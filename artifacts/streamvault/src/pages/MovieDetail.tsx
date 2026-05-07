@@ -1,19 +1,42 @@
 import { useParams } from "wouter";
-import { useGetMovie } from "@workspace/api-client-react";
+import { useGetMovie, useAddWatchHistory, getGetWatchHistoryQueryKey } from "@workspace/api-client-react";
 import { Navigation } from "@/components/Navigation";
 import { MediaRow } from "@/components/MediaRow";
 import { Play, Star, Clock, Calendar, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
+import { useAuth } from "@workspace/replit-auth-web";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function MovieDetail() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
 
   const { data: movie, isLoading } = useGetMovie(id);
+  const { mutate: addWatch } = useAddWatchHistory();
 
   const handleWatch = () => {
+    if (isAuthenticated && movie) {
+      addWatch(
+        {
+          data: {
+            mediaId: movie.id,
+            mediaType: "movie",
+            title: movie.title,
+            posterPath: movie.poster_path ?? null,
+            backdropPath: movie.backdrop_path ?? null,
+          },
+        },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getGetWatchHistoryQueryKey() });
+          },
+        }
+      );
+    }
     const url = `${window.location.origin}/watch/movie/${id}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };

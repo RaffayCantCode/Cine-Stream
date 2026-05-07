@@ -1,0 +1,130 @@
+import { Link } from "wouter";
+import { useGetWatchHistory, useDeleteWatchHistoryItem, getGetWatchHistoryQueryKey } from "@workspace/api-client-react";
+import { useAuth } from "@workspace/replit-auth-web";
+import { Play, X, Tv, Film } from "lucide-react";
+import { motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
+
+export function ContinueWatching() {
+  const { isAuthenticated } = useAuth();
+  const watchHistoryQueryKey = getGetWatchHistoryQueryKey();
+  const { data, isLoading } = useGetWatchHistory({
+    query: { enabled: isAuthenticated, queryKey: watchHistoryQueryKey },
+  });
+  const queryClient = useQueryClient();
+  const { mutate: deleteItem } = useDeleteWatchHistoryItem();
+
+  if (!isAuthenticated || isLoading || !data?.items?.length) return null;
+
+  const handleRemove = (mediaId: number, mediaType: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    deleteItem(
+      { mediaId, params: { mediaType: mediaType as "movie" | "tv" } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetWatchHistoryQueryKey() });
+        },
+      }
+    );
+  };
+
+  const handlePlay = (item: typeof data.items[0], e: React.MouseEvent) => {
+    e.preventDefault();
+    if (item.mediaType === "movie") {
+      window.open(`${window.location.origin}/watch/movie/${item.mediaId}`, "_blank", "noopener,noreferrer");
+    } else {
+      const season = item.season ?? 1;
+      const episode = item.episode ?? 1;
+      window.open(`${window.location.origin}/watch/tv/${item.mediaId}/${season}/${episode}`, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  return (
+    <section className="px-5 md:px-10 py-6">
+      <div className="max-w-screen-2xl mx-auto">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-1 h-5 bg-primary rounded-full" />
+          <h2 className="text-base font-bold text-white tracking-wide">Continue Watching</h2>
+        </div>
+
+        <div className="flex gap-4 overflow-x-auto pb-3 hide-scrollbar">
+          {data.items.map((item, i) => {
+            const detailHref = item.mediaType === "movie"
+              ? `/movie/${item.mediaId}`
+              : `/tv/${item.mediaId}`;
+            const posterUrl = item.posterPath
+              ? `https://image.tmdb.org/t/p/w342${item.posterPath}`
+              : null;
+
+            return (
+              <motion.div
+                key={`${item.mediaType}-${item.mediaId}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05, duration: 0.35 }}
+                className="relative shrink-0 w-[130px] sm:w-[150px] group"
+              >
+                <Link href={detailHref}>
+                  {/* Poster */}
+                  <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card ring-1 ring-white/[0.06] mb-2.5 relative">
+                    {posterUrl ? (
+                      <img
+                        src={posterUrl}
+                        alt={item.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        {item.mediaType === "tv" ? (
+                          <Tv className="w-8 h-8 text-white/20" />
+                        ) : (
+                          <Film className="w-8 h-8 text-white/20" />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Play overlay */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        onClick={(e) => handlePlay(item, e)}
+                        className="w-11 h-11 rounded-full bg-primary/90 flex items-center justify-center shadow-xl hover:bg-primary transition-colors"
+                        aria-label="Play"
+                      >
+                        <Play className="w-5 h-5 fill-white text-white ml-0.5" />
+                      </button>
+                    </div>
+
+                    {/* Episode badge */}
+                    {item.mediaType === "tv" && item.season != null && item.episode != null && (
+                      <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white/80">
+                        S{item.season} E{item.episode}
+                      </div>
+                    )}
+
+                    {/* Remove button */}
+                    <button
+                      onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/80"
+                      aria-label="Remove"
+                    >
+                      <X className="w-3.5 h-3.5 text-white" />
+                    </button>
+                  </div>
+
+                  <h4 className="text-xs font-semibold text-white/80 line-clamp-1 leading-tight">
+                    {item.title}
+                  </h4>
+                  {item.mediaType === "tv" && item.episodeName && (
+                    <p className="text-[10px] text-white/40 mt-0.5 line-clamp-1">{item.episodeName}</p>
+                  )}
+                </Link>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "wouter";
-import { useGetTvShow, useGetTvSeason, getGetTvSeasonQueryKey } from "@workspace/api-client-react";
+import { useGetTvShow, useGetTvSeason, getGetTvSeasonQueryKey, useAddWatchHistory, getGetWatchHistoryQueryKey } from "@workspace/api-client-react";
 import { Navigation } from "@/components/Navigation";
 import { MediaRow } from "@/components/MediaRow";
 import { Play, Star, Calendar, ExternalLink, Clock, CheckCircle2 } from "lucide-react";
@@ -8,10 +8,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
+import { useAuth } from "@workspace/replit-auth-web";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function TvDetail() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
 
   const { data: show, isLoading: showLoading } = useGetTvShow(id);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -24,6 +28,8 @@ export function TvDetail() {
     },
   });
 
+  const { mutate: addWatch } = useAddWatchHistory();
+
   useEffect(() => {
     if (show) {
       const first = show.seasons?.find(s => s.season_number > 0)?.season_number ?? 1;
@@ -31,9 +37,32 @@ export function TvDetail() {
     }
   }, [show?.id]);
 
-  const handleWatchEpisode = (season: number, episode: number) => {
-    setPlayingEp({ season, episode });
-    const url = `${window.location.origin}/watch/tv/${id}/${season}/${episode}`;
+  const handleWatchEpisode = (season: number, episodeNumber: number, episodeName?: string) => {
+    setPlayingEp({ season, episode: episodeNumber });
+
+    if (isAuthenticated && show) {
+      addWatch(
+        {
+          data: {
+            mediaId: show.id,
+            mediaType: "tv",
+            title: show.name,
+            posterPath: show.poster_path ?? null,
+            backdropPath: show.backdrop_path ?? null,
+            season,
+            episode: episodeNumber,
+            episodeName: episodeName ?? null,
+          },
+        },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getGetWatchHistoryQueryKey() });
+          },
+        }
+      );
+    }
+
+    const url = `${window.location.origin}/watch/tv/${id}/${season}/${episodeNumber}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -142,7 +171,7 @@ export function TvDetail() {
               <button
                 onClick={() => {
                   const ep = seasonData?.episodes?.[0];
-                  handleWatchEpisode(selectedSeason, ep?.episode_number ?? 1);
+                  handleWatchEpisode(selectedSeason, ep?.episode_number ?? 1, ep?.name);
                 }}
                 className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-white font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
                 data-testid="btn-watch-show"
@@ -187,7 +216,7 @@ export function TvDetail() {
             )}
           </div>
 
-          {/* Season title + info */}
+          {/* Season overview + episodes */}
           <AnimatePresence mode="wait">
             {!seasonLoading && seasonData && (
               <motion.div
@@ -216,7 +245,7 @@ export function TvDetail() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.025, duration: 0.3 }}
-                        onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number)}
+                        onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
                         className={cn(
                           "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer",
                           isPlaying

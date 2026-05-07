@@ -5,18 +5,24 @@
  * StreamVault API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
 import type {
+  AddWatchHistoryInput,
+  DeleteWatchHistoryItemParams,
   DiscoverMoviesParams,
   DiscoverTvParams,
   GenreList,
+  GetCurrentAuthUserResponse,
   GetPopularMoviesParams,
   GetPopularTvParams,
   GetTopRatedMoviesParams,
@@ -27,11 +33,13 @@ import type {
   MovieDetail,
   SearchContentParams,
   SeasonDetail,
+  SuccessResponse,
   TvDetail,
+  WatchHistoryList,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -1282,3 +1290,342 @@ export function useDiscoverTv<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get the currently authenticated user
+ */
+export const getGetCurrentAuthUserUrl = () => {
+  return `/api/auth/user`;
+};
+
+export const getCurrentAuthUser = async (
+  options?: RequestInit,
+): Promise<GetCurrentAuthUserResponse> => {
+  return customFetch<GetCurrentAuthUserResponse>(getGetCurrentAuthUserUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCurrentAuthUserQueryKey = () => {
+  return [`/api/auth/user`] as const;
+};
+
+export const getGetCurrentAuthUserQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCurrentAuthUser>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentAuthUser>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCurrentAuthUserQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCurrentAuthUser>>
+  > = ({ signal }) => getCurrentAuthUser({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentAuthUser>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCurrentAuthUserQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCurrentAuthUser>>
+>;
+export type GetCurrentAuthUserQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the currently authenticated user
+ */
+
+export function useGetCurrentAuthUser<
+  TData = Awaited<ReturnType<typeof getCurrentAuthUser>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentAuthUser>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCurrentAuthUserQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get the current user's watch history
+ */
+export const getGetWatchHistoryUrl = () => {
+  return `/api/watch-history`;
+};
+
+export const getWatchHistory = async (
+  options?: RequestInit,
+): Promise<WatchHistoryList> => {
+  return customFetch<WatchHistoryList>(getGetWatchHistoryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWatchHistoryQueryKey = () => {
+  return [`/api/watch-history`] as const;
+};
+
+export const getGetWatchHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWatchHistory>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWatchHistory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWatchHistoryQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getWatchHistory>>> = ({
+    signal,
+  }) => getWatchHistory({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWatchHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWatchHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWatchHistory>>
+>;
+export type GetWatchHistoryQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the current user's watch history
+ */
+
+export function useGetWatchHistory<
+  TData = Awaited<ReturnType<typeof getWatchHistory>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWatchHistory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWatchHistoryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record a watched item
+ */
+export const getAddWatchHistoryUrl = () => {
+  return `/api/watch-history`;
+};
+
+export const addWatchHistory = async (
+  addWatchHistoryInput: AddWatchHistoryInput,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getAddWatchHistoryUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addWatchHistoryInput),
+  });
+};
+
+export const getAddWatchHistoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addWatchHistory>>,
+    TError,
+    { data: BodyType<AddWatchHistoryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addWatchHistory>>,
+  TError,
+  { data: BodyType<AddWatchHistoryInput> },
+  TContext
+> => {
+  const mutationKey = ["addWatchHistory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addWatchHistory>>,
+    { data: BodyType<AddWatchHistoryInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return addWatchHistory(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddWatchHistoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addWatchHistory>>
+>;
+export type AddWatchHistoryMutationBody = BodyType<AddWatchHistoryInput>;
+export type AddWatchHistoryMutationError = ErrorType<void>;
+
+/**
+ * @summary Record a watched item
+ */
+export const useAddWatchHistory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addWatchHistory>>,
+    TError,
+    { data: BodyType<AddWatchHistoryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addWatchHistory>>,
+  TError,
+  { data: BodyType<AddWatchHistoryInput> },
+  TContext
+> => {
+  return useMutation(getAddWatchHistoryMutationOptions(options));
+};
+
+/**
+ * @summary Remove an item from watch history
+ */
+export const getDeleteWatchHistoryItemUrl = (
+  mediaId: number,
+  params: DeleteWatchHistoryItemParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/watch-history/${mediaId}?${stringifiedParams}`
+    : `/api/watch-history/${mediaId}`;
+};
+
+export const deleteWatchHistoryItem = async (
+  mediaId: number,
+  params: DeleteWatchHistoryItemParams,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(
+    getDeleteWatchHistoryItemUrl(mediaId, params),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteWatchHistoryItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteWatchHistoryItem>>,
+    TError,
+    { mediaId: number; params: DeleteWatchHistoryItemParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteWatchHistoryItem>>,
+  TError,
+  { mediaId: number; params: DeleteWatchHistoryItemParams },
+  TContext
+> => {
+  const mutationKey = ["deleteWatchHistoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteWatchHistoryItem>>,
+    { mediaId: number; params: DeleteWatchHistoryItemParams }
+  > = (props) => {
+    const { mediaId, params } = props ?? {};
+
+    return deleteWatchHistoryItem(mediaId, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteWatchHistoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteWatchHistoryItem>>
+>;
+
+export type DeleteWatchHistoryItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Remove an item from watch history
+ */
+export const useDeleteWatchHistoryItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteWatchHistoryItem>>,
+    TError,
+    { mediaId: number; params: DeleteWatchHistoryItemParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteWatchHistoryItem>>,
+  TError,
+  { mediaId: number; params: DeleteWatchHistoryItemParams },
+  TContext
+> => {
+  return useMutation(getDeleteWatchHistoryItemMutationOptions(options));
+};

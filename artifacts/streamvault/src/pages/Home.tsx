@@ -8,6 +8,7 @@ import {
 import { HeroBanner } from "@/components/HeroBanner";
 import { MediaRow } from "@/components/MediaRow";
 import { Navigation } from "@/components/Navigation";
+import { ContinueWatching } from "@/components/ContinueWatching";
 
 export function Home() {
   const { data: trending, isLoading: trendingLoading } = useGetTrending({ type: "all", timeWindow: "week" });
@@ -28,7 +29,8 @@ export function Home() {
         <HeroBanner item={heroItem} />
       ) : null}
 
-      <div className="relative z-20 mt-12 md:mt-16 space-y-4 md:space-y-8">
+      <div className="relative z-20 mt-6 md:mt-10 space-y-2 md:space-y-4">
+        <ContinueWatching />
         <MediaRow title="Trending This Week" items={trending?.results?.slice(1)} isLoading={trendingLoading} />
         <MediaRow title="Popular Movies" items={popularMovies?.results} isLoading={popMoviesLoading} />
         <MediaRow title="Top Rated Movies" items={topRatedMovies?.results} isLoading={topMoviesLoading} />

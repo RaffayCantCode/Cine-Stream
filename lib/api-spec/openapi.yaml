@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication endpoints
   - name: trending
     description: Trending content
   - name: search
@@ -22,6 +24,8 @@ tags:
     description: Genre operations
   - name: discover
     description: Discover content
+  - name: watchHistory
+    description: Watch history and progress tracking
 paths:
   /healthz:
     get:
@@ -316,6 +320,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MediaPage"
+
+  /auth/user:
+    get:
+      tags: [auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      responses:
+        "200":
+          description: Auth status resolved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCurrentAuthUserResponse"
+
+  /watch-history:
+    get:
+      tags: [watchHistory]
+      operationId: getWatchHistory
+      summary: Get the current user's watch history
+      responses:
+        "200":
+          description: Watch history list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchHistoryList"
+        "401":
+          description: Unauthorized
+    post:
+      tags: [watchHistory]
+      operationId: addWatchHistory
+      summary: Record a watched item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddWatchHistoryInput"
+      responses:
+        "200":
+          description: Recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Unauthorized
+
+  /watch-history/{mediaId}:
+    delete:
+      tags: [watchHistory]
+      operationId: deleteWatchHistoryItem
+      summary: Remove an item from watch history
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: mediaType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [movie, tv]
+      responses:
+        "200":
+          description: Deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Unauthorized
 
 components:
   schemas:
@@ -629,3 +707,155 @@ components:
       required:
         - id
         - name
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          nullable: true
+        firstName:
+          type: string
+          nullable: true
+        lastName:
+          type: string
+          nullable: true
+        profileImageUrl:
+          type: string
+          nullable: true
+      required:
+        - id
+
+    GetCurrentAuthUserResponse:
+      type: object
+      properties:
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AuthUser"
+            - type: "null"
+      required:
+        - user
+
+    ExchangeMobileAuthorizationCodeBody:
+      type: object
+      properties:
+        code:
+          type: string
+        code_verifier:
+          type: string
+        redirect_uri:
+          type: string
+        state:
+          type: string
+        nonce:
+          type: string
+          nullable: true
+      required:
+        - code
+        - code_verifier
+        - redirect_uri
+        - state
+
+    ExchangeMobileAuthorizationCodeResponse:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+        - token
+
+    LogoutMobileSessionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+
+    WatchHistoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        mediaId:
+          type: integer
+        mediaType:
+          type: string
+        title:
+          type: string
+        posterPath:
+          type: string
+          nullable: true
+        backdropPath:
+          type: string
+          nullable: true
+        season:
+          type: integer
+          nullable: true
+        episode:
+          type: integer
+          nullable: true
+        episodeName:
+          type: string
+          nullable: true
+        watchedAt:
+          type: string
+      required:
+        - id
+        - userId
+        - mediaId
+        - mediaType
+        - title
+        - watchedAt
+
+    WatchHistoryList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchHistoryItem"
+      required:
+        - items
+
+    AddWatchHistoryInput:
+      type: object
+      properties:
+        mediaId:
+          type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+        title:
+          type: string
+        posterPath:
+          type: string
+          nullable: true
+        backdropPath:
+          type: string
+          nullable: true
+        season:
+          type: integer
+          nullable: true
+        episode:
+          type: integer
+          nullable: true
+        episodeName:
+          type: string
+          nullable: true
+      required:
+        - mediaId
+        - mediaType
+        - title
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success

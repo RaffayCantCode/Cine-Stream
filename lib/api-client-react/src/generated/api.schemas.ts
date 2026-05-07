@@ -143,6 +143,75 @@ export interface TvDetail {
   similar?: MediaPage;
 }
 
+export interface AuthUser {
+  id: string;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  profileImageUrl?: string | null;
+}
+
+export interface GetCurrentAuthUserResponse {
+  user: AuthUser | null;
+}
+
+export interface ExchangeMobileAuthorizationCodeBody {
+  code: string;
+  code_verifier: string;
+  redirect_uri: string;
+  state: string;
+  nonce?: string | null;
+}
+
+export interface ExchangeMobileAuthorizationCodeResponse {
+  token: string;
+}
+
+export interface LogoutMobileSessionResponse {
+  success: boolean;
+}
+
+export interface WatchHistoryItem {
+  id: number;
+  userId: string;
+  mediaId: number;
+  mediaType: string;
+  title: string;
+  posterPath?: string | null;
+  backdropPath?: string | null;
+  season?: number | null;
+  episode?: number | null;
+  episodeName?: string | null;
+  watchedAt: string;
+}
+
+export interface WatchHistoryList {
+  items: WatchHistoryItem[];
+}
+
+export type AddWatchHistoryInputMediaType =
+  (typeof AddWatchHistoryInputMediaType)[keyof typeof AddWatchHistoryInputMediaType];
+
+export const AddWatchHistoryInputMediaType = {
+  movie: "movie",
+  tv: "tv",
+} as const;
+
+export interface AddWatchHistoryInput {
+  mediaId: number;
+  mediaType: AddWatchHistoryInputMediaType;
+  title: string;
+  posterPath?: string | null;
+  backdropPath?: string | null;
+  season?: number | null;
+  episode?: number | null;
+  episodeName?: string | null;
+}
+
+export interface SuccessResponse {
+  success: boolean;
+}
+
 export type GetTrendingParams = {
   type?: GetTrendingType;
   timeWindow?: GetTrendingTimeWindow;
@@ -208,3 +277,15 @@ export type DiscoverTvParams = {
   sortBy?: string;
   page?: number;
 };
+
+export type DeleteWatchHistoryItemParams = {
+  mediaType: DeleteWatchHistoryItemMediaType;
+};
+
+export type DeleteWatchHistoryItemMediaType =
+  (typeof DeleteWatchHistoryItemMediaType)[keyof typeof DeleteWatchHistoryItemMediaType];
+
+export const DeleteWatchHistoryItemMediaType = {
+  movie: "movie",
+  tv: "tv",
+} as const;
