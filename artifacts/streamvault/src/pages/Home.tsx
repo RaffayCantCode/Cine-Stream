@@ -28,7 +28,7 @@ export function Home() {
         <HeroBanner item={heroItem} />
       ) : null}
 
-      <div className="relative z-20 -mt-24 md:-mt-32 space-y-4 md:space-y-8">
+      <div className="relative z-20 mt-12 md:mt-16 space-y-4 md:space-y-8">
         <MediaRow title="Trending This Week" items={trending?.results?.slice(1)} isLoading={trendingLoading} />
         <MediaRow title="Popular Movies" items={popularMovies?.results} isLoading={popMoviesLoading} />
         <MediaRow title="Top Rated Movies" items={topRatedMovies?.results} isLoading={topMoviesLoading} />

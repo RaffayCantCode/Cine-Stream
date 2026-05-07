@@ -39,9 +39,20 @@ export function Navigation() {
         <div className="flex items-center w-full max-w-screen-2xl mx-auto gap-8">
           {/* Logo */}
           <Link href="/" className="shrink-0 group" data-testid="link-logo">
-            <span className="font-display text-3xl tracking-widest leading-none">
-              <span className="text-primary group-hover:text-primary/80 transition-colors">STREAM</span>
-              <span className="text-white">VAULT</span>
+            <span className="font-display text-3xl tracking-widest leading-none flex items-center gap-0">
+              <span
+                className="transition-opacity group-hover:opacity-80"
+                style={{ color: "#08f0fc" }}
+              >
+                STREAM
+              </span>
+              <span className="text-white/20 mx-1">·</span>
+              <span
+                className="transition-opacity group-hover:opacity-80"
+                style={{ color: "#08fc92" }}
+              >
+                VAULT
+              </span>
             </span>
           </Link>
 
