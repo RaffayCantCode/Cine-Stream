@@ -2,29 +2,32 @@ import { useParams } from "wouter";
 import { useGetMovie } from "@workspace/api-client-react";
 import { Navigation } from "@/components/Navigation";
 import { MediaRow } from "@/components/MediaRow";
-import { Play, Star, Clock, Calendar } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Play, Star, Clock, Calendar, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState } from "react";
+import { motion } from "framer-motion";
 import { format } from "date-fns";
 
 export function MovieDetail() {
-  const params = useParams();
+  const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  
+
   const { data: movie, isLoading } = useGetMovie(id);
-  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handleWatch = () => {
+    const url = `${window.location.origin}/watch/movie/${id}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background text-foreground">
         <Navigation />
-        <div className="w-full h-[60vh] bg-muted animate-pulse" />
-        <div className="px-6 md:px-12 py-12 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
-          <div className="md:col-span-2 space-y-6">
-            <Skeleton className="h-12 w-3/4" />
-            <Skeleton className="h-6 w-1/2" />
-            <Skeleton className="h-32 w-full" />
+        <div className="w-full h-[65vh] bg-muted/30 animate-pulse" />
+        <div className="px-5 md:px-10 py-12 max-w-screen-2xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
+          <div className="md:col-span-2 space-y-4">
+            <Skeleton className="h-12 w-3/4 bg-muted/40" />
+            <Skeleton className="h-6 w-1/2 bg-muted/40" />
+            <Skeleton className="h-28 w-full bg-muted/40" />
           </div>
         </div>
       </div>
@@ -33,108 +36,159 @@ export function MovieDetail() {
 
   if (!movie) return null;
 
-  const backdropUrl = movie.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : null;
-  const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/w342${movie.poster_path}` : null;
+  const backdropUrl = movie.backdrop_path
+    ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}`
+    : null;
+  const posterUrl = movie.poster_path
+    ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`
+    : null;
+
+  const score = movie.vote_average ?? 0;
+  const scoreColor =
+    score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20">
+    <div className="min-h-screen bg-background text-foreground pb-24">
       <Navigation />
 
-      {isPlaying ? (
-        <div className="w-full pt-20 bg-black aspect-video max-h-[85vh]">
-          <iframe
-            src={`https://www.vidking.net/embed/movie/${movie.id}`}
-            className="w-full h-full border-0"
-            allowFullScreen
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          />
+      {/* Hero backdrop */}
+      <div className="relative w-full h-[62vh] md:h-[72vh] overflow-hidden flex items-end">
+        <div className="absolute inset-0 z-0">
+          {backdropUrl ? (
+            <motion.img
+              src={backdropUrl}
+              alt={movie.title}
+              className="w-full h-full object-cover object-top scale-[1.03]"
+              initial={{ opacity: 0, scale: 1.07 }}
+              animate={{ opacity: 1, scale: 1.03 }}
+              transition={{ duration: 1.4, ease: "easeOut" }}
+            />
+          ) : (
+            <div className="w-full h-full bg-card" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/30 to-transparent" />
+          <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/50 to-transparent" />
         </div>
-      ) : (
-        <div className="relative w-full min-h-[60vh] flex items-end pt-32 pb-16">
-          <div className="absolute inset-0 z-0">
-            {backdropUrl && (
-              <img
-                src={backdropUrl}
-                alt={movie.title}
-                className="w-full h-full object-cover opacity-30"
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
-          </div>
 
-          <div className="relative z-10 px-6 md:px-12 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end md:items-start">
-            {posterUrl && (
+        <div className="relative z-10 pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
+          {/* Poster */}
+          {posterUrl && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="hidden md:block shrink-0"
+            >
               <img
                 src={posterUrl}
                 alt={movie.title}
-                className="w-48 md:w-64 rounded-xl shadow-2xl shrink-0 hidden md:block"
+                className="w-48 lg:w-60 rounded-2xl shadow-2xl ring-1 ring-white/10"
               />
-            )}
-            
-            <div className="flex-1 space-y-6">
-              <div>
-                <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white mb-2">
-                  {movie.title}
-                </h1>
-                {movie.tagline && (
-                  <p className="text-xl text-primary font-medium italic">
-                    {movie.tagline}
-                  </p>
-                )}
-              </div>
+            </motion.div>
+          )}
 
-              <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-white/70">
-                {movie.vote_average ? (
-                  <div className="flex items-center gap-1 text-primary">
-                    <Star className="w-5 h-5 fill-current" />
-                    <span className="text-white text-base">{movie.vote_average.toFixed(1)}</span>
-                  </div>
-                ) : null}
-                
-                {movie.release_date && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    <span>{format(new Date(movie.release_date), "yyyy")}</span>
-                  </div>
-                )}
-                
-                {movie.runtime ? (
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4" />
-                    <span>{movie.runtime} min</span>
-                  </div>
-                ) : null}
+          <div className="flex-1 space-y-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+            >
+              <h1 className="font-display text-5xl md:text-7xl text-white leading-none tracking-wider mb-2">
+                {movie.title}
+              </h1>
+              {movie.tagline && (
+                <p className="text-primary/90 font-semibold italic text-base md:text-lg">
+                  {movie.tagline}
+                </p>
+              )}
+            </motion.div>
 
-                <div className="flex flex-wrap gap-2 ml-2">
-                  {movie.genres?.map(g => (
-                    <span key={g.id} className="px-2.5 py-1 bg-white/10 rounded-md text-xs font-semibold text-white">
-                      {g.name}
-                    </span>
-                  ))}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.45, duration: 0.5 }}
+              className="flex flex-wrap items-center gap-3 text-sm"
+            >
+              {score > 0 && (
+                <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
+                  <Star className="w-4 h-4 fill-current" />
+                  <span className="text-base">{score.toFixed(1)}</span>
+                  <span className="text-white/30 font-normal text-xs">/ 10</span>
                 </div>
+              )}
+              {movie.release_date && (
+                <span className="flex items-center gap-1.5 text-white/40 font-medium">
+                  <Calendar className="w-3.5 h-3.5" />
+                  {format(new Date(movie.release_date), "yyyy")}
+                </span>
+              )}
+              {movie.runtime ? (
+                <span className="flex items-center gap-1.5 text-white/40 font-medium">
+                  <Clock className="w-3.5 h-3.5" />
+                  {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
+                </span>
+              ) : null}
+              <div className="flex flex-wrap gap-1.5 ml-1">
+                {movie.genres?.map(g => (
+                  <span key={g.id} className="px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70">
+                    {g.name}
+                  </span>
+                ))}
               </div>
+            </motion.div>
 
-              <p className="text-lg text-white/80 leading-relaxed max-w-3xl">
-                {movie.overview}
-              </p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55, duration: 0.5 }}
+              className="text-white/65 text-base leading-relaxed max-w-2xl"
+            >
+              {movie.overview}
+            </motion.p>
 
-              <Button size="lg" className="h-14 px-8 text-lg font-bold gap-3" onClick={() => setIsPlaying(true)}>
-                <Play className="w-6 h-6 fill-current" />
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.65, duration: 0.5 }}
+            >
+              <button
+                onClick={handleWatch}
+                className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-white font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+                data-testid="btn-watch-movie"
+              >
+                <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch Now
-              </Button>
-            </div>
+                <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+              </button>
+            </motion.div>
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="max-w-screen-2xl mx-auto mt-12 px-6 md:px-12 space-y-16">
+      {/* Details below */}
+      <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 space-y-14">
+        {/* Cast */}
         {movie.credits?.cast && movie.credits.cast.length > 0 && (
-          <section>
-            <h2 className="text-2xl font-bold mb-6 text-white">Cast</h2>
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-1 h-5 bg-primary rounded-full" />
+              <h2 className="text-base font-bold text-white tracking-wide">Cast</h2>
+            </div>
             <div className="flex overflow-x-auto gap-4 pb-4 hide-scrollbar">
-              {movie.credits.cast.slice(0, 15).map(person => (
-                <div key={person.id} className="w-[120px] shrink-0 text-center">
-                  <div className="aspect-[2/3] rounded-lg bg-muted overflow-hidden mb-3">
+              {movie.credits.cast.slice(0, 16).map((person, i) => (
+                <motion.div
+                  key={person.id}
+                  className="w-[100px] shrink-0 text-center"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03, duration: 0.35 }}
+                >
+                  <div className="aspect-[2/3] rounded-xl bg-card overflow-hidden mb-2.5 ring-1 ring-white/[0.06]">
                     {person.profile_path ? (
                       <img
                         src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
@@ -143,22 +197,25 @@ export function MovieDetail() {
                         loading="lazy"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-secondary">
-                        <span className="text-secondary-foreground/50 text-xs">No Image</span>
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <span className="text-muted-foreground/40 text-lg font-bold">
+                          {person.name?.[0]}
+                        </span>
                       </div>
                     )}
                   </div>
-                  <h4 className="font-bold text-sm text-white line-clamp-1">{person.name}</h4>
-                  <p className="text-xs text-muted-foreground line-clamp-1">{person.character}</p>
-                </div>
+                  <h4 className="font-semibold text-xs text-white line-clamp-1 leading-tight">{person.name}</h4>
+                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{person.character}</p>
+                </motion.div>
               ))}
             </div>
-          </section>
+          </motion.section>
         )}
 
+        {/* Similar */}
         {movie.similar?.results && movie.similar.results.length > 0 && (
-          <div className="-mx-6 md:-mx-12">
-            <MediaRow title="Similar Movies" items={movie.similar.results} />
+          <div className="-mx-5 md:-mx-10">
+            <MediaRow title="More Like This" items={movie.similar.results} />
           </div>
         )}
       </div>

@@ -10,8 +10,11 @@ import { TvDetail } from "@/pages/TvDetail";
 import { Search } from "@/pages/Search";
 import { BrowseMovies } from "@/pages/BrowseMovies";
 import { BrowseTv } from "@/pages/BrowseTv";
+import { WatchMovie, WatchTv } from "@/pages/WatchPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5 * 60 * 1000 } },
+});
 
 function Router() {
   return (
@@ -22,6 +25,8 @@ function Router() {
       <Route path="/search" component={Search} />
       <Route path="/browse/movies" component={BrowseMovies} />
       <Route path="/browse/tv" component={BrowseTv} />
+      <Route path="/watch/movie/:id" component={WatchMovie} />
+      <Route path="/watch/tv/:id/:season/:episode" component={WatchTv} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -29,7 +34,7 @@ function Router() {
 
 function App() {
   useEffect(() => {
-    document.documentElement.classList.add('dark');
+    document.documentElement.classList.add("dark");
   }, []);
 
   return (

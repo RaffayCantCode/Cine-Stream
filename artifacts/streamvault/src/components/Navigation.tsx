@@ -1,56 +1,128 @@
 import { Link, useLocation } from "wouter";
-import { Search } from "lucide-react";
+import { Search, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function Navigation() {
   const [location] = useLocation();
   const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 30);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => setMobileOpen(false), [location]);
+
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/browse/movies", label: "Movies" },
+    { href: "/browse/tv", label: "TV Shows" },
+  ];
+
   return (
-    <nav
-      className={cn(
-        "fixed top-0 inset-x-0 z-50 transition-colors duration-300 ease-in-out h-16 sm:h-20 flex items-center px-6 md:px-12",
-        isScrolled ? "bg-background/95 backdrop-blur-sm border-b border-border shadow-sm" : "bg-gradient-to-b from-background/80 to-transparent"
-      )}
-    >
-      <div className="flex items-center w-full max-w-screen-2xl mx-auto">
-        <Link href="/" className="mr-8">
-          <span className="text-2xl font-black tracking-tighter text-primary">
-            STREAM<span className="text-white">VAULT</span>
-          </span>
-        </Link>
+    <>
+      <motion.nav
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className={cn(
+          "fixed top-0 inset-x-0 z-50 transition-all duration-500 h-16 sm:h-[72px] flex items-center px-5 md:px-10",
+          isScrolled
+            ? "bg-black/80 backdrop-blur-xl border-b border-white/[0.04] shadow-2xl"
+            : "bg-gradient-to-b from-black/70 to-transparent"
+        )}
+      >
+        <div className="flex items-center w-full max-w-screen-2xl mx-auto gap-8">
+          {/* Logo */}
+          <Link href="/" className="shrink-0 group" data-testid="link-logo">
+            <span className="font-display text-3xl tracking-widest leading-none">
+              <span className="text-primary group-hover:text-primary/80 transition-colors">STREAM</span>
+              <span className="text-white">VAULT</span>
+            </span>
+          </Link>
 
-        <div className="hidden md:flex items-center gap-6 font-medium text-sm text-white/70">
-          <Link href="/" className={cn("hover:text-white transition-colors", location === "/" && "text-white font-bold")}>
-            Home
-          </Link>
-          <Link href="/browse/movies" className={cn("hover:text-white transition-colors", location === "/browse/movies" && "text-white font-bold")}>
-            Movies
-          </Link>
-          <Link href="/browse/tv" className={cn("hover:text-white transition-colors", location === "/browse/tv" && "text-white font-bold")}>
-            TV Shows
-          </Link>
+          {/* Desktop links */}
+          <div className="hidden md:flex items-center gap-1">
+            {links.map(({ href, label }) => {
+              const active = location === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "relative px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200",
+                    active
+                      ? "text-white"
+                      : "text-white/50 hover:text-white/90 hover:bg-white/[0.06]"
+                  )}
+                  data-testid={`nav-${label.toLowerCase().replace(" ", "-")}`}
+                >
+                  {label}
+                  {active && (
+                    <motion.div
+                      layoutId="nav-pill"
+                      className="absolute inset-0 bg-white/[0.09] rounded-lg border border-white/[0.06]"
+                      transition={{ type: "spring", stiffness: 380, damping: 35 }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Right actions */}
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/search"
+              className="p-2.5 text-white/50 hover:text-white hover:bg-white/[0.07] rounded-full transition-all duration-200"
+              aria-label="Search"
+              data-testid="btn-search"
+            >
+              <Search className="w-[18px] h-[18px]" />
+            </Link>
+
+            {/* Mobile menu toggle */}
+            <button
+              className="md:hidden p-2.5 text-white/50 hover:text-white hover:bg-white/[0.07] rounded-full transition-all"
+              onClick={() => setMobileOpen(v => !v)}
+              aria-label="Menu"
+              data-testid="btn-mobile-menu"
+            >
+              {mobileOpen ? <X className="w-[18px] h-[18px]" /> : <Menu className="w-[18px] h-[18px]" />}
+            </button>
+          </div>
         </div>
+      </motion.nav>
 
-        <div className="ml-auto flex items-center gap-4">
-          <Link
-            href="/search"
-            className="p-2 text-white/70 hover:text-white transition-colors hover:bg-white/10 rounded-full"
-            aria-label="Search"
+      {/* Mobile menu */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="fixed top-16 inset-x-0 z-40 bg-black/95 backdrop-blur-xl border-b border-white/[0.06] px-5 py-4 md:hidden"
           >
-            <Search className="w-5 h-5" />
-          </Link>
-        </div>
-      </div>
-    </nav>
+            {links.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  "block px-4 py-3 rounded-lg text-sm font-semibold transition-colors",
+                  location === href ? "text-white bg-white/[0.08]" : "text-white/50 hover:text-white hover:bg-white/[0.04]"
+                )}
+              >
+                {label}
+              </Link>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

@@ -1,42 +1,82 @@
 import { Link } from "wouter";
-import { Star } from "lucide-react";
+import { Star, Play } from "lucide-react";
 import { MediaItem } from "@workspace/api-client-react";
+import { motion } from "framer-motion";
 
-export function MediaCard({ item }: { item: MediaItem }) {
+interface MediaCardProps {
+  item: MediaItem;
+  index?: number;
+}
+
+export function MediaCard({ item, index = 0 }: MediaCardProps) {
   const isMovie = item.media_type === "movie" || !!item.title;
   const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
   const title = item.title || item.name;
-  
+  const year = (item.release_date || item.first_air_date || "").slice(0, 4);
+
   const posterUrl = item.poster_path
     ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
     : null;
 
   return (
-    <Link href={link} className="group relative block aspect-[2/3] w-[160px] sm:w-[200px] md:w-[240px] shrink-0 overflow-hidden rounded-lg bg-muted transition-transform duration-300 hover:scale-105 hover:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-      {posterUrl ? (
-        <img
-          src={posterUrl}
-          alt={title}
-          className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-60"
-          loading="lazy"
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center p-4 text-center">
-          <span className="text-muted-foreground font-medium">{title}</span>
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.35, ease: "easeOut" }}
+    >
+      <Link
+        href={link}
+        className="group relative block aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 overflow-hidden rounded-xl bg-muted transition-all duration-300 hover:scale-[1.06] hover:z-10 focus:outline-none card-shimmer card-glow"
+        data-testid={`card-media-${item.id}`}
+        style={{ transformOrigin: "center bottom" }}
+      >
+        {posterUrl ? (
+          <img
+            src={posterUrl}
+            alt={title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
+            <span className="text-muted-foreground text-xs font-medium">{title}</span>
+          </div>
+        )}
+
+        {/* Hover overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-end p-3.5">
+          {/* Play button center */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="w-12 h-12 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-xl shadow-primary/40 translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+              <Play className="w-5 h-5 fill-white text-white ml-0.5" />
+            </div>
+          </div>
+
+          {/* Bottom info */}
+          <div className="relative z-10">
+            <h3 className="text-white font-bold text-sm leading-tight mb-1 line-clamp-2">
+              {title}
+            </h3>
+            <div className="flex items-center gap-2">
+              {item.vote_average ? (
+                <div className="flex items-center gap-1 text-amber-400">
+                  <Star className="w-3 h-3 fill-current" />
+                  <span className="font-bold text-xs">{item.vote_average.toFixed(1)}</span>
+                </div>
+              ) : null}
+              {year && <span className="text-white/40 text-xs">{year}</span>}
+            </div>
+          </div>
         </div>
-      )}
-      
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 flex flex-col justify-end p-4">
-        <h3 className="text-white font-bold leading-tight mb-2 line-clamp-2">
-          {title}
-        </h3>
+
+        {/* Rating badge (always visible) */}
         {item.vote_average ? (
-          <div className="flex items-center gap-1.5 text-primary">
-            <Star className="w-4 h-4 fill-current" />
-            <span className="font-semibold text-sm">{item.vote_average.toFixed(1)}</span>
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm text-amber-400 text-xs font-bold px-1.5 py-0.5 rounded-md opacity-0 group-hover:opacity-0 transition-opacity">
+            <Star className="w-2.5 h-2.5 fill-current" />
+            {item.vote_average.toFixed(1)}
           </div>
         ) : null}
-      </div>
-    </Link>
+      </Link>
+    </motion.div>
   );
 }
