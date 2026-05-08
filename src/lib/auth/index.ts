@@ -23,9 +23,8 @@ export const {
   adapter: DrizzleAdapter(db),
   session: { strategy: "jwt" },
   pages: {
-    signIn: "/login",
-    signUp: "/signup",
-  },
+  signIn: "/login",
+},
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
