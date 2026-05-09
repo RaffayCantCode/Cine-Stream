@@ -50,6 +50,7 @@ export default function TvDetailPage() {
   const { status } = useSession();
   const [show, setShow] = useState<TvShow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -111,11 +112,7 @@ export default function TvDetailPage() {
       });
     }
 
-    window.open(
-      `https://www.vidking.net/embed/tv/${id}/${season}/${episodeNumber}?autoPlay=true`,
-      "_blank",
-      "noopener,noreferrer"
-    );
+    setIsPlaying(true);
   };
 
   if (isLoading) {
@@ -263,7 +260,7 @@ export default function TvDetailPage() {
               >
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch S{selectedSeason} E1
-                <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+                
               </button>
             </motion.div>
           </div>
@@ -271,6 +268,23 @@ export default function TvDetailPage() {
       </div>
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
+      {isPlaying && (
+        <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 mb-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black ring-1 ring-white/10"
+          >
+            <iframe
+              src={`https://www.vidking.net/embed/tv/${id}/${selectedSeason}/${seasonData?.episodes?.[0]?.episode_number ?? 1}?autoPlay=true`}
+              className="w-full h-full"
+              allowFullScreen
+              allow="autoplay; fullscreen"
+              title="Watch TV"
+            />
+          </motion.div>
+        </div>
+      )}
         <section>
           <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
             <div className="flex items-center gap-3">

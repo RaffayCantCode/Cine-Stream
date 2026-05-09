@@ -32,6 +32,7 @@ export default function MovieDetailPage() {
   const { status } = useSession();
   const [movie, setMovie] = useState<Movie | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,11 +67,7 @@ export default function MovieDetailPage() {
       });
     }
 
-    window.open(
-      `https://www.vidking.net/embed/movie/${id}?autoPlay=true`,
-      "_blank",
-      "noopener,noreferrer"
-    );
+    setIsPlaying(true);
   };
 
   if (isLoading) {
@@ -231,16 +228,34 @@ export default function MovieDetailPage() {
             >
               <button
                 onClick={handleWatch}
-                className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-white font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+                className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
               >
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch Now
-                <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+                
               </button>
             </motion.div>
           </div>
         </div>
       </div>
+
+      {isPlaying && (
+        <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 mb-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black ring-1 ring-white/10"
+          >
+            <iframe
+              src={`https://www.vidking.net/embed/movie/${id}?autoPlay=true`}
+              className="w-full h-full"
+              allowFullScreen
+              allow="autoplay; fullscreen"
+              title="Watch"
+            />
+          </motion.div>
+        </div>
+      )}
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 space-y-14">
         {movie.credits?.cast && movie.credits.cast.length > 0 && (

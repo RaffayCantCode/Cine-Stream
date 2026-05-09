@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Navigation } from "@/components/Navigation";
 import { MediaCard } from "@/components/MediaCard";
-import { cn, fetchJson, shuffleArray } from "@/lib/utils";
+import { cn, fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
 
 interface Genre {
   id: number;
@@ -75,7 +75,7 @@ export default function BrowseTvPage() {
           total_pages?: number;
         }>(`/api/tmdb/discover/tv?${params}`);
 
-        const next = shuffleArray(data.results || []);
+        const next = shuffleArray(filterReleasedSafeContent(data.results || []));
         setShows((prev) => (mode === "append" ? [...prev, ...next] : next));
 
         const currentPage = data.page ?? page;

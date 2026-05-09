@@ -52,3 +52,19 @@ export function formatDate(dateString: string): string {
     day: "numeric",
   });
 }
+  
+export function filterReleasedSafeContent<T extends { adult?: boolean; release_date?: string; first_air_date?: string }>(items: T[]): T[] {  
+  const today = new Date();  
+  today.setHours(0, 0, 0, 0);  
+  return items.filter((item) => {  
+    if (item.adult === true) return false;  
+    const releaseStr = item.release_date || item.first_air_date;  
+    if (releaseStr) {  
+      const releaseDate = new Date(releaseStr);  
+      if (!isNaN(releaseDate.getTime()) && releaseDate > today) {  
+        return false;  
+      }  
+    }  
+    return true;  
+  });  
+} 

@@ -6,7 +6,7 @@ import { HeroBanner } from "@/components/HeroBanner";
 import { MediaRow } from "@/components/MediaRow";
 import { AnimeRow } from "@/components/AnimeRow";
 import { ContinueWatching } from "@/components/ContinueWatching";
-import { fetchJson, shuffleArray } from "@/lib/utils";
+import { fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
 import { AnimeItem } from "@/components/AnimeCard";
 
 interface MediaItem {
@@ -27,20 +27,13 @@ interface ApiResponse {
   results: MediaItem[];
 }
 
-// Filter out adult/18+ content from TMDB results
-function filterSafeContent(items: MediaItem[]): MediaItem[] {
-  return items.filter((item) => {
-    // Remove items explicitly flagged as adult
-    if (item.adult === true) return false;
-    return true;
-  });
-}
+// Removed old filterSafeContent since we imported the new one from utils
 
 // Pick a truly random hero item (not always index 0)
 function pickRandomHero(items: MediaItem[]): MediaItem | undefined {
   if (!items.length) return undefined;
-  // Exclude adult items and pick from first 15 for variety
-  const pool = filterSafeContent(items).slice(0, 15);
+  // Exclude adult and unreleased items and pick from first 15 for variety
+  const pool = filterReleasedSafeContent(items).slice(0, 15);
   if (!pool.length) return items[0];
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -80,11 +73,11 @@ export default function Home() {
           fetchJson<ApiResponse>(`/api/tmdb/tv/top-rated?page=${Math.floor(Math.random() * 5) + 1}`),
         ]);
 
-        const safeFiltered = filterSafeContent(shuffleArray(trendingData.results || []));
-        const safePM = filterSafeContent(shuffleArray(popularMoviesData.results || []));
-        const safeTRM = filterSafeContent(shuffleArray(topRatedMoviesData.results || []));
-        const safePTV = filterSafeContent(shuffleArray(popularTvData.results || []));
-        const safeTRTV = filterSafeContent(shuffleArray(topRatedTvData.results || []));
+        const safeFiltered = filterReleasedSafeContent(shuffleArray(trendingData.results || []));
+        const safePM = filterReleasedSafeContent(shuffleArray(popularMoviesData.results || []));
+        const safeTRM = filterReleasedSafeContent(shuffleArray(topRatedMoviesData.results || []));
+        const safePTV = filterReleasedSafeContent(shuffleArray(popularTvData.results || []));
+        const safeTRTV = filterReleasedSafeContent(shuffleArray(topRatedTvData.results || []));
 
         setTrending(safeFiltered);
         setHeroItem(pickRandomHero(safeFiltered));

@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
-
-const ANIME_API_BASE = "https://anime-site.xo.je/api/v2/anikoto";
+import { fetchAnimeApi } from "@/lib/anime-fetch";
 
 export async function GET(
   _request: NextRequest,
@@ -9,19 +8,7 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const res = await fetch(`${ANIME_API_BASE}/anime/${id}/episodes`, {
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "StreamVault/1.0",
-      },
-      next: { revalidate: 120 },
-    });
-
-    if (!res.ok) {
-      throw new Error(`Anime episodes API failed: ${res.status} ${res.statusText}`);
-    }
-
-    const data = await res.json();
+    const data = await fetchAnimeApi(`/anime/${id}/episodes`, { next: { revalidate: 120 } });
     return Response.json(data);
   } catch (error) {
     const message =

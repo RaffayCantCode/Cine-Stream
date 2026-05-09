@@ -7,7 +7,7 @@ import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Search as SearchIcon, MonitorPlay } from "lucide-react";
 import { Input } from "@/components/ui/Input";
-import { fetchJson } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 interface MediaItem {
@@ -63,9 +63,9 @@ export default function SearchPage() {
 
       // Handle TMDB results
       if (tmdbResult.status === "fulfilled") {
-        const filtered = tmdbResult.value.results
-          ?.filter((r) => (r.media_type === "movie" || r.media_type === "tv") && !r.adult)
-          || [];
+        const filtered = filterReleasedSafeContent(tmdbResult.value.results
+          ?.filter((r) => (r.media_type === "movie" || r.media_type === "tv"))
+          || []);
         setResults(filtered);
       } else {
         setResults([]);
