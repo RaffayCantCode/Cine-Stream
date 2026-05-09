@@ -8,13 +8,16 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const data = await fetchAnimeApi(`/anime/${id}/episodes`, { next: { revalidate: 120 } });
+    const data = await fetchAnimeApi(`/api/episodes/${encodeURIComponent(id)}`, { next: { revalidate: 120 } });
+
+    // Response is already transformed by fetchAnimeApi
     return Response.json(data);
   } catch (error) {
+    console.error("[Anime Episodes Error]:", error);
     const message =
       error instanceof Error && error.message
         ? error.message
         : "Failed to fetch anime episodes";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message, success: false }, { status: 500 });
   }
 }

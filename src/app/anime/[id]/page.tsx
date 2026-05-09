@@ -27,17 +27,16 @@ interface AnimeDetail {
 }
 
 interface Episode {
-  number: number;
+  episodeId: string;
+  episodeNum: number;
   title?: string;
   isFiller?: boolean;
-  hasSub?: boolean;
-  hasDub?: boolean;
-  sources?: {
-    sub?: string;
-    dub?: string;
-    aniSub?: string;
-    aniDub?: string;
-  };
+}
+
+interface StreamingSource {
+  url?: string;
+  quality?: string;
+  isM3U8?: boolean;
 }
 
 export default function AnimeDetailPage() {
@@ -51,6 +50,8 @@ export default function AnimeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
   const [watchMode, setWatchMode] = useState<"sub" | "dub">("sub");
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [streamLoading, setStreamLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -80,7 +81,7 @@ export default function AnimeDetailPage() {
     const loadEps = async () => {
       setEpisodesLoading(true);
       try {
-        const data = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(
+        const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; totalEpisodes: number } }>(
           `/api/anime/${id}/episodes`
         );
         if (data.success && data.data?.episodes) {
@@ -98,15 +99,42 @@ export default function AnimeDetailPage() {
     loadEps();
   }, [id]);
 
-  const getStreamUrl = (ep: Episode) => {
-    if (!ep.sources) return null;
-    if (watchMode === "dub") {
-      return ep.sources.dub || ep.sources.aniDub || ep.sources.sub || null;
-    }
-    return ep.sources.aniSub || ep.sources.sub || null;
-  };
+  // Fetch streaming source when episode or watch mode changes
+  useEffect(() => {
+    if (!selectedEp || !id) return;
 
-  const streamUrl = selectedEp ? getStreamUrl(selectedEp) : null;
+    const fetchStream = async () => {
+      setStreamLoading(true);
+      try {
+        const data = await fetchJson<{
+          success: boolean;
+          data: {
+            sources?: StreamingSource[];
+            download?: string;
+            headers?: Record<string, string>;
+          };
+          source: string;
+        }>(
+          `/api/anime/watch?animeId=${encodeURIComponent(id)}&episodeId=${encodeURIComponent(selectedEp.episodeId)}&server=${watchMode}`
+        );
+
+        if (data.success && data.data?.sources && data.data.sources.length > 0) {
+          // Get the first available source (usually highest quality)
+          const source = data.data.sources[0];
+          setStreamUrl(source.url || null);
+        } else {
+          setStreamUrl(null);
+        }
+      } catch (e) {
+        console.error("Failed to load stream:", e);
+        setStreamUrl(null);
+      } finally {
+        setStreamLoading(false);
+      }
+    };
+
+    fetchStream();
+  }, [selectedEp, watchMode, id]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -259,27 +287,41 @@ export default function AnimeDetailPage() {
                 </div>
 
                 {/* Embedded player */}
-                {streamUrl && selectedEp && (
+                {(streamUrl || streamLoading) && selectedEp && (
                   <motion.div
-                    key={`${selectedEp.number}-${watchMode}`}
+                    key={`${selectedEp.episodeNum}-${watchMode}`}
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3 }}
-                    className="w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10"
+                    className="w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10 relative"
                   >
-                    <iframe
-                      src={streamUrl}
-                      className="w-full h-full"
-                      allowFullScreen
-                      allow="autoplay; fullscreen"
-                      title={`${anime.name} - Episode ${selectedEp.number}`}
-                    />
+                    {streamLoading ? (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500" />
+                      </div>
+                    ) : streamUrl ? (
+                      <video
+                        src={streamUrl}
+                        className="w-full h-full"
+                        controls
+                        autoPlay
+                        playsInline
+                        title={`${anime.name} - Episode ${selectedEp.episodeNum}`}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white/60">
+                        <div className="text-center">
+                          <div className="text-4xl mb-2">📺</div>
+                          <p>Stream unavailable for this episode</p>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 )}
 
                 {selectedEp && (
                   <div className="text-sm text-white/60">
-                    <span className="font-bold text-white">Episode {selectedEp.number}</span>
+                    <span className="font-bold text-white">Episode {selectedEp.episodeNum}</span>
                     {selectedEp.title && ` — ${selectedEp.title}`}
                     {selectedEp.isFiller && (
                       <span className="ml-2 text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded font-bold uppercase">Filler</span>
@@ -293,15 +335,15 @@ export default function AnimeDetailPage() {
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
                     {episodes.map((ep) => (
                       <button
-                        key={ep.number}
+                        key={ep.episodeId}
                         onClick={() => setSelectedEp(ep)}
                         className={`aspect-square rounded-lg text-sm font-bold transition-all duration-200 flex flex-col items-center justify-center gap-0.5 ${
-                          selectedEp?.number === ep.number
+                          selectedEp?.episodeId === ep.episodeId
                             ? "bg-violet-600 text-white shadow-lg shadow-violet-500/30 scale-105"
                             : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
                         }`}
                       >
-                        <span>{ep.number}</span>
+                        <span>{ep.episodeNum}</span>
                         {ep.isFiller && (
                           <span className="text-[7px] font-bold text-amber-400 uppercase tracking-wider leading-none">filler</span>
                         )}

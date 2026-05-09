@@ -6,19 +6,22 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get("q");
 
   if (!query) {
-    return Response.json({ error: "Missing query parameter" }, { status: 400 });
+    return Response.json({ error: "Missing query parameter", success: false }, { status: 400 });
   }
 
   try {
-    const data = await fetchAnimeApi(`/search?q=${encodeURIComponent(query)}&page=1`, {
+    const data = await fetchAnimeApi(`/api/search?keyword=${encodeURIComponent(query)}`, {
       next: { revalidate: 300 },
     });
+
+    // Response is already transformed by fetchAnimeApi
     return Response.json(data);
   } catch (error) {
+    console.error("[Anime Search Error]:", error);
     const message =
       error instanceof Error && error.message
         ? error.message
         : "Failed to search anime";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message, success: false }, { status: 500 });
   }
 }

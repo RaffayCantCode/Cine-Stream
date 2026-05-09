@@ -1,5 +1,7 @@
+export const dynamic = "force-dynamic";
+
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { watchHistory } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -23,6 +25,7 @@ export async function DELETE(
     );
   }
 
+  const db = getDb();
   await db
     .delete(watchHistory)
     .where(

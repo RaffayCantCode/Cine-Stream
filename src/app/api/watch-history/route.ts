@@ -1,6 +1,8 @@
+export const dynamic = "force-dynamic";
+
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { watchHistory } from "@/lib/db/schema";
+import { getDb } from "@/lib/db";
+import { watchHistory, WatchHistoryItem } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod";
 
@@ -23,6 +25,7 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const db = getDb();
   const rows = await db
     .select()
     .from(watchHistory)
@@ -31,7 +34,7 @@ export async function GET() {
     .limit(30);
 
   const seen = new Set<string>();
-  const deduped = rows.filter((r) => {
+  const deduped = rows.filter((r: WatchHistoryItem) => {
     const key = `${r.mediaType}-${r.mediaId}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -46,6 +49,8 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const db = getDb();
 
   const body = await request.json();
   const parsed = AddWatchHistorySchema.safeParse(body);

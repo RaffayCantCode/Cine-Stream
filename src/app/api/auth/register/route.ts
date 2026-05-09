@@ -1,4 +1,6 @@
-import { db } from "@/lib/db";
+export const dynamic = "force-dynamic";
+
+import { getDb } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -12,6 +14,9 @@ const registerSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    // Get database instance dynamically
+    const db = getDb();
+
     const body = await request.json();
     const parsed = registerSchema.safeParse(body);
 
@@ -56,6 +61,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    console.error("[Register Error]:", error);
     return Response.json(
       { error: "Failed to create account" },
       { status: 500 }
