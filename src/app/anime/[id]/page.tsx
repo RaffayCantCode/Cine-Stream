@@ -100,11 +100,11 @@ export default function AnimeDetailPage() {
 
       <main className="md:pl-56 lg:pl-64">
       {isLoading ? (
-        <div className="pt-8 px-6 md:px-12 max-w-screen-2xl mx-auto">
+        <div className="pt-0 px-6 md:px-12 max-w-screen-2xl mx-auto">
           <div className="w-full h-[60vh] rounded-2xl bg-muted/50 animate-pulse" />
         </div>
       ) : error ? (
-        <div className="pt-8 px-6 md:px-12 max-w-screen-2xl mx-auto">
+        <div className="pt-0 px-6 md:px-12 max-w-screen-2xl mx-auto">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
             <div className="text-2xl mb-2">😔</div>
             <div className="text-lg font-bold text-white mb-1">Couldn&apos;t load anime</div>

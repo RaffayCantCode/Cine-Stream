@@ -101,7 +101,7 @@ export default function BrowseMoviesPage() {
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64">
-      <div className="pt-8 px-6 md:px-12 max-w-screen-2xl mx-auto">
+      <div className="pt-0 px-6 md:px-12 max-w-screen-2xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white">Movies</h1>

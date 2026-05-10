@@ -134,7 +134,7 @@ export default function TvDetailPage() {
       <div className="min-h-screen bg-background text-foreground pb-24">
         <Sidebar />
         <main className="md:pl-56 lg:pl-64">
-          <div className="pt-8 px-6 md:px-12 max-w-screen-2xl mx-auto">
+          <div className="pt-0 px-6 md:px-12 max-w-screen-2xl mx-auto">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-white/80">
               <div className="text-lg font-bold text-white mb-1">Couldn&apos;t load this TV show</div>
               {error ? (

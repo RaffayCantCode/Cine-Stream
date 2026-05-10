@@ -61,7 +61,7 @@ export default function SignupPage() {
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64">
-      <div className="pt-8 px-6 md:px-12 max-w-screen-xl mx-auto">
+      <div className="pt-0 px-6 md:px-12 max-w-screen-xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { fetchJson, shuffleArray } from "@/lib/utils";
-import { Star, BookOpen, Clock, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface MangaItem {
@@ -20,32 +19,52 @@ interface MangaItem {
 export default function MangaBrowsePage() {
   const [mangas, setMangas] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"popular" | "latest">("popular");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadManga = useCallback(async (pageNum: number, append: boolean = false) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
+    setError(null);
+
+    try {
+      const data = await fetchJson<{
+        success: boolean;
+        data: MangaItem[];
+      }>(`/api/manga?category=${activeTab}&page=${pageNum}`);
+
+      if (data.success && data.data) {
+        if (append) {
+          setMangas((prev) => [...prev, ...data.data]);
+        } else {
+          setMangas(shuffleArray(data.data));
+        }
+        setHasMore(data.data.length > 0);
+        setPage(pageNum);
+      } else {
+        throw new Error("No data returned");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load manga");
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await fetchJson<{
-          success: boolean;
-          data: MangaItem[];
-        }>(`/api/manga?category=${activeTab}`);
+    loadManga(1, false);
+  }, [activeTab, loadManga]);
 
-        if (data.success && data.data) {
-          setMangas(shuffleArray(data.data));
-        } else {
-          throw new Error("Manga API returned no data");
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load manga");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, [activeTab]);
+  const handleLoadMore = () => {
+    loadManga(page + 1, true);
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -54,7 +73,7 @@ export default function MangaBrowsePage() {
       <main className="md:pl-56 lg:pl-64">
         <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 pt-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 pt-4">
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-1.5 h-8 bg-amber-500 rounded-full" />
@@ -67,19 +86,12 @@ export default function MangaBrowsePage() {
                 Read your favorite manga online. Track your reading progress!
               </p>
             </div>
-            <div className="flex items-center gap-2 ml-5 md:ml-0">
-              <input
-                type="text"
-                placeholder="Search manga..."
-                className="h-10 px-4 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm font-semibold outline-none placeholder:text-white/30 w-40"
-              />
-              <Link
-                href="/manga/search"
-                className="h-10 px-4 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-500 transition flex items-center gap-2"
-              >
-                Search
-              </Link>
-            </div>
+            <Link
+              href="/manga/search"
+              className="h-10 px-4 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-500 transition flex items-center gap-2 ml-5 md:ml-0"
+            >
+              Search Manga
+            </Link>
           </div>
 
           {/* Tabs */}
@@ -102,7 +114,7 @@ export default function MangaBrowsePage() {
           {/* Content */}
           {isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-              {Array.from({ length: 12 }).map((_, i) => (
+              {Array.from({ length: 18 }).map((_, i) => (
                 <div key={i} className="aspect-[2/3] w-full rounded-xl bg-muted/50 animate-pulse" />
               ))}
             </div>
@@ -112,11 +124,25 @@ export default function MangaBrowsePage() {
               <div className="text-sm text-white/50">{error}</div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-              {mangas.map((manga, i) => (
-                <MangaCard key={manga.id} item={manga} index={i} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                {mangas.map((manga, i) => (
+                  <MangaCard key={`${manga.id}-${i}`} item={manga} index={i} />
+                ))}
+              </div>
+
+              {hasMore && (
+                <div className="flex justify-center mt-12">
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore}
+                    className="h-11 px-8 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-500 disabled:opacity-50 transition"
+                  >
+                    {isLoadingMore ? "Loading..." : "Load More"}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
@@ -142,6 +168,9 @@ function MangaCard({ item, index }: { item: MangaItem; index: number }) {
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
@@ -149,30 +178,27 @@ function MangaCard({ item, index }: { item: MangaItem; index: number }) {
           </div>
         )}
 
-        {/* Status Badge */}
         <div className="absolute top-2 left-2 z-20">
           <span className="bg-amber-600/90 backdrop-blur-sm text-white text-[9px] font-extrabold tracking-widest px-1.5 py-0.5 rounded-md uppercase">
             📚 Manga
           </span>
         </div>
 
-        {/* Hover overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-end p-3.5">
           <div className="relative z-10">
             <h3 className="text-white font-bold text-sm leading-tight mb-0.5 line-clamp-2">
               {item.name}
             </h3>
-            {item.author && (
-              <p className="text-white/40 text-[10px] leading-tight mb-1 line-clamp-1">{item.author}</p>
+            {item.genres && item.genres.length > 0 && (
+              <p className="text-white/40 text-[10px] leading-tight mb-1 line-clamp-1">
+                {item.genres.slice(0, 2).join(", ")}
+              </p>
             )}
             <div className="flex items-center gap-2 flex-wrap">
               {item.type && (
                 <span className="text-amber-400 text-[9px] font-bold uppercase tracking-wider">
                   {item.type}
                 </span>
-              )}
-              {item.year && (
-                <span className="text-white/40 text-[9px]">{item.year}</span>
               )}
             </div>
           </div>
