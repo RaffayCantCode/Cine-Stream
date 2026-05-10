@@ -71,8 +71,6 @@ npm run db:migrate
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the app.
-
 ### Deploy to Vercel
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
