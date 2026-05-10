@@ -14,40 +14,35 @@ const nextConfig: NextConfig = {
       // Anime API image sources
       {
         protocol: "https",
-        hostname: "**.vercel.app",
+        hostname: "*.vercel.app",
       },
       {
         protocol: "https",
-        hostname: "**.animekai.to",
+        hostname: "*.animekai.to",
       },
       {
         protocol: "https",
-        hostname: "**.gogoanime.**",
+        hostname: "*.gogoanime.*",
       },
       {
         protocol: "https",
-        hostname: "**.hianime.**",
+        hostname: "*.hianime.*",
       },
       {
         protocol: "https",
-        hostname: "**.aniwatch.**",
+        hostname: "*.aniwatch.*",
       },
       {
         protocol: "https",
-        hostname: "**.m3u8",
-      },
-      // General image sources
-      {
-        protocol: "https",
-        hostname: "**.png",
+        hostname: "dropfile.cc",
       },
       {
         protocol: "https",
-        hostname: "**.jpg",
+        hostname: "api.anipub.xyz",
       },
       {
         protocol: "https",
-        hostname: "**.jpeg",
+        hostname: "api.tatakai.me",
       },
     ],
   },

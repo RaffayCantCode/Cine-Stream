@@ -1,31 +1,31 @@
 // Multi-API Anime Fetcher with Fallback Logic
 // APIs included:
-// 1. AnimeKAI API - https://animekai-api.vercel.app
-// 2. Consumet API (GogoAnime) - https://api.consumet.org/anime/gogoanime
-// 3. Anime-API by Abhay Thakur (AniWatch) - https://api-anime-rouge.vercel.app/aniwatch
-// 4. Hianime API - https://hianime-api.vercel.app/api/v2/hianime
+// 1. AniPub API - https://api.anipub.xyz
+// 2. Tatakai API - https://api.tatakai.me
+// 3. DropFile API - https://dropfile.cc
+// 4. Hianime API - https://hianime-api.vercel.app/api/v2/hianime (fallback)
 
 interface AnimeAPIConfig {
   name: string;
   baseUrl: string;
-  type: "animekai" | "consumet" | "aniwatch" | "hianime";
+  type: "anipub" | "tatakai" | "dropfile" | "hianime";
 }
 
 const ANIME_APIS: AnimeAPIConfig[] = [
   {
-    name: "AnimeKAI",
-    baseUrl: "https://animekai-api.vercel.app",
-    type: "animekai",
+    name: "AniPub",
+    baseUrl: "https://api.anipub.xyz",
+    type: "anipub",
   },
   {
-    name: "Consumet (GogoAnime)",
-    baseUrl: "https://api.consumet.org/anime/gogoanime",
-    type: "consumet",
+    name: "Tatakai",
+    baseUrl: "https://api.tatakai.me",
+    type: "tatakai",
   },
   {
-    name: "Anime-API (AniWatch)",
-    baseUrl: "https://api-anime-rouge.vercel.app/aniwatch",
-    type: "aniwatch",
+    name: "DropFile",
+    baseUrl: "https://dropfile.cc",
+    type: "dropfile",
   },
   {
     name: "Hianime",
@@ -50,12 +50,12 @@ export interface AnimeItem {
 // Transform different API responses to unified format
 function transformResponse(apiType: string, data: any): any {
   switch (apiType) {
-    case "animekai":
-      return transformAnimeKAI(data);
-    case "consumet":
-      return transformConsumet(data);
-    case "aniwatch":
-      return transformAniWatch(data);
+    case "anipub":
+      return transformAniPub(data);
+    case "tatakai":
+      return transformTatakai(data);
+    case "dropfile":
+      return transformDropFile(data);
     case "hianime":
       return transformHianime(data);
     default:
@@ -128,6 +128,115 @@ function transformAniWatch(data: any): any {
   return data;
 }
 
+// Transform AniPub API response
+function transformAniPub(data: any): any {
+  // AniPub returns detailed anime info
+  if (data.local || data.title) {
+    // Single anime response
+    const item = {
+      id: data._id || data.id || "",
+      name: data.title || data.name || "Unknown",
+      jname: data.japanese_title || data.jname || null,
+      poster: data.poster || data.cover || data.image || "",
+      type: data.type || data.format || "TV",
+      episodes: {
+        sub: data.episodes?.sub || data.episode_count || null,
+        dub: data.episodes?.dub || null,
+      },
+      rating: data.rating || data.score || null,
+      description: data.description || data.synopsis || data.summary || "",
+      genres: data.genres || [],
+    };
+    return { success: true, data: [item] };
+  }
+  
+  // Search/browse response
+  if (data.results || data.data || Array.isArray(data)) {
+    const items = (data.results || data.data || data || []).map((item: any) => ({
+      id: item._id || item.id || item.slug || "",
+      name: item.title || item.name || "Unknown",
+      jname: item.japanese_title || item.jname || null,
+      poster: item.poster || item.cover || item.image || "",
+      type: item.type || item.format || "TV",
+      episodes: {
+        sub: item.episodes?.sub || item.episode_count || null,
+        dub: item.episodes?.dub || null,
+      },
+      rating: item.rating || item.score || null,
+      description: item.description || item.synopsis || item.summary || "",
+      genres: item.genres || [],
+    }));
+    return { success: true, data: items };
+  }
+  return data;
+}
+
+// Transform Tatakai API response
+function transformTatakai(data: any): any {
+  // Tatakai API structure
+  if (data.anime || data.results || data.data) {
+    const items = (data.anime || data.results || data.data || []).map((item: any) => ({
+      id: item.id || item.mal_id || item.anilist_id || "",
+      name: item.title || item.name || "Unknown",
+      jname: item.japanese_title || item.jname || null,
+      poster: item.poster || item.image || item.cover || "",
+      type: item.type || item.format || "TV",
+      episodes: {
+        sub: item.episodes?.sub || item.episode_count || null,
+        dub: item.episodes?.dub || null,
+      },
+      rating: item.rating || item.score || item.score_avg || null,
+      description: item.description || item.synopsis || item.summary || "",
+      genres: item.genres || [],
+    }));
+    return { success: true, data: items };
+  }
+  return data;
+}
+
+// Transform DropFile API response
+function transformDropFile(data: any): any {
+  // DropFile returns embed data
+  if (data.anime && data.stream) {
+    // Single anime with stream data
+    const item = {
+      id: data.anime.ids?.mal || data.anime.ids?.anilist || data.anime.ids?.imdb || "",
+      name: data.anime.title || "Unknown",
+      jname: null, // DropFile doesn't provide Japanese name
+      poster: "", // Would need to fetch separately
+      type: data.anime.type || "TV",
+      episodes: {
+        sub: null, // Would need episode-specific calls
+        dub: null,
+      },
+      rating: null,
+      description: "",
+      genres: [],
+    };
+    return { success: true, data: [item] };
+  }
+  
+  // Search response
+  if (data.results || data.data || Array.isArray(data)) {
+    const items = (data.results || data.data || data || []).map((item: any) => ({
+      id: item.ids?.mal || item.ids?.anilist || item.ids?.imdb || item.id || "",
+      name: item.title || item.name || "Unknown",
+      jname: null,
+      poster: "",
+      type: item.type || "TV",
+      episodes: {
+        sub: null,
+        dub: null,
+      },
+      rating: null,
+      description: "",
+      genres: [],
+    }));
+    return { success: true, data: items };
+  }
+  return data;
+}
+
 function transformHianime(data: any): any {
   if (data.data) {
     // Handle hianime structure
@@ -167,50 +276,60 @@ function transformHianime(data: any): any {
 // Build endpoint URL based on API type
 function buildEndpoint(api: AnimeAPIConfig, endpoint: string): string {
   switch (api.type) {
-    case "animekai":
-      return `${api.baseUrl}${endpoint}`;
-    case "consumet":
-      // Consumet uses different endpoints
-      if (endpoint.startsWith("/search")) {
-        const query = new URLSearchParams(endpoint.split("?")[1]).get("q") || "";
-        return `${api.baseUrl}/${encodeURIComponent(query)}`;
+    case "anipub":
+      // AniPub API endpoints
+      if (endpoint === "/home") {
+        return `${api.baseUrl}/api/anime/trending?limit=20`;
       }
-      if (endpoint === "/home" || endpoint === "/top-airing") {
-        return `${api.baseUrl}/top-airing`;
-      }
-      if (endpoint === "/category/latest-updated") {
-        return `${api.baseUrl}/recent-episodes`;
-      }
-      if (endpoint.startsWith("/anime/")) {
-        const id = endpoint.replace("/anime/", "");
-        return `${api.baseUrl}/info/${id}`;
-      }
-      if (endpoint.includes("/episodes")) {
-        const id = endpoint.split("/")[2];
-        return `${api.baseUrl}/info/${id}`;
-      }
-      return `${api.baseUrl}${endpoint}`;
-    case "aniwatch":
-      // AniWatch uses different structure
       if (endpoint.startsWith("/api/search")) {
         const params = new URLSearchParams(endpoint.split("?")[1]);
-        const keyword = params.get("keyword") || "";
-        return `${api.baseUrl}/search?keyword=${encodeURIComponent(keyword)}`;
+        const keyword = params.get("keyword") || params.get("q") || "";
+        return `${api.baseUrl}/api/search/${encodeURIComponent(keyword)}`;
       }
+      if (endpoint.startsWith("/api/find/")) {
+        const id = endpoint.replace("/api/find/", "");
+        return `${api.baseUrl}/api/find/${id}`;
+      }
+      if (endpoint.startsWith("/api/findbyGenre/")) {
+        const genre = endpoint.replace("/api/findbyGenre/", "").split("?")[0];
+        const page = new URLSearchParams(endpoint.split("?")[1]).get("page") || "1";
+        return `${api.baseUrl}/api/findbyGenre/${genre}?Page=${page}`;
+      }
+      return `${api.baseUrl}${endpoint}`;
+    case "tatakai":
+      // Tatakai API endpoints
       if (endpoint === "/home") {
-        return `${api.baseUrl}/home`;
+        return `${api.baseUrl}/api/v1/hianime/home`;
       }
-      if (endpoint.startsWith("/category/")) {
-        const category = endpoint.replace("/category/", "").split("?")[0];
-        return `${api.baseUrl}/${category}`;
+      if (endpoint.startsWith("/api/search")) {
+        const params = new URLSearchParams(endpoint.split("?")[1]);
+        const keyword = params.get("keyword") || params.get("q") || "";
+        return `${api.baseUrl}/api/v1/anime/search?q=${encodeURIComponent(keyword)}`;
       }
-      if (endpoint.startsWith("/api/anime/")) {
-        const id = endpoint.replace("/api/anime/", "");
-        return `${api.baseUrl}/anime/${id}`;
+      if (endpoint.startsWith("/api/v1/hianime/home")) {
+        return `${api.baseUrl}${endpoint}`;
       }
-      if (endpoint.startsWith("/api/episodes/")) {
-        const id = endpoint.replace("/api/episodes/", "");
-        return `${api.baseUrl}/episodes/${id}`;
+      return `${api.baseUrl}${endpoint}`;
+    case "dropfile":
+      // DropFile API endpoints - mainly for embedding
+      if (endpoint.startsWith("/api/anime/embed/")) {
+        // Extract TV/movie, id, season, episode from path
+        const parts = endpoint.split("/");
+        if (parts.length >= 6 && parts[3] === "tv") {
+          const type = parts[2]; // tv or movie
+          const idSource = parts[4]; // mal-21, anilist-154587, etc
+          const season = parts[5];
+          const episode = parts[6].split("?")[0]; // Remove query params
+          const queryParams = parts[6].split("?")[1] || "";
+          return `${api.baseUrl}/api/anime/embed/${type}/${idSource}/${season}/${episode}?${queryParams}`;
+        }
+        return `${api.baseUrl}${endpoint}`;
+      }
+      // For search, we'll use a different approach since DropFile is mainly for embeds
+      if (endpoint.startsWith("/api/search")) {
+        const params = new URLSearchParams(endpoint.split("?")[1]);
+        const keyword = params.get("keyword") || params.get("q") || "";
+        return `${api.baseUrl}/api/anime/search?q=${encodeURIComponent(keyword)}`;
       }
       return `${api.baseUrl}${endpoint}`;
     case "hianime":
@@ -308,14 +427,18 @@ export async function getStreamingSource(
       let url: string;
 
       switch (api.type) {
-        case "animekai":
-          url = `${api.baseUrl}/api/servers/${episodeId}`;
+        case "anipub":
+          // AniPub provides streaming links via getStreamingLinks equivalent
+          // We'd need to construct the appropriate endpoint
+          url = `${api.baseUrl}/v1/api/details/${episodeId}`;
           break;
-        case "consumet":
-          url = `${api.baseUrl}/watch/${episodeId}`;
+        case "tatakai":
+          // Tatakai API for episodes
+          url = `${api.baseUrl}/api/v1/anime/${animeId}/episode/${episodeId}`;
           break;
-        case "aniwatch":
-          url = `${api.baseUrl}/servers/${episodeId}`;
+        case "dropfile":
+          // DropFile for direct embed URLs
+          url = `${api.baseUrl}/api/anime/embed/tv/${animeId}/1/${episodeId}?audio=sub&lang=en`;
           break;
         case "hianime":
           url = `${api.baseUrl}/episode/servers?animeEpisodeId=${episodeId}`;

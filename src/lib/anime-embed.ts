@@ -83,8 +83,8 @@ export function getAutoEmbedSources(title: string, episode: number = 1): AnimeEm
       hasDub: false,
     },
     {
-      name: "VidSrc Anime",
-      embedUrl: `https://vidsrc.xyz/embed/anime/${encodedTitle}/${episode}`,
+      name: "VidSrc.me Anime",
+      embedUrl: `https://vidsrcme.ru/embed/anime/${encodedTitle}/${episode}`,
       type: "iframe",
       quality: "HD",
       requiresReferrer: false,
@@ -101,13 +101,13 @@ export function getAutoEmbedSources(title: string, episode: number = 1): AnimeEm
       hasDub: false,
     },
     {
-      name: "Anime Universe",
-      embedUrl: `https://animeuniverse.com/embed/${encodedTitle}/${episode}`,
+      name: "VidSrc.sbs Anime",
+      embedUrl: `https://vidsrc.sbs/embed/anime/${encodedTitle}/${episode}`,
       type: "iframe",
       quality: "HD",
       requiresReferrer: false,
       hasSubtitles: true,
-      hasDub: true,
+      hasDub: false,
     },
   ];
 }
