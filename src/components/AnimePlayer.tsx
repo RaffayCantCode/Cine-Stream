@@ -12,7 +12,7 @@ interface AnimePlayerProps {
 }
 
 export function AnimePlayer({ animeId, animeTitle, episode }: AnimePlayerProps) {
-  const sources = getAllAnimeSources(animeTitle, animeId, episode);
+  const sources = getAllAnimeSources(animeTitle, episode);
   const [currentSource, setCurrentSource] = useState<AnimeEmbedSource>(sources[0]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,10 +103,9 @@ export function AnimePlayer({ animeId, animeTitle, episode }: AnimePlayerProps) 
             <iframe
               src={currentSource.embedUrl}
               className="w-full h-full"
-              allowFullScreen
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-storage-access-by-user-activation"
               title={`${animeTitle} - Episode ${episode}`}
-              referrerPolicy="no-referrer"
               onLoad={() => setIsLoading(false)}
               onError={handleIframeError}
             />

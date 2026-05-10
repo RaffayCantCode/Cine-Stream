@@ -1,97 +1,135 @@
-# StreamVault - Next.js Streaming Platform
+# StreamVault 🎬
 
-A Next.js streaming platform that uses the TMDB API for movie/TV data and VidKing for streaming.
+StreamVault is a full-featured streaming platform for movies, TV shows, anime, and manga. Built with Next.js 15 and deployed on Vercel.
 
-## Features
+![StreamVault Banner](https://via.placeholder.com/1200x400/1a1a2e/6366f1?text=StreamVault)
 
-- Browse trending movies and TV shows
-- Search functionality
-- Movie and TV detail pages with cast info
-- Episode selection for TV shows
-- User authentication (email/password + OAuth)
-- Watch history tracking
-- Responsive design
+## ✨ Features
 
-## Deploy to Vercel
+### Entertainment Hub
+- 🎬 **Movies** - Browse popular, top-rated, trending movies from TMDB
+- 📺 **TV Shows** - Stream TV series with episode selection
+- 🇯🇵 **Anime** - Japanese anime with sub/dub options
+- 📚 **Manga** - Read manga online via MangaDex
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
+### User Experience
+- 🔍 **Search** - Find any movie, show, anime, or manga
+- 👤 **User Accounts** - Sign up/login with email or OAuth (Google)
+- 📊 **Watch History** - Track what you've watched
+- ⏭️ **Continue Watching** - Pick up where you left off
+- 🗑️ **Remove Items** - Clear items from your continue list
+- 📱 **Responsive Design** - Works on mobile, tablet, and desktop
+
+### Streaming
+- Multiple streaming sources for reliability
+- Auto-fallback if one source fails
+- English subtitles where available
+
+## 🛠️ Tech Stack
+
+| Technology | Purpose |
+|------------|---------|
+| **Next.js 15** | Framework |
+| **React 19** | UI Library |
+| **TypeScript** | Type Safety |
+| **Tailwind CSS** | Styling |
+| **NextAuth.js** | Authentication |
+| **Drizzle ORM** | Database |
+| **Vercel Postgres** | Database |
+| **Framer Motion** | Animations |
+| **TMDB API** | Movie/TV Data |
+| **MangaDex API** | Manga Data |
+| **Jikan API** | Anime Metadata |
+
+## 🚀 Getting Started
 
 ### Prerequisites
+- Node.js 18+
+- Vercel account (for deployment)
+- TMDB API key (free from themoviedb.org)
 
-1. **Vercel Account** - Sign up at [vercel.com](https://vercel.com)
-2. **Vercel Postgres** - Add from Vercel Dashboard (Storage tab)
-3. **TMDB API Key** - Already included in the env.example
-
-### Environment Variables
-
-Set these in your Vercel project settings:
-
-```
-POSTGRES_URL="your-vercel-postgres-url"
-NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
-NEXTAUTH_URL="https://your-domain.vercel.app"
-TMDB_API_KEY="your-tmdb-token"
-```
-
-### Database Setup
-
-After deploying, run the migration:
+### Local Development
 
 ```bash
-npx drizzle-kit migrate
-```
+# Clone the repository
+git clone https://github.com/yourusername/stream-vault.git
+cd stream-vault
 
-Or set up in Vercel Dashboard:
-1. Go to your project Settings
-2. Click "Build & Deployment"
-3. Add Build Command: `npm run build && npm run db:migrate`
-
-## Local Development
-
-```bash
 # Install dependencies
 npm install
 
-# Copy environment variables
+# Copy environment file
 cp .env.example .env.local
 
-# Update .env.local with your values
+# Edit .env.local with your credentials
+# Required: TMDB_API_KEY, POSTGRES_URL, NEXTAUTH_SECRET
 
 # Run database migrations
 npm run db:migrate
 
-# Start development server
+# Start the dev server
 npm run dev
 ```
 
-## Project Structure
+Open [http://localhost:3000](http://localhost:3000) to view the app.
+
+### Deploy to Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
+
+1. Connect your GitHub repository
+2. Add the required environment variables in Vercel dashboard:
+   - `TMDB_API_KEY` - Get from [TMDB](https://www.themoviedb.org/settings/api)
+   - `POSTGRES_URL` - Add Vercel Postgres from the Storage tab
+   - `NEXTAUTH_SECRET` - Generate with: `openssl rand -base64 32`
+   - `NEXTAUTH_URL` - Your Vercel project URL
+3. Deploy!
+
+## 📁 Project Structure
 
 ```
-src/
-  app/              # Next.js App Router pages
-  components/       # React components
-  lib/              # Utilities and database
-  hooks/            # Custom React hooks
+stream-vault/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── api/               # API routes
+│   │   │   ├── anime/         # Anime API
+│   │   │   ├── manga/         # Manga API
+│   │   │   ├── tmdb/          # Movie/TV API
+│   │   │   └── auth/          # Authentication
+│   │   ├── anime/             # Anime pages
+│   │   ├── manga/             # Manga pages
+│   │   ├── movie/             # Movie detail pages
+│   │   ├── tv/                # TV show pages
+│   │   └── ...
+│   ├── components/             # React components
+│   │   ├── Sidebar.tsx        # Navigation sidebar
+│   │   ├── VideoPlayer.tsx    # Movie/TV player
+│   │   ├── AnimePlayer.tsx    # Anime player
+│   │   └── ...
+│   └── lib/                   # Utilities & APIs
+│       ├── streaming-fetch.ts # Movie/TV sources
+│       ├── anime-embed.ts     # Anime sources
+│       ├── jikan-fetch.ts     # Anime metadata
+│       └── mangadex-fetch.ts  # Manga API
+├── public/                     # Static assets
+└── .env.local                  # Environment variables
 ```
 
-## Tech Stack
+## 📝 API Credits
 
-- Next.js 15
-- React 19
-- TypeScript
-- Tailwind CSS
-- NextAuth.js v5
-- Drizzle ORM
-- Vercel Postgres
-- Framer Motion
-- Lucide Icons
+- **TMDB** - Movie and TV show data (themoviedb.org)
+- **MangaDex** - Manga metadata and covers (mangadex.org)
+- **Jikan** - Anime metadata (jikan.moe)
+- **Streaming Sources** - VidSrc, 2Embed, VidKing, VidSrc.in
 
-## API Routes
+## ⚠️ Disclaimer
 
-- `/api/auth/*` - Authentication (NextAuth.js)
-- `/api/tmdb/*` - TMDB API proxy routes
-- `/api/watch-history` - User watch history
+StreamVault is for educational purposes only. All content is provided by third-party sources. Please support the original creators by purchasing or subscribing to their services when possible.
 
-## Original Project
+## 📄 License
 
-This is a conversion of the original Vite + React + Express app to Next.js for Vercel deployment.
+MIT License - feel free to use this for your own projects!
+
+---
+
+Made with ❤️ using Next.js 15

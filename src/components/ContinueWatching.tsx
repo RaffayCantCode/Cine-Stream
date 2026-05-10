@@ -123,7 +123,7 @@ export function ContinueWatching() {
 
                     <button
                       onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/80"
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-100 transition-opacity hover:bg-red-600/80 z-10"
                       aria-label="Remove"
                     >
                       <X className="w-3.5 h-3.5 text-white" />

@@ -13,7 +13,8 @@ import {
   LogOut,
   LogIn,
   ChevronRight,
-  Menu
+  Menu,
+  BookOpen
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/browse/movies", icon: Film, label: "Movies" },
   { href: "/browse/tv", icon: Tv, label: "TV Shows" },
   { href: "/anime", icon: Sparkles, label: "Anime" },
+  { href: "/manga", icon: BookOpen, label: "Manga" },
 ];
 
 export function Sidebar() {

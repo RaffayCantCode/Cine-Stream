@@ -105,10 +105,9 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
             <iframe
               src={currentSource.url}
               className="w-full h-full"
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-storage-access-by-user-activation"
               title={title || "Watch"}
-              referrerPolicy="no-referrer"
               onLoad={() => setIsLoading(false)}
               onError={handleIframeError}
             />
