@@ -2,24 +2,22 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Play, AlertCircle, Check, Server } from "lucide-react";
-import { StreamingSource, getStreamingSources } from "@/lib/streaming-fetch";
+import { AlertCircle, Check, Server } from "lucide-react";
+import { AnimeEmbedSource, getAllAnimeSources } from "@/lib/anime-embed";
 
-interface VideoPlayerProps {
-  type: "movie" | "tv";
-  id: number;
-  season?: number;
-  episode?: number;
-  title?: string;
+interface AnimePlayerProps {
+  animeId: string;
+  animeTitle: string;
+  episode: number;
 }
 
-export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerProps) {
-  const sources = getStreamingSources(type, id, season, episode);
-  const [currentSource, setCurrentSource] = useState<StreamingSource>(sources[0]);
+export function AnimePlayer({ animeId, animeTitle, episode }: AnimePlayerProps) {
+  const sources = getAllAnimeSources(animeTitle, animeId, episode);
+  const [currentSource, setCurrentSource] = useState<AnimeEmbedSource>(sources[0]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const handleSourceChange = (source: StreamingSource) => {
+  const handleSourceChange = (source: AnimeEmbedSource) => {
     setCurrentSource(source);
     setError(null);
     setIsLoading(true);
@@ -27,9 +25,9 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
 
   const handleIframeError = () => {
     // Try next source
-    const currentIndex = sources.findIndex(s => s.name === currentSource.name);
+    const currentIndex = sources.findIndex((s) => s.name === currentSource.name);
     const nextSource = sources[currentIndex + 1];
-    
+
     if (nextSource) {
       setError(`${currentSource.name} failed, trying ${nextSource.name}...`);
       setTimeout(() => {
@@ -52,7 +50,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
             onClick={() => handleSourceChange(source)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
               currentSource.name === source.name
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                ? "bg-violet-600 text-white shadow-md shadow-violet-500/30"
                 : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
             }`}
           >
@@ -70,7 +68,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
 
       {/* Video Player */}
       <motion.div
-        key={currentSource.url}
+        key={currentSource.embedUrl}
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black ring-1 ring-white/10 relative"
@@ -85,7 +83,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
                   setError(null);
                   setCurrentSource(sources[0]);
                 }}
-                className="mt-4 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg text-sm font-medium transition-colors"
+                className="mt-4 px-4 py-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 rounded-lg text-sm font-medium transition-colors"
               >
                 Try Again
               </button>
@@ -96,19 +94,19 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
                 <div className="text-center">
-                  <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                  <div className="w-12 h-12 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
                   <p className="text-sm text-white/60">Loading {currentSource.name}...</p>
                   {error && <p className="text-xs text-white/40 mt-1">{error}</p>}
                 </div>
               </div>
             )}
             <iframe
-              src={currentSource.url}
+              src={currentSource.embedUrl}
               className="w-full h-full"
               allowFullScreen
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
-              title={title || "Watch"}
-              referrerPolicy="origin"
+              title={`${animeTitle} - Episode ${episode}`}
+              referrerPolicy={currentSource.requiresReferrer ? "origin" : "no-referrer"}
               onLoad={() => setIsLoading(false)}
               onError={handleIframeError}
             />

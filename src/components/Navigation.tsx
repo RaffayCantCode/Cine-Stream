@@ -29,6 +29,7 @@ export function Navigation() {
     { href: "/browse/trending", label: "Trending", accent: null },
     { href: "/browse/movies", label: "Movies", accent: null },
     { href: "/browse/tv", label: "TV Shows", accent: null },
+    { href: "/anime", label: "Anime", accent: "violet" },
   ];
 
   return (
@@ -40,24 +41,18 @@ export function Navigation() {
         className={cn(
           "fixed top-0 inset-x-0 z-50 transition-all duration-500 h-16 sm:h-[72px] flex items-center px-5 md:px-10",
           isScrolled
-            ? "bg-black/80 backdrop-blur-xl border-b border-white/[0.04] shadow-2xl"
-            : "bg-gradient-to-b from-black/70 to-transparent"
+            ? "glass border-b border-white/[0.06] shadow-2xl shadow-violet-500/5"
+            : "bg-gradient-to-b from-[#0a0a12]/90 via-[#0a0a12]/50 to-transparent"
         )}
       >
         <div className="flex items-center w-full max-w-screen-2xl mx-auto gap-8">
           <Link href="/" className="shrink-0 group">
-            <span className="font-bold text-3xl tracking-widest leading-none flex items-center gap-0">
-              <span
-                className="transition-opacity group-hover:opacity-80"
-                style={{ color: "#08f0fc" }}
-              >
+            <span className="font-bold text-2xl md:text-3xl tracking-wider leading-none flex items-center">
+              <span className="gradient-text transition-opacity group-hover:opacity-80">
                 STREAM
               </span>
-              <span className="text-white/20 mx-1">·</span>
-              <span
-                className="transition-opacity group-hover:opacity-80"
-                style={{ color: "#08fc92" }}
-              >
+              <span className="text-white/30 mx-1.5 font-light">|</span>
+              <span className="gradient-text-violet transition-opacity group-hover:opacity-80">
                 VAULT
               </span>
             </span>
@@ -72,12 +67,14 @@ export function Navigation() {
                   key={href}
                   href={href}
                   className={cn(
-                    "relative px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200",
+                    "relative px-4 py-2 text-sm font-medium rounded-xl transition-all duration-300",
                     active
-                      ? isAnime ? "text-violet-300" : "text-white"
+                      ? isAnime 
+                        ? "text-violet-300" 
+                        : "text-white"
                       : isAnime
-                      ? "text-violet-400/70 hover:text-violet-300 hover:bg-violet-500/[0.08]"
-                      : "text-white/50 hover:text-white/90 hover:bg-white/[0.06]"
+                      ? "text-violet-400/70 hover:text-violet-300"
+                      : "text-white/50 hover:text-white"
                   )}
                 >
                   {label}
@@ -85,12 +82,17 @@ export function Navigation() {
                     <motion.div
                       layoutId="nav-pill"
                       className={cn(
-                        "absolute inset-0 rounded-lg border",
+                        "absolute inset-0 rounded-xl -z-10",
                         isAnime
-                          ? "bg-violet-500/[0.12] border-violet-500/[0.15]"
-                          : "bg-white/[0.09] border-white/[0.06]"
+                          ? "bg-gradient-to-r from-violet-600/20 to-violet-500/10 border border-violet-500/20"
+                          : "bg-white/[0.06] border border-white/[0.08]"
                       )}
                       transition={{ type: "spring", stiffness: 380, damping: 35 }}
+                    />
+                  )}
+                  {!active && (
+                    <motion.div
+                      className="absolute inset-0 rounded-xl bg-white/[0.03] opacity-0 hover:opacity-100 transition-opacity -z-10"
                     />
                   )}
                 </Link>
@@ -101,7 +103,7 @@ export function Navigation() {
           <div className="ml-auto flex items-center gap-2">
             <Link
               href="/search"
-              className="p-2.5 text-white/50 hover:text-white hover:bg-white/[0.07] rounded-full transition-all duration-200"
+              className="p-2.5 text-white/50 hover:text-white hover:bg-white/[0.08] rounded-xl transition-all duration-200 glass-light"
               aria-label="Search"
             >
               <Search className="w-[18px] h-[18px]" />

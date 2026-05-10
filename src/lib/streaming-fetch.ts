@@ -1,17 +1,24 @@
 // Multi-API Streaming Fetcher with Fallback Logic
 // APIs included:
-// 1. 2Embed - https://www.2embed.cc (Most reliable)
-// 2. VidSrc - https://vidsrc.to
-// 3. Embed.su - https://embed.su
-// 4. VidKing - https://www.vidking.net
+// 1. AutoEmbed - https://autoembed.co (Most reliable - Updated 2024)
+// 2. 2Embed - https://www.2embed.cc
+// 3. VidSrc XYZ - https://vidsrc.xyz (Working domain)
+// 4. SuperEmbed - https://superembed.stream
+// 5. VidKing - https://www.vidking.net
+// 6. MoviesAPI - https://moviesapi.club
 
 interface StreamingAPIConfig {
   name: string;
   baseUrl: string;
-  type: "vidsrc" | "embedsu" | "2embed" | "vidking";
+  type: "autoembed" | "2embed" | "vidsrc" | "superembed" | "vidking" | "moviesapi";
 }
 
 const STREAMING_APIS: StreamingAPIConfig[] = [
+  {
+    name: "AutoEmbed",
+    baseUrl: "https://autoembed.co",
+    type: "autoembed",
+  },
   {
     name: "2Embed",
     baseUrl: "https://www.2embed.cc",
@@ -19,35 +26,41 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "VidSrc",
-    baseUrl: "https://vidsrc.to",
+    baseUrl: "https://vidsrc.xyz",
     type: "vidsrc",
   },
   {
-    name: "Embed.su",
-    baseUrl: "https://embed.su",
-    type: "embedsu",
+    name: "SuperEmbed",
+    baseUrl: "https://superembed.stream",
+    type: "superembed",
   },
   {
     name: "VidKing",
     baseUrl: "https://www.vidking.net",
     type: "vidking",
   },
+  {
+    name: "MoviesAPI",
+    baseUrl: "https://moviesapi.club",
+    type: "moviesapi",
+  },
 ];
 
 // Build embed URL based on API type
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number): string {
   switch (api.type) {
+    case "autoembed":
+      // AutoEmbed uses TMDB ID directly - most reliable
+      if (type === "movie") {
+        return `${api.baseUrl}/movie/${id}`;
+      }
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+    
     case "vidsrc":
       if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}?autoPlay=true`;
+        return `${api.baseUrl}/embed/movie/${id}`;
       }
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?autoPlay=true`;
-    
-    case "embedsu":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}?autoPlay=true`;
-      }
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?autoPlay=true`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
     
     case "2embed":
       if (type === "movie") {
@@ -55,11 +68,23 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       }
       return `${api.baseUrl}/embedtv/${id}/${season ?? 1}/${episode ?? 1}`;
     
+    case "superembed":
+      if (type === "movie") {
+        return `${api.baseUrl}/embed/movie/${id}`;
+      }
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+    
     case "vidking":
       if (type === "movie") {
         return `${api.baseUrl}/embed/movie/${id}`;
       }
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+    
+    case "moviesapi":
+      if (type === "movie") {
+        return `${api.baseUrl}/movie/${id}`;
+      }
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
     
     default:
       return "";

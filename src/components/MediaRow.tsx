@@ -26,7 +26,7 @@ interface MediaRowProps {
 function SkeletonCard({ index }: { index: number }) {
   return (
     <div
-      className="aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 rounded-xl bg-muted/40 animate-pulse"
+      className="aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 rounded-xl shimmer"
       style={{ animationDelay: `${index * 80}ms` }}
     />
   );
@@ -73,12 +73,12 @@ export function MediaRow({ title, items, isLoading, seeAllHref }: MediaRowProps)
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="py-5 md:py-7 space-y-4"
+      className="py-6 md:py-8 space-y-5"
     >
       <div className="flex items-center justify-between px-5 md:px-10">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-5 bg-primary rounded-full" />
-          <h2 className="text-base md:text-lg font-bold text-white tracking-wide">{title}</h2>
+          <div className="w-1.5 h-6 bg-gradient-to-b from-violet-500 to-violet-600 rounded-full" />
+          <h2 className="text-base md:text-xl font-bold text-white tracking-wide">{title}</h2>
         </div>
         <div className="flex items-center gap-2">
           <div className="hidden md:flex items-center gap-1">
@@ -86,35 +86,35 @@ export function MediaRow({ title, items, isLoading, seeAllHref }: MediaRowProps)
               type="button"
               onClick={() => scrollByAmount("left")}
               disabled={!canScrollLeft}
-              className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.03] text-white/70 hover:text-white hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-white/[0.03] transition"
+              className="w-10 h-10 rounded-xl border border-white/10 bg-white/[0.03] text-white/70 hover:text-white hover:bg-white/[0.08] disabled:opacity-30 disabled:hover:bg-white/[0.03] transition-all duration-200 glass-light"
               aria-label="Scroll left"
             >
-              <ChevronLeft className="w-4 h-4 mx-auto" />
+              <ChevronLeft className="w-5 h-5 mx-auto" />
             </button>
             <button
               type="button"
               onClick={() => scrollByAmount("right")}
               disabled={!canScrollRight}
-              className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.03] text-white/70 hover:text-white hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-white/[0.03] transition"
+              className="w-10 h-10 rounded-xl border border-white/10 bg-white/[0.03] text-white/70 hover:text-white hover:bg-white/[0.08] disabled:opacity-30 disabled:hover:bg-white/[0.03] transition-all duration-200 glass-light"
               aria-label="Scroll right"
             >
-              <ChevronRight className="w-4 h-4 mx-auto" />
+              <ChevronRight className="w-5 h-5 mx-auto" />
             </button>
           </div>
           {seeAllHref && (
             <a
               href={seeAllHref}
-              className="flex items-center gap-0.5 text-xs font-semibold text-white/40 hover:text-primary transition-colors group"
+              className="flex items-center gap-1 text-xs font-semibold text-white/50 hover:text-violet-400 transition-colors group px-3 py-2 rounded-lg hover:bg-white/[0.05]"
             >
               See all
-              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </a>
           )}
         </div>
       </div>
 
-      <div ref={scrollerRef} className="w-full overflow-x-auto pb-4 pt-2 hide-scrollbar">
-        <div className="flex gap-3 md:gap-4 px-5 md:px-10 w-max">
+      <div ref={scrollerRef} className="w-full overflow-x-auto pb-6 pt-2 hide-scrollbar">
+        <div className="flex gap-4 md:gap-5 px-5 md:px-10 w-max">
           {isLoading
             ? Array.from({ length: 8 }).map((_, i) => (
                 <SkeletonCard key={i} index={i} />

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Navigation } from "@/components/Navigation";
+import { AnimePlayer } from "@/components/AnimePlayer";
 import { fetchJson } from "@/lib/utils";
 import { Play, Star, ArrowLeft, Tv2, Clock, Globe } from "lucide-react";
 import { motion } from "framer-motion";
@@ -33,11 +34,6 @@ interface Episode {
   isFiller?: boolean;
 }
 
-interface StreamingSource {
-  url?: string;
-  quality?: string;
-  isM3U8?: boolean;
-}
 
 export default function AnimeDetailPage() {
   const params = useParams();
@@ -50,8 +46,6 @@ export default function AnimeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
   const [watchMode, setWatchMode] = useState<"sub" | "dub">("sub");
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [streamLoading, setStreamLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -99,42 +93,6 @@ export default function AnimeDetailPage() {
     loadEps();
   }, [id]);
 
-  // Fetch streaming source when episode or watch mode changes
-  useEffect(() => {
-    if (!selectedEp || !id) return;
-
-    const fetchStream = async () => {
-      setStreamLoading(true);
-      try {
-        const data = await fetchJson<{
-          success: boolean;
-          data: {
-            sources?: StreamingSource[];
-            download?: string;
-            headers?: Record<string, string>;
-          };
-          source: string;
-        }>(
-          `/api/anime/watch?animeId=${encodeURIComponent(id)}&episodeId=${encodeURIComponent(selectedEp.episodeId)}&server=${watchMode}`
-        );
-
-        if (data.success && data.data?.sources && data.data.sources.length > 0) {
-          // Get the first available source (usually highest quality)
-          const source = data.data.sources[0];
-          setStreamUrl(source.url || null);
-        } else {
-          setStreamUrl(null);
-        }
-      } catch (e) {
-        console.error("Failed to load stream:", e);
-        setStreamUrl(null);
-      } finally {
-        setStreamLoading(false);
-      }
-    };
-
-    fetchStream();
-  }, [selectedEp, watchMode, id]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -286,36 +244,19 @@ export default function AnimeDetailPage() {
                   </div>
                 </div>
 
-                {/* Embedded player */}
-                {(streamUrl || streamLoading) && selectedEp && (
+                {/* Anime Player with iframe embeds */}
+                {selectedEp && (
                   <motion.div
                     key={`${selectedEp.episodeNum}-${watchMode}`}
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3 }}
-                    className="w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10 relative"
                   >
-                    {streamLoading ? (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500" />
-                      </div>
-                    ) : streamUrl ? (
-                      <video
-                        src={streamUrl}
-                        className="w-full h-full"
-                        controls
-                        autoPlay
-                        playsInline
-                        title={`${anime.name} - Episode ${selectedEp.episodeNum}`}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white/60">
-                        <div className="text-center">
-                          <div className="text-4xl mb-2">📺</div>
-                          <p>Stream unavailable for this episode</p>
-                        </div>
-                      </div>
-                    )}
+                    <AnimePlayer
+                      animeId={id}
+                      animeTitle={anime.name}
+                      episode={selectedEp.episodeNum}
+                    />
                   </motion.div>
                 )}
 
