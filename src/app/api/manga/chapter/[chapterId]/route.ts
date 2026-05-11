@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 
 const MANGADEX_API = "https://api.mangadex.org";
-const MANGADEX_AT_HOME = "https://api.mangadex.network";
 
 export async function GET(
   _request: NextRequest,
@@ -10,7 +9,7 @@ export async function GET(
   const { chapterId } = await params;
 
   try {
-    const res = await fetch(`${MANGADEX_AT_HOME}/at-home/server/${chapterId}`, {
+    const res = await fetch(`${MANGADEX_API}/at-home/server/${chapterId}`, {
       next: { revalidate: 300 },
     });
 
@@ -21,19 +20,21 @@ export async function GET(
     const data = await res.json();
     const baseUrl = data.baseUrl;
     const hash = data.chapter?.hash;
-    const files: string[] = data.chapter?.dataSaver || data.chapter?.data || [];
+    const files: string[] = data.chapter?.data || [];
 
     if (!baseUrl || !hash || files.length === 0) {
       throw new Error("No readable pages found for this chapter");
     }
 
-    const pages = files.map((file) => `${baseUrl}/data-saver/${hash}/${file}`);
+    const pages = files.map((file) => `${baseUrl}/data/${hash}/${file}`);
 
     return Response.json({
       success: true,
       data: {
         chapterId,
         pages,
+        baseUrl,
+        hash,
       },
     });
   } catch (error) {

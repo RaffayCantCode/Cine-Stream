@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       data = await MangaDex.getLatestManga(page);
     } else if (category === "search") {
       const query = searchParams.get("q") || "";
-      data = await MangaDex.searchManga(query);
+      data = await MangaDex.searchManga(query, page);
     } else {
       data = await MangaDex.getPopularManga(page);
     }
