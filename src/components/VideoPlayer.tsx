@@ -105,8 +105,8 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
             <iframe
               src={currentSource.url}
               className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture"
-              allowFullScreen
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allowFullScreen={true}
               title={title || "Watch"}
               onLoad={() => setIsLoading(false)}
               onError={handleIframeError}

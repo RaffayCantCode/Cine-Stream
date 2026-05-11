@@ -10,14 +10,14 @@ export async function GET(request: NextRequest) {
     let data: any;
 
     if (category === "popular") {
-      data = await MangaDex.getPopularManga();
+      data = await MangaDex.getPopularManga(page);
     } else if (category === "latest") {
-      data = await MangaDex.getLatestManga();
+      data = await MangaDex.getLatestManga(page);
     } else if (category === "search") {
       const query = searchParams.get("q") || "";
       data = await MangaDex.searchManga(query);
     } else {
-      data = await MangaDex.getPopularManga();
+      data = await MangaDex.getPopularManga(page);
     }
 
     return Response.json(data);

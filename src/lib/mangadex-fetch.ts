@@ -13,10 +13,10 @@ async function fetchAniList(query: string, variables: any = {}): Promise<any> {
   return json.data;
 }
 
-export async function getPopularManga(): Promise<any> {
+export async function getPopularManga(page: number = 1): Promise<any> {
   const query = `
-    query {
-      Page(perPage: 24) {
+    query($page: Int) {
+      Page(perPage: 24, page: $page) {
         media(type: MANGA, sort: POPULARITY_DESC) {
           id
           title { userPreferred english native }
@@ -30,11 +30,12 @@ export async function getPopularManga(): Promise<any> {
           startDate { year }
           format
         }
+        pageInfo { hasNextPage }
       }
     }
   `;
   
-  const data = await fetchAniList(query);
+  const data = await fetchAniList(query, { page });
   const items = data.Page.media.map((m: any) => ({
     id: String(m.id),
     name: m.title.english || m.title.userPreferred,
@@ -48,13 +49,13 @@ export async function getPopularManga(): Promise<any> {
     chapters: m.chapters,
   }));
   
-  return { success: true, data: items };
+  return { success: true, data: items, hasMore: data.Page.pageInfo?.hasNextPage || false };
 }
 
-export async function getLatestManga(): Promise<any> {
+export async function getLatestManga(page: number = 1): Promise<any> {
   const query = `
-    query {
-      Page(perPage: 24) {
+    query($page: Int) {
+      Page(perPage: 24, page: $page) {
         media(type: MANGA, sort: UPDATED_AT_DESC) {
           id
           title { userPreferred english native }
@@ -68,11 +69,12 @@ export async function getLatestManga(): Promise<any> {
           startDate { year }
           format
         }
+        pageInfo { hasNextPage }
       }
     }
   `;
   
-  const data = await fetchAniList(query);
+  const data = await fetchAniList(query, { page });
   const items = data.Page.media.map((m: any) => ({
     id: String(m.id),
     name: m.title.english || m.title.userPreferred,
@@ -86,7 +88,7 @@ export async function getLatestManga(): Promise<any> {
     chapters: m.chapters,
   }));
   
-  return { success: true, data: items };
+  return { success: true, data: items, hasMore: data.Page.pageInfo?.hasNextPage || false };
 }
 
 export async function searchManga(query: string): Promise<any> {

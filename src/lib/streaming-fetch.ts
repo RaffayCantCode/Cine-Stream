@@ -1,5 +1,5 @@
 // Multi-API Streaming Fetcher for Movies & TV
-// Working sources: VidKing, 2Embed, VidSrc (PM), VidSrc (ME)
+// Working sources as of May 2026
 
 interface StreamingAPIConfig {
   name: string;
@@ -14,19 +14,24 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     type: "vidking",
   },
   {
-    name: "2Embed",
-    baseUrl: "https://www.2embed.cc",
-    type: "2embed",
+    name: "CineSrc",
+    baseUrl: "https://cinesrc.st",
+    type: "cinesrc",
   },
   {
-    name: "VidSrc (PM)",
-    baseUrl: "https://vidsrc.pm",
-    type: "vidsrcpm",
+    name: "VidSrc (MOV)",
+    baseUrl: "https://vidsrc.mov",
+    type: "vidsrcmov",
   },
   {
-    name: "VidSrc (ME)",
-    baseUrl: "https://vidsrcme.ru",
-    type: "vidsrcme",
+    name: "VidSrc (IN)",
+    baseUrl: "https://vidsrc.in",
+    type: "vidsrcin",
+  },
+  {
+    name: "StreamSrc",
+    baseUrl: "https://streamsrc.cc",
+    type: "streamsrc",
   },
 ];
 
@@ -39,23 +44,29 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       }
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
     
-    case "2embed":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/${id}`;
-      }
-      return `${api.baseUrl}/embedtv/${id}/${season ?? 1}/${episode ?? 1}`;
-    
-    case "vidsrcpm":
+    case "cinesrc":
       if (type === "movie") {
         return `${api.baseUrl}/embed/movie/${id}`;
       }
-      return `${api.baseUrl}/embed/tv/${id}-${season ?? 1}-${episode ?? 1}`;
+      return `${api.baseUrl}/embed/tv/${id}?s=${season ?? 1}&e=${episode ?? 1}`;
     
-    case "vidsrcme":
+    case "vidsrcmov":
       if (type === "movie") {
         return `${api.baseUrl}/embed/movie/${id}`;
       }
-      return `${api.baseUrl}/embed/tv/${id}-${season ?? 1}-${episode ?? 1}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+    
+    case "vidsrcin":
+      if (type === "movie") {
+        return `${api.baseUrl}/embed/movie/${id}`;
+      }
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+    
+    case "streamsrc":
+      if (type === "movie") {
+        return `${api.baseUrl}/watch/movie/tmdbid=${id}`;
+      }
+      return `${api.baseUrl}/watch/series/tmdbid=${id}`;
     
     default:
       return "";

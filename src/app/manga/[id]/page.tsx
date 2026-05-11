@@ -165,7 +165,6 @@ export default function MangaDetailPage() {
               src={getMangaEmbedUrl(manga.name, selectedChapter.number)}
               className="w-full h-full"
               allow="fullscreen"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               title={`${manga.name} - Chapter ${selectedChapter.number}`}
             />
           </div>
