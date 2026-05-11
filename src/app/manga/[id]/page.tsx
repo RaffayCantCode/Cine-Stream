@@ -28,6 +28,7 @@ interface Chapter {
   number: number;
   title: string;
   read: boolean;
+  url?: string;
 }
 
 // Get manga embed URL for reading
@@ -162,7 +163,7 @@ export default function MangaDetailPage() {
           {/* Manga Reader Iframe */}
           <div className="w-full h-[calc(100vh-60px)] bg-black">
             <iframe
-              src={getMangaEmbedUrl(manga.name, selectedChapter.number)}
+              src={selectedChapter.url || getMangaEmbedUrl(manga.name, selectedChapter.number)}
               className="w-full h-full"
               allow="fullscreen"
               title={`${manga.name} - Chapter ${selectedChapter.number}`}

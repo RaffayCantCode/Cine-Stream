@@ -16,12 +16,14 @@ interface FallbackSource {
   quality: "HD";
 }
 
-function getFallbackSources(title: string, ep: number): FallbackSource[] {
+function getFallbackSources(animeId: string, title: string, ep: number): FallbackSource[] {
   const clean = title.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").trim();
   return [
-    { name: "VidPlay", embedUrl: `https://vidplay.site/embed/${clean}-episode-${ep}`, type: "iframe", quality: "HD" },
-    { name: "StreamSB", embedUrl: `https://streamsb.net/embed/${clean}-episode-${ep}`, type: "iframe", quality: "HD" },
-    { name: "Filemoon", embedUrl: `https://filemoon.top/e/${clean}-episode-${ep}`, type: "iframe", quality: "HD" },
+    { name: "CineSrc", embedUrl: `https://cinesrc.st/embed/anime/${animeId}?ep=${ep}`, type: "iframe", quality: "HD" },
+    { name: "VidSrc ME", embedUrl: `https://vidsrc.mov/embed/anime/${animeId}/${ep}`, type: "iframe", quality: "HD" },
+    { name: "VidSrc ME", embedUrl: `https://vidsrc.me/embed/${clean}-episode-${ep}`, type: "iframe", quality: "HD" },
+    { name: "SuperStream", embedUrl: `https://superstream.se/embed/${animeId}?ep=${ep}`, type: "iframe", quality: "HD" },
+    { name: "VidKing", embedUrl: `https://vidking.net/embed/anime/${animeId}/${ep}`, type: "iframe", quality: "HD" },
   ];
 }
 
@@ -33,10 +35,10 @@ interface AnimePlayerProps {
 }
 
 export function AnimePlayer({ animeId, animeTitle, episode, episodeSources }: AnimePlayerProps) {
-  // Use AniPub sources if available, otherwise fallback to generic embeds
+  // Use episode sources if available, otherwise fallback to generic embeds
   const sources = episodeSources?.length 
     ? episodeSources.map((s, i) => ({ name: s.name || `Server ${i+1}`, embedUrl: s.src, type: "iframe" as const, quality: "HD" as const }))
-    : getFallbackSources(animeTitle, episode);
+    : getFallbackSources(animeId, animeTitle, episode);
   
   const [currentSource, setCurrentSource] = useState(sources[0]);
   const [error, setError] = useState<string | null>(null);

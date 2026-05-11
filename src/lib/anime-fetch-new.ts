@@ -7,6 +7,28 @@ function fixImageUrl(url?: string): string {
   return `https://anipub.xyz/${url}`;
 }
 
+function isAdultContent(name?: string, genres?: string[], description?: string): boolean {
+  const ADULT_GENRES = ["hentai", "ecchi", "erotica", "pornographic", "smut", "adult"];
+  const ADULT_KEYWORDS = ["hentai", "ecchi", "nude", "naked", "porn", "sex", "erotic", "18+", "adult", "xxx", "nsfw", "explicit"];
+  
+  const lowerName = (name || "").toLowerCase();
+  const lowerGenres = (genres || []).map((g) => g.toLowerCase());
+  const lowerDesc = (description || "").toLowerCase();
+
+  for (const genre of lowerGenres) {
+    if (ADULT_GENRES.some((ag) => genre.includes(ag))) return true;
+  }
+  for (const keyword of ADULT_KEYWORDS) {
+    if (lowerName.includes(keyword)) return true;
+  }
+  let matches = 0;
+  for (const keyword of ADULT_KEYWORDS) {
+    if (lowerDesc.includes(keyword)) matches++;
+  }
+  if (matches >= 2) return true;
+  return false;
+}
+
 // Get anime by genre - use action as default for browsing
 export async function getAnimeByGenre(genre: string = "action", page: number = 1): Promise<any> {
   try {
@@ -17,18 +39,20 @@ export async function getAnimeByGenre(genre: string = "action", page: number = 1
     const data = await res.json();
     
     const animes = data.wholePage || data || [];
-    const items = animes.map((anime: any) => ({
-      id: String(anime._id || anime.Id),
-      name: anime.Name,
-      poster: fixImageUrl(anime.ImagePath || anime.Image),
-      type: "TV",
-      episodes: { sub: anime.epCount || anime.ep || null, dub: null },
-      rating: anime.MALScore || null,
-      description: anime.DescripTion || "",
-      genres: anime.Genres || [],
-      year: null,
-      status: anime.Status || "Finished",
-    }));
+    const items = animes
+      .filter((anime: any) => !isAdultContent(anime.Name, anime.Genres, anime.DescripTion))
+      .map((anime: any) => ({
+        id: String(anime._id || anime.Id),
+        name: anime.Name,
+        poster: fixImageUrl(anime.ImagePath || anime.Image),
+        type: "TV",
+        episodes: { sub: anime.epCount || anime.ep || null, dub: null },
+        rating: anime.MALScore || null,
+        description: anime.DescripTion || "",
+        genres: anime.Genres || [],
+        year: null,
+        status: anime.Status || "Finished",
+      }));
     
     return { success: true, data: items };
   } catch (error) {
@@ -47,18 +71,20 @@ export async function getTopAnime(page: number = 1): Promise<any> {
     const data = await res.json();
     
     const animes = data.wholePage || data.AniData || data || [];
-    const items = animes.map((anime: any) => ({
-      id: String(anime._id || anime.Id),
-      name: anime.Name,
-      poster: fixImageUrl(anime.ImagePath || anime.Image),
-      type: "TV",
-      episodes: { sub: anime.epCount || anime.ep || null, dub: null },
-      rating: anime.MALScore || null,
-      description: anime.DescripTion || "",
-      genres: anime.Genres || [],
-      year: null,
-      status: anime.Status || "Finished",
-    }));
+    const items = animes
+      .filter((anime: any) => !isAdultContent(anime.Name, anime.Genres, anime.DescripTion))
+      .map((anime: any) => ({
+        id: String(anime._id || anime.Id),
+        name: anime.Name,
+        poster: fixImageUrl(anime.ImagePath || anime.Image),
+        type: "TV",
+        episodes: { sub: anime.epCount || anime.ep || null, dub: null },
+        rating: anime.MALScore || null,
+        description: anime.DescripTion || "",
+        genres: anime.Genres || [],
+        year: null,
+        status: anime.Status || "Finished",
+      }));
     
     return { success: true, data: items };
   } catch (error) {
@@ -77,18 +103,20 @@ export async function searchAnime(query: string, page: number = 1): Promise<any>
     const data = await res.json();
     
     const animes = data.AniData || data.wholePage || data || [];
-    const items = animes.map((anime: any) => ({
-      id: String(anime._id || anime.Id),
-      name: anime.Name,
-      poster: fixImageUrl(anime.ImagePath || anime.Image),
-      type: "TV",
-      episodes: { sub: anime.epCount || anime.ep || null, dub: null },
-      rating: anime.MALScore || null,
-      description: anime.DescripTion || "",
-      genres: anime.Genres || [],
-      year: null,
-      status: anime.Status || "Finished",
-    }));
+    const items = animes
+      .filter((anime: any) => !isAdultContent(anime.Name, anime.Genres, anime.DescripTion))
+      .map((anime: any) => ({
+        id: String(anime._id || anime.Id),
+        name: anime.Name,
+        poster: fixImageUrl(anime.ImagePath || anime.Image),
+        type: "TV",
+        episodes: { sub: anime.epCount || anime.ep || null, dub: null },
+        rating: anime.MALScore || null,
+        description: anime.DescripTion || "",
+        genres: anime.Genres || [],
+        year: null,
+        status: anime.Status || "Finished",
+      }));
     
     return { success: true, data: items };
   } catch (error) {

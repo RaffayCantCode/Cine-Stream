@@ -1,9 +1,7 @@
 import { NextRequest } from "next/server";
 
-// Manga chapters using AniList for metadata
-// For reading, we'll use MangaDex embed
-
 const ANILIST_API = "https://graphql.anilist.co";
+const MANGADEX_API = "https://api.mangadex.org";
 
 async function fetchAniList(query: string, variables: any = {}): Promise<any> {
   const res = await fetch(ANILIST_API, {
@@ -17,6 +15,38 @@ async function fetchAniList(query: string, variables: any = {}): Promise<any> {
   return json.data;
 }
 
+async function searchMangaDex(title: string): Promise<any> {
+  try {
+    const res = await fetch(`${MANGADEX_API}/manga?title=${encodeURIComponent(title)}&limit=5&includes[]=cover_art`, {
+      next: { revalidate: 300 },
+    });
+    const data = await res.json();
+    return data.data?.[0] || null;
+  } catch (e) {
+    console.warn("[MangaDex] Search failed:", e);
+    return null;
+  }
+}
+
+async function getMangaDexChapters(mangaId: string): Promise<any[]> {
+  try {
+    const res = await fetch(
+      `${MANGADEX_API}/manga/${mangaId}/feed?limit=100&translatedLanguage[]=en&order[chapter]=desc`,
+      { next: { revalidate: 300 } }
+    );
+    const data = await res.json();
+    return data.data || [];
+  } catch (e) {
+    console.warn("[MangaDex] Chapters failed:", e);
+    return [];
+  }
+}
+
+function getMangaReaderUrl(mangaTitle: string, chapter: number): string {
+  const clean = mangaTitle.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").trim();
+  return `https://mangareader.to/read/${clean}/${chapter}`;
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -24,7 +54,6 @@ export async function GET(
   const { id } = await params;
 
   try {
-    // Get manga details from AniList
     const query = `
       query($id: Int!) {
         Media(id: $id, type: MANGA) {
@@ -45,27 +74,61 @@ export async function GET(
 
     const data = await fetchAniList(query, { id: parseInt(id) });
     const m = data.Media;
+    const mangaTitle = m.title.english || m.title.userPreferred;
 
-    // Generate mock chapters based on chapter count
-    const chapterCount = m.chapters || 10;
-    const chapters = [];
-    for (let i = chapterCount; i >= 1; i--) {
-      chapters.push({
-        id: `${id}-chapter-${i}`,
-        number: i,
-        title: `Chapter ${i}`,
-        read: false,
-      });
+    let chapters: any[] = [];
+    let mdManga = null;
+    
+    try {
+      mdManga = await searchMangaDex(mangaTitle);
+      if (mdManga) {
+        chapters = await getMangaDexChapters(mdManga.id);
+      }
+    } catch (e) {
+      console.warn("[MangaChapters] MangaDex failed, using fallback:", e);
+    }
+
+    let chapterList: { id: string; number: number; title: string; read: boolean; url: string }[] = [];
+    
+    if (chapters.length > 0) {
+      const uniqueChapters = new Map();
+      for (const ch of chapters) {
+        const chNum = parseFloat(ch.attributes.chapter);
+        if (!uniqueChapters.has(chNum)) {
+          uniqueChapters.set(chNum, ch);
+        }
+      }
+      
+      chapterList = Array.from(uniqueChapters.values())
+        .sort((a, b) => parseFloat(b.attributes.chapter) - parseFloat(a.attributes.chapter))
+        .map((ch: any) => ({
+          id: ch.id,
+          number: parseInt(ch.attributes.chapter) || 1,
+          title: ch.attributes.title || `Chapter ${ch.attributes.chapter}`,
+          read: false,
+          url: getMangaReaderUrl(mangaTitle, parseInt(ch.attributes.chapter) || 1),
+        }));
+    } else {
+      const chapterCount = m.chapters || 10;
+      for (let i = chapterCount; i >= 1; i--) {
+        chapterList.push({
+          id: `${id}-chapter-${i}`,
+          number: i,
+          title: `Chapter ${i}`,
+          read: false,
+          url: getMangaReaderUrl(mangaTitle, i),
+        });
+      }
     }
 
     return Response.json({
       success: true,
       data: {
-        chapters,
-        totalChapters: chapterCount,
+        chapters: chapterList,
+        totalChapters: chapterList.length,
         manga: {
           id: String(m.id),
-          name: m.title.english || m.title.userPreferred,
+          name: mangaTitle,
           jname: m.title.native,
           poster: m.coverImage?.large || m.coverImage?.medium || "",
           description: m.description?.replace(/<[^>]*>/g, "") || "",

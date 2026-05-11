@@ -9,11 +9,6 @@ interface StreamingAPIConfig {
 
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
-    name: "VidKing",
-    baseUrl: "https://vidking.net",
-    type: "vidking",
-  },
-  {
     name: "CineSrc",
     baseUrl: "https://cinesrc.st",
     type: "cinesrc",
@@ -24,26 +19,25 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     type: "vidsrcmov",
   },
   {
-    name: "VidSrc (IN)",
-    baseUrl: "https://vidsrc.in",
-    type: "vidsrcin",
+    name: "VidSrc ME",
+    baseUrl: "https://vidsrc.me",
+    type: "vidsrcme",
   },
   {
-    name: "StreamSrc",
-    baseUrl: "https://streamsrc.cc",
-    type: "streamsrc",
+    name: "SuperStream",
+    baseUrl: "https://superstream.se",
+    type: "superstream",
+  },
+  {
+    name: "VidKing",
+    baseUrl: "https://vidking.net",
+    type: "vidking",
   },
 ];
 
 // Build embed URL based on API type
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number): string {
   switch (api.type) {
-    case "vidking":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}`;
-      }
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
-    
     case "cinesrc":
       if (type === "movie") {
         return `${api.baseUrl}/embed/movie/${id}`;
@@ -56,17 +50,23 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       }
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
     
-    case "vidsrcin":
+    case "vidsrcme":
       if (type === "movie") {
         return `${api.baseUrl}/embed/movie/${id}`;
       }
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
     
-    case "streamsrc":
+    case "superstream":
       if (type === "movie") {
-        return `${api.baseUrl}/watch/movie/tmdbid=${id}`;
+        return `${api.baseUrl}/embed/${id}`;
       }
-      return `${api.baseUrl}/watch/series/tmdbid=${id}`;
+      return `${api.baseUrl}/embed/${id}?season=${season ?? 1}&episode=${episode ?? 1}`;
+    
+    case "vidking":
+      if (type === "movie") {
+        return `${api.baseUrl}/embed/movie/${id}`;
+      }
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
     
     default:
       return "";

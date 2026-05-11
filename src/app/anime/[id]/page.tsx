@@ -32,6 +32,7 @@ interface Episode {
   episodeNum: number;
   title?: string;
   src?: string;
+  sources?: { name: string; url: string }[];
   isFiller?: boolean;
 }
 
@@ -87,15 +88,15 @@ export default function AnimeDetailPage() {
         );
         if (data.success && data.data?.episodes) {
           setEpisodes(data.data.episodes);
-          // Extract sources from episodes if available
-          const sources = data.data.episodes
-            .filter((ep: Episode) => ep.src)
-            .map((ep: Episode, idx: number) => ({
-              src: ep.src || "",
-              name: `Server ${idx + 1}`
-            }));
-          if (sources.length > 0) {
-            setEpisodeSources(sources);
+          // Extract sources from episodes - support both old src format and new sources array format
+          const firstEp = data.data.episodes[0];
+          if (firstEp?.sources && firstEp.sources.length > 0) {
+            setEpisodeSources(firstEp.sources.map((s: { name: string; url: string }) => ({
+              src: s.url,
+              name: s.name
+            })));
+          } else if (firstEp?.src) {
+            setEpisodeSources([{ src: firstEp.src, name: "Server 1" }]);
           }
           if (data.data.episodes.length > 0) {
             setSelectedEp(data.data.episodes[0]);
