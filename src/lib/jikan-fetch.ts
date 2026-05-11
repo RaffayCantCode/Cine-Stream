@@ -41,22 +41,33 @@ export interface JikanResponse {
 
 // Transform Jikan response to our unified format
 function transformJikanToAnime(data: JikanResponse): any {
-  const items = data.data.map((anime) => ({
-    id: String(anime.mal_id),
-    name: anime.title_english || anime.title,
-    jname: anime.title_japanese || null,
-    poster: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
-    type: anime.type || "TV",
-    episodes: {
-      sub: anime.episodes || null,
-      dub: null,
-    },
-    rating: anime.score ? String(anime.score) : null,
-    description: anime.synopsis || "",
-    genres: [...anime.genres.map((g) => g.name), ...anime.themes.map((t) => t.name)],
-    year: anime.year,
-    status: anime.status,
-  }));
+  const items = data.data.map((anime) => {
+    // Try multiple image sources
+    const poster = 
+      anime.images.jpg?.large_image_url || 
+      anime.images.jpg?.image_url ||
+      anime.images.webp?.large_image_url ||
+      anime.images.webp?.image_url ||
+      anime.images.jpg?.small_image_url ||
+      "";
+    
+    return {
+      id: String(anime.mal_id),
+      name: anime.title_english || anime.title,
+      jname: anime.title_japanese || null,
+      poster,
+      type: anime.type || "TV",
+      episodes: {
+        sub: anime.episodes || null,
+        dub: null,
+      },
+      rating: anime.score ? String(anime.score) : null,
+      description: anime.synopsis || "",
+      genres: [...anime.genres.map((g) => g.name), ...anime.themes.map((t) => t.name)],
+      year: anime.year,
+      status: anime.status,
+    };
+  });
   return { success: true, data: items, pagination: data.pagination };
 }
 

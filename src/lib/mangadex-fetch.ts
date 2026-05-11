@@ -1,21 +1,6 @@
 // Manga API - Using AniList which has manga with proper covers
 const ANILIST_API = "https://graphql.anilist.co";
 
-interface AniListMedia {
-  id: number;
-  title: { userPreferred: string; english: string | null; native: string };
-  coverImage: { large: string; medium: string };
-  description: string | null;
-  type: string;
-  status: string;
-  episodes: number | null;
-  chapters: number | null;
-  genres: string[];
-  averageScore: number | null;
-  year: number | null;
-  format: string;
-}
-
 async function fetchAniList(query: string, variables: any = {}): Promise<any> {
   const res = await fetch(ANILIST_API, {
     method: "POST",
@@ -42,7 +27,7 @@ export async function getPopularManga(): Promise<any> {
           chapters
           genres
           averageScore
-          year
+          startDate
           format
         }
       }
@@ -50,16 +35,16 @@ export async function getPopularManga(): Promise<any> {
   `;
   
   const data = await fetchAniList(query);
-  const items = data.Page.media.map((m: AniListMedia) => ({
+  const items = data.Page.media.map((m: any) => ({
     id: String(m.id),
     name: m.title.english || m.title.userPreferred,
     jname: m.title.native,
-    poster: m.coverImage.large || m.coverImage.medium,
+    poster: m.coverImage?.large || m.coverImage?.medium || "",
     description: m.description?.replace(/<[^>]*>/g, "") || "",
     type: m.format,
-    genres: m.genres,
+    genres: m.genres || [],
     rating: m.averageScore ? String(m.averageScore) : null,
-    year: m.year,
+    year: m.startDate ? parseInt(m.startDate) : null,
     chapters: m.chapters,
   }));
   
@@ -80,7 +65,7 @@ export async function getLatestManga(): Promise<any> {
           chapters
           genres
           averageScore
-          year
+          startDate
           format
         }
       }
@@ -88,16 +73,16 @@ export async function getLatestManga(): Promise<any> {
   `;
   
   const data = await fetchAniList(query);
-  const items = data.Page.media.map((m: AniListMedia) => ({
+  const items = data.Page.media.map((m: any) => ({
     id: String(m.id),
     name: m.title.english || m.title.userPreferred,
     jname: m.title.native,
-    poster: m.coverImage.large || m.coverImage.medium,
+    poster: m.coverImage?.large || m.coverImage?.medium || "",
     description: m.description?.replace(/<[^>]*>/g, "") || "",
     type: m.format,
-    genres: m.genres,
+    genres: m.genres || [],
     rating: m.averageScore ? String(m.averageScore) : null,
-    year: m.year,
+    year: m.startDate ? parseInt(m.startDate) : null,
     chapters: m.chapters,
   }));
   
@@ -118,7 +103,7 @@ export async function searchManga(query: string): Promise<any> {
           chapters
           genres
           averageScore
-          year
+          startDate
           format
         }
       }
@@ -126,16 +111,16 @@ export async function searchManga(query: string): Promise<any> {
   `;
   
   const data = await fetchAniList(searchQuery, { search: query });
-  const items = data.Page.media.map((m: AniListMedia) => ({
+  const items = data.Page.media.map((m: any) => ({
     id: String(m.id),
     name: m.title.english || m.title.userPreferred,
     jname: m.title.native,
-    poster: m.coverImage.large || m.coverImage.medium,
+    poster: m.coverImage?.large || m.coverImage?.medium || "",
     description: m.description?.replace(/<[^>]*>/g, "") || "",
     type: m.format,
-    genres: m.genres,
+    genres: m.genres || [],
     rating: m.averageScore ? String(m.averageScore) : null,
-    year: m.year,
+    year: m.startDate ? parseInt(m.startDate) : null,
     chapters: m.chapters,
   }));
   
@@ -155,7 +140,7 @@ export async function getMangaDetails(mangaId: string): Promise<any> {
         chapters
         genres
         averageScore
-        year
+        startDate
         format
         authors { nodes { name } }
       }
@@ -171,12 +156,12 @@ export async function getMangaDetails(mangaId: string): Promise<any> {
       id: String(m.id),
       name: m.title.english || m.title.userPreferred,
       jname: m.title.native,
-poster: (m.coverImage?.large || m.coverImage?.medium || ""),
+      poster: (m.coverImage?.large || m.coverImage?.medium || ""),
       description: m.description?.replace(/<[^>]*>/g, "") || "",
       type: m.format,
-      genres: m.genres,
+      genres: m.genres || [],
       rating: m.averageScore ? String(m.averageScore) : null,
-      year: m.year,
+      year: m.startDate ? parseInt(m.startDate) : null,
       chapters: m.chapters,
       author: m.authors?.nodes?.[0]?.name || "Unknown",
     },
