@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
-const inter = Inter({ subsets: ["latin"] });
+const manrope = Manrope({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "StreamVault - Watch Movies & TV Shows",
-  description: "Stream your favorite movies and TV shows with StreamVault",
+  title: "SV - Stream Vault",
+  description: "Premium-style streaming experience for movies, TV, anime, and manga.",
 };
 
 export default function RootLayout({
@@ -17,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${manrope.className} antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>

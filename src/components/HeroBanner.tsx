@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Play, Info, Star, Calendar, Clock } from "lucide-react";
+import { Play, Info, Star, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface MediaItem {
@@ -32,9 +32,7 @@ export function HeroBanner({ item }: HeroBannerProps) {
   const title = item.title || item.name || "";
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
-  const watchLink = isMovie
-    ? `https://vidsrc-embed.ru/embed/movie/${item.id}?ds_lang=en`
-    : `https://vidsrc-embed.ru/embed/tv/${item.id}/1/1?ds_lang=en`;
+  const watchLink = `${link}?autoplay=1`;
 
   return (
     <div className="relative w-full h-[75vh] md:h-[90vh] flex items-end overflow-hidden">
@@ -112,15 +110,13 @@ export function HeroBanner({ item }: HeroBannerProps) {
           transition={{ delay: 0.75, duration: 0.5 }}
           className="flex items-center gap-3 flex-wrap"
         >
-          <a
+          <Link
             href={watchLink}
-            target="_blank"
-            rel="noopener noreferrer"
             className="group flex items-center gap-2.5 bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 active:scale-95 text-white font-bold px-8 py-4 rounded-xl text-sm transition-all duration-300 shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40"
           >
             <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
             Watch Now
-          </a>
+          </Link>
 
           <Link
             href={link}

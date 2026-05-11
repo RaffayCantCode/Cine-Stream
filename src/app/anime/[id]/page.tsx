@@ -88,16 +88,6 @@ export default function AnimeDetailPage() {
         );
         if (data.success && data.data?.episodes) {
           setEpisodes(data.data.episodes);
-          // Extract sources from episodes - support both old src format and new sources array format
-          const firstEp = data.data.episodes[0];
-          if (firstEp?.sources && firstEp.sources.length > 0) {
-            setEpisodeSources(firstEp.sources.map((s: { name: string; url: string }) => ({
-              src: s.url,
-              name: s.name
-            })));
-          } else if (firstEp?.src) {
-            setEpisodeSources([{ src: firstEp.src, name: "Server 1" }]);
-          }
           if (data.data.episodes.length > 0) {
             setSelectedEp(data.data.episodes[0]);
           }
@@ -110,6 +100,30 @@ export default function AnimeDetailPage() {
     };
     loadEps();
   }, [id]);
+
+  useEffect(() => {
+    if (!selectedEp) {
+      setEpisodeSources([]);
+      return;
+    }
+
+    if (selectedEp.sources && selectedEp.sources.length > 0) {
+      setEpisodeSources(
+        selectedEp.sources.map((source) => ({
+          src: source.url,
+          name: source.name,
+        }))
+      );
+      return;
+    }
+
+    if (selectedEp.src) {
+      setEpisodeSources([{ src: selectedEp.src, name: "AniPub" }]);
+      return;
+    }
+
+    setEpisodeSources([]);
+  }, [selectedEp]);
 
 
   return (

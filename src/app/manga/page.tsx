@@ -22,6 +22,7 @@ export default function MangaBrowsePage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"popular" | "latest">("popular");
+  const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
@@ -66,6 +67,25 @@ export default function MangaBrowsePage() {
     loadManga(page + 1, true);
   };
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await fetchJson<{ success: boolean; data: MangaItem[] }>(
+        `/api/manga?category=search&q=${encodeURIComponent(searchQuery)}`
+      );
+      if (data.success) {
+        setMangas(data.data || []);
+        setHasMore(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Search failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
@@ -86,12 +106,22 @@ export default function MangaBrowsePage() {
                 Read your favorite manga online. Track your reading progress!
               </p>
             </div>
-            <Link
-              href="/manga/search"
-              className="h-10 px-4 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-500 transition flex items-center gap-2 ml-5 md:ml-0"
-            >
-              Search Manga
-            </Link>
+            <div className="flex items-center gap-2 ml-5 md:ml-0">
+              <input
+                type="text"
+                placeholder="Search manga..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="h-10 px-4 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm font-semibold outline-none placeholder:text-white/30 w-44"
+              />
+              <button
+                onClick={handleSearch}
+                className="h-10 px-4 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-500 transition"
+              >
+                Search
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}

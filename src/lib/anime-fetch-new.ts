@@ -164,18 +164,45 @@ export async function getStreamingLinks(animeId: string): Promise<any> {
     if (!res.ok) throw new Error(`Failed: ${res.status}`);
     const data = await res.json();
     
-    // Extract episode links - the API returns links with src= prefix
-    const episodes = (data.episodes || []).map((ep: any, index: number) => {
-      const link = ep.link || ep.src || "";
-      // Strip src= prefix if present
-      const src = link.replace(/^src=/, "").replace(/^"/, "").replace(/"$/, "");
-      return {
-        episodeId: String(index + 1),
-        episodeNum: index + 1,
-        title: ep.title || `Episode ${index + 1}`,
-        src: src,
-      };
-    });
+    const cleanSrc = (link: string) =>
+      (link || "").replace(/^src=/, "").replace(/^"/, "").replace(/"$/, "");
+
+    const episodes: { episodeId: string; episodeNum: number; title: string; src: string }[] = [];
+
+    // Official shape: local.link = ep1 and local.ep[] = ep2+
+    if (data.local?.link) {
+      episodes.push({
+        episodeId: `${animeId}-1`,
+        episodeNum: 1,
+        title: "Episode 1",
+        src: cleanSrc(data.local.link),
+      });
+    }
+
+    if (Array.isArray(data.local?.ep)) {
+      data.local.ep.forEach((ep: any, index: number) => {
+        const epNum = index + 2;
+        episodes.push({
+          episodeId: `${animeId}-${epNum}`,
+          episodeNum: epNum,
+          title: ep?.title || `Episode ${epNum}`,
+          src: cleanSrc(ep?.link || ep?.src || ""),
+        });
+      });
+    }
+
+    // Fallback shape
+    if (episodes.length === 0 && Array.isArray(data.episodes)) {
+      data.episodes.forEach((ep: any, index: number) => {
+        const epNum = Number(ep.episodeNum || index + 1);
+        episodes.push({
+          episodeId: String(ep.episodeId || `${animeId}-${epNum}`),
+          episodeNum: epNum,
+          title: ep.title || `Episode ${epNum}`,
+          src: cleanSrc(ep.link || ep.src || ""),
+        });
+      });
+    }
     
     return { success: true, data: { episodes, totalEpisodes: episodes.length } };
   } catch (error) {

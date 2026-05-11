@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
@@ -29,6 +29,7 @@ interface Movie {
 
 export default function MovieDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = Number(params.id);
   const { status } = useSession();
   const [movie, setMovie] = useState<Movie | null>(null);
@@ -52,6 +53,12 @@ export default function MovieDetailPage() {
 
     fetchMovie();
   }, [id]);
+
+  useEffect(() => {
+    if (searchParams.get("autoplay") === "1") {
+      setIsPlaying(true);
+    }
+  }, [searchParams]);
 
   const handleWatch = async () => {
     if (status === "authenticated" && movie) {

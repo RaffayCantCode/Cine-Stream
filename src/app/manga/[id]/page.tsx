@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { fetchJson } from "@/lib/utils";
-import { BookOpen, Star, ArrowLeft, Clock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, Star, ArrowLeft, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface MangaDetail {
@@ -28,20 +28,7 @@ interface Chapter {
   number: number;
   title: string;
   read: boolean;
-  url?: string;
-}
-
-// Get manga embed URL for reading
-function getMangaEmbedUrl(mangaName: string, chapter: number): string {
-  const clean = mangaName
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .trim();
-  
-  // Use MangaDex embed through 3rd party reader
-  return `https://mangareader.to/read/${clean}/${chapter}`;
+  pages?: string[];
 }
 
 export default function MangaDetailPage() {
@@ -55,6 +42,8 @@ export default function MangaDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [readMode, setReadMode] = useState(false);
+  const [chapterPages, setChapterPages] = useState<string[]>([]);
+  const [chapterPagesLoading, setChapterPagesLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -78,6 +67,29 @@ export default function MangaDetailPage() {
     };
     load();
   }, [id]);
+
+  useEffect(() => {
+    const loadChapterPages = async () => {
+      if (!selectedChapter || !readMode) return;
+      setChapterPagesLoading(true);
+      try {
+        const data = await fetchJson<{ success: boolean; data: { pages: string[] } }>(
+          `/api/manga/chapter/${selectedChapter.id}`
+        );
+        if (data.success && data.data?.pages) {
+          setChapterPages(data.data.pages);
+        } else {
+          setChapterPages([]);
+        }
+      } catch {
+        setChapterPages([]);
+      } finally {
+        setChapterPagesLoading(false);
+      }
+    };
+
+    loadChapterPages();
+  }, [selectedChapter, readMode]);
 
   useEffect(() => {
     if (!id) return;
@@ -105,7 +117,7 @@ export default function MangaDetailPage() {
 
   const handleChapterChange = (direction: "prev" | "next") => {
     if (!selectedChapter) return;
-    const currentIndex = chapters.findIndex((c) => c.number === selectedChapter.number);
+    const currentIndex = chapters.findIndex((c) => c.id === selectedChapter.id);
     if (direction === "prev" && currentIndex < chapters.length - 1) {
       setSelectedChapter(chapters[currentIndex + 1]);
     } else if (direction === "next" && currentIndex > 0) {
@@ -139,7 +151,7 @@ export default function MangaDetailPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleChapterChange("prev")}
-                  disabled={selectedChapter.number >= chapters.length}
+                  disabled={chapters.findIndex((c) => c.id === selectedChapter.id) >= chapters.length - 1}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white disabled:opacity-30 transition"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -150,7 +162,7 @@ export default function MangaDetailPage() {
                 </span>
                 <button
                   onClick={() => handleChapterChange("next")}
-                  disabled={selectedChapter.number <= 1}
+                  disabled={chapters.findIndex((c) => c.id === selectedChapter.id) <= 0}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white disabled:opacity-30 transition"
                 >
                   Next
@@ -160,14 +172,30 @@ export default function MangaDetailPage() {
             </div>
           </div>
 
-          {/* Manga Reader Iframe */}
-          <div className="w-full h-[calc(100vh-60px)] bg-black">
-            <iframe
-              src={selectedChapter.url || getMangaEmbedUrl(manga.name, selectedChapter.number)}
-              className="w-full h-full"
-              allow="fullscreen"
-              title={`${manga.name} - Chapter ${selectedChapter.number}`}
-            />
+          <div className="max-w-4xl mx-auto px-4 py-6">
+            {chapterPagesLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="w-full h-72 md:h-96 rounded-xl bg-muted/40 animate-pulse" />
+                ))}
+              </div>
+            ) : chapterPages.length > 0 ? (
+              <div className="space-y-4">
+                {chapterPages.map((page, index) => (
+                  <img
+                    key={page}
+                    src={page}
+                    alt={`${manga.name} Chapter ${selectedChapter.number} Page ${index + 1}`}
+                    className="w-full rounded-lg bg-black/40"
+                    loading="lazy"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center text-white/70">
+                Couldn&apos;t load chapter pages for this chapter yet.
+              </div>
+            )}
           </div>
         </main>
       </div>

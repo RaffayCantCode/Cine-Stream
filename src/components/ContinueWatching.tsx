@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Play, X, Tv, Film } from "lucide-react";
 import { motion } from "framer-motion";
 import useSWR, { mutate } from "swr";
@@ -21,6 +22,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export function ContinueWatching() {
   const { status } = useSession();
+  const router = useRouter();
   const { data, isLoading } = useSWR(
     status === "authenticated" ? "/api/watch-history" : null,
     fetcher
@@ -44,19 +46,11 @@ export function ContinueWatching() {
   const handlePlay = (item: WatchHistoryItem, e: React.MouseEvent) => {
     e.preventDefault();
     if (item.mediaType === "movie") {
-      window.open(
-        `https://vidsrc-embed.ru/embed/movie/${item.mediaId}?ds_lang=en`,
-        "_blank",
-        "noopener,noreferrer"
-      );
+      router.push(`/movie/${item.mediaId}?autoplay=1`);
     } else {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
-      window.open(
-        `https://vidsrc-embed.ru/embed/tv/${item.mediaId}/${season}/${episode}?ds_lang=en`,
-        "_blank",
-        "noopener,noreferrer"
-      );
+      router.push(`/tv/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
     }
   };
 

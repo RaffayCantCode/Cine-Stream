@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaRow } from "@/components/MediaRow";
@@ -47,6 +47,7 @@ interface TvShow {
 
 export default function TvDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = Number(params.id);
   const { status } = useSession();
   const [show, setShow] = useState<TvShow | null>(null);
@@ -76,6 +77,16 @@ export default function TvDetailPage() {
 
     fetchShow();
   }, [id]);
+
+  useEffect(() => {
+    const autoPlay = searchParams.get("autoplay") === "1";
+    const season = Number(searchParams.get("season") || "");
+    const episode = Number(searchParams.get("episode") || "");
+
+    if (season > 0) setSelectedSeason(season);
+    if (episode > 0) setSelectedEpisode(episode);
+    if (autoPlay) setIsPlaying(true);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!selectedSeason) return;
@@ -160,6 +171,8 @@ export default function TvDetailPage() {
   const score = show.vote_average ?? 0;
   const scoreColor =
     score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
+  const currentEpisode = seasonData?.episodes?.find((ep) => ep.episode_number === selectedEpisode);
+  const nextEpisode = seasonData?.episodes?.find((ep) => ep.episode_number === selectedEpisode + 1);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
@@ -276,14 +289,51 @@ export default function TvDetailPage() {
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
       {isPlaying && (
-        <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 mb-4">
-          <VideoPlayer
-            type="tv"
-            id={id}
-            season={selectedSeason}
-            episode={selectedEpisode}
-            title={`${show.name} - S${selectedSeason}E${selectedEpisode}`}
-          />
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+          <div>
+            <VideoPlayer
+              type="tv"
+              id={id}
+              season={selectedSeason}
+              episode={selectedEpisode}
+              title={`${show.name} - S${selectedSeason}E${selectedEpisode}`}
+            />
+            <div className="mt-3 text-sm text-white/60">
+              <span className="font-bold text-white">Now Playing: </span>
+              S{selectedSeason}E{selectedEpisode}
+              {currentEpisode?.name ? ` - ${currentEpisode.name}` : ""}
+            </div>
+            {nextEpisode && (
+              <button
+                onClick={() => handleWatchEpisode(selectedSeason, nextEpisode.episode_number, nextEpisode.name)}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Play Next: E{nextEpisode.episode_number}
+              </button>
+            )}
+          </div>
+
+          <aside className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3">
+            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Episode Queue</div>
+            <div className="max-h-[70vh] overflow-y-auto space-y-2 pr-1">
+              {seasonData?.episodes?.map((episode) => (
+                <button
+                  key={`queue-${episode.id}`}
+                  onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
+                  className={cn(
+                    "w-full rounded-xl border p-3 text-left transition",
+                    selectedEpisode === episode.episode_number
+                      ? "border-primary/60 bg-primary/15"
+                      : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06]"
+                  )}
+                >
+                  <div className="text-xs font-bold text-white/70">E{episode.episode_number}</div>
+                  <div className="mt-0.5 text-sm font-semibold text-white line-clamp-2">{episode.name}</div>
+                </button>
+              ))}
+            </div>
+          </aside>
         </div>
       )}
         <section>
