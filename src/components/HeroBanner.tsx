@@ -53,9 +53,8 @@ export function HeroBanner({ item }: HeroBannerProps) {
         )}
 
         {/* Cinematic gradient overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/40 to-transparent" />
-        <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-background/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/30 to-transparent" />
         
         {/* Subtle vignette effect */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
@@ -64,7 +63,7 @@ export function HeroBanner({ item }: HeroBannerProps) {
         <div className="absolute bottom-0 inset-x-0 h-64 bg-gradient-to-t from-violet-500/10 via-transparent to-transparent blur-3xl" />
       </div>
 
-      <div className="relative z-10 pb-16 md:pb-24 px-5 md:px-10 max-w-3xl">
+      <div className="relative z-10 pb-16 md:pb-20 px-5 md:px-10 max-w-3xl pt-20">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

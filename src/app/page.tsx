@@ -67,14 +67,17 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Use useCallback for stable reference
-  const fetchData = useCallback(async () => {
+  // Fetch data with randomization - runs on every mount for fresh content
+  const fetchData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Get random pages for true variety
-      const moviePages = getRandomPages(2, 8);
-      const tvPages = getRandomPages(2, 8);
+      // Get random pages for true variety - new random pages each time
+      const moviePages = getRandomPages(2, 10);
+      const tvPages = getRandomPages(2, 10);
+      const trendingPage = Math.floor(Math.random() * 5) + 1;
+      const nowPlayingPage = Math.floor(Math.random() * 3) + 1;
+      const airingTodayPage = Math.floor(Math.random() * 3) + 1;
       
       const [
         trendingData,
@@ -85,13 +88,13 @@ export default function Home() {
         nowPlayingData,
         airingTodayData,
       ] = await Promise.all([
-        fetchJson<ApiResponse>(`/api/tmdb/trending?type=all&timeWindow=day&page=${Math.floor(Math.random() * 3) + 1}`),
+        fetchJson<ApiResponse>(`/api/tmdb/trending?type=all&timeWindow=day&page=${trendingPage}`),
         fetchJson<ApiResponse>(`/api/tmdb/movies/popular?page=${moviePages[0]}`),
         fetchJson<ApiResponse>(`/api/tmdb/movies/top-rated?page=${moviePages[1]}`),
         fetchJson<ApiResponse>(`/api/tmdb/tv/popular?page=${tvPages[0]}`),
         fetchJson<ApiResponse>(`/api/tmdb/tv/top-rated?page=${tvPages[1]}`),
-        fetchJson<ApiResponse>(`/api/tmdb/movies/now-playing?page=${Math.floor(Math.random() * 3) + 1}`),
-        fetchJson<ApiResponse>(`/api/tmdb/tv/airing-today?page=${Math.floor(Math.random() * 3) + 1}`),
+        fetchJson<ApiResponse>(`/api/tmdb/movies/now-playing?page=${nowPlayingPage}`),
+        fetchJson<ApiResponse>(`/api/tmdb/tv/airing-today?page=${airingTodayPage}`),
       ]);
 
       // Shuffle and deduplicate for maximum variety
@@ -126,21 +129,18 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
+  // Always fetch fresh data on mount
   useEffect(() => {
     fetchData();
-    // Refresh data periodically for variety (every 30 minutes)
-    const interval = setInterval(fetchData, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64">
-
       {isLoading ? (
         <div className="w-full h-[70vh] md:h-[85vh] bg-muted animate-pulse" />
       ) : error ? (

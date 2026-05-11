@@ -53,11 +53,45 @@ export function formatDate(dateString: string): string {
   });
 }
   
-export function filterReleasedSafeContent<T extends { adult?: boolean; release_date?: string; first_air_date?: string }>(items: T[]): T[] {  
+// Adult content genre IDs to filter out (these are commonly adult-oriented genres)
+const ADULT_GENRE_IDS = [
+  1,   // Often used for adult/pornographic
+  10770, // TV Movie (sometimes contains adult content)
+];
+
+// Keywords that suggest adult content
+const ADULT_KEYWORDS = [
+  'porn', 'adult', 'erotic', 'sex', 'nude', 'nudity', 'explicit',
+  'hardcore', 'softcore', 'xxx', 'mature', 'nsfw'
+];
+
+export function filterReleasedSafeContent<T extends { 
+  adult?: boolean; 
+  release_date?: string; 
+  first_air_date?: string;
+  genre_ids?: number[];
+  title?: string;
+  name?: string;
+  overview?: string;
+}>(items: T[]): T[] {  
   const today = new Date();  
   today.setHours(0, 0, 0, 0);  
   return items.filter((item) => {  
-    if (item.adult === true) return false;  
+    // Filter explicit adult flag
+    if (item.adult === true) return false;
+    
+    // Filter by adult genre IDs
+    if (item.genre_ids && item.genre_ids.some(id => ADULT_GENRE_IDS.includes(id))) {
+      return false;
+    }
+    
+    // Filter by keywords in title/name/overview
+    const textToCheck = `${item.title || ''} ${item.name || ''} ${item.overview || ''}`.toLowerCase();
+    if (ADULT_KEYWORDS.some(keyword => textToCheck.includes(keyword))) {
+      return false;
+    }
+    
+    // Filter unreleased content
     const releaseStr = item.release_date || item.first_air_date;  
     if (releaseStr) {  
       const releaseDate = new Date(releaseStr);  

@@ -99,8 +99,8 @@ export default function SearchPage() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64">
-      <div className="pt-0 px-6 md:px-12 max-w-screen-2xl mx-auto">
+      <main className="md:pl-56 lg:pl-64 pt-6">
+      <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
         <div className="relative max-w-3xl mx-auto mb-10">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <SearchIcon className="h-6 w-6 text-muted-foreground" />
