@@ -60,6 +60,14 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
           )}
         </div>
 
+        <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-black/85 to-transparent pointer-events-none" />
+
+        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 pointer-events-none">
+          <h3 className="text-white font-bold text-[11px] leading-tight line-clamp-2 drop-shadow-xl">
+            {item.name}
+          </h3>
+        </div>
+
         <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-3.5">
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
             <div className="w-12 h-12 rounded-full bg-[#831C91]/90 backdrop-blur-xl flex items-center justify-center shadow-2xl shadow-[#831C91]/50 translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
