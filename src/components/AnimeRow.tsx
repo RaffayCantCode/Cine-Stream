@@ -67,9 +67,9 @@ export function AnimeRow({ title, items, isLoading, seeAllHref }: AnimeRowProps)
       <div className="flex items-center justify-between px-5 md:px-10">
         <div className="flex items-center gap-3">
           {/* Violet accent for anime rows */}
-          <div className="w-1 h-5 bg-violet-500 rounded-full" />
+          <div className="w-1 h-5 bg-[#831C91] rounded-full" />
           <h2 className="text-base md:text-lg font-bold text-white tracking-wide">{title}</h2>
-          <span className="text-[10px] font-bold tracking-widest text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full uppercase">
+          <span className="text-[10px] font-bold tracking-widest text-[#D552A3] bg-[#831C91]/10 border border-[#D552A3]/20 px-2 py-0.5 rounded-full uppercase">
             🇯🇵 JP Sub/Dub
           </span>
         </div>
@@ -79,7 +79,7 @@ export function AnimeRow({ title, items, isLoading, seeAllHref }: AnimeRowProps)
               type="button"
               onClick={() => scrollByAmount("left")}
               disabled={!canScrollLeft}
-              className="w-9 h-9 rounded-full border border-violet-500/20 bg-violet-500/[0.05] text-white/70 hover:text-white hover:bg-violet-500/[0.12] disabled:opacity-40 disabled:hover:bg-violet-500/[0.05] transition"
+              className="w-9 h-9 rounded-full border border-[#D552A3]/20 bg-[#831C91]/[0.05] text-white/70 hover:text-white hover:bg-[#831C91]/[0.12] disabled:opacity-40 disabled:hover:bg-[#831C91]/[0.05] transition"
               aria-label="Scroll left"
             >
               <ChevronLeft className="w-4 h-4 mx-auto" />
@@ -88,7 +88,7 @@ export function AnimeRow({ title, items, isLoading, seeAllHref }: AnimeRowProps)
               type="button"
               onClick={() => scrollByAmount("right")}
               disabled={!canScrollRight}
-              className="w-9 h-9 rounded-full border border-violet-500/20 bg-violet-500/[0.05] text-white/70 hover:text-white hover:bg-violet-500/[0.12] disabled:opacity-40 disabled:hover:bg-violet-500/[0.05] transition"
+              className="w-9 h-9 rounded-full border border-[#D552A3]/20 bg-[#831C91]/[0.05] text-white/70 hover:text-white hover:bg-[#831C91]/[0.12] disabled:opacity-40 disabled:hover:bg-[#831C91]/[0.05] transition"
               aria-label="Scroll right"
             >
               <ChevronRight className="w-4 h-4 mx-auto" />
@@ -97,7 +97,7 @@ export function AnimeRow({ title, items, isLoading, seeAllHref }: AnimeRowProps)
           {seeAllHref && (
             <a
               href={seeAllHref}
-              className="flex items-center gap-0.5 text-xs font-semibold text-violet-400/70 hover:text-violet-400 transition-colors group"
+              className="flex items-center gap-0.5 text-xs font-semibold text-[#D552A3]/70 hover:text-[#D552A3] transition-colors group"
             >
               See all
               <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />

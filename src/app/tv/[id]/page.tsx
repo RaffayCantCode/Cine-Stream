@@ -330,7 +330,7 @@ export default function TvDetailPage() {
                     onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
                     className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
                       isSelected
-                        ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/20"
+                        ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/20"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
                     }`}
                   >

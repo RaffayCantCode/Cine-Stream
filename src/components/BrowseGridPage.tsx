@@ -89,7 +89,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
             {description ? <p className="text-sm text-white/40 mt-2">{description}</p> : null}
           </div>
 
-          {error && <div className="mb-6 text-sm text-red-300">{error}</div>}
+          {error && <div className="mb-6 text-sm text-[#D552A3]">{error}</div>}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
             {items.map((item, idx) => (

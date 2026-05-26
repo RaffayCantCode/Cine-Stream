@@ -40,7 +40,7 @@ export function Sidebar() {
       {/* Mobile Floating Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="md:hidden fixed bottom-6 left-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center"
+        className="md:hidden fixed bottom-6 left-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-[#831C91] to-[#D552A3] shadow-lg shadow-[#831C91]/30 flex items-center justify-center"
       >
         {isOpen ? (
           <ChevronRight className="w-6 h-6 text-white" />
@@ -79,7 +79,7 @@ export function Sidebar() {
             <img src="/logo-icon.svg" alt="StreamVault" className="w-10 h-10 shrink-0 drop-shadow-lg" />
             <span className="hidden md:block font-bold text-xl tracking-wider">
               <span className="text-white">STREAM</span>
-              <span className="text-violet-400">VAULT</span>
+              <span className="bg-gradient-to-r from-[#D552A3] to-[#FF70BF] bg-clip-text text-transparent">VAULT</span>
             </span>
           </Link>
         </div>
@@ -99,10 +99,10 @@ export function Sidebar() {
                   "group relative flex items-center justify-center md:justify-start gap-2 px-3 md:px-2 lg:px-3 py-2.5 rounded-xl transition-all duration-300",
                   isActive 
                     ? isAnime 
-                      ? "text-violet-300" 
+                      ? "text-[#D552A3]" 
                       : "text-white"
                     : isAnime
-                    ? "text-violet-400/70 hover:text-violet-300"
+                    ? "text-[#D552A3]/60 hover:text-[#D552A3]"
                     : "text-white/50 hover:text-white"
                 )}
               >
@@ -112,7 +112,7 @@ export function Sidebar() {
                     className={cn(
                       "absolute inset-0 rounded-xl -z-10",
                       isAnime
-                        ? "bg-gradient-to-r from-violet-600/20 to-violet-500/10 border border-violet-500/20"
+                        ? "bg-gradient-to-r from-[#831C91]/20 to-[#D552A3]/10 border border-[#D552A3]/20"
                         : "bg-white/[0.06] border border-white/[0.08]"
                     )}
                     transition={{ type: "spring", stiffness: 380, damping: 35 }}
@@ -167,7 +167,7 @@ export function Sidebar() {
             ) : (
               <button
                 onClick={() => signIn()}
-                className="w-full flex items-center justify-center md:justify-start gap-2 px-3 md:px-2 lg:px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-all"
+                className="w-full flex items-center justify-center md:justify-start gap-2 px-3 md:px-2 lg:px-3 py-2 rounded-xl bg-[#831C91] hover:bg-[#D552A3] text-white text-xs font-bold transition-all"
               >
                 <LogIn className="w-4 h-4" />
                 <span className="hidden md:block">

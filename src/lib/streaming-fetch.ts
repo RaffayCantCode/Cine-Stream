@@ -22,6 +22,21 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     type: "vidking",
     supportsNativeFullscreen: true,
   },
+  {
+    name: "VidLink",
+    baseUrl: "https://vidlink.pro",
+    type: "vidlink",
+  },
+  {
+    name: "2Embed",
+    baseUrl: "https://2embed.cc",
+    type: "2embed",
+  },
+  {
+    name: "AutoEmbed",
+    baseUrl: "https://autoembed.co",
+    type: "autoembed",
+  },
 ];
 
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number): string {
@@ -39,6 +54,24 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     case "vidking":
+      if (type === "movie") {
+        return `${api.baseUrl}/embed/movie/${id}`;
+      }
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "vidlink":
+      if (type === "movie") {
+        return `${api.baseUrl}/embed/movie/${id}`;
+      }
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "2embed":
+      if (type === "movie") {
+        return `${api.baseUrl}/embed/${id}`;
+      }
+      return `${api.baseUrl}/embed/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "autoembed":
       if (type === "movie") {
         return `${api.baseUrl}/embed/movie/${id}`;
       }

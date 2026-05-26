@@ -130,13 +130,16 @@ export default function Home() {
 
         <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto py-8 space-y-8">
           <section className="space-y-3">
-            <h2 className="text-2xl font-bold text-white">Genres</h2>
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-gradient-to-b from-[#D552A3] to-[#831C91] rounded-full shadow-lg shadow-[#D552A3]/20" />
+              <h2 className="text-2xl font-black text-white tracking-tight">Genres</h2>
+            </div>
             <div className="flex flex-wrap gap-2">
               {genres.map((genre) => (
                 <Link
                   key={genre.id}
                   href={`/browse/genre/${genre.id}`}
-                  className="px-3 py-2 rounded-xl bg-white/[0.06] text-sm text-white/80 hover:bg-white/[0.12] hover:text-violet-300 transition-all"
+                  className="px-3 py-2 rounded-xl bg-white/[0.06] text-sm text-white/80 hover:bg-white/[0.12] hover:text-[#D552A3] transition-all"
                 >
                   {genre.name}
                 </Link>
@@ -145,15 +148,18 @@ export default function Home() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-bold text-white">
-              Franchise Collections
-            </h2>
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-gradient-to-b from-[#D552A3] to-[#831C91] rounded-full shadow-lg shadow-[#D552A3]/20" />
+              <h2 className="text-2xl font-black text-white tracking-tight">
+                Franchise Collections
+              </h2>
+            </div>
             <div className="flex flex-wrap gap-2">
               {FRANCHISES.map((name) => (
                 <Link
                   key={name}
-                  href={`/search?q=${encodeURIComponent(name)}`}
-                  className="px-3 py-2 rounded-xl bg-violet-600/20 border border-violet-500/30 text-sm text-violet-200 hover:bg-violet-600/30 hover:text-white transition-all"
+                  href={`/browse/franchise/${encodeURIComponent(name)}`}
+                  className="px-3 py-2 rounded-xl bg-[#831C91]/20 border border-[#D552A3]/30 text-sm text-[#D552A3] hover:bg-[#831C91]/30 hover:text-white transition-all"
                 >
                   {name}
                 </Link>

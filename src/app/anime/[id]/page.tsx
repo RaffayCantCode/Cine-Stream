@@ -151,7 +151,7 @@ export default function AnimeDetailPage() {
       <main className="md:pl-56 lg:pl-64 pt-0">
         {isLoading ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto">
-            <div className="w-full h-[60vh] rounded-2xl bg-gradient-to-br from-violet-900/20 to-background animate-pulse" />
+            <div className="w-full h-[60vh] rounded-2xl bg-gradient-to-br from-[#462C7D]/20 to-background animate-pulse" />
           </div>
         ) : error ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto">
@@ -159,7 +159,7 @@ export default function AnimeDetailPage() {
               <div className="text-6xl mb-4">😔</div>
               <div className="text-xl font-bold text-white mb-2">Couldn&apos;t load anime</div>
               <div className="text-sm text-white/50 mb-4">{error}</div>
-              <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-sm font-bold transition-all">
+              <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#831C91] hover:bg-[#831C91] text-white rounded-xl text-sm font-bold transition-all">
                 <ArrowLeft className="w-4 h-4" /> Back to Anime
               </Link>
             </div>
@@ -180,7 +180,7 @@ export default function AnimeDetailPage() {
                 </motion.div>
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5 }} className="flex flex-col gap-3 max-w-3xl">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-[10px] font-extrabold tracking-widest px-3 py-1 rounded-full uppercase shadow-lg shadow-violet-500/25">🇯🇵 Anime</span>
+                    <span className="bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white text-[10px] font-extrabold tracking-widest px-3 py-1 rounded-full uppercase shadow-lg shadow-[#831C91]/25">🇯🇵 Anime</span>
                     {anime.type && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase">{anime.type}</span>}
                     {anime.rating && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase">{anime.rating}</span>}
                     {anime.status && (
@@ -201,7 +201,7 @@ export default function AnimeDetailPage() {
                   </div>
                   {anime.genres && anime.genres.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {anime.genres.slice(0, 6).map(g => <span key={g} className="text-[10px] text-violet-300 bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-full font-bold backdrop-blur-sm">{g}</span>)}
+                      {anime.genres.slice(0, 6).map(g => <span key={g} className="text-[10px] text-[#D552A3] bg-[#831C91]/10 border border-[#D552A3]/20 px-2.5 py-1 rounded-full font-bold backdrop-blur-sm">{g}</span>)}
                     </div>
                   )}
                   <p className="text-white/50 text-sm leading-relaxed line-clamp-3 max-w-2xl">{anime.description}</p>
@@ -224,7 +224,7 @@ export default function AnimeDetailPage() {
                       <button key={mode} onClick={() => setWatchMode(mode)}
                         className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                           watchMode === mode
-                            ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/25"
+                            ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25"
                             : "text-white/40 hover:text-white"
                         }`}>
                         {mode === "sub" ? "🇯🇵 Sub" : "🎤 Dub"}
@@ -296,7 +296,7 @@ export default function AnimeDetailPage() {
                 <div className="w-80 xl:w-96 shrink-0 bg-white/[0.02] rounded-2xl border border-white/[0.06] overflow-hidden sticky top-6 max-h-[85vh] flex flex-col">
                   <div className="p-4 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.02]">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Tv2 className="w-4 h-4 text-violet-400" />
+                      <Tv2 className="w-4 h-4 text-[#D552A3]" />
                       Episodes
                       <span className="text-xs text-white/30 font-normal">({episodes.length})</span>
                     </h3>
@@ -325,7 +325,7 @@ export default function AnimeDetailPage() {
                           disabled={isUnreleased}
                           className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
                             isSelected
-                              ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/20"
+                              ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/20"
                               : isUnreleased
                               ? "bg-white/[0.02] text-white/20 cursor-not-allowed"
                               : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
@@ -357,7 +357,7 @@ export default function AnimeDetailPage() {
                   >
                     <div>
                       <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                        <Tv2 className="w-4 h-4 text-violet-400" /> Episodes ({episodes.length})
+                        <Tv2 className="w-4 h-4 text-[#D552A3]" /> Episodes ({episodes.length})
                       </h2>
                       <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-2">
                         {episodes.map(ep => {
@@ -370,7 +370,7 @@ export default function AnimeDetailPage() {
                               disabled={isUnreleased}
                               className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
                                 isSelected
-                                  ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg"
+                                  ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg"
                                   : isUnreleased
                                   ? "bg-white/[0.03] text-white/20 cursor-not-allowed"
                                   : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
@@ -431,7 +431,7 @@ export default function AnimeDetailPage() {
               {!showMobileEpisodes && !episodesLoading && episodes.length > 0 && (
                 <div className="md:hidden">
                   <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                    <Tv2 className="w-4 h-4 text-violet-400" /> Episodes ({episodes.length})
+                    <Tv2 className="w-4 h-4 text-[#D552A3]" /> Episodes ({episodes.length})
                   </h2>
                   <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-2">
                     {episodes.map(ep => {
@@ -444,7 +444,7 @@ export default function AnimeDetailPage() {
                           disabled={isUnreleased}
                           className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
                             isSelected
-                              ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg"
+                              ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg"
                               : isUnreleased
                               ? "bg-white/[0.03] text-white/20 cursor-not-allowed"
                               : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"

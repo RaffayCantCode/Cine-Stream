@@ -124,7 +124,7 @@ export default function SearchPage() {
                 className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-all duration-200 capitalize ${
                   activeTab === tab
                     ? tab === "anime"
-                      ? "bg-violet-600 text-white shadow-lg shadow-violet-500/20"
+                      ? "bg-[#831C91] text-white shadow-lg shadow-[#831C91]/20"
                       : "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
                     : "bg-white/[0.05] text-white/50 hover:bg-white/[0.09] hover:text-white"
                 }`}
@@ -147,7 +147,7 @@ export default function SearchPage() {
           <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
             <MonitorPlay className="w-16 h-16 mb-4 opacity-20" />
             <h3 className="text-xl font-medium text-white mb-2">Find something to watch</h3>
-            <p>Search movies, TV shows, and <span className="text-violet-400 font-semibold">anime (🇯🇵 Japanese dub)</span> all in one place.</p>
+            <p>Search movies, TV shows, and <span className="text-[#D552A3] font-semibold">anime (🇯🇵 Japanese dub)</span> all in one place.</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
@@ -166,9 +166,9 @@ export default function SearchPage() {
             {(activeTab === "all" || activeTab === "anime") && animeResults.length > 0 && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-1 h-5 bg-violet-500 rounded-full" />
+                  <div className="w-1 h-5 bg-[#831C91] rounded-full" />
                   <h2 className="text-lg font-bold text-white">Anime Results</h2>
-                  <span className="text-[10px] font-bold text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-[#D552A3] bg-[#831C91]/10 border border-[#D552A3]/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
                     🇯🇵 Japanese Dub · English Subs
                   </span>
                 </div>

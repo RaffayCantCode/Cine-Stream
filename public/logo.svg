@@ -1,17 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#7c3aed"/>
-      <stop offset="45%" stop-color="#a21caf"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#462C7D"/>
+      <stop offset="35%" stop-color="#831C91"/>
+      <stop offset="70%" stop-color="#D552A3"/>
+      <stop offset="100%" stop-color="#FF70BF"/>
     </linearGradient>
-    <linearGradient id="icon-g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#7c3aed"/>
-      <stop offset="100%" stop-color="#22d3ee"/>
-    </linearGradient>
+    <filter id="sg">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#D552A3" flood-opacity="0.4"/>
+    </filter>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <g transform="translate(256,256)">
-    <polygon points="-80,-40 80,0 -80,40" fill="white" opacity="0.95"/>
+  <!-- SV icon -->
+  <g filter="url(#sg)">
+    <rect x="8" y="12" width="56" height="56" rx="14" fill="#0a0a12" stroke="url(#lg)" stroke-width="2" stroke-opacity="0.6"/>
+    <path d="M24 24h10l-6 28H24z" fill="url(#lg)" opacity="0.85"/>
+    <path d="M38 24h10l-6 28H38z" fill="url(#lg)" opacity="0.65"/>
   </g>
+  <!-- STREAM text -->
+  <text x="80" y="48" font-family="Inter, system-ui, sans-serif" font-size="30" font-weight="800" fill="white" letter-spacing="3">STREAM</text>
+  <!-- VAULT text (accent) -->
+  <text x="218" y="48" font-family="Inter, system-ui, sans-serif" font-size="30" font-weight="800" fill="url(#lg)" letter-spacing="3">VAULT</text>
+  <!-- underline accent -->
+  <line x1="80" y1="58" x2="305" y2="58" stroke="url(#lg)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
 </svg>

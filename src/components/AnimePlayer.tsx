@@ -30,32 +30,19 @@ interface AnimePlayerProps {
 }
 
 const VIDEO_SOURCES: Omit<Source, "embedUrl">[] = [
-  { name: "VidPlay", quality: "1080p", baseDomain: "vidplay.site", type: "iframe", color: "violet" },
-  { name: "VidSrc.me", quality: "720p", baseDomain: "vidsrc.me", type: "iframe", color: "cyan" },
-  { name: "VidSrc.pro", quality: "1080p", baseDomain: "vidsrc.pro", type: "iframe", color: "emerald" },
-  { name: "VidSrc.to", quality: "720p", baseDomain: "vidsrc.to", type: "iframe", color: "amber" },
-  { name: "StreamSB", quality: "720p", baseDomain: "streamsb.net", type: "iframe", color: "rose" },
-  { name: "Filemoon", quality: "1080p", baseDomain: "filemoon.sx", type: "iframe", color: "fuchsia" },
-  { name: "AutoEmbed", quality: "720p", baseDomain: "autoembed.co", type: "iframe", color: "blue" },
-  { name: "2Embed", quality: "720p", baseDomain: "2embed.cc", type: "iframe", color: "orange" },
-  { name: "VidLink", quality: "1080p", baseDomain: "vidlink.pro", type: "iframe", color: "green" },
-  { name: "VidCloud", quality: "720p", baseDomain: "vidcloud9.ru", type: "iframe", color: "sky" },
-  { name: "MovieWeb", quality: "1080p", baseDomain: "movieweb.top", type: "iframe", color: "yellow" },
+  { name: "VidNest", quality: "1080p", baseDomain: "vidnest.fun", type: "iframe", color: "violet" },
+  { name: "AnimePahe", quality: "1080p", baseDomain: "vidnest.fun/animepahe", type: "iframe", color: "cyan" },
+  { name: "2Anime", quality: "720p", baseDomain: "2anime.xyz", type: "iframe", color: "emerald" },
+  { name: "AnimEmbed", quality: "720p", baseDomain: "animembed.com", type: "iframe", color: "fuchsia" },
+  { name: "VidAPI", quality: "720p", baseDomain: "vidapi.xyz", type: "iframe", color: "amber" },
 ];
 
 const SOURCE_COLORS: Record<string, { bg: string; text: string; ring: string; badge: string }> = {
-  violet: { bg: "bg-violet-600", text: "text-violet-300", ring: "ring-violet-500/30", badge: "bg-violet-500/20 text-violet-300" },
+  violet: { bg: "bg-[#831C91]", text: "text-[#D552A3]", ring: "ring-[#D552A3]/30", badge: "bg-[#831C91]/20 text-[#D552A3]" },
   cyan: { bg: "bg-cyan-600", text: "text-cyan-300", ring: "ring-cyan-500/30", badge: "bg-cyan-500/20 text-cyan-300" },
   emerald: { bg: "bg-emerald-600", text: "text-emerald-300", ring: "ring-emerald-500/30", badge: "bg-emerald-500/20 text-emerald-300" },
-  amber: { bg: "bg-amber-600", text: "text-amber-300", ring: "ring-amber-500/30", badge: "bg-amber-500/20 text-amber-300" },
-  rose: { bg: "bg-rose-600", text: "text-rose-300", ring: "ring-rose-500/30", badge: "bg-rose-500/20 text-rose-300" },
   fuchsia: { bg: "bg-fuchsia-600", text: "text-fuchsia-300", ring: "ring-fuchsia-500/30", badge: "bg-fuchsia-500/20 text-fuchsia-300" },
-  blue: { bg: "bg-blue-600", text: "text-blue-300", ring: "ring-blue-500/30", badge: "bg-blue-500/20 text-blue-300" },
-  orange: { bg: "bg-orange-600", text: "text-orange-300", ring: "ring-orange-500/30", badge: "bg-orange-500/20 text-orange-300" },
-  green: { bg: "bg-green-600", text: "text-green-300", ring: "ring-green-500/30", badge: "bg-green-500/20 text-green-300" },
-  red: { bg: "bg-red-600", text: "text-red-300", ring: "ring-red-500/30", badge: "bg-red-500/20 text-red-300" },
-  sky: { bg: "bg-sky-600", text: "text-sky-300", ring: "ring-sky-500/30", badge: "bg-sky-500/20 text-sky-300" },
-  yellow: { bg: "bg-yellow-600", text: "text-yellow-300", ring: "ring-yellow-500/30", badge: "bg-yellow-500/20 text-yellow-300" },
+  amber: { bg: "bg-amber-600", text: "text-amber-300", ring: "ring-amber-500/30", badge: "bg-amber-500/20 text-amber-300" },
 };
 
 function buildEmbedUrl(source: Omit<Source, "embedUrl">, animeId: string, animeTitle: string, episode: number): string {
@@ -67,28 +54,16 @@ function buildEmbedUrl(source: Omit<Source, "embedUrl">, animeId: string, animeT
   const numericId = animeId.replace(/\D/g, "");
 
   switch (source.baseDomain) {
-    case "vidplay.site":
-      return `https://vidplay.site/embed/${cleanTitle}-episode-${episode}`;
-    case "vidsrc.me":
-      return `https://vidsrc.me/embed/${cleanTitle}-episode-${episode}`;
-    case "vidsrc.pro":
-      return `https://vidsrc.pro/embed/${numericId}`;
-    case "vidsrc.to":
-      return `https://vidsrc.to/embed/anime/${numericId}`;
-    case "streamsb.net":
-      return `https://streamsb.net/embed/${cleanTitle}-episode-${episode}`;
-    case "filemoon.sx":
-      return `https://filemoon.sx/e/${cleanTitle}-episode-${episode}`;
-    case "autoembed.co":
-      return `https://autoembed.co/embed/anime/${numericId}`;
-    case "2embed.cc":
-      return `https://www.2embed.cc/embed/${numericId}`;
-    case "vidlink.pro":
-      return `https://vidlink.pro/embed/anime/${numericId}`;
-    case "vidcloud9.ru":
-      return `https://vidcloud9.ru/embed/${cleanTitle}-episode-${episode}`;
-    case "movieweb.top":
-      return `https://movieweb.top/embed/${cleanTitle}-episode-${episode}`;
+    case "vidnest.fun":
+      return `https://vidnest.fun/anime/${numericId}/${episode}/sub`;
+    case "vidnest.fun/animepahe":
+      return `https://vidnest.fun/animepahe/${numericId}/${episode}/sub`;
+    case "2anime.xyz":
+      return `https://2anime.xyz/embed/${cleanTitle}-episode-${episode}`;
+    case "animembed.com":
+      return `https://animembed.com/embed/${numericId}/${episode}`;
+    case "vidapi.xyz":
+      return `https://vidapi.xyz/embed/anime/${cleanTitle}-episode-${episode}`;
     default:
       return `https://${source.baseDomain}/embed/${cleanTitle}-episode-${episode}`;
   }
@@ -345,7 +320,7 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
                 <button onClick={handleRetry} className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2">
                   <RotateCcw className="w-4 h-4" /> Try Again
                 </button>
-                <button onClick={() => setShowSources(true)} className="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                <button onClick={() => setShowSources(true)} className="px-5 py-2.5 bg-[#831C91] hover:bg-[#831C91] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2">
                   <Server className="w-4 h-4" /> Change Source
                 </button>
               </div>
@@ -356,7 +331,7 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
                 <div className="text-center">
-                  <div className="w-14 h-14 border-4 border-white/10 border-t-violet-500 rounded-full animate-spin mx-auto mb-4" />
+                  <div className="w-14 h-14 border-4 border-white/10 border-t-[#831C91] rounded-full animate-spin mx-auto mb-4" />
                   <p className="text-white/60 text-sm font-medium">
                     {error || `Loading ${currentSource?.name || "player"}...`}
                   </p>
