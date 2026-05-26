@@ -1,21 +1,8 @@
-// Multi-API Anime Fetcher with Fallback Logic
-// Integrating Kiwi Anime API for Japanese dub with English sub
+// Multi-API Anime Fetcher
+// Metadata: AniList (primary) + Jikan (fallback)
+// Streaming: Kiwi API + iframe embed sources
+// Self-hosted: Consumet (configurable)
 
-interface AnimeAPIConfig {
-  name: string;
-  baseUrl: string;
-  type: "kiwi";
-}
-
-const ANIME_APIS: AnimeAPIConfig[] = [
-  {
-    name: "Kiwi",
-    baseUrl: "https://animefreestream.vercel.app/anime/zoro",
-    type: "kiwi",
-  },
-];
-
-// Unified Anime Item interface
 export interface AnimeItem {
   id: string;
   name: string;
@@ -26,204 +13,337 @@ export interface AnimeItem {
   rating?: string | null;
   description?: string;
   genres?: string[];
+  status?: string | null;
 }
 
-// Transform different API responses to unified format
-function transformResponse(apiType: string, data: any): any {
-  switch (apiType) {
-    case "kiwi":
-      return transformKiwi(data);
-    default:
-      return data;
-  }
+interface AniListMedia {
+  id: number;
+  title: { romaji: string; english: string | null; native: string | null };
+  coverImage: { large: string; extraLarge: string };
+  episodes: number | null;
+  genres: string[];
+  averageScore: number | null;
+  description: string | null;
+  status: string | null;
+  type: string | null;
+  season: string | null;
+  seasonYear: number | null;
 }
 
-// Transform Kiwi API response
-function transformKiwi(data: any): any {
-  if (data.results || Array.isArray(data.results)) {
-    // Search or list response
-    const items = (data.results || []).map((item: any) => ({
-      id: String(item.id || ""),
-      name: item.title || "Unknown",
-      jname: item.japaneseTitle || null,
-      poster: item.image || "",
-      type: item.type || "TV",
-      episodes: {
-        sub: item.sub || null,
-        dub: item.dub || null,
-      },
-      rating: null,
-      description: item.description || "",
-      genres: item.genres || [],
-    }));
-    return { success: true, data: items };
-  } else if (data.id || data.title) {
-    // Series detail response
-    return {
-      success: true,
-      data: {
-        ...data,
-        id: String(data.id),
-        name: data.title || "Unknown",
-        jname: data.japaneseTitle || null,
-        poster: data.image || "",
-        episodes: data.episodes?.map((ep: any, idx: number) => ({
-          episodeId: String(ep.id || idx + 1),
-          episodeNum: ep.number || idx + 1,
-          title: ep.title || `Episode ${ep.number || idx + 1}`,
-        })) || [],
-        totalEpisodes: data.totalEpisodes || data.episodes?.length || 0,
-      },
-    };
-  }
-  return data;
+const ANILIST_API = "https://graphql.anilist.co";
+const JIKAN_BASE = "https://api.jikan.moe/v4";
+const KIWI_BASE = "https://animefreestream.vercel.app/anime/zoro";
+
+// Configurable self-hosted Consumet endpoint
+const SELF_HOSTED_CONSUMET = process.env.NEXT_PUBLIC_CONSUMET_URL || "";
+
+function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
+  return fetch(ANILIST_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(10000),
+  }).then((r) => r.json());
 }
 
-// Build endpoint URL based on API type
-function buildEndpoint(api: AnimeAPIConfig, endpoint: string): string {
-  switch (api.type) {
-    case "kiwi":
-      // Kiwi API - get recent anime
-      if (endpoint === "/home") {
-        return `${api.baseUrl}/top-airing?page=1`;
-      }
-      if (endpoint.startsWith("/api/search")) {
-        const params = new URLSearchParams(endpoint.split("?")[1]);
-        const keyword = params.get("keyword") || params.get("q") || "";
-        return `${api.baseUrl}/${encodeURIComponent(keyword)}?page=1`;
-      }
-      if (endpoint.startsWith("/series/")) {
-        const seriesId = endpoint.replace("/series/", "");
-        return `${api.baseUrl}/info?id=${encodeURIComponent(seriesId)}`;
-      }
-      return `${api.baseUrl}/recent-episodes?page=1`;
-    
-    default:
-      return `${api.baseUrl}${endpoint}`;
-  }
+function transformAniList(media: AniListMedia): AnimeItem {
+  return {
+    id: String(media.id),
+    name: media.title.english || media.title.romaji,
+    jname: media.title.native || null,
+    poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
+    type: media.type || "TV",
+    episodes: { sub: media.episodes || null, dub: null },
+    rating: media.averageScore ? String(media.averageScore / 10) : null,
+    description: media.description?.replace(/<[^>]*>/g, "") || "",
+    genres: media.genres || [],
+    status: media.status || null,
+  };
 }
 
-export async function fetchAnimeApi(endpoint: string, options?: RequestInit): Promise<any> {
-  const errors: string[] = [];
-
-  for (const api of ANIME_APIS) {
-    try {
-      const url = buildEndpoint(api, endpoint);
-      console.log(`[Anime API] Trying ${api.name}: ${url}`);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-      const res = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "StreamVault/1.0",
-          ...options?.headers,
-        },
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        throw new Error(`${api.name} returned ${res.status} ${res.statusText}`);
+// Search anime via AniList
+export async function searchAnime(query: string, page = 1): Promise<AnimeItem[]> {
+  const q = `query ($q: String, $page: Int) {
+    Page(page: $page, perPage: 50) {
+      media(search: $q, type: ANIME, sort: POPULARITY_DESC) {
+        id title { romaji english native } coverImage { large extraLarge }
+        episodes genres averageScore description status type
       }
-
-      const data = await res.json();
-
-      // Transform response based on API type
-      const transformed = transformResponse(api.type, data);
-
-      console.log(`[Anime API] ✅ ${api.name} succeeded`);
-      return transformed;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.warn(`[Anime API] ❌ ${api.name} failed:`, message);
-      errors.push(`${api.name}: ${message}`);
-      continue; // Try next API
     }
+  }`;
+  try {
+    const data = await anilistQuery(q, { q: query, page });
+    return (data?.data?.Page?.media || []).map(transformAniList);
+  } catch {
+    return [];
   }
-
-  // All APIs failed
-  console.error("[Anime API] All APIs failed:", errors);
-  throw new Error(`All Anime APIs failed. Errors: ${errors.join(" | ")}`);
 }
 
-// Fetch with specific API preference
-export async function fetchAnimeApiWithPreference(
-  endpoint: string,
-  preferredApi: string,
-  options?: RequestInit
-): Promise<any> {
-  const api = ANIME_APIS.find((a) => a.name.toLowerCase().includes(preferredApi.toLowerCase()));
-  if (api) {
-    const url = buildEndpoint(api, endpoint);
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "StreamVault/1.0",
-        ...options?.headers,
-      },
-    });
-    if (!res.ok) throw new Error(`${api.name} returned ${res.status}`);
-    const data = await res.json();
-    return transformResponse(api.type, data);
+// Get popular anime via AniList
+export async function getPopularAnime(page = 1): Promise<AnimeItem[]> {
+  const q = `query ($page: Int) {
+    Page(page: $page, perPage: 50) {
+      media(type: ANIME, sort: POPULARITY_DESC) {
+        id title { romaji english native } coverImage { large extraLarge }
+        episodes genres averageScore description status type
+      }
+    }
+  }`;
+  try {
+    const data = await anilistQuery(q, { page });
+    return (data?.data?.Page?.media || []).map(transformAniList);
+  } catch {
+    return [];
   }
-  return fetchAnimeApi(endpoint, options);
+}
+
+// Get trending/airing anime via AniList
+export async function getTrendingAnime(page = 1): Promise<AnimeItem[]> {
+  const q = `query ($page: Int) {
+    Page(page: $page, perPage: 50) {
+      media(type: ANIME, sort: TRENDING_DESC) {
+        id title { romaji english native } coverImage { large extraLarge }
+        episodes genres averageScore description status type
+      }
+    }
+  }`;
+  try {
+    const data = await anilistQuery(q, { page });
+    return (data?.data?.Page?.media || []).map(transformAniList);
+  } catch {
+    return [];
+  }
+}
+
+// Get currently airing anime via AniList
+export async function getAiringAnime(page = 1): Promise<AnimeItem[]> {
+  const now = new Date();
+  const year = now.getFullYear();
+  const seasons = ["WINTER", "SPRING", "SUMMER", "FALL"];
+  const season = seasons[Math.floor(now.getMonth() / 3)];
+
+  const q = `query ($season: MediaSeason, $year: Int, $page: Int) {
+    Page(page: $page, perPage: 50) {
+      media(season: $season, seasonYear: $year, type: ANIME, sort: POPULARITY_DESC) {
+        id title { romaji english native } coverImage { large extraLarge }
+        episodes genres averageScore description status type
+      }
+    }
+  }`;
+  try {
+    const data = await anilistQuery(q, { season, year, page });
+    return (data?.data?.Page?.media || []).map(transformAniList);
+  } catch {
+    return [];
+  }
+}
+
+// Get anime details via AniList + Kiwi streaming IDs
+export async function getAnimeDetails(id: string): Promise<{
+  anime: AnimeItem;
+  episodes: { episodeId: string; episodeNum: number; title: string }[];
+  totalEpisodes: number;
+} | null> {
+  // Get metadata from AniList
+  const q = `query ($id: Int) {
+    Media(id: $id, type: ANIME) {
+      id title { romaji english native } coverImage { large extraLarge }
+      episodes genres averageScore description status type
+    }
+  }`;
+
+  try {
+    const numId = parseInt(id, 10);
+    const data = await anilistQuery(q, { id: isNaN(numId) ? 1 : numId });
+    const media = data?.data?.Media;
+    if (!media) return null;
+
+    const anime = transformAniList(media);
+
+    // Try to get streaming episodes from Kiwi API
+    let episodes: { episodeId: string; episodeNum: number; title: string }[] = [];
+    let totalEpisodes = media.episodes || 0;
+
+    try {
+      const searchName = anime.name.toLowerCase().replace(/[^\w\s]/g, "").slice(0, 30);
+      const searchRes = await fetch(
+        `${KIWI_BASE}/${encodeURIComponent(searchName)}?page=1`,
+        { signal: AbortSignal.timeout(15000) }
+      );
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        const match = (searchData.results || [])[0];
+        if (match?.id) {
+          const infoRes = await fetch(
+            `${KIWI_BASE}/info?id=${encodeURIComponent(match.id)}`,
+            { signal: AbortSignal.timeout(15000) }
+          );
+          if (infoRes.ok) {
+            const infoData = await infoRes.json();
+            episodes = (infoData.episodes || []).map((ep: any, i: number) => ({
+              episodeId: ep.id || `${match.id}-${i + 1}`,
+              episodeNum: ep.number || i + 1,
+              title: ep.title || `Episode ${ep.number || i + 1}`,
+            }));
+            totalEpisodes = infoData.totalEpisodes || episodes.length || totalEpisodes;
+          }
+        }
+      }
+    } catch {
+      // Kiwi search failed - use placeholder episodes
+    }
+
+    // If no Kiwi episodes, generate placeholder
+    if (episodes.length === 0 && totalEpisodes > 0) {
+      episodes = Array.from({ length: Math.min(totalEpisodes, 500) }, (_, i) => ({
+        episodeId: `${id}-${i + 1}`,
+        episodeNum: i + 1,
+        title: `Episode ${i + 1}`,
+      }));
+    }
+
+    return { anime, episodes, totalEpisodes };
+  } catch {
+    return null;
+  }
+}
+
+// Search via Jikan (fallback for AniList failures)
+export async function searchViaJikan(query: string): Promise<AnimeItem[]> {
+  try {
+    const res = await fetch(
+      `${JIKAN_BASE}/anime?q=${encodeURIComponent(query)}&limit=25&sfw`,
+      { headers: { "User-Agent": "StreamVault/1.0" }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data || []).map((a: any) => ({
+      id: String(a.mal_id),
+      name: a.title_english || a.title,
+      jname: a.title_japanese || null,
+      poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
+      type: a.type || "TV",
+      episodes: { sub: a.episodes || null, dub: null },
+      rating: a.score ? String(a.score) : null,
+      description: a.synopsis || "",
+      genres: a.genres?.map((g: any) => g.name) || [],
+      status: a.status || null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// Main fetch function for the API routes
+export async function fetchAnimeApi(
+  endpoint: string,
+  isDetail = false
+): Promise<any> {
+  // Parse endpoint to determine action
+  const isSearch = endpoint.includes("/search") || endpoint.includes("keyword=");
+  const isPopular = endpoint.includes("/popular") || endpoint.includes("/home");
+  const isLatest = endpoint.includes("/latest") || endpoint.includes("recent");
+  const isSeries = endpoint.startsWith("/series/");
+  const isWatch = endpoint.startsWith("/watch/");
+
+  if (isDetail || isSeries) {
+    const id = endpoint.replace("/series/", "").split("?")[0];
+    const result = await getAnimeDetails(id);
+    if (result) {
+      return {
+        success: true,
+        data: {
+          ...result.anime,
+          episodes: result.episodes,
+          totalEpisodes: result.totalEpisodes,
+        },
+      };
+    }
+    throw new Error("Anime not found");
+  }
+
+  if (isSearch) {
+    const params = new URLSearchParams(endpoint.split("?")[1]);
+    const keyword = params.get("keyword") || params.get("q") || "";
+    let items = await searchAnime(keyword);
+    if (items.length === 0) {
+      items = await searchViaJikan(keyword);
+    }
+    return { success: true, data: items };
+  }
+
+  if (isPopular) {
+    const items = await getPopularAnime(1);
+    if (items.length === 0) {
+      const jikan = await searchViaJikan("top");
+      return { success: true, data: jikan };
+    }
+    return { success: true, data: items };
+  }
+
+  if (isLatest) {
+    const items = await getAiringAnime(1);
+    return { success: true, data: items };
+  }
+
+  // Default: trending
+  const items = await getTrendingAnime(1);
+  return { success: true, data: items };
 }
 
 // Get streaming source for an episode
 export async function getStreamingSource(
   animeId: string,
   episodeId: string,
-  server: string = "default"
+  _server = "default"
 ): Promise<any> {
-  const errors: string[] = [];
-
-  for (const api of ANIME_APIS) {
+  // Try self-hosted Consumet first
+  if (SELF_HOSTED_CONSUMET) {
     try {
-      let url: string;
-
-      switch (api.type) {
-        case "kiwi":
-          url = `${api.baseUrl}/watch/${encodeURIComponent(episodeId)}?server=${server === 'default' ? 'vidcloud' : server}`;
-          break;
-        default:
-          continue;
+      const res = await fetch(
+        `${SELF_HOSTED_CONSUMET}/anime/gogoanime/watch/${encodeURIComponent(episodeId)}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const sources = data.sources || [];
+        const subtitles = data.subtitles || [];
+        if (sources.length > 0) {
+          return {
+            success: true,
+            data: {
+              sources: sources.map((s: any) => ({ url: s.url, quality: s.quality || "Auto" })),
+              subtitles: subtitles.map((s: any) => ({ url: s.url, lang: s.lang || "English" })),
+            },
+            source: "Consumet",
+          };
+        }
       }
-
-      console.log(`[Streaming] Trying ${api.name}: ${url}`);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "StreamVault/1.0",
-        },
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        throw new Error(`${api.name} returned ${res.status}`);
-      }
-
-      const data = await res.json();
-      console.log(`[Streaming] ✅ ${api.name} succeeded`);
-      return { success: true, data, source: api.name };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.warn(`[Streaming] ❌ ${api.name} failed:`, message);
-      errors.push(`${api.name}: ${message}`);
-      continue;
-    }
+    } catch { /* fall through */ }
   }
 
-  console.error("[Streaming] All APIs failed:", errors);
-  throw new Error(`All streaming sources failed. Errors: ${errors.join(" | ")}`);
+  // Try Kiwi API
+  try {
+    const url = `${KIWI_BASE}/watch/${encodeURIComponent(episodeId)}?server=vidcloud`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
+    if (res.ok) {
+      const data = await res.json();
+      const sources = data.sources || data.data?.sources || [];
+      const subtitles = data.subtitles || data.data?.subtitles || [];
+
+      if (sources.length > 0) {
+        return {
+          success: true,
+          data: {
+            sources: sources.map((s: any) => ({ url: s.url, quality: s.quality || "Auto" })),
+            subtitles: subtitles.map((s: any) => ({ url: s.url, lang: s.lang || "English" })),
+          },
+          source: "Kiwi",
+        };
+      }
+    }
+  } catch { /* fall through */ }
+
+  // No streaming sources available
+  throw new Error("No streaming sources available");
 }

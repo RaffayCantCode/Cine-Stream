@@ -31,16 +31,26 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchJson<{ results: any[]; page?: number; total_pages?: number }>(`${endpoint}?page=${page}`, {
-          cacheTtlMs: 120000,
-        });
+        const isAppend = page > 1;
+        const pages = isAppend ? [page, page + 1, page + 2] : [1];
 
-        const next = (data.results || []).map((item) => (mediaType ? { ...item, media_type: mediaType } : item));
-        setItems((prev) => (page === 1 ? next : [...prev, ...next]));
+        const allResults = await Promise.all(
+          pages.map((p) =>
+            fetchJson<{ results: any[]; page?: number; total_pages?: number }>(`${endpoint}?page=${p}`, {
+              cacheTtlMs: 120000,
+            })
+          )
+        );
 
-        const currentPage = data.page ?? page;
-        const totalPages = data.total_pages ?? currentPage;
-        setHasMore(currentPage < totalPages);
+        const merged = allResults.flatMap((data) =>
+          (data.results || []).map((item) => (mediaType ? { ...item, media_type: mediaType } : item))
+        );
+
+        setItems((prev) => (isAppend ? [...prev, ...merged] : merged));
+
+        const last = allResults[allResults.length - 1];
+        const totalPages = last?.total_pages ?? 1;
+        setHasMore(last?.page ? last.page < totalPages : false);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load content");
         setHasMore(false);
@@ -60,7 +70,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
       (entries) => {
         if (!entries[0].isIntersecting) return;
         if (isLoading || !hasMore) return;
-        setPage((p) => p + 1);
+        setPage((p) => p + 3);
       },
       { rootMargin: "300px" }
     );

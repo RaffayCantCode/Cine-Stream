@@ -8,24 +8,23 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const data = await fetchAnimeApi(`/series/${id}`);
+    const data = await fetchAnimeApi(`/series/${id}`, true);
     const rawEpisodes = data?.data?.episodes || [];
-    
-    const episodes = rawEpisodes.map((ep: any, index: number) => {
-      return {
-        episodeId: ep.episodeId || `${id}-${index + 1}`,
-        episodeNum: Number(ep.episodeNum || index + 1),
-        title: ep.title || `Episode ${index + 1}`,
-        src: "",
-        sources: [],
-      };
-    });
+    const totalEps = data?.data?.totalEpisodes || rawEpisodes.length || 0;
+
+    const episodes = rawEpisodes.map((ep: any) => ({
+      episodeId: ep.episodeId || `${id}-${ep.episodeNum}`,
+      episodeNum: Number(ep.episodeNum || ep.episode || 1),
+      title: ep.title || `Episode ${ep.episodeNum || 1}`,
+      isFiller: ep.isFiller || false,
+      releasedDate: ep.releasedDate || null,
+    }));
 
     return Response.json({
       success: true,
       data: {
         episodes,
-        totalEpisodes: episodes.length,
+        totalEpisodes: totalEps,
       },
     });
   } catch (error) {

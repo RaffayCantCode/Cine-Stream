@@ -15,36 +15,36 @@ export async function GET(request: NextRequest) {
       return Response.json({
         success: true,
         data: {
-          spotlightAnimes: animes.slice(0, 6),
-          latestEpisodeAnimes: animes.slice(6, 12),
-          newReleases: animes.slice(12, 18),
+          spotlightAnimes: animes.slice(0, 8),
+          latestEpisodeAnimes: animes.slice(8, 16),
+          newReleases: animes.slice(16, 24),
         },
-        hasMore: true,
+        hasMore: animes.length >= 24,
       });
     } else if (category === "new-releases" || category === "latest") {
-      data = await fetchAnimeApi(`/recently-added?page=${page}`);
+      data = await fetchAnimeApi(`/popular?page=${page}`);
       const animes = data.data || [];
       return Response.json({
         success: true,
         data: {
-          spotlightAnimes: animes.slice(0, 6),
-          latestEpisodeAnimes: animes.slice(6, 12),
-          newReleases: animes.slice(12, 18),
+          spotlightAnimes: animes.slice(0, 8),
+          latestEpisodeAnimes: animes.slice(8, 16),
+          newReleases: animes.slice(16, 24),
         },
         hasMore: true,
       });
     } else if (category === "search") {
       const query = searchParams.get("q") || "";
-      data = await fetchAnimeApi(`/search?q=${encodeURIComponent(query)}&page=${page}`);
+      data = await fetchAnimeApi(`/api/search?keyword=${encodeURIComponent(query)}&page=${page}`);
       const animes = data.data || [];
       return Response.json({
         success: true,
         data: {
           spotlightAnimes: [],
-          latestEpisodeAnimes: animes.slice(0, 9),
-          newReleases: animes.slice(9, 18),
+          latestEpisodeAnimes: animes.slice(0, 12),
+          newReleases: animes.slice(12, 24),
         },
-        hasMore: animes.length >= 9,
+        hasMore: animes.length >= 12,
       });
     } else {
       data = await fetchAnimeApi(`/popular?page=${page}`);
@@ -52,15 +52,18 @@ export async function GET(request: NextRequest) {
       return Response.json({
         success: true,
         data: {
-          spotlightAnimes: animes.slice(0, 6),
-          latestEpisodeAnimes: animes.slice(6, 12),
-          newReleases: animes.slice(12, 18),
+          spotlightAnimes: animes.slice(0, 8),
+          latestEpisodeAnimes: animes.slice(8, 16),
+          newReleases: animes.slice(16, 24),
         },
         hasMore: true,
       });
     }
   } catch (error) {
     console.error("[Anime API Route Error]:", error);
-    return Response.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Failed to fetch anime", success: false },
+      { status: 500 }
+    );
   }
 }

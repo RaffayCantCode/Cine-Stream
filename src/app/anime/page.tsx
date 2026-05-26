@@ -39,8 +39,8 @@ export default function AnimeBrowsePage() {
       ];
 
       const seen = new Set<string>();
-      const filtered = merged.filter((x) => {
-        const key = x.id || x.animeId;
+      const filtered = merged.filter((x: AnimeItem) => {
+        const key = x.id;
         if (!key || seen.has(key)) return false;
         seen.add(key);
 
@@ -65,7 +65,7 @@ export default function AnimeBrowsePage() {
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64 pt-0">
+      <main className="md:pl-56 lg:pl-64 pt-6">
         <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white">Anime</h1>

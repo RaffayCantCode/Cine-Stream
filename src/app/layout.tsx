@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
-const manrope = Manrope({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "SV - Stream Vault",
-  description: "Premium-style streaming experience for movies, TV, anime, and manga.",
+  title: "StreamVault — Premium Streaming",
+  description: "Premium streaming experience for movies, TV, and anime with Japanese audio & English subtitles.",
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({
@@ -17,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${manrope.className} antialiased`}>
+      <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>

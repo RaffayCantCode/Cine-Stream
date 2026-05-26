@@ -29,7 +29,7 @@ export default function BrowseMoviesPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
-  const [page, setPage] = useState(() => Math.floor(Math.random() * 5) + 1);
+  const [page, setPage] = useState(() => Math.floor(Math.random() * 10) * 3 + 1);
   const [hasMore, setHasMore] = useState(true);
   const initialLoad = useRef(true);
 
@@ -64,25 +64,34 @@ export default function BrowseMoviesPage() {
       }
       setError(null);
       try {
-        const params = new URLSearchParams();
-        if (selectedGenre) params.append("genreId", selectedGenre.toString());
-        params.append("sortBy", sortBy);
-        params.append("page", page.toString());
+        const pagesToFetch = mode === "append" ? [page, page + 1, page + 2] : [page];
 
-        const data = await fetchJson<{
-          results: Movie[];
-          page?: number;
-          total_pages?: number;
-        }>(`/api/tmdb/discover/movies?${params}`);
+        const results = await Promise.all(
+          pagesToFetch.map(async (p) => {
+            const params = new URLSearchParams();
+            if (selectedGenre) params.append("genreId", selectedGenre.toString());
+            params.append("sortBy", sortBy);
+            params.append("page", p.toString());
 
-        const next = shuffleArray(filterReleasedSafeContent(data.results || []));
+            const data = await fetchJson<{
+              results: Movie[];
+              page?: number;
+              total_pages?: number;
+            }>(`/api/tmdb/discover/movies?${params}`);
+
+            return data;
+          })
+        );
+
+        const allItems = results.flatMap((r) => filterReleasedSafeContent(r.results || []));
+        const next = shuffleArray(allItems);
         setMovies((prev) => (mode === "append" ? [...prev, ...next] : next));
 
-        const currentPage = data.page ?? page;
-        const totalPages = data.total_pages ?? currentPage;
-        setHasMore(currentPage < totalPages);
+        const last = results[results.length - 1];
+        const totalPages = last?.total_pages ?? 1;
+        setHasMore(results[0]?.page ? results[0].page < totalPages : true);
       } catch (error) {
-        if (page === 1) setMovies([]);
+        if (page <= 3) setMovies([]);
         setError(error instanceof Error ? error.message : "Failed to fetch movies");
         setHasMore(false);
       } finally {
@@ -91,7 +100,7 @@ export default function BrowseMoviesPage() {
       }
     };
 
-    const mode = initialLoad.current ? "replace" : page === 1 ? "replace" : "append";
+    const mode = initialLoad.current ? "replace" : page <= 3 ? "replace" : "append";
     fetchMovies(mode);
     initialLoad.current = false;
   }, [selectedGenre, sortBy, page]);
@@ -100,7 +109,7 @@ export default function BrowseMoviesPage() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-0">
+      <main className="md:pl-56 lg:pl-64 pt-6">
       <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
           <div>
@@ -113,20 +122,19 @@ export default function BrowseMoviesPage() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="h-10 px-3 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm font-semibold outline-none"
+              className="h-10 px-3 rounded-xl bg-[#1a1a2e] border border-white/20 text-white text-sm font-semibold appearance-none cursor-pointer hover:border-violet-500/50 transition-colors outline-none"
               aria-label="Sort by"
+              style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
             >
-              <option value="popularity.desc">Most Popular</option>
-              <option value="vote_average.desc">Top Rated</option>
-              <option value="primary_release_date.desc">Newest</option>
-              <option value="revenue.desc">Biggest Box Office</option>
+              <option value="popularity.desc" className="bg-[#1a1a2e] text-white">Most Popular</option>
+              <option value="vote_average.desc" className="bg-[#1a1a2e] text-white">Top Rated</option>
+              <option value="primary_release_date.desc" className="bg-[#1a1a2e] text-white">Newest</option>
+              <option value="revenue.desc" className="bg-[#1a1a2e] text-white">Biggest Box Office</option>
             </select>
             <button
               type="button"
-              onClick={() => {
-                setMovies((prev) => shuffleArray(prev));
-              }}
-              className="h-10 px-4 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm font-semibold hover:bg-white/[0.08] transition"
+              onClick={() => setMovies((prev) => shuffleArray(prev))}
+              className="h-10 px-4 rounded-xl bg-[#1a1a2e] border border-white/20 text-white/80 text-sm font-semibold hover:border-violet-500/50 hover:text-white transition"
             >
               Shuffle
             </button>
@@ -184,12 +192,12 @@ export default function BrowseMoviesPage() {
           </div>
         )}
 
-        <div className="flex justify-center mt-12">
+          <div className="flex justify-center mt-12">
           <button
             type="button"
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => setPage((p) => p + 3)}
             disabled={isLoadingMore || isLoading || !hasMore}
-            className="h-11 px-6 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm font-bold hover:bg-white/[0.08] disabled:opacity-50 transition"
+            className="h-11 px-6 rounded-xl bg-[#1a1a2e] border border-white/20 text-white/80 text-sm font-bold hover:border-violet-500/50 hover:text-white disabled:opacity-50 transition"
           >
             {hasMore ? (isLoadingMore ? "Loading..." : "Load more") : "No more results"}
           </button>

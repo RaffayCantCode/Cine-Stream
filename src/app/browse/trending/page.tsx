@@ -42,7 +42,7 @@ export default function TrendingPage() {
 
   const current = state[activeTab];
 
-  const loadPage = async (tab: TrendType, page: number, append: boolean) => {
+  const loadPage = async (tab: TrendType, startPage: number, append: boolean) => {
     setState((prev) => ({
       ...prev,
       [tab]: {
@@ -53,19 +53,29 @@ export default function TrendingPage() {
     }));
 
     try {
-      const data = await fetchJson<{ results: MediaItem[]; page: number; total_pages: number }>(
-        `/api/tmdb/trending?type=${tab}&timeWindow=${timeWindow}&page=${page}`,
-        { cacheTtlMs: 120000 }
+      const pages = append ? [startPage, startPage + 1, startPage + 2] : [startPage];
+
+      const allResults = await Promise.all(
+        pages.map((p) =>
+          fetchJson<{ results: MediaItem[]; page: number; total_pages: number }>(
+            `/api/tmdb/trending?type=${tab}&timeWindow=${timeWindow}&page=${p}`,
+            { cacheTtlMs: 120000 }
+          )
+        )
       );
+
+      const merged = allResults.flatMap((r) => r.results || []);
+      const last = allResults[allResults.length - 1];
+      const hasMore = last ? last.page < last.total_pages : false;
 
       setState((prev) => ({
         ...prev,
         [tab]: {
           ...prev[tab],
           isLoading: false,
-          items: append ? [...prev[tab].items, ...(data.results || [])] : data.results || [],
-          page,
-          hasMore: data.page < data.total_pages,
+          items: append ? [...prev[tab].items, ...merged] : merged,
+          page: startPage,
+          hasMore,
         },
       }));
     } catch (e) {
@@ -94,7 +104,7 @@ export default function TrendingPage() {
         const entry = entries[0];
         if (!entry.isIntersecting) return;
         if (current.isLoading || !current.hasMore) return;
-        loadPage(activeTab, current.page + 1, true);
+        loadPage(activeTab, current.page + 3, true);
       },
       { rootMargin: "300px" }
     );
@@ -108,7 +118,7 @@ export default function TrendingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64 pt-0">
+      <main className="md:pl-56 lg:pl-64 pt-6">
         <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
           <div className="mb-8 flex flex-wrap gap-3 items-center justify-between">
             <div>
@@ -121,10 +131,11 @@ export default function TrendingPage() {
               <select
                 value={timeWindow}
                 onChange={(e) => setTimeWindow(e.target.value as "day" | "week")}
-                className="h-10 px-3 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm font-semibold"
+                className="h-10 px-3 rounded-xl bg-[#1a1a2e] border border-white/20 text-white text-sm font-semibold appearance-none cursor-pointer hover:border-violet-500/50 transition-colors"
+                style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
               >
-                <option value="day">Today</option>
-                <option value="week">This Week</option>
+                <option value="day" className="bg-[#1a1a2e] text-white">Today</option>
+                <option value="week" className="bg-[#1a1a2e] text-white">This Week</option>
               </select>
             </div>
           </div>

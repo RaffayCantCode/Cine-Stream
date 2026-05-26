@@ -76,9 +76,7 @@ export function Sidebar() {
         {/* Logo */}
         <div className="relative z-10 p-4 md:p-3 lg:p-4">
           <Link href="/" className="flex items-center justify-center md:justify-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/30 shrink-0">
-              <span className="text-white font-black text-sm tracking-tight">SV</span>
-            </div>
+            <img src="/logo-icon.svg" alt="StreamVault" className="w-10 h-10 shrink-0 drop-shadow-lg" />
             <span className="hidden md:block font-bold text-xl tracking-wider">
               <span className="text-white">STREAM</span>
               <span className="text-violet-400">VAULT</span>

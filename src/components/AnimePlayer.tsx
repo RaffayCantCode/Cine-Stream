@@ -102,7 +102,7 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
   const [dynamicSources, setDynamicSources] = useState<Source[]>([]);
   const [subtitles, setSubtitles] = useState<{ url: string; lang: string }[]>([]);
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -117,25 +117,25 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
         const res = await getStreamingSource(animeId, episodeId, "vidcloud");
         if (res.success && res.data?.sources) {
           const hlsSources = res.data.sources.map((s: any, idx: number) => ({
-            name: `Kiwi HLS ${s.quality || idx + 1}`,
+            name: `HLS ${s.quality || "Auto"}`,
             embedUrl: s.url,
             type: "hls" as const,
             quality: s.quality || "Auto",
-            baseDomain: "kiwianime",
+            baseDomain: "streamapi",
             color: "emerald",
           }));
-          
-          if (res.data.subtitles) {
+
+          if (res.data.subtitles && res.data.subtitles.length > 0) {
             setSubtitles(res.data.subtitles);
           }
-          
+
           setDynamicSources(hlsSources);
           if (hlsSources.length > 0) {
             setCurrentSource(hlsSources[0]);
           }
         }
       } catch (err) {
-        console.warn("Failed to fetch Kiwi streaming source:", err);
+        console.warn("Failed to fetch streaming source:", err);
       } finally {
         setIsLoading(false);
       }
@@ -159,8 +159,7 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
     setError(null);
     setIsLoading(true);
     setAutoNextCountdown(null);
-    
-    // Cleanup HLS instance on unmount or source change
+
     return () => {
       if (hlsRef.current) {
         hlsRef.current.destroy();
@@ -175,39 +174,36 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
     }
   }, [episode]);
 
-  // HLS Setup
   useEffect(() => {
     if (currentSource?.type === "hls" && videoRef.current) {
       const video = videoRef.current;
-      
+
       if (Hls.isSupported()) {
         if (hlsRef.current) {
           hlsRef.current.destroy();
         }
-        
-        const hls = new Hls({
-          maxMaxBufferLength: 100,
-        });
+
+        const hls = new Hls({ maxMaxBufferLength: 100 });
         hlsRef.current = hls;
-        
+
         hls.loadSource(currentSource.embedUrl);
         hls.attachMedia(video);
-        
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           setIsLoading(false);
         });
-        
-        hls.on(Hls.Events.ERROR, (event, data) => {
+
+        hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
             handleError();
           }
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = currentSource.embedUrl;
-        video.addEventListener('loadedmetadata', () => {
+        video.addEventListener("loadedmetadata", () => {
           setIsLoading(false);
         });
-        video.addEventListener('error', handleError);
+        video.addEventListener("error", handleError);
       }
     }
   }, [currentSource]);
@@ -264,7 +260,6 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
 
   return (
     <div ref={containerRef} className="w-full space-y-4">
-      {/* Controls Bar */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-white/40 font-medium uppercase tracking-wider hidden sm:inline">Source:</span>
@@ -281,6 +276,11 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
               {currentSource.quality}
             </span>
           )}
+          {subtitles.length > 0 && (
+            <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold px-2 py-1 rounded-lg uppercase tracking-widest border border-emerald-500/30">
+              Subs
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleRetry} className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all" title="Retry">
@@ -292,7 +292,6 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
         </div>
       </div>
 
-      {/* Source Dropdown */}
       <AnimatePresence>
         {showSources && (
           <motion.div
@@ -327,7 +326,6 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
         )}
       </AnimatePresence>
 
-      {/* Video Player */}
       <motion.div
         ref={playerRef}
         key={episode}
@@ -400,7 +398,6 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
         )}
       </motion.div>
 
-      {/* Auto-Next Countdown */}
       <AnimatePresence>
         {autoNextCountdown !== null && (
           <motion.div
@@ -428,10 +425,9 @@ export function AnimePlayer({ animeId, animeTitle, episode, episodeId, episodeSo
         )}
       </AnimatePresence>
 
-      {/* Info */}
       <div className="flex items-center justify-center gap-2 text-xs text-white/20">
         <Info className="w-3 h-3" />
-        <span>Quality depends on source. Auto-switches on failure.</span>
+        <span>Japanese dub with English subtitles. Auto-switches on failure.</span>
       </div>
     </div>
   );

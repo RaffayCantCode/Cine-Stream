@@ -4,9 +4,6 @@
 
 @layer base {
   :root {
-    /* StreamVault Design System 2.0 - Unique Violet/Cyan Gradient Theme */
-    
-    /* Light mode (not actively used — site is always dark) */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -30,19 +27,14 @@
   }
 
   .dark {
-    /* Deep space background with purple undertones */
     --background: 240 20% 4%;
     --foreground: 0 0% 100%;
     --card: 240 15% 8%;
     --card-foreground: 0 0% 100%;
     --popover: 240 15% 8%;
     --popover-foreground: 0 0% 100%;
-
-    /* PRIMARY = Violet to Cyan gradient accent */
     --primary: 262 85% 60%;
     --primary-foreground: 0 0% 100%;
-    
-    /* Secondary = Deep slate with purple tint */
     --secondary: 240 12% 12%;
     --secondary-foreground: 0 0% 100%;
     --muted: 240 10% 16%;
@@ -54,8 +46,6 @@
     --border: 240 10% 18%;
     --input: 240 10% 14%;
     --ring: 262 85% 60%;
-    
-    /* Custom properties for gradient accents */
     --gradient-violet: 262 85% 60%;
     --gradient-cyan: 183 95% 55%;
     --gradient-pink: 320 80% 65%;
@@ -70,7 +60,7 @@
   }
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 0;
+    scroll-padding-top: 24px;
   }
   body {
     @apply bg-background text-foreground;
@@ -79,9 +69,12 @@
     min-height: 100vh;
     overflow-x: hidden;
   }
+  ::selection {
+    background: hsl(262 85% 60% / 0.3);
+    color: white;
+  }
 }
 
-/* Hide scrollbars but keep scrollability */
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -90,7 +83,6 @@
   display: none;
 }
 
-/* Custom scrollbar for dark theme - Violet accent */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -109,7 +101,6 @@
   background: hsl(262 70% 45%);
 }
 
-/* Glassmorphism Utilities */
 .glass {
   background: rgba(15, 15, 25, 0.65);
   backdrop-filter: blur(20px);
@@ -131,7 +122,13 @@
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Gradient Text */
+.glass-violet {
+  background: linear-gradient(145deg, rgba(139, 92, 246, 0.1), rgba(6, 182, 212, 0.05));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
 .gradient-text {
   background: linear-gradient(135deg, hsl(262 85% 70%), hsl(183 95% 55%));
   -webkit-background-clip: text;
@@ -146,7 +143,6 @@
   background-clip: text;
 }
 
-/* Glow Effects */
 .glow-violet {
   box-shadow: 0 0 40px -10px hsl(262 85% 50% / 0.5),
               0 0 80px -20px hsl(262 85% 50% / 0.3);
@@ -161,7 +157,6 @@
   box-shadow: 0 0 20px -5px hsl(262 85% 50% / 0.4);
 }
 
-/* Gradient Borders */
 .gradient-border {
   position: relative;
 }
@@ -180,7 +175,6 @@
   pointer-events: none;
 }
 
-/* Animated Gradient Background */
 @keyframes gradient-shift {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -197,7 +191,6 @@
   animation: gradient-shift 15s ease infinite;
 }
 
-/* Shimmer Loading Effect */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -207,27 +200,43 @@
   background: linear-gradient(
     90deg,
     hsl(240 15% 10%) 25%,
-    hsl(240 15% 15%) 50%,
+    hsl(240 15% 18%) 50%,
     hsl(240 15% 10%) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
-/* Card Hover Glow */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out both;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
 .card-glow {
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-glow:hover {
-  box-shadow: 0 0 30px -5px hsl(262 85% 50% / 0.3),
-              0 0 60px -10px hsl(183 95% 50% / 0.2);
+  box-shadow: 0 0 40px -5px hsl(262 85% 50% / 0.35),
+              0 0 80px -10px hsl(183 95% 50% / 0.2);
   transform: translateY(-4px);
 }
 
-/* Netflix-style row hover */
 .row-item {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .row-item:hover {
@@ -241,17 +250,26 @@
   opacity: 0.6;
 }
 
-/* Blur Backdrop for Overlays */
 .backdrop-blur-heavy {
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
 }
 
-/* Custom focus ring */
 .focus-ring:focus-visible {
   outline: none;
   ring: 2px;
   ring-color: hsl(262 85% 60%);
   ring-offset: 2px;
   ring-offset-color: hsl(240 20% 4%);
+}
+
+.skeleton-pulse {
+  background: linear-gradient(
+    90deg,
+    hsl(240 15% 10%) 0%,
+    hsl(240 15% 18%) 50%,
+    hsl(240 15% 10%) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }
