@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { fetchJson } from "@/lib/utils";
@@ -8,6 +8,14 @@ import { fetchJson } from "@/lib/utils";
 type AnimeSort = "popular" | "ongoing" | "recent" | "subbed" | "movie" | "search";
 
 const ANIME_GENRES = ["Action", "Adventure", "Fantasy", "Romance", "Sci-Fi", "Comedy", "Drama", "Sports", "Horror", "Slice of Life"];
+
+const SORT_TO_CATEGORY: Record<string, string> = {
+  popular: "popular",
+  ongoing: "airing",
+  recent: "trending",
+  subbed: "popular",
+  movie: "search&q=movie",
+};
 
 export default function AnimeBrowsePage() {
   const [items, setItems] = useState<AnimeItem[]>([]);
@@ -18,95 +26,80 @@ export default function AnimeBrowsePage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(() => Math.floor(Math.random() * 15) + 1);
   const [hasMore, setHasMore] = useState(true);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const initialLoad = useRef(true);
 
-  const loadAnime = async (loadPage: number, mode: "replace" | "append") => {
-    if (mode === "replace") setIsLoading(true);
+  const getCategory = useCallback((): string => {
+    if (query.trim() || sortBy === "search") return `search&q=${encodeURIComponent(query)}`;
+    return SORT_TO_CATEGORY[sortBy] || "popular";
+  }, [sortBy, query]);
+
+  const loadAnime = useCallback(async (loadPage: number, replace: boolean) => {
+    setIsLoading(true);
     setError(null);
 
     try {
-      const pages = mode === "append" ? [loadPage, loadPage + 1, loadPage + 2] : [loadPage];
+      const pages = replace ? [loadPage] : [loadPage, loadPage + 1, loadPage + 2];
+      const category = getCategory();
+      const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
 
       const results = await Promise.all(
-        pages.map(async (p) => {
-          const category = query
-            ? `search&q=${encodeURIComponent(query)}${selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : ""}`
-            : sortBy === "recent"
-              ? "latest"
-              : sortBy === "subbed" || sortBy === "movie"
-                ? `search&q=${encodeURIComponent(sortBy)}`
-                : sortBy === "search"
-                  ? `search&q=${encodeURIComponent(query)}`
-                  : "popular";
-
-          const data = await fetchJson<{
-            success: boolean;
-            data: {
-              latestEpisodeAnimes?: AnimeItem[];
-              newReleases?: AnimeItem[];
-              spotlightAnimes?: AnimeItem[];
-            };
-            hasMore?: boolean;
-          }>(`/api/anime?category=${category}&page=${p}`, { cacheTtlMs: 120000 });
-
-          return data;
-        })
+        pages.map(p =>
+          fetchJson<{ success: boolean; data: { items: AnimeItem[] }; hasMore?: boolean }>(
+            `/api/anime?category=${category}&page=${p}${genreParam}`,
+            { cacheTtlMs: 60000 }
+          )
+        )
       );
 
-      const merged = results.flatMap((r) => [
-        ...(r.data?.spotlightAnimes || []),
-        ...(r.data?.latestEpisodeAnimes || []),
-        ...(r.data?.newReleases || []),
-      ]);
+      const merged = results.flatMap(r => r.data?.items || []);
 
       const seen = new Set<string>();
       const filtered = merged.filter((x: AnimeItem) => {
-        const key = x.id;
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        if (sortBy === "subbed") return true;
+        if (!x.id || seen.has(x.id)) return false;
+        seen.add(x.id);
+        if (selectedGenre && x.genres) {
+          if (!x.genres.some(g => g.toLowerCase() === selectedGenre.toLowerCase())) return false;
+        }
         if (sortBy === "movie") return x.type?.toLowerCase().includes("movie");
-        if (sortBy === "ongoing") return /episode|ep/i.test(x.type || "");
         return true;
       });
 
-      if (selectedGenre) {}
-
-      setItems((prev) => (mode === "replace" ? filtered : [...prev, ...filtered]));
-
-      const last = results[results.length - 1];
-      setHasMore(last?.hasMore !== false);
+      setItems(prev => replace ? filtered : [...prev, ...filtered]);
+      setHasMore(results.some(r => r.hasMore !== false));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load anime");
-      if (mode === "replace") setItems([]);
+      if (replace) setItems([]);
       setHasMore(false);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [getCategory, selectedGenre, sortBy]);
 
+  // Initial load and reload on page change
   useEffect(() => {
-    if (initialLoad.current) return;
+    const mode = initialLoad.current;
+    initialLoad.current = false;
+    loadAnime(page, mode);
+  }, [page, loadKey]);
+
+  // Reset on sort/genre/query change
+  useEffect(() => {
     setItems([]);
     setHasMore(true);
-    setPage(1);
+    setPage(Math.floor(Math.random() * 15) + 1);
+    setLoadKey(k => k + 1);
   }, [sortBy, selectedGenre]);
 
-  useEffect(() => {
-    const mode = initialLoad.current ? "replace" : page <= 3 ? "replace" : "append";
-    loadAnime(page, mode);
-    initialLoad.current = false;
-  }, [sortBy, selectedGenre, page]);
-
+  // Scroll sentinel
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting) return;
-        if (isLoading || !hasMore) return;
-        setPage((p) => p + 3);
+      entries => {
+        if (!entries[0].isIntersecting || isLoading || !hasMore) return;
+        setPage(p => p + 3);
       },
       { rootMargin: "300px" }
     );
@@ -141,7 +134,7 @@ export default function AnimeBrowsePage() {
               >
                 <option value="popular" className="bg-[#1a1a2e] text-white">Popular</option>
                 <option value="ongoing" className="bg-[#1a1a2e] text-white">Ongoing</option>
-                <option value="recent" className="bg-[#1a1a2e] text-white">Recently Aired</option>
+                <option value="recent" className="bg-[#1a1a2e] text-white">Trending</option>
                 <option value="subbed" className="bg-[#1a1a2e] text-white">Subbed</option>
                 <option value="movie" className="bg-[#1a1a2e] text-white">Movies</option>
               </select>
@@ -191,7 +184,7 @@ export default function AnimeBrowsePage() {
           </div>
 
           <div ref={sentinelRef} className="h-20 flex items-center justify-center text-white/40 text-sm">
-            {isLoading && items.length > 0 ? "Loading more..." : hasMore ? "Scroll for more" : "End of results"}
+            {isLoading && items.length > 0 ? "Loading more..." : hasMore ? "Scroll for more" : items.length > 0 ? "End of results" : ""}
           </div>
         </div>
       </main>

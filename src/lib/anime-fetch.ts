@@ -1,7 +1,6 @@
 // Multi-API Anime Fetcher
 // Metadata: AniList (primary) + Jikan (fallback)
-// Streaming: Kiwi API + iframe embed sources
-// Self-hosted: Consumet (configurable)
+// Streaming: iframe embed sources only (no HLS)
 
 export interface AnimeItem {
   id: string;
@@ -16,6 +15,14 @@ export interface AnimeItem {
   status?: string | null;
 }
 
+export interface SeasonInfo {
+  id: string;
+  name: string;
+  seasonLabel: string;
+  totalEpisodes: number;
+  isCurrent: boolean;
+}
+
 interface AniListMedia {
   id: number;
   title: { romaji: string; english: string | null; native: string | null };
@@ -26,23 +33,20 @@ interface AniListMedia {
   description: string | null;
   status: string | null;
   type: string | null;
+  format: string | null;
   season: string | null;
   seasonYear: number | null;
 }
 
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
-const KIWI_BASE = "https://animefreestream.vercel.app/anime/zoro";
-
-// Configurable self-hosted Consumet endpoint
-const SELF_HOSTED_CONSUMET = process.env.NEXT_PUBLIC_CONSUMET_URL || "";
 
 function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
   return fetch(ANILIST_API, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(8000),
   }).then((r) => r.json());
 }
 
@@ -61,94 +65,119 @@ function transformAniList(media: AniListMedia): AnimeItem {
   };
 }
 
-// Search anime via AniList
-export async function searchAnime(query: string, page = 1): Promise<AnimeItem[]> {
-  const q = `query ($q: String, $page: Int) {
-    Page(page: $page, perPage: 50) {
-      media(search: $q, type: ANIME, sort: POPULARITY_DESC) {
-        id title { romaji english native } coverImage { large extraLarge }
-        episodes genres averageScore description status type
-      }
+const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
+  Page(page: $page, perPage: 50) {
+    media(
+      type: ANIME,
+      sort: [POPULARITY_DESC],
+      genre: $genre,
+      search: $q
+    ) {
+      id title { romaji english native } coverImage { large extraLarge }
+      episodes genres averageScore description status type
     }
-  }`;
-  try {
-    const data = await anilistQuery(q, { q: query, page });
-    return (data?.data?.Page?.media || []).map(transformAniList);
-  } catch {
-    return [];
   }
-}
+}`;
 
-// Get popular anime via AniList
-export async function getPopularAnime(page = 1): Promise<AnimeItem[]> {
-  const q = `query ($page: Int) {
-    Page(page: $page, perPage: 50) {
-      media(type: ANIME, sort: POPULARITY_DESC) {
-        id title { romaji english native } coverImage { large extraLarge }
-        episodes genres averageScore description status type
-      }
+const TRENDING_QUERY = `query ($page: Int, $genre: String) {
+  Page(page: $page, perPage: 50) {
+    media(
+      type: ANIME,
+      sort: [TRENDING_DESC],
+      genre: $genre
+    ) {
+      id title { romaji english native } coverImage { large extraLarge }
+      episodes genres averageScore description status type
     }
-  }`;
-  try {
-    const data = await anilistQuery(q, { page });
-    return (data?.data?.Page?.media || []).map(transformAniList);
-  } catch {
-    return [];
   }
-}
+}`;
 
-// Get trending/airing anime via AniList
-export async function getTrendingAnime(page = 1): Promise<AnimeItem[]> {
-  const q = `query ($page: Int) {
-    Page(page: $page, perPage: 50) {
-      media(type: ANIME, sort: TRENDING_DESC) {
-        id title { romaji english native } coverImage { large extraLarge }
-        episodes genres averageScore description status type
-      }
+const AIRING_QUERY = `query ($page: Int, $genre: String, $season: MediaSeason, $year: Int) {
+  Page(page: $page, perPage: 50) {
+    media(
+      type: ANIME,
+      sort: [POPULARITY_DESC],
+      genre: $genre,
+      season: $season,
+      seasonYear: $year
+    ) {
+      id title { romaji english native } coverImage { large extraLarge }
+      episodes genres averageScore description status type
     }
-  }`;
-  try {
-    const data = await anilistQuery(q, { page });
-    return (data?.data?.Page?.media || []).map(transformAniList);
-  } catch {
-    return [];
   }
-}
+}`;
 
-// Get currently airing anime via AniList
-export async function getAiringAnime(page = 1): Promise<AnimeItem[]> {
+function getCurrentSeason() {
   const now = new Date();
-  const year = now.getFullYear();
   const seasons = ["WINTER", "SPRING", "SUMMER", "FALL"];
-  const season = seasons[Math.floor(now.getMonth() / 3)];
+  return {
+    season: seasons[Math.floor(now.getMonth() / 3)],
+    year: now.getFullYear(),
+  };
+}
 
-  const q = `query ($season: MediaSeason, $year: Int, $page: Int) {
-    Page(page: $page, perPage: 50) {
-      media(season: $season, seasonYear: $year, type: ANIME, sort: POPULARITY_DESC) {
-        id title { romaji english native } coverImage { large extraLarge }
-        episodes genres averageScore description status type
-      }
-    }
-  }`;
+export async function searchAnime(query: string, page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
-    const data = await anilistQuery(q, { season, year, page });
+    const data = await anilistQuery(LIST_QUERY, { page, q: query, genre: genre || null });
     return (data?.data?.Page?.media || []).map(transformAniList);
   } catch {
     return [];
   }
 }
 
-// Get anime details via AniList + Kiwi streaming IDs
+export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
+  try {
+    const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
+    return (data?.data?.Page?.media || []).map(transformAniList);
+  } catch {
+    return [];
+  }
+}
+
+export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
+  try {
+    const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
+    return (data?.data?.Page?.media || []).map(transformAniList);
+  } catch {
+    return [];
+  }
+}
+
+export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
+  const { season, year } = getCurrentSeason();
+  try {
+    const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
+    return (data?.data?.Page?.media || []).map(transformAniList);
+  } catch {
+    return [];
+  }
+}
+
+// Get anime details + related seasons via AniList
 export async function getAnimeDetails(id: string): Promise<{
   anime: AnimeItem;
   episodes: { episodeId: string; episodeNum: number; title: string }[];
   totalEpisodes: number;
+  seasons: SeasonInfo[];
 } | null> {
-  // Get metadata from AniList
   const q = `query ($id: Int) {
     Media(id: $id, type: ANIME) {
       id title { romaji english native } coverImage { large extraLarge }
-      episodes genres averageScore description status type
+      episodes genres averageScore description status type format season seasonYear
+      relations {
+        edges {
+          node {
+            id
+            title { romaji english native }
+            type
+            episodes
+            season
+            seasonYear
+            format
+          }
+          relationType
+        }
+      }
     }
   }`;
 
@@ -160,60 +189,76 @@ export async function getAnimeDetails(id: string): Promise<{
 
     const anime = transformAniList(media);
 
-    // Try to get streaming episodes from Kiwi API
-    let episodes: { episodeId: string; episodeNum: number; title: string }[] = [];
-    let totalEpisodes = media.episodes || 0;
-
-    try {
-      const searchName = anime.name.toLowerCase().replace(/[^\w\s]/g, "").slice(0, 30);
-      const searchRes = await fetch(
-        `${KIWI_BASE}/${encodeURIComponent(searchName)}?page=1`,
-        { signal: AbortSignal.timeout(15000) }
-      );
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        const match = (searchData.results || [])[0];
-        if (match?.id) {
-          const infoRes = await fetch(
-            `${KIWI_BASE}/info?id=${encodeURIComponent(match.id)}`,
-            { signal: AbortSignal.timeout(15000) }
-          );
-          if (infoRes.ok) {
-            const infoData = await infoRes.json();
-            episodes = (infoData.episodes || []).map((ep: any, i: number) => ({
-              episodeId: ep.id || `${match.id}-${i + 1}`,
-              episodeNum: ep.number || i + 1,
-              title: ep.title || `Episode ${ep.number || i + 1}`,
-            }));
-            totalEpisodes = infoData.totalEpisodes || episodes.length || totalEpisodes;
-          }
-        }
+    const relatedSeasons: { id: number; title: string; episodes: number; season: string; seasonYear: number; format: string | null }[] = [];
+    const relations = media.relations?.edges || [];
+    for (const edge of relations) {
+      const node = edge.node;
+      if (node.type === "ANIME" && (edge.relationType === "SEQUEL" || edge.relationType === "PREQUEL")) {
+        relatedSeasons.push({
+          id: node.id,
+          title: node.title?.english || node.title?.romaji || "",
+          episodes: node.episodes || 0,
+          season: node.season || "FALL",
+          seasonYear: node.seasonYear || 0,
+          format: node.format || null,
+        });
       }
-    } catch {
-      // Kiwi search failed - use placeholder episodes
     }
 
-    // If no Kiwi episodes, generate placeholder
-    if (episodes.length === 0 && totalEpisodes > 0) {
-      episodes = Array.from({ length: Math.min(totalEpisodes, 500) }, (_, i) => ({
-        episodeId: `${id}-${i + 1}`,
-        episodeNum: i + 1,
-        title: `Episode ${i + 1}`,
-      }));
-    }
+    const seen = new Set<number>();
+    const allSeasons = [{
+      id: numId,
+      title: anime.name,
+      episodes: media.episodes || 0,
+      season: media.season || "FALL",
+      seasonYear: media.seasonYear || 0,
+      format: media.format,
+    }, ...relatedSeasons].filter(s => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
 
-    return { anime, episodes, totalEpisodes };
+    const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
+    allSeasons.sort((a, b) => {
+      if (a.seasonYear !== b.seasonYear) return a.seasonYear - b.seasonYear;
+      return seasonOrder.indexOf(a.season) - seasonOrder.indexOf(b.season);
+    });
+
+    const seasons: SeasonInfo[] = allSeasons.map((s, i) => {
+      const totalEp = s.format === "MOVIE" || s.format === "SPECIAL" || s.format === "OVA" || s.format === "ONA"
+        ? 1
+        : Math.max(s.episodes || 12, 1);
+      return {
+        id: String(s.id),
+        name: s.title,
+        seasonLabel: `Season ${i + 1}`,
+        totalEpisodes: totalEp,
+        isCurrent: s.id === numId,
+      };
+    });
+
+    const current = seasons.find(s => s.isCurrent) || seasons[0];
+    const totalEpisodes = current.totalEpisodes;
+
+    const episodes = Array.from({ length: Math.min(totalEpisodes, 500) }, (_, i) => ({
+      episodeId: `${id}-${i + 1}`,
+      episodeNum: i + 1,
+      title: `Episode ${i + 1}`,
+    }));
+
+    return { anime, episodes, totalEpisodes, seasons };
   } catch {
     return null;
   }
 }
 
-// Search via Jikan (fallback for AniList failures)
+// Search via Jikan (fallback)
 export async function searchViaJikan(query: string): Promise<AnimeItem[]> {
   try {
     const res = await fetch(
       `${JIKAN_BASE}/anime?q=${encodeURIComponent(query)}&limit=25&sfw`,
-      { headers: { "User-Agent": "StreamVault/1.0" }, signal: AbortSignal.timeout(8000) }
+      { headers: { "User-Agent": "StreamVault/1.0" }, signal: AbortSignal.timeout(6000) }
     );
     if (!res.ok) return [];
     const data = await res.json();
@@ -239,15 +284,19 @@ export async function fetchAnimeApi(
   endpoint: string,
   isDetail = false
 ): Promise<any> {
-  // Parse endpoint to determine action
-  const isSearch = endpoint.includes("/search") || endpoint.includes("keyword=");
-  const isPopular = endpoint.includes("/popular") || endpoint.includes("/home");
-  const isLatest = endpoint.includes("/latest") || endpoint.includes("recent");
-  const isSeries = endpoint.startsWith("/series/");
-  const isWatch = endpoint.startsWith("/watch/");
+  const [path, queryString] = endpoint.split("?");
+  const params = new URLSearchParams(queryString || "");
+  const page = parseInt(params.get("page") || "1", 10);
+  const genre = params.get("genre") || undefined;
+
+  const isSearch = path.includes("/search") || path.includes("keyword=");
+  const isPopular = path.includes("/popular");
+  const isAiring = path.includes("/airing") || path.includes("/latest") || path.includes("/recent");
+  const isTrending = path.includes("/trending");
+  const isSeries = path.startsWith("/series/");
 
   if (isDetail || isSeries) {
-    const id = endpoint.replace("/series/", "").split("?")[0];
+    const id = path.replace("/series/", "").split("?")[0];
     const result = await getAnimeDetails(id);
     if (result) {
       return {
@@ -256,6 +305,7 @@ export async function fetchAnimeApi(
           ...result.anime,
           episodes: result.episodes,
           totalEpisodes: result.totalEpisodes,
+          seasons: result.seasons,
         },
       };
     }
@@ -263,87 +313,25 @@ export async function fetchAnimeApi(
   }
 
   if (isSearch) {
-    const params = new URLSearchParams(endpoint.split("?")[1]);
     const keyword = params.get("keyword") || params.get("q") || "";
-    let items = await searchAnime(keyword);
+    let items = await searchAnime(keyword, page, genre);
     if (items.length === 0) {
       items = await searchViaJikan(keyword);
     }
     return { success: true, data: items };
   }
 
-  if (isPopular) {
-    const items = await getPopularAnime(1);
-    if (items.length === 0) {
-      const jikan = await searchViaJikan("top");
-      return { success: true, data: jikan };
-    }
+  if (isAiring) {
+    const items = await getAiringAnime(page, genre);
     return { success: true, data: items };
   }
 
-  if (isLatest) {
-    const items = await getAiringAnime(1);
+  if (isTrending) {
+    const items = await getTrendingAnime(page, genre);
     return { success: true, data: items };
   }
 
-  // Default: trending
-  const items = await getTrendingAnime(1);
+  // default: popular
+  const items = await getPopularAnime(page, genre);
   return { success: true, data: items };
-}
-
-// Get streaming source for an episode
-export async function getStreamingSource(
-  animeId: string,
-  episodeId: string,
-  _server = "default"
-): Promise<any> {
-  // Try self-hosted Consumet first
-  if (SELF_HOSTED_CONSUMET) {
-    try {
-      const res = await fetch(
-        `${SELF_HOSTED_CONSUMET}/anime/gogoanime/watch/${encodeURIComponent(episodeId)}`,
-        { signal: AbortSignal.timeout(10000) }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const sources = data.sources || [];
-        const subtitles = data.subtitles || [];
-        if (sources.length > 0) {
-          return {
-            success: true,
-            data: {
-              sources: sources.map((s: any) => ({ url: s.url, quality: s.quality || "Auto" })),
-              subtitles: subtitles.map((s: any) => ({ url: s.url, lang: s.lang || "English" })),
-            },
-            source: "Consumet",
-          };
-        }
-      }
-    } catch { /* fall through */ }
-  }
-
-  // Try Kiwi API
-  try {
-    const url = `${KIWI_BASE}/watch/${encodeURIComponent(episodeId)}?server=vidcloud`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
-    if (res.ok) {
-      const data = await res.json();
-      const sources = data.sources || data.data?.sources || [];
-      const subtitles = data.subtitles || data.data?.subtitles || [];
-
-      if (sources.length > 0) {
-        return {
-          success: true,
-          data: {
-            sources: sources.map((s: any) => ({ url: s.url, quality: s.quality || "Auto" })),
-            subtitles: subtitles.map((s: any) => ({ url: s.url, lang: s.lang || "English" })),
-          },
-          source: "Kiwi",
-        };
-      }
-    }
-  } catch { /* fall through */ }
-
-  // No streaming sources available
-  throw new Error("No streaming sources available");
 }

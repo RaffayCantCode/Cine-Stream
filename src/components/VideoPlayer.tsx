@@ -17,9 +17,9 @@ const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   cinesrc: { bg: "bg-[#831C91]", badge: "bg-[#831C91]/20 text-[#D552A3]" },
   vidsrcmov: { bg: "bg-cyan-600", badge: "bg-cyan-500/20 text-cyan-300" },
   vidking: { bg: "bg-fuchsia-600", badge: "bg-fuchsia-500/20 text-fuchsia-300" },
-  vidlink: { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
   "2embed": { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
-  autoembed: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
+  multiembed: { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
+  embedsu: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
 };
 
 export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerProps) {
@@ -61,20 +61,14 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   };
 
   const requestFullscreen = async () => {
-    const iframe = iframeRef.current;
-    if (iframe?.requestFullscreen) {
-      try { await iframe.requestFullscreen(); return; } catch { }
-    }
     const el = playerContainerRef.current;
     if (!el) return;
-    const anyEl = el as HTMLElement & {
-      webkitRequestFullscreen?: () => Promise<void> | void;
-      msRequestFullscreen?: () => Promise<void> | void;
-    };
     try {
-      if (el.requestFullscreen) { await el.requestFullscreen(); }
-      else if (anyEl.webkitRequestFullscreen) { anyEl.webkitRequestFullscreen(); }
-      else if (anyEl.msRequestFullscreen) { anyEl.msRequestFullscreen(); }
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else if ((el as any).webkitRequestFullscreen) {
+        await (el as any).webkitRequestFullscreen();
+      }
     } catch {
       setError("Fullscreen was blocked. Use the player's built-in fullscreen button inside the video.");
     }

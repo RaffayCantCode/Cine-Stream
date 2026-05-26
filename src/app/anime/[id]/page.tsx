@@ -1,38 +1,34 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { fetchJson } from "@/lib/utils";
-import { Play, Star, ArrowLeft, Tv2, Clock, Globe, ChevronLeft, ChevronRight, List, Calendar, Lock } from "lucide-react";
+import type { SeasonInfo } from "@/lib/anime-fetch";
+import { Star, ArrowLeft, Tv2, Clock, ChevronLeft, ChevronRight, List, Calendar, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AnimeDetail {
   id: string;
-  animeId: string;
   name: string;
   jname?: string | null;
   poster: string;
   description: string;
   type?: string | null;
   rating?: string | null;
-  episodes: { sub: number | null; dub: number | null };
-  duration?: string | null;
-  premiered?: string | null;
-  status?: string | null;
   score?: string | null;
+  status?: string | null;
   genres?: string[];
-  studios?: string[];
+  totalEpisodes: number;
+  seasons: SeasonInfo[];
 }
 
 interface Episode {
   episodeId: string;
   episodeNum: number;
   title?: string;
-  src?: string;
-  sources?: { name: string; url: string }[];
   isFiller?: boolean;
   releasedDate?: string;
   isReleased?: boolean;
@@ -48,9 +44,9 @@ export default function AnimeDetailPage() {
   const [episodesLoading, setEpisodesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
-  const [watchMode, setWatchMode] = useState<"sub" | "dub">("sub");
   const [showMobileEpisodes, setShowMobileEpisodes] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const [currentSeasonId, setCurrentSeasonId] = useState<string>(id);
 
   const playerRef = useRef<HTMLDivElement>(null);
   const episodeListRef = useRef<HTMLDivElement>(null);
@@ -63,7 +59,9 @@ export default function AnimeDetailPage() {
       try {
         const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail } }>(`/api/anime/${id}`);
         if (data.success && data.data?.anime) {
-          setAnime(data.data.anime);
+          const a = data.data.anime;
+          setAnime(a);
+          setCurrentSeasonId(id);
         } else {
           throw new Error("Anime not found");
         }
@@ -76,29 +74,32 @@ export default function AnimeDetailPage() {
     load();
   }, [id]);
 
+  const loadEpisodes = useCallback(async (seasonId: string) => {
+    setEpisodesLoading(true);
+    setEpisodes([]);
+    setSelectedEp(null);
+    setCurrentPage(0);
+    try {
+      const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; totalEpisodes: number } }>(`/api/anime/${seasonId}/episodes`);
+      if (data.success && data.data?.episodes) {
+        const sorted = data.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
+        const withRelease = sorted.map(ep => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          return { ...ep, isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= today };
+        });
+        setEpisodes(withRelease);
+        const first = withRelease.find(ep => ep.isReleased !== false) || withRelease[0];
+        if (first) setSelectedEp(first);
+      }
+    } catch { /* silent */ }
+    finally { setEpisodesLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (!id) return;
-    const loadEps = async () => {
-      setEpisodesLoading(true);
-      try {
-        const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; totalEpisodes: number } }>(`/api/anime/${id}/episodes`);
-        if (data.success && data.data?.episodes) {
-          const sortedEps = data.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
-          const withRelease = sortedEps.map((ep: any) => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const isReleased = !ep.releasedDate || new Date(ep.releasedDate) <= today;
-            return { ...ep, isReleased: isReleased as boolean };
-          });
-          setEpisodes(withRelease);
-          const firstReleased = withRelease.find((ep: Episode) => ep.isReleased !== false) || withRelease[0];
-          if (firstReleased) setSelectedEp(firstReleased);
-        }
-      } catch { /* silent */ }
-      finally { setEpisodesLoading(false); }
-    };
-    loadEps();
-  }, [id]);
+    loadEpisodes(id);
+  }, [id, loadEpisodes]);
 
   useEffect(() => {
     if (selectedEp) {
@@ -107,6 +108,14 @@ export default function AnimeDetailPage() {
       }, 150);
     }
   }, [selectedEp?.episodeId]);
+
+  const handleSeasonClick = async (season: SeasonInfo) => {
+    if (season.isCurrent) return;
+    setCurrentSeasonId(season.id);
+    setAnime(prev => prev ? { ...prev, totalEpisodes: season.totalEpisodes } : prev);
+    setShowMobileEpisodes(false);
+    await loadEpisodes(season.id);
+  };
 
   const episodeGroups = episodes.reduce((acc, ep) => {
     const group = Math.floor((ep.episodeNum - 1) / 30);
@@ -140,9 +149,8 @@ export default function AnimeDetailPage() {
     setShowMobileEpisodes(false);
   };
 
-  const handleAutoNext = () => {
-    handleNext();
-  };
+  const handleAutoNext = () => handleNext();
+  const seasons = anime?.seasons || [];
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -180,13 +188,13 @@ export default function AnimeDetailPage() {
                 </motion.div>
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5 }} className="flex flex-col gap-3 max-w-3xl">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white text-[10px] font-extrabold tracking-widest px-3 py-1 rounded-full uppercase shadow-lg shadow-[#831C91]/25">🇯🇵 Anime</span>
+                    <span className="bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white text-[10px] font-extrabold tracking-widest px-3 py-1 rounded-full uppercase shadow-lg shadow-[#831C91]/25">Anime</span>
                     {anime.type && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase">{anime.type}</span>}
                     {anime.rating && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase">{anime.rating}</span>}
                     {anime.status && (
                       <span className={`text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase ${
-                        anime.status === "Airing" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" :
-                        anime.status === "Completed" ? "bg-white/10 text-white/60 border border-white/20" :
+                        anime.status === "Airing" || anime.status === "RELEASING" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" :
+                        anime.status === "Completed" || anime.status === "FINISHED" ? "bg-white/10 text-white/60 border border-white/20" :
                         "bg-white/10 text-white/60 border border-white/20"
                       }`}>{anime.status}</span>
                     )}
@@ -195,9 +203,7 @@ export default function AnimeDetailPage() {
                   {anime.jname && <p className="text-white/40 text-sm md:text-base font-medium">{anime.jname}</p>}
                   <div className="flex items-center gap-5 flex-wrap text-xs text-white/50">
                     {anime.score && <span className="flex items-center gap-1 text-amber-400 font-bold"><Star className="w-3.5 h-3.5 fill-current" /> {anime.score}</span>}
-                    {anime.episodes.sub !== null && <span className="flex items-center gap-1"><Tv2 className="w-3.5 h-3.5" /> {anime.episodes.sub} eps (sub)</span>}
-                    {anime.duration && <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {anime.duration}</span>}
-                    {anime.premiered && <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {anime.premiered}</span>}
+                    {anime.totalEpisodes > 0 && <span className="flex items-center gap-1"><Tv2 className="w-3.5 h-3.5" /> {anime.totalEpisodes} eps</span>}
                   </div>
                   {anime.genres && anime.genres.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
@@ -215,64 +221,109 @@ export default function AnimeDetailPage() {
                 <ArrowLeft className="w-4 h-4" /> Back to Anime
               </Link>
 
-              {/* Watch mode toggle */}
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-white/40 font-bold uppercase tracking-widest">Watch:</span>
-                  <div className="flex gap-1 bg-white/[0.05] rounded-xl p-1 border border-white/[0.06]">
-                    {(["sub", "dub"] as const).map(mode => (
-                      <button key={mode} onClick={() => setWatchMode(mode)}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                          watchMode === mode
-                            ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25"
-                            : "text-white/40 hover:text-white"
-                        }`}>
-                        {mode === "sub" ? "🇯🇵 Sub" : "🎤 Dub"}
-                      </button>
-                    ))}
-                  </div>
+              {/* Season Selector */}
+              {seasons.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-white/40 font-bold uppercase tracking-widest mr-1">Seasons:</span>
+                  {seasons.map(season => (
+                    <button
+                      key={season.id}
+                      onClick={() => handleSeasonClick(season)}
+                      disabled={season.isCurrent}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
+                        season.isCurrent
+                          ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25"
+                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white border border-white/[0.06]"
+                      }`}
+                    >
+                      {season.seasonLabel}
+                      <span className={`ml-1.5 text-[9px] ${season.isCurrent ? "text-white/60" : "text-white/30"}`}>
+                        ({season.totalEpisodes} eps)
+                      </span>
+                    </button>
+                  ))}
                 </div>
-                {/* Mobile only: toggle episodes */}
+              )}
+
+              {/* Mobile: Episodes toggle + info */}
+              <div className="flex md:hidden items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {selectedEp && (
+                    <span className="text-base font-bold text-white">Ep {selectedEp.episodeNum}</span>
+                  )}
+                </div>
                 <button onClick={() => setShowMobileEpisodes(!showMobileEpisodes)}
-                  className="md:hidden flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/60 hover:text-white text-sm font-medium transition-all border border-white/[0.06]">
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/60 hover:text-white text-sm font-medium transition-all border border-white/[0.06]">
                   <List className="w-4 h-4" />
-                  {showMobileEpisodes ? "Hide" : "Episodes"}
+                  {showMobileEpisodes ? "Hide Episodes" : `Episodes (${episodes.length})`}
                 </button>
               </div>
 
-              {/* Desktop: Side-by-side layout (Player left, Episodes right) */}
-              <div className="hidden md:flex gap-6 items-start">
-                {/* Player Section */}
-                <div ref={playerRef} className="flex-1 min-w-0">
-                  {selectedEp && (
+              {/* Mobile: collapsible episode grid */}
+              <AnimatePresence>
+                {showMobileEpisodes && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="md:hidden overflow-hidden"
+                  >
+                    <div className="grid grid-cols-5 sm:grid-cols-7 gap-2">
+                      {episodes.map(ep => {
+                        const isSelected = selectedEp?.episodeId === ep.episodeId;
+                        const isUnreleased = ep.isReleased === false;
+                        return (
+                          <button key={ep.episodeId} onClick={() => handleSelectEp(ep)} disabled={isUnreleased}
+                            className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
+                              isSelected ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg" :
+                              isUnreleased ? "bg-white/[0.03] text-white/20 cursor-not-allowed" :
+                              "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
+                            }`}>
+                            {isUnreleased ? <Lock className="w-3.5 h-3.5" /> : ep.episodeNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* SINGLE PLAYER */}
+              <div className="flex gap-6 items-start flex-col md:flex-row">
+                <div ref={playerRef} className="w-full md:flex-1 min-w-0">
+                  {selectedEp && !episodesLoading && (
                     <motion.div
-                      key={`${selectedEp.episodeId}-${watchMode}`}
+                      key={selectedEp.episodeId}
                       initial={{ opacity: 0, y: 16 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.35 }}
+                      transition={{ duration: 0.3 }}
                     >
-                        <AnimePlayer
-                          animeId={id}
-                          animeTitle={anime.name}
-                          episode={selectedEp.episodeNum}
-                          episodeId={selectedEp.episodeId}
-                          episodeSources={selectedEp.sources?.map(s => ({ src: s.url, name: s.name }))}
-                          onAutoNext={handleAutoNext}
-                        />
+                      <AnimePlayer
+                        animeId={currentSeasonId}
+                        animeTitle={anime.name}
+                        episode={selectedEp.episodeNum}
+                        onAutoNext={handleAutoNext}
+                      />
                     </motion.div>
                   )}
 
-                  {/* Episode Info + Nav */}
-                  {selectedEp && (
+                  {episodesLoading && (
+                    <div className="w-full aspect-video rounded-2xl bg-black/60 flex items-center justify-center border border-white/10">
+                      <div className="text-center">
+                        <div className="w-10 h-10 border-3 border-white/10 border-t-[#D552A3] rounded-full animate-spin mx-auto mb-3" />
+                        <p className="text-white/40 text-sm">Loading episodes...</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedEp && !episodesLoading && (
                     <div className="mt-4 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <span className="text-lg font-black text-white">Episode {selectedEp.episodeNum}</span>
                         {selectedEp.title && <span className="text-sm text-white/50">— {selectedEp.title}</span>}
-                        {selectedEp.isFiller && <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded font-bold uppercase">Filler</span>}
-                        {selectedEp.isReleased === false && (
-                          <span className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-400/10 border border-rose-400/20 px-2 py-0.5 rounded font-bold uppercase">
-                            <Lock className="w-3 h-3" /> Unreleased
-                          </span>
+                        {selectedEp.isFiller && (
+                          <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded font-bold uppercase">Filler</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
@@ -292,8 +343,8 @@ export default function AnimeDetailPage() {
                   )}
                 </div>
 
-                {/* Desktop Episode Sidebar - always visible */}
-                <div className="w-80 xl:w-96 shrink-0 bg-white/[0.02] rounded-2xl border border-white/[0.06] overflow-hidden sticky top-6 max-h-[85vh] flex flex-col">
+                {/* Desktop Episode Sidebar */}
+                <div className="hidden md:flex w-80 xl:w-96 shrink-0 bg-white/[0.02] rounded-2xl border border-white/[0.06] overflow-hidden sticky top-6 max-h-[85vh] flex-col">
                   <div className="p-4 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.02]">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <Tv2 className="w-4 h-4 text-[#D552A3]" />
@@ -315,156 +366,39 @@ export default function AnimeDetailPage() {
                     )}
                   </div>
                   <div ref={episodeListRef} className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
-                    {episodeGroups[currentPage]?.map(ep => {
-                      const isSelected = selectedEp?.episodeId === ep.episodeId;
-                      const isUnreleased = ep.isReleased === false;
-                      return (
-                        <button
-                          key={ep.episodeId}
-                          onClick={() => handleSelectEp(ep)}
-                          disabled={isUnreleased}
-                          className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
-                            isSelected
-                              ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/20"
-                              : isUnreleased
-                              ? "bg-white/[0.02] text-white/20 cursor-not-allowed"
-                              : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
-                          }`}
-                        >
-                          <span className={`text-sm font-black w-12 shrink-0 ${isSelected ? "text-white" : ""}`}>
-                            {isUnreleased ? <Lock className="w-4 h-4 mx-auto" /> : `Ep ${ep.episodeNum}`}
-                          </span>
-                          <span className="text-xs truncate flex-1 line-clamp-1">{ep.title || (isUnreleased ? "Not Yet Released" : "No title")}</span>
-                          {ep.isFiller && !isSelected && <span className="text-[9px] text-amber-400 font-bold shrink-0">FL</span>}
-                        </button>
-                      );
-                    }) || (
-                      <div className="p-4 text-center text-white/30 text-sm">No episodes</div>
+                    {episodesLoading ? (
+                      <div className="p-4 space-y-2">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <div key={i} className="h-10 rounded-xl bg-white/[0.05] animate-pulse" />
+                        ))}
+                      </div>
+                    ) : episodeGroups[currentPage]?.length ? (
+                      episodeGroups[currentPage]?.map(ep => {
+                        const isSelected = selectedEp?.episodeId === ep.episodeId;
+                        const isUnreleased = ep.isReleased === false;
+                        return (
+                          <button key={ep.episodeId} onClick={() => handleSelectEp(ep)} disabled={isUnreleased}
+                            className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
+                              isSelected ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/20" :
+                              isUnreleased ? "bg-white/[0.02] text-white/20 cursor-not-allowed" :
+                              "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
+                            }`}>
+                            <span className={`text-sm font-black w-12 shrink-0 ${isSelected ? "text-white" : ""}`}>
+                              {isUnreleased ? <Lock className="w-4 h-4 mx-auto" /> : `Ep ${ep.episodeNum}`}
+                            </span>
+                            <span className="text-xs truncate flex-1 line-clamp-1">{ep.title || (isUnreleased ? "Not Yet Released" : "No title")}</span>
+                            {ep.isFiller && !isSelected && <span className="text-[9px] text-amber-400 font-bold shrink-0">FL</span>}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="p-4 text-center text-white/30 text-sm">
+                        {episodesLoading ? "Loading..." : "No episodes available"}
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
-
-              {/* Mobile: Episode Grid (toggleable) */}
-              <AnimatePresence>
-                {showMobileEpisodes && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="md:hidden overflow-hidden"
-                  >
-                    <div>
-                      <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                        <Tv2 className="w-4 h-4 text-[#D552A3]" /> Episodes ({episodes.length})
-                      </h2>
-                      <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                        {episodes.map(ep => {
-                          const isSelected = selectedEp?.episodeId === ep.episodeId;
-                          const isUnreleased = ep.isReleased === false;
-                          return (
-                            <button
-                              key={ep.episodeId}
-                              onClick={() => handleSelectEp(ep)}
-                              disabled={isUnreleased}
-                              className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
-                                isSelected
-                                  ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg"
-                                  : isUnreleased
-                                  ? "bg-white/[0.03] text-white/20 cursor-not-allowed"
-                                  : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
-                              }`}
-                            >
-                              {isUnreleased ? <Lock className="w-3.5 h-3.5" /> : ep.episodeNum}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Mobile Player (always below hero on mobile) */}
-              <div ref={playerRef} className="md:hidden">
-                {selectedEp && (
-                  <motion.div
-                    key={`mobile-${selectedEp.episodeId}-${watchMode}`}
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35 }}
-                  >
-                    <AnimePlayer
-                      animeId={id}
-                      animeTitle={anime.name}
-                      episode={selectedEp.episodeNum}
-                      episodeId={selectedEp.episodeId}
-                      episodeSources={selectedEp.sources?.map(s => ({ src: s.url, name: s.name }))}
-                      onAutoNext={handleAutoNext}
-                    />
-                  </motion.div>
-                )}
-                {selectedEp && (
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-bold text-white">Ep {selectedEp.episodeNum}</span>
-                      {selectedEp.isFiller && <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded font-bold">Filler</span>}
-                      {selectedEp.isReleased === false && <span className="flex items-center gap-1 text-[10px] text-rose-400"><Lock className="w-3 h-3" /> Unreleased</span>}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button onClick={handlePrev} disabled={currentIdx <= 0 || episodes[currentIdx - 1]?.isReleased === false}
-                        className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-30 text-white/60 transition-all">
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <span className="text-xs text-white/40 px-1">{currentIdx + 1}/{episodes.length}</span>
-                      <button onClick={handleNext} disabled={currentIdx >= episodes.length - 1 || episodes[currentIdx + 1]?.isReleased === false}
-                        className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-30 text-white/60 transition-all">
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Mobile episodes below player when player is showing */}
-              {!showMobileEpisodes && !episodesLoading && episodes.length > 0 && (
-                <div className="md:hidden">
-                  <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                    <Tv2 className="w-4 h-4 text-[#D552A3]" /> Episodes ({episodes.length})
-                  </h2>
-                  <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                    {episodes.map(ep => {
-                      const isSelected = selectedEp?.episodeId === ep.episodeId;
-                      const isUnreleased = ep.isReleased === false;
-                      return (
-                        <button
-                          key={ep.episodeId}
-                          onClick={() => handleSelectEp(ep)}
-                          disabled={isUnreleased}
-                          className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
-                            isSelected
-                              ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg"
-                              : isUnreleased
-                              ? "bg-white/[0.03] text-white/20 cursor-not-allowed"
-                              : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
-                          }`}
-                        >
-                          {isUnreleased ? <Lock className="w-3.5 h-3.5" /> : ep.episodeNum}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {episodesLoading && (
-                <div className="md:hidden">
-                  <div className="grid grid-cols-8 gap-2">
-                    {Array.from({ length: 24 }).map((_, i) => <div key={i} className="aspect-square rounded-xl bg-white/[0.05] animate-pulse" />)}
-                  </div>
-                </div>
-              )}
             </div>
           </>
         ) : null}

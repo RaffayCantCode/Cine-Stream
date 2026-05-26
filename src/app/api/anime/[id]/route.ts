@@ -19,6 +19,7 @@ export async function GET(
 
     const episodes = data.data.episodes || [];
     const totalEps = data.data.totalEpisodes || episodes.length || 0;
+    const seasons = data.data.seasons || [];
 
     return Response.json({
       success: true,
@@ -27,6 +28,7 @@ export async function GET(
           ...data.data,
           episodes,
           totalEpisodes: totalEps,
+          seasons,
         },
       },
     });

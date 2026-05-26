@@ -23,19 +23,21 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     supportsNativeFullscreen: true,
   },
   {
-    name: "VidLink",
-    baseUrl: "https://vidlink.pro",
-    type: "vidlink",
-  },
-  {
     name: "2Embed",
     baseUrl: "https://2embed.cc",
     type: "2embed",
   },
   {
-    name: "AutoEmbed",
-    baseUrl: "https://autoembed.co",
-    type: "autoembed",
+    name: "MultiEmbed",
+    baseUrl: "https://multiembed.mov",
+    type: "multiembed",
+    supportsNativeFullscreen: true,
+  },
+  {
+    name: "Embed.su",
+    baseUrl: "https://embed.su",
+    type: "embedsu",
+    supportsNativeFullscreen: true,
   },
 ];
 
@@ -59,7 +61,13 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       }
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "vidlink":
+    case "multiembed":
+      if (type === "movie") {
+        return `${api.baseUrl}/?video_id=${id}&tmdb=1`;
+      }
+      return `${api.baseUrl}/?video_id=${id}&tmdb=1&s=${season ?? 1}&e=${episode ?? 1}`;
+
+    case "embedsu":
       if (type === "movie") {
         return `${api.baseUrl}/embed/movie/${id}`;
       }
