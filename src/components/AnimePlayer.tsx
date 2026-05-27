@@ -21,53 +21,60 @@ interface AnimePlayerProps {
 function buildSources(animeId: string, malId: string | null | undefined, episode: number): Source[] {
   const numericId = animeId.replace(/\D/g, "");
   const activeMalId = malId ? malId.trim() : numericId;
-  const sources: Source[] = [
-    {
-      name: "AnimePahe (AniList)",
-      url: `https://vidnest.fun/animepahe/${numericId}/${episode}/sub?quality=1080`,
-      color: "from-[#462C7D]/30 to-[#831C91]/20",
-    },
-  ];
+  const sources: Source[] = [];
 
-  if (activeMalId && activeMalId !== numericId) {
+  // AnimePahe (Primary - MAL ID)
+  sources.push({
+    name: "AnimePahe (Primary)",
+    url: `https://vidnest.fun/animepahe/${activeMalId}/${episode}/sub?quality=1080`,
+    color: "from-[#462C7D]/30 to-[#831C91]/20",
+  });
+
+  // AnimePahe (Backup - AniList ID, if different)
+  if (activeMalId !== numericId) {
     sources.push({
-      name: "AnimePahe (MAL)",
-      url: `https://vidnest.fun/animepahe/${activeMalId}/${episode}/sub?quality=1080`,
-      color: "from-[#462C7D]/30 to-[#831C91]/20",
+      name: "AnimePahe (Backup)",
+      url: `https://vidnest.fun/animepahe/${numericId}/${episode}/sub?quality=1080`,
+      color: "from-[#462C7D]/25 to-[#831C91]/15",
     });
   }
 
+  // GogoAnime (Primary - MAL ID)
   sources.push({
-    name: "GogoAnime (AniList)",
-    url: `https://vidnest.fun/gogoanime/${numericId}/${episode}/sub`,
+    name: "GogoAnime (Primary)",
+    url: `https://vidnest.fun/gogoanime/${activeMalId}/${episode}/sub`,
     color: "from-[#1e293b]/40 to-[#0f172a]/20",
   });
 
-  if (activeMalId && activeMalId !== numericId) {
+  // GogoAnime (Backup - AniList ID, if different)
+  if (activeMalId !== numericId) {
     sources.push({
-      name: "GogoAnime (MAL)",
-      url: `https://vidnest.fun/gogoanime/${activeMalId}/${episode}/sub`,
-      color: "from-[#1e293b]/40 to-[#0f172a]/20",
+      name: "GogoAnime (Backup)",
+      url: `https://vidnest.fun/gogoanime/${numericId}/${episode}/sub`,
+      color: "from-[#1e293b]/30 to-[#0f172a]/15",
     });
   }
 
+  // VidLink (Sub - MAL ID)
   sources.push({
     name: "VidLink (Sub)",
     url: `https://vidlink.pro/anime/${activeMalId}/${episode}/sub`,
     color: "from-[#312e81]/40 to-[#4f46e5]/20",
   });
 
+  // VidNest (Primary - MAL ID)
   sources.push({
-    name: "VidNest (AniList)",
-    url: `https://vidnest.fun/anime/${numericId}/${episode}/sub`,
+    name: "VidNest (Primary)",
+    url: `https://vidnest.fun/anime/${activeMalId}/${episode}/sub`,
     color: "from-[#831C91]/30 to-[#D552A3]/20",
   });
 
-  if (activeMalId && activeMalId !== numericId) {
+  // VidNest (Backup - AniList ID, if different)
+  if (activeMalId !== numericId) {
     sources.push({
-      name: "VidNest (MAL)",
-      url: `https://vidnest.fun/anime/${activeMalId}/${episode}/sub`,
-      color: "from-[#831C91]/30 to-[#D552A3]/20",
+      name: "VidNest (Backup)",
+      url: `https://vidnest.fun/anime/${numericId}/${episode}/sub`,
+      color: "from-[#831C91]/20 to-[#D552A3]/10",
     });
   }
 
