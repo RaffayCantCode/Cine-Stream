@@ -23,6 +23,16 @@ function buildSources(animeId: string, malId: string | null | undefined, episode
   const activeMalId = malId ? malId.trim() : numericId;
   return [
     {
+      name: "AnimePahe",
+      url: `https://vidnest.fun/animepahe/${numericId}/${episode}/sub?quality=1080`,
+      color: "from-[#462C7D]/30 to-[#831C91]/20",
+    },
+    {
+      name: "GogoAnime (Sub)",
+      url: `https://vidnest.fun/gogoanime/${numericId}/${episode}/sub`,
+      color: "from-[#1e293b]/40 to-[#0f172a]/20",
+    },
+    {
       name: "VidLink (Sub)",
       url: `https://vidlink.pro/anime/${activeMalId}/${episode}/sub`,
       color: "from-[#312e81]/40 to-[#4f46e5]/20",
@@ -31,11 +41,6 @@ function buildSources(animeId: string, malId: string | null | undefined, episode
       name: "VidLink (Dub)",
       url: `https://vidlink.pro/anime/${activeMalId}/${episode}/dub`,
       color: "from-[#4f46e5]/30 to-[#ec4899]/10",
-    },
-    {
-      name: "AnimePahe",
-      url: `https://vidnest.fun/animepahe/${numericId}/${episode}/sub`,
-      color: "from-[#462C7D]/30 to-[#831C91]/20",
     },
     {
       name: "VidNest",

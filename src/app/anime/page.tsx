@@ -40,20 +40,15 @@ export default function AnimeBrowsePage() {
     setError(null);
 
     try {
-      const pages = replace ? [loadPage] : [loadPage, loadPage + 1, loadPage + 2];
       const category = getCategory();
       const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
 
-      const results = await Promise.all(
-        pages.map(p =>
-          fetchJson<{ success: boolean; data: { items: AnimeItem[] }; hasMore?: boolean }>(
-            `/api/anime?category=${category}&page=${p}${genreParam}`,
-            { cacheTtlMs: 60000 }
-          )
-        )
+      const res = await fetchJson<{ success: boolean; data: { items: AnimeItem[] }; hasMore?: boolean }>(
+        `/api/anime?category=${category}&page=${loadPage}${genreParam}`,
+        { cacheTtlMs: 60000 }
       );
 
-      const merged = results.flatMap(r => r.data?.items || []);
+      const merged = res.data?.items || [];
 
       const seen = new Set<string>();
       const filtered = merged.filter((x: AnimeItem) => {
@@ -67,7 +62,7 @@ export default function AnimeBrowsePage() {
       });
 
       setItems(prev => replace ? filtered : [...prev, ...filtered]);
-      setHasMore(results.some(r => r.hasMore !== false));
+      setHasMore(res.hasMore !== false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load anime");
       if (replace) setItems([]);
@@ -99,7 +94,7 @@ export default function AnimeBrowsePage() {
     const observer = new IntersectionObserver(
       entries => {
         if (!entries[0].isIntersecting || isLoading || !hasMore) return;
-        setPage(p => p + 3);
+        setPage(p => p + 1);
       },
       { rootMargin: "300px" }
     );

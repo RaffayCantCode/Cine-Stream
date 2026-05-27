@@ -14,6 +14,9 @@ export interface AnimeItem {
   rating?: string | null;
   description?: string;
   genres?: string[];
+  season?: string | null;
+  seasonYear?: number | null;
+  format?: string | null;
 }
 
 interface AnimeCardProps {
@@ -76,21 +79,36 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
           </div>
 
           <div className="relative z-10">
-            <h3 className="text-white font-bold text-sm leading-tight mb-0.5 line-clamp-2 drop-shadow-lg">
-              {item.name}
-            </h3>
-            {item.jname && (
-              <p className="text-white/40 text-[10px] leading-tight mb-1 line-clamp-1">{item.jname}</p>
+            {/* Show Year and Rating on hover instead of Title */}
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap text-[9px] font-bold text-white/90">
+              {item.seasonYear && (
+                <span className="bg-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm uppercase">
+                  {item.season ? `${item.season} ` : ""}{item.seasonYear}
+                </span>
+              )}
+              {item.rating && (
+                <span className="flex items-center gap-0.5 text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                  <Star className="w-2.5 h-2.5 fill-current" />
+                  {item.rating}
+                </span>
+              )}
+            </div>
+
+            {/* Show Genres on hover */}
+            {item.genres && item.genres.length > 0 && (
+              <p className="text-[10px] font-bold text-[#D552A3] line-clamp-1 mb-1.5 uppercase tracking-wide leading-none">
+                {item.genres.slice(0, 2).join(" · ")}
+              </p>
             )}
+
             <div className="flex items-center gap-2 flex-wrap">
               {item.type && (
-                <span className="text-[#D552A3] text-[9px] font-bold uppercase tracking-wider">
+                <span className="text-white/40 text-[9px] font-bold uppercase tracking-wider">
                   {item.type}
                 </span>
               )}
               {subCount !== null && (
-                <span className="flex items-center gap-0.5 text-white/40 text-[9px]">
-                  <Star className="w-2.5 h-2.5 fill-current text-amber-400" />
+                <span className="flex items-center gap-0.5 text-white/40 text-[9px] font-semibold">
                   {subCount} eps
                 </span>
               )}
