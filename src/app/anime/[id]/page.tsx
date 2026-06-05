@@ -34,6 +34,7 @@ interface Episode {
   episodeNum: number;
   title?: string;
   thumbnail?: string | null;
+  malUrl?: string | null;
   isFiller?: boolean;
   releasedDate?: string;
   isReleased?: boolean;
@@ -114,7 +115,7 @@ export default function AnimeDetailPage() {
   }, [selectedEp?.episodeId]);
 
   const handleSeasonClick = async (season: SeasonInfo) => {
-    if (season.isCurrent) return;
+    if (season.id === currentSeasonId) return;
     setCurrentSeasonId(season.id);
     setAnime(prev => prev ? { ...prev, totalEpisodes: season.totalEpisodes } : prev);
     await loadEpisodes(season.id);
@@ -154,6 +155,38 @@ export default function AnimeDetailPage() {
   };
 
   const handleAutoNext = () => handleNext();
+
+  // Lazy-load episode thumbnails (batch 3 at a time to avoid MAL rate limits)
+  const thumbnailFetchingRef = useRef(new Set<string>());
+  useEffect(() => {
+    const loading = thumbnailFetchingRef.current;
+    const needThumb = episodes.filter(ep => !ep.thumbnail && ep.malUrl && !loading.has(ep.episodeId));
+    if (needThumb.length === 0) return;
+
+    let i = 0;
+    const BATCH = 3;
+    const tick = () => {
+      const batch = needThumb.slice(i, i + BATCH);
+      i += BATCH;
+      for (const ep of batch) {
+        loading.add(ep.episodeId);
+        fetch(`/api/anime/thumbnail?url=${encodeURIComponent(ep.malUrl!)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.success && data.thumbnail) {
+              setEpisodes(prev => prev.map(e =>
+                e.episodeId === ep.episodeId ? { ...e, thumbnail: data.thumbnail } : e
+              ));
+            }
+          })
+          .catch(() => {})
+          .finally(() => loading.delete(ep.episodeId));
+      }
+      if (i < needThumb.length) setTimeout(tick, 400);
+    };
+    tick();
+  }, [episodes]);
+
   const seasons = anime?.seasons || [];
 
   return (
@@ -340,37 +373,50 @@ export default function AnimeDetailPage() {
 
               {/* Season Selector */}
               {seasons.length > 1 && (
-                <div className="max-w-5xl mx-auto w-full space-y-3 bg-white/[0.02] border border-white/[0.06] rounded-2xl p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1 h-5 bg-gradient-to-b from-[#D552A3] to-[#831C91] rounded-full" />
-                    <h3 className="text-base font-bold text-white tracking-tight">Seasons</h3>
-                    <span className="text-xs bg-white/[0.06] text-white/50 px-2.5 py-1 rounded-full font-semibold">
+                <div className="max-w-5xl mx-auto w-full bg-gradient-to-br from-white/[0.03] to-white/[0.01] border border-white/[0.06] rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#D552A3] to-[#831C91] rounded-full shadow-lg shadow-[#D552A3]/20" />
+                    <h3 className="text-lg font-black text-white tracking-tight">Seasons</h3>
+                    <span className="text-[10px] bg-white/[0.06] text-white/50 px-2.5 py-1 rounded-full font-bold">
                       {seasons.length} Available
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
-                    {seasons.map((season, idx) => (
-                      <button
-                        key={season.id}
-                        onClick={() => handleSeasonClick(season)}
-                        disabled={season.id === currentSeasonId}
-                        className={cn(
-                          "flex flex-col items-center gap-1 px-4 py-4 rounded-xl text-sm font-bold tracking-wide transition-all",
-                          season.id === currentSeasonId
-                            ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25 ring-2 ring-[#D552A3]/40"
-                            : "bg-white/[0.06] text-white/50 hover:bg-white/[0.12] hover:text-white border border-white/[0.06] hover:border-white/[0.15]"
-                        )}
-                      >
-                        <span className="text-xs text-white/40 font-medium uppercase tracking-wider">Season</span>
-                        <span className="text-xl font-black">{idx + 1}</span>
-                        <span className={cn(
-                          "text-[10px] font-semibold",
-                          season.id === currentSeasonId ? "text-white/60" : "text-white/30"
-                        )}>
-                          {season.totalEpisodes} ep.
-                        </span>
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {seasons.map((season, idx) => {
+                      const isActive = season.id === currentSeasonId;
+                      return (
+                        <button
+                          key={season.id}
+                          onClick={() => handleSeasonClick(season)}
+                          disabled={isActive}
+                          className={cn(
+                            "relative flex flex-col items-center gap-1.5 px-4 py-5 rounded-2xl text-sm font-bold tracking-wide transition-all duration-300 select-none",
+                            isActive
+                              ? "bg-gradient-to-br from-[#462C7D] to-[#D552A3] text-white shadow-xl shadow-[#831C91]/25 ring-2 ring-[#D552A3]/40 scale-[1.02]"
+                              : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white border border-white/[0.06] hover:border-white/[0.15] hover:scale-[1.02] cursor-pointer"
+                          )}
+                        >
+                          {/* Active top glow */}
+                          {isActive && (
+                            <div className="absolute -top-px left-3 right-3 h-[2px] bg-gradient-to-r from-transparent via-white/40 to-transparent rounded-full" />
+                          )}
+                          <span className="text-[9px] text-white/40 font-bold uppercase tracking-[0.15em]">
+                            Season
+                          </span>
+                          <span className="text-2xl md:text-3xl font-black tracking-tight leading-none mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span className={cn(
+                            "text-[9px] font-bold px-2 py-0.5 rounded-full mt-1",
+                            isActive
+                              ? "bg-white/15 text-white/80"
+                              : "bg-white/[0.05] text-white/40"
+                          )}>
+                            {season.totalEpisodes} {season.totalEpisodes === 1 ? "ep" : "eps"}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

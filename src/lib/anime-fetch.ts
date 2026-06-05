@@ -448,14 +448,14 @@ async function fetchEpisodesFromJikan(
     }
 
     allEps.sort((a, b) => a.episodeNum - b.episodeNum);
-    if (allEps.length > 0) {
-      await batchScrapeThumbnails(allEps, 10);
-    }
     return allEps.length > 0 ? allEps : null;
   } catch {
     return null;
   }
 }
+
+// In-memory thumbnail cache (keyed by MAL episode URL)
+const thumbnailCache = new Map<string, string>();
 
 // Scrape a single MAL episode page for an episode screenshot
 async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
@@ -475,6 +475,10 @@ async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
     const lazyMatch = html.match(/data-src="([^"]+)"[^>]*width="800"/i);
     if (lazyMatch) return lazyMatch[1];
 
+    // Try poster attribute on video element
+    const posterMatch = html.match(/poster="([^"]+)"/i);
+    if (posterMatch) return posterMatch[1];
+
     // Fall back to og:image (anime poster)
     const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
     if (ogMatch) return ogMatch[1];
@@ -485,21 +489,25 @@ async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
   }
 }
 
-// Batch-scrape thumbnails for episodes (first maxScrape episodes)
+// Exported: fetch a single episode thumbnail with cache
+export async function fetchEpisodeThumbnail(malUrl: string): Promise<string | null> {
+  if (thumbnailCache.has(malUrl)) return thumbnailCache.get(malUrl)!;
+  const thumb = await scrapeEpisodeThumbnail(malUrl);
+  if (thumb) thumbnailCache.set(malUrl, thumb);
+  return thumb;
+}
+
+// Batch-scrape thumbnails for episodes (all episodes, non-blocking)
 async function batchScrapeThumbnails(
-  episodes: EpisodeDetail[],
-  maxScrape: number
+  episodes: EpisodeDetail[]
 ): Promise<void> {
-  const toScrape = episodes
-    .filter(ep => ep.malUrl && !ep.thumbnail)
-    .slice(0, maxScrape);
+  const toScrape = episodes.filter(ep => ep.malUrl && !ep.thumbnail);
   if (toScrape.length === 0) return;
 
-  // Fire all at once with 200ms stagger to avoid rate-limit bursts
   await Promise.allSettled(
     toScrape.map((ep, i) =>
-      new Promise(resolve => setTimeout(resolve, i * 200))
-        .then(() => scrapeEpisodeThumbnail(ep.malUrl!))
+      new Promise(resolve => setTimeout(resolve, i * 100))
+        .then(() => fetchEpisodeThumbnail(ep.malUrl!))
         .then(thumb => { if (thumb) ep.thumbnail = thumb; })
     )
   );

@@ -24,13 +24,13 @@ function buildSources(animeId: string, malId: string | null | undefined, episode
 
   const sourceDefs: { name: string; urlTpl: string; color: string }[] = [
     { name: "Source 1", urlTpl: `https://vidnest.fun/anime/${anilistId}/${episode}/sub`, color: "from-[#831C91]/30 to-[#D552A3]/20" },
-    { name: "Source 2", urlTpl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/sub?quality=1080`, color: "from-[#462C7D]/30 to-[#831C91]/20" },
+    { name: "Source 2", urlTpl: `https://vidnest.fun/anime/${anilistId}/${episode}/sub?source=pahe`, color: "from-[#462C7D]/30 to-[#831C91]/20" },
   ];
 
   if (myanimelistId) {
     sourceDefs.push(
-      { name: "Source 3", urlTpl: `https://vidlink.pro/anime/${myanimelistId}/${episode}/sub`, color: "from-[#312e81]/40 to-[#4f46e5]/20" },
-      { name: "Source 4", urlTpl: `https://vidlink.pro/anime/${myanimelistId}/${episode}/sub?fallback=true`, color: "from-[#1e293b]/40 to-[#0f172a]/20" }
+      { name: "Source 3", urlTpl: `https://vidnest.fun/anime/${myanimelistId}/${episode}/sub`, color: "from-[#312e81]/40 to-[#4f46e5]/20" },
+      { name: "Source 4", urlTpl: `https://vidnest.fun/anime/${myanimelistId}/${episode}/sub?source=pahe`, color: "from-[#1e293b]/40 to-[#0f172a]/20" }
     );
   }
 
@@ -87,16 +87,20 @@ export function AnimePlayer({ animeId, malId, animeTitle, episode, onAutoNext }:
     setUrlIndex(0);
   }, [sourceIndex, sources.length]);
 
-  // Auto-try the backup ID within the same source if the primary ID takes too long.
+  // Auto-advance: try backup URL within same source first, then switch source
   useEffect(() => {
-    if (!isLoading || hasError || urlIndex >= currentSource.urls.length - 1) return;
+    if (!isLoading || hasError) return;
     timerRef.current = setTimeout(() => {
       if (isLoading && !hasError) {
-        tryNextId();
+        if (urlIndex < currentSource.urls.length - 1) {
+          tryNextId();
+        } else {
+          switchSource();
+        }
       }
     }, 6000);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [isLoading, hasError, urlIndex, currentSource.urls.length, tryNextId]);
+  }, [isLoading, hasError, urlIndex, currentSource.urls.length, tryNextId, switchSource]);
 
   const toggleFullscreen = async () => {
     try {
@@ -240,8 +244,8 @@ export function AnimePlayer({ animeId, malId, animeTitle, episode, onAutoNext }:
                 {isActive ? (
                   <span className="w-1.5 h-1.5 rounded-full bg-[#D552A3] animate-pulse shrink-0 ml-1.5" />
                 ) : (
-                  source.name === "AnimePahe" && (
-                    <span className="text-[9px] font-bold text-[#D552A3] uppercase shrink-0 ml-1.5">1080p</span>
+                  (source.name === "Source 2" || source.name === "Source 4") && (
+                    <span className="text-[9px] font-bold text-[#D552A3] uppercase shrink-0 ml-1.5">Pahe</span>
                   )
                 )}
               </button>
