@@ -8,34 +8,34 @@ interface StreamingAPIConfig {
 
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
-    name: "CineSrc",
+    name: "Source 1",
     baseUrl: "https://cinesrc.st",
     type: "cinesrc",
     quality: "Best",
     supportsNativeFullscreen: true,
   },
   {
-    name: "VIDKING",
+    name: "Source 2",
     baseUrl: "https://vidking.net",
     type: "vidking",
     quality: "Best",
     supportsNativeFullscreen: true,
   },
   {
-    name: "VidSrc",
+    name: "Source 3",
     baseUrl: "https://vidsrc.mov",
     type: "vidsrcmov",
     quality: "HD",
   },
   {
-    name: "MultiEmbed",
+    name: "Source 4",
     baseUrl: "https://multiembed.mov",
     type: "multiembed",
     quality: "HD",
     supportsNativeFullscreen: true,
   },
   {
-    name: "2Embed",
+    name: "Source 5",
     baseUrl: "https://2embed.cc",
     type: "2embed",
     quality: "Backup",

@@ -340,25 +340,38 @@ export default function AnimeDetailPage() {
 
               {/* Season Selector */}
               {seasons.length > 1 && (
-                <div className="flex items-center gap-2 flex-wrap max-w-5xl mx-auto">
-                  <span className="text-xs text-white/40 font-bold uppercase tracking-widest mr-1">Seasons:</span>
-                  {seasons.map(season => (
-                    <button
-                      key={season.id}
-                      onClick={() => handleSeasonClick(season)}
-                      disabled={season.id === currentSeasonId}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
-                        season.id === currentSeasonId
-                          ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25"
-                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white border border-white/[0.06]"
-                      }`}
-                    >
-                      {season.seasonLabel}
-                      <span className={`ml-1.5 text-[9px] ${season.id === currentSeasonId ? "text-white/60" : "text-white/30"}`}>
-                        ({season.totalEpisodes} eps)
-                      </span>
-                    </button>
-                  ))}
+                <div className="max-w-5xl mx-auto w-full space-y-3 bg-white/[0.02] border border-white/[0.06] rounded-2xl p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-5 bg-gradient-to-b from-[#D552A3] to-[#831C91] rounded-full" />
+                    <h3 className="text-base font-bold text-white tracking-tight">Seasons</h3>
+                    <span className="text-xs bg-white/[0.06] text-white/50 px-2.5 py-1 rounded-full font-semibold">
+                      {seasons.length} Available
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                    {seasons.map((season, idx) => (
+                      <button
+                        key={season.id}
+                        onClick={() => handleSeasonClick(season)}
+                        disabled={season.id === currentSeasonId}
+                        className={cn(
+                          "flex flex-col items-center gap-1 px-4 py-4 rounded-xl text-sm font-bold tracking-wide transition-all",
+                          season.id === currentSeasonId
+                            ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25 ring-2 ring-[#D552A3]/40"
+                            : "bg-white/[0.06] text-white/50 hover:bg-white/[0.12] hover:text-white border border-white/[0.06] hover:border-white/[0.15]"
+                        )}
+                      >
+                        <span className="text-xs text-white/40 font-medium uppercase tracking-wider">Season</span>
+                        <span className="text-xl font-black">{idx + 1}</span>
+                        <span className={cn(
+                          "text-[10px] font-semibold",
+                          season.id === currentSeasonId ? "text-white/60" : "text-white/30"
+                        )}>
+                          {season.totalEpisodes} ep.
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -429,16 +442,23 @@ export default function AnimeDetailPage() {
                           </div>
 
                           {/* Cover Thumbnail aspect-video */}
-                          <div className="w-36 md:w-48 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
+                          <div className="w-36 md:w-48 shrink-0 aspect-video rounded-xl overflow-hidden bg-gradient-to-br from-[#462C7D]/40 to-[#831C91]/20 relative self-start">
                             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent z-10" />
                             
-                            {/* Episode thumbnail with anime poster fallback */}
-                            <img
-                              src={ep.thumbnail || anime.poster}
-                              alt={ep.title || `Episode ${ep.episodeNum}`}
-                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              onError={(e) => { e.currentTarget.src = anime.poster; }}
-                            />
+                            {ep.thumbnail ? (
+                              <img
+                                src={ep.thumbnail}
+                                alt={ep.title || `Episode ${ep.episodeNum}`}
+                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                onError={(e) => { e.currentTarget.src = ""; }}
+                              />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-2xl md:text-3xl font-black text-white/[0.12] select-none">
+                                  EP {ep.episodeNum}
+                                </span>
+                              </div>
+                            )}
                             
                             {/* Play Overlay */}
                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
