@@ -22,7 +22,7 @@ const navItems = [
   { href: "/browse/trending", icon: TrendingUp, label: "Trending" },
   { href: "/browse/movies", icon: Film, label: "Movies" },
   { href: "/browse/tv", icon: Tv, label: "TV Shows" },
-  { href: "/anime", icon: Sparkles, label: "Anime" },
+  { href: "/anime", icon: Sparkles, label: "JP Dub + Eng Sub" },
 ];
 
 export function Sidebar() {
@@ -91,7 +91,6 @@ export function Sidebar() {
       <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 premium-glass z-40 flex items-center justify-around pb-safe px-2">
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
-          const isAnime = href === "/anime";
           
           return (
             <Link
@@ -100,21 +99,14 @@ export function Sidebar() {
               className={cn(
                 "relative flex-1 h-full flex flex-col items-center justify-center transition-all duration-300 select-none touch-manipulation cursor-pointer",
                 isActive 
-                  ? isAnime 
-                    ? "text-[#D552A3]" 
-                    : "text-white"
-                  : isAnime
-                  ? "text-[#D552A3]/50 hover:text-[#D552A3]"
+                  ? "text-white" 
                   : "text-white/40 hover:text-white"
               )}
             >
               {isActive && (
                 <motion.div
                   layoutId="mobile-nav-indicator"
-                  className={cn(
-                    "absolute top-0 w-8 h-1 rounded-full",
-                    isAnime ? "bg-[#D552A3]" : "bg-white"
-                  )}
+                  className="absolute top-0 w-8 h-1 rounded-full bg-white"
                   transition={{ type: "spring", stiffness: 380, damping: 35 }}
                 />
               )}
@@ -144,7 +136,6 @@ export function Sidebar() {
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto">
           {navItems.map(({ href, icon: Icon, label }) => {
             const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
-            const isAnime = href === "/anime";
             
             return (
               <Link
@@ -153,23 +144,14 @@ export function Sidebar() {
                 className={cn(
                   "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300",
                   isActive 
-                    ? isAnime 
-                      ? "text-[#D552A3]" 
-                      : "text-white"
-                    : isAnime
-                    ? "text-[#D552A3]/60 hover:text-[#D552A3]"
+                    ? "text-white" 
                     : "text-white/50 hover:text-white"
                 )}
               >
                 {isActive && (
                   <motion.div
                     layoutId="nav-pill"
-                    className={cn(
-                      "absolute inset-0 rounded-xl -z-10",
-                      isAnime
-                        ? "bg-gradient-to-r from-[#831C91]/20 to-[#D552A3]/10 border border-[#D552A3]/25"
-                        : "bg-white/[0.06] border border-white/[0.08]"
-                    )}
+                    className="absolute inset-0 rounded-xl -z-10 bg-white/[0.06] border border-white/[0.08]"
                     transition={{ type: "spring", stiffness: 380, damping: 35 }}
                   />
                 )}

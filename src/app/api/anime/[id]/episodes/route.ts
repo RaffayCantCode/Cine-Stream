@@ -16,6 +16,7 @@ export async function GET(
       episodeId: ep.episodeId || `${id}-${ep.episodeNum}`,
       episodeNum: Number(ep.episodeNum || ep.episode || 1),
       title: ep.title || `Episode ${ep.episodeNum || 1}`,
+      thumbnail: ep.thumbnail || null,
       isFiller: ep.isFiller || false,
       releasedDate: ep.releasedDate || null,
       description: ep.description || null,

@@ -33,6 +33,7 @@ interface Episode {
   episodeId: string;
   episodeNum: number;
   title?: string;
+  thumbnail?: string | null;
   isFiller?: boolean;
   releasedDate?: string;
   isReleased?: boolean;
@@ -234,30 +235,6 @@ export default function AnimeDetailPage() {
                 <ArrowLeft className="w-4 h-4" /> Back to Anime
               </Link>
 
-              {/* Season Selector */}
-              {seasons.length > 1 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-white/40 font-bold uppercase tracking-widest mr-1">Seasons:</span>
-                  {seasons.map(season => (
-                    <button
-                      key={season.id}
-                      onClick={() => handleSeasonClick(season)}
-                      disabled={season.id === currentSeasonId}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
-                        season.id === currentSeasonId
-                          ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25"
-                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white border border-white/[0.06]"
-                      }`}
-                    >
-                      {season.seasonLabel}
-                      <span className={`ml-1.5 text-[9px] ${season.id === currentSeasonId ? "text-white/60" : "text-white/30"}`}>
-                        ({season.totalEpisodes} eps)
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
               {/* SINGLE FULL-WIDTH PLAYER & REDESIGNED SYNOPSIS/METADATA */}
               <div className="flex flex-col gap-6">
                 <div ref={playerRef} className="w-full max-w-5xl mx-auto min-w-0">
@@ -361,6 +338,30 @@ export default function AnimeDetailPage() {
                 </div>
               </div>
 
+              {/* Season Selector */}
+              {seasons.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap max-w-5xl mx-auto">
+                  <span className="text-xs text-white/40 font-bold uppercase tracking-widest mr-1">Seasons:</span>
+                  {seasons.map(season => (
+                    <button
+                      key={season.id}
+                      onClick={() => handleSeasonClick(season)}
+                      disabled={season.id === currentSeasonId}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
+                        season.id === currentSeasonId
+                          ? "bg-gradient-to-r from-[#462C7D] to-[#D552A3] text-white shadow-lg shadow-[#831C91]/25"
+                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white border border-white/[0.06]"
+                      }`}
+                    >
+                      {season.seasonLabel}
+                      <span className={`ml-1.5 text-[9px] ${season.id === currentSeasonId ? "text-white/60" : "text-white/30"}`}>
+                        ({season.totalEpisodes} eps)
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Visually Stunning Episodes Section (Below the Player) */}
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
@@ -431,10 +432,12 @@ export default function AnimeDetailPage() {
                           <div className="w-36 md:w-48 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
                             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent z-10" />
                             
-                            {/* Stylized background using anime poster */}
-                            <div 
-                              className="absolute inset-0 bg-cover bg-center opacity-35 blur-[0.5px] group-hover:scale-105 transition-transform duration-500" 
-                              style={{ backgroundImage: `url(${anime.poster})` }} 
+                            {/* Episode thumbnail with anime poster fallback */}
+                            <img
+                              src={ep.thumbnail || anime.poster}
+                              alt={ep.title || `Episode ${ep.episodeNum}`}
+                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              onError={(e) => { e.currentTarget.src = anime.poster; }}
                             />
                             
                             {/* Play Overlay */}

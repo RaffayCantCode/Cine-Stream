@@ -17,6 +17,8 @@ interface MediaItem {
   vote_average?: number;
   release_date?: string;
   first_air_date?: string;
+  original_language?: string;
+  genre_ids?: number[];
 }
 
 interface Genre {
@@ -55,22 +57,23 @@ export default function Home() {
     const load = async () => {
       setIsLoading(true);
       setLoadError(null);
+      const rngPage = (max: number) => Math.floor(Math.random() * max) + 1;
       try {
         const [tr, pm, pt, np, gm] = await Promise.all([
           fetchJson<{ results: MediaItem[] }>(
-            "/api/tmdb/trending?type=all&timeWindow=week&page=1",
+            `/api/tmdb/trending?type=all&timeWindow=week&page=${rngPage(5)}`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ results: MediaItem[] }>(
-            "/api/tmdb/movies/popular?page=1",
+            `/api/tmdb/movies/popular?page=${rngPage(5)}`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ results: MediaItem[] }>(
-            "/api/tmdb/tv/top-rated?page=1",
+            `/api/tmdb/tv/top-rated?page=${rngPage(5)}`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ results: MediaItem[] }>(
-            "/api/tmdb/movies/now-playing?page=1",
+            `/api/tmdb/movies/now-playing?page=${rngPage(3)}`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ genres: Genre[] }>(
@@ -199,6 +202,24 @@ export default function Home() {
                   {name}
                 </Link>
               ))}
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center gap-3 group">
+              <div className="w-1.5 h-7 bg-gradient-to-b from-[#D552A3] to-[#831C91] rounded-full shadow-lg shadow-[#D552A3]/20 group-hover:shadow-[#D552A3]/40 transition-shadow" />
+              <div className="flex items-center gap-4 flex-wrap">
+                <div>
+                  <h2 className="text-2xl font-black text-white tracking-tight">Anime</h2>
+                  <p className="text-[10px] text-white/30 font-medium tracking-wider uppercase">Japanese audio with English subtitles &mdash; browse all anime</p>
+                </div>
+                <Link
+                  href="/anime"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#462C7D] to-[#831C91] text-white text-xs font-bold hover:from-[#831C91] hover:to-[#D552A3] transition-all shadow-lg shadow-[#831C91]/25"
+                >
+                  Browse Anime &rarr;
+                </Link>
+              </div>
             </div>
           </section>
 

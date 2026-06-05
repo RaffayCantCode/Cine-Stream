@@ -115,6 +115,12 @@ const ADULT_KEYWORDS = [
   "hardcore", "softcore", "xxx", "mature", "nsfw",
 ];
 
+export function isTmdbAnime(item: { original_language?: string; genre_ids?: number[] }): boolean {
+  return item.original_language === "ja" &&
+    Array.isArray(item.genre_ids) &&
+    item.genre_ids.includes(16);
+}
+
 export function filterReleasedSafeContent<T extends {
   adult?: boolean;
   release_date?: string;

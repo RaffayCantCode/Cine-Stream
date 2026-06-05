@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
+import { Shuffle } from "lucide-react";
 import { cn, fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
 
 interface Genre {
@@ -28,10 +29,27 @@ export default function BrowseMoviesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
-  const [page, setPage] = useState(() => Math.floor(Math.random() * 10) * 3 + 1);
+  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const initialLoad = useRef(true);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const handleShuffleMovies = async () => {
+    setIsLoading(true);
+    const rng = Math.floor(Math.random() * 100) + 1;
+    try {
+      const params = new URLSearchParams();
+      if (selectedGenre) params.append("genreId", selectedGenre.toString());
+      params.append("sortBy", sortBy);
+      params.append("page", rng.toString());
+      const data = await fetchJson<{ results: Movie[] }>(`/api/tmdb/discover/movies?${params}`);
+      setMovies(shuffleArray(filterReleasedSafeContent(data.results || [])));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to shuffle");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchGenres = async () => {
@@ -80,8 +98,7 @@ export default function BrowseMoviesPage() {
         );
 
         const allItems = results.flatMap((r) => filterReleasedSafeContent(r.results || []));
-        const next = shuffleArray(allItems);
-        setMovies((prev) => (mode === "append" ? [...prev, ...next] : next));
+        setMovies((prev) => (mode === "append" ? [...prev, ...allItems] : allItems));
 
         const last = results[results.length - 1];
         const totalPages = last?.total_pages ?? 1;
@@ -143,10 +160,10 @@ export default function BrowseMoviesPage() {
             </select>
             <button
               type="button"
-              onClick={() => setMovies((prev) => shuffleArray(prev))}
-              className="h-10 px-4 rounded-xl bg-[#1a1a2e] border border-white/20 text-white/80 text-sm font-semibold hover:border-[#D552A3]/50 hover:text-white transition"
+              onClick={handleShuffleMovies}
+              className="h-10 px-4 rounded-xl bg-[#1a1a2e] border border-white/20 text-white/80 text-sm font-semibold hover:border-[#D552A3]/50 hover:text-white transition flex items-center gap-2"
             >
-              Shuffle
+              <Shuffle className="w-4 h-4" /> Shuffle
             </button>
           </div>
         </div>

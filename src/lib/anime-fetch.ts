@@ -27,6 +27,17 @@ export interface SeasonInfo {
   isCurrent: boolean;
 }
 
+export interface EpisodeDetail {
+  episodeId: string;
+  episodeNum: number;
+  title: string;
+  description?: string | null;
+  thumbnail?: string | null;
+  releasedDate?: string | null;
+  isFiller?: boolean;
+  isRecap?: boolean;
+}
+
 interface AniListMedia {
   id: number;
   idMal: number | null;
@@ -184,7 +195,7 @@ const RELATIONS_QUERY = `query ($id: Int) {
 // Get anime details + related seasons via AniList + Jikan fallback
 export async function getAnimeDetails(id: string): Promise<{
   anime: AnimeItem;
-  episodes: { episodeId: string; episodeNum: number; title: string }[];
+  episodes: EpisodeDetail[];
   totalEpisodes: number;
   seasons: SeasonInfo[];
 } | null> {
@@ -217,13 +228,27 @@ export async function getAnimeDetails(id: string): Promise<{
         const jData = await jikanRes.json();
         const a = jData.data;
         if (a) {
-          const episodes = Array.from({ length: Math.max(a.episodes || 12, 1) }, (_, i) => ({
-            episodeId: `${id}-${i + 1}`,
-            episodeNum: i + 1,
-            title: `Episode ${i + 1}`,
-            description: `Watch Episode ${i + 1} of ${a.title_english || a.title || "Unknown"} in high quality with English subtitles.`,
-          }));
           const totalEps = Math.max(a.episodes || 12, 1);
+          let episodes: EpisodeDetail[] = [];
+          const realEps = await fetchEpisodesFromJikan(numId, String(numId), totalEps);
+          if (realEps) episodes = realEps;
+
+          const existingNums = new Set(episodes.map(e => e.episodeNum));
+          for (let i = 1; i <= totalEps; i++) {
+            if (!existingNums.has(i)) {
+              episodes.push({
+                episodeId: `${id}-${i}`,
+                episodeNum: i,
+                title: `Episode ${i}`,
+                description: null,
+                thumbnail: null,
+                releasedDate: null,
+                isFiller: false,
+                isRecap: false,
+              });
+            }
+          }
+          episodes.sort((a, b) => a.episodeNum - b.episodeNum);
           return {
             anime: {
               id: String(a.mal_id),
@@ -317,12 +342,28 @@ export async function getAnimeDetails(id: string): Promise<{
   const current = seasons.find(s => s.isCurrent) || seasons[0];
   const totalEpisodes = Math.max(current.totalEpisodes, isMovieFormat ? 1 : 12);
 
-  const episodes = Array.from({ length: Math.min(totalEpisodes, 500) }, (_, i) => ({
-    episodeId: `${id}-${i + 1}`,
-    episodeNum: i + 1,
-    title: `Episode ${i + 1}`,
-    description: `Watch Episode ${i + 1} of ${anime.name} in high quality with English subtitles.`,
-  }));
+  let episodes: EpisodeDetail[] = [];
+  if (media.idMal) {
+    const realEps = await fetchEpisodesFromJikan(media.idMal, id, totalEpisodes);
+    if (realEps) episodes = realEps;
+  }
+
+  const existingNums = new Set(episodes.map(e => e.episodeNum));
+  for (let i = 1; i <= Math.min(totalEpisodes, 500); i++) {
+    if (!existingNums.has(i)) {
+      episodes.push({
+        episodeId: `${id}-${i}`,
+        episodeNum: i,
+        title: `Episode ${i}`,
+        description: null,
+        thumbnail: null,
+        releasedDate: null,
+        isFiller: false,
+        isRecap: false,
+      });
+    }
+  }
+  episodes.sort((a, b) => a.episodeNum - b.episodeNum);
 
   return { anime, episodes, totalEpisodes, seasons };
 }
@@ -350,6 +391,56 @@ export async function searchViaJikan(query: string): Promise<AnimeItem[]> {
     }));
   } catch {
     return [];
+  }
+}
+
+// Fetch real episode metadata (titles, thumbnails, airdates) from Jikan
+async function fetchEpisodesFromJikan(
+  malId: number | string,
+  anilistId: string,
+  maxEpisodes: number
+): Promise<EpisodeDetail[] | null> {
+  try {
+    const allEps: EpisodeDetail[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore && allEps.length < maxEpisodes) {
+      const res = await fetch(
+        `${JIKAN_BASE}/anime/${malId}/episodes?page=${page}`,
+        { signal: AbortSignal.timeout(6000), headers: { "User-Agent": "StreamVault/1.0" } }
+      );
+      if (!res.ok) break;
+
+      const data = await res.json();
+      const pageEps = data.data || [];
+      if (pageEps.length === 0) break;
+
+      for (const ep of pageEps) {
+        const epNum = ep.mal_id;
+        if (!epNum || epNum > maxEpisodes) continue;
+        allEps.push({
+          episodeId: `${anilistId}-${epNum}`,
+          episodeNum: epNum,
+          title: ep.title || `Episode ${epNum}`,
+          description: null,
+          thumbnail: ep.images?.jpg?.image_url || null,
+          releasedDate: ep.aired || null,
+          isFiller: ep.filler || false,
+          isRecap: ep.recap || false,
+        });
+      }
+
+      const totalPages = data.pagination?.last_visible_page || page;
+      hasMore = page < totalPages && allEps.length < maxEpisodes;
+      page++;
+      if (hasMore) await new Promise(r => setTimeout(r, 350));
+    }
+
+    allEps.sort((a, b) => a.episodeNum - b.episodeNum);
+    return allEps.length > 0 ? allEps : null;
+  } catch {
+    return null;
   }
 }
 

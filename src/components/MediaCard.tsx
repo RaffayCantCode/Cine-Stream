@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Star, Play } from "lucide-react";
+import { Star, Play, Languages } from "lucide-react";
 import { motion } from "framer-motion";
 import { memo } from "react";
+import { isTmdbAnime } from "@/lib/utils";
 
 interface MediaItem {
   id: number;
@@ -14,6 +15,8 @@ interface MediaItem {
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
+  original_language?: string;
+  genre_ids?: number[];
 }
 
 interface MediaCardProps {
@@ -108,6 +111,12 @@ export const MediaCard = memo(function MediaCard({ item, index = 0 }: MediaCardP
             {item.vote_average.toFixed(1)}
           </div>
         ) : null}
+
+        {isTmdbAnime(item) && (
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-gradient-to-r from-[#831C91]/90 to-[#D552A3]/90 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-md backdrop-blur-sm tracking-wider uppercase group-hover:opacity-0 transition-opacity duration-300">
+            <Languages className="w-2.5 h-2.5" /> Eng Dub
+          </div>
+        )}
 
         <div className="absolute inset-0 rounded-2xl ring-1 ring-white/0 group-hover:ring-[#D552A3]/40 transition-all duration-500 pointer-events-none" />
         <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: "inset 0 0 30px rgba(213,82,163,0.15)" }} />

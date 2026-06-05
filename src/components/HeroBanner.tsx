@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Play, Info, Star, Calendar } from "lucide-react";
+import { Play, Info, Star, Calendar, Languages } from "lucide-react";
 import { motion } from "framer-motion";
+import { isTmdbAnime } from "@/lib/utils";
 
 interface MediaItem {
   id: number;
@@ -15,6 +16,8 @@ interface MediaItem {
   first_air_date?: string;
   vote_average?: number;
   overview?: string;
+  original_language?: string;
+  genre_ids?: number[];
 }
 
 interface HeroBannerProps {
@@ -54,9 +57,8 @@ export function HeroBanner({ item }: HeroBannerProps) {
               transition={{ duration: 1.5 }}
               style={{
                 background: `
-                  linear-gradient(to top, hsl(259 30% 4%) 0%, hsl(259 30% 4% / 0.8) 30%, hsl(259 30% 4% / 0.2) 60%, transparent 100%),
-                  linear-gradient(to right, hsl(259 30% 4% / 0.9) 0%, transparent 40%),
-                  linear-gradient(to bottom, transparent 0%, hsl(259 30% 4% / 0.8) 90%, hsl(259 30% 4%) 100%)
+                  linear-gradient(to top, hsl(259 30% 4% / 0.95) 0%, hsl(259 30% 4% / 0.6) 20%, hsl(259 30% 4% / 0.15) 40%, transparent 60%),
+                  linear-gradient(to right, hsl(259 30% 4% / 0.8) 0%, transparent 35%)
                 `
               }}
             />
@@ -80,6 +82,11 @@ export function HeroBanner({ item }: HeroBannerProps) {
           <span className="flex items-center gap-1.5 text-xs font-bold tracking-[0.2em] uppercase px-4 py-1.5 bg-gradient-to-r from-[#831C91]/20 to-[#D552A3]/10 border border-[#D552A3]/30 rounded-full text-[#D552A3] backdrop-blur-xl">
             {isMovie ? "Movie" : "TV Series"}
           </span>
+          {isTmdbAnime(item) && (
+            <span className="flex items-center gap-1 text-xs font-bold tracking-wider uppercase px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-full text-amber-400 backdrop-blur-xl">
+              <Languages className="w-3 h-3" /> Eng Dub
+            </span>
+          )}
           {year && (
             <span className="flex items-center gap-1 text-xs font-semibold text-white/50 tracking-wider backdrop-blur-sm">
               <Calendar className="w-3 h-3" />
@@ -110,7 +117,8 @@ export function HeroBanner({ item }: HeroBannerProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
-          className="text-white/60 text-base md:text-lg leading-relaxed line-clamp-3 mb-10 max-w-2xl font-medium drop-shadow-lg"
+          className="text-white/80 text-base md:text-lg leading-relaxed line-clamp-3 mb-10 max-w-2xl font-medium drop-shadow-2xl"
+          style={{ textShadow: "0 2px 20px rgba(0,0,0,0.7)" }}
         >
           {item.overview}
         </motion.p>
@@ -139,8 +147,8 @@ export function HeroBanner({ item }: HeroBannerProps) {
         </motion.div>
       </div>
 
-      <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none z-20" />
-      <div className="absolute right-0 top-0 bottom-0 w-40 bg-gradient-to-l from-background/40 to-transparent pointer-events-none z-10" />
+      <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-background via-background/50 to-transparent pointer-events-none z-20" />
+      <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background/30 to-transparent pointer-events-none z-10" />
     </div>
   );
 }

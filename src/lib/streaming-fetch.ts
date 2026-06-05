@@ -8,9 +8,9 @@ interface StreamingAPIConfig {
 
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
-    name: "Embed.su",
-    baseUrl: "https://embed.su",
-    type: "embedsu",
+    name: "CineSrc",
+    baseUrl: "https://cinesrc.st",
+    type: "cinesrc",
     quality: "Best",
     supportsNativeFullscreen: true,
   },
@@ -31,13 +31,6 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     name: "MultiEmbed",
     baseUrl: "https://multiembed.mov",
     type: "multiembed",
-    quality: "HD",
-    supportsNativeFullscreen: true,
-  },
-  {
-    name: "CineSrc",
-    baseUrl: "https://cinesrc.st",
-    type: "cinesrc",
     quality: "HD",
     supportsNativeFullscreen: true,
   },
@@ -74,12 +67,6 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
         return `${api.baseUrl}/?video_id=${id}&tmdb=1`;
       }
       return `${api.baseUrl}/?video_id=${id}&tmdb=1&s=${season ?? 1}&e=${episode ?? 1}`;
-
-    case "embedsu":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}`;
-      }
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     case "2embed":
       if (type === "movie") {

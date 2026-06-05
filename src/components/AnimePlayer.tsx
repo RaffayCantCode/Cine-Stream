@@ -25,8 +25,8 @@ function buildSources(animeId: string, malId: string | null | undefined, episode
 
   const sourceDefs: { name: string; urlTpl: string; color: string }[] = [
     { name: "AnimePahe", urlTpl: `https://vidnest.fun/animepahe/{id}/${episode}/sub?quality=1080`, color: "from-[#462C7D]/30 to-[#831C91]/20" },
-    { name: "GogoAnime", urlTpl: `https://vidnest.fun/gogoanime/{id}/${episode}/sub`, color: "from-[#1e293b]/40 to-[#0f172a]/20" },
-    { name: "VidLink", urlTpl: `https://vidlink.pro/anime/{id}/${episode}/sub`, color: "from-[#312e81]/40 to-[#4f46e5]/20" },
+    { name: "GogoAnime", urlTpl: `https://vidnest.fun/stream/{id}/${episode}/sub`, color: "from-[#1e293b]/40 to-[#0f172a]/20" },
+    { name: "VidLink", urlTpl: `https://vidlink.pro/anime/{id}?ep=${episode}`, color: "from-[#312e81]/40 to-[#4f46e5]/20" },
     { name: "VidNest", urlTpl: `https://vidnest.fun/anime/{id}/${episode}/sub`, color: "from-[#831C91]/30 to-[#D552A3]/20" },
   ];
 

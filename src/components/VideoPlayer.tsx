@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward } from "lucide-react";
+import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward, Play, Pause } from "lucide-react";
 import { StreamingSource, getStreamingSources } from "@/lib/streaming-fetch";
 
 interface VideoPlayerProps {
@@ -19,7 +19,6 @@ const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   vidking: { bg: "bg-fuchsia-600", badge: "bg-fuchsia-500/20 text-fuchsia-300" },
   "2embed": { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
   multiembed: { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
-  embedsu: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -35,9 +34,12 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   const [isLoading, setIsLoading] = useState(true);
   const [showSources, setShowSources] = useState(false);
   const [showFallbackHint, setShowFallbackHint] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [showCenterIcon, setShowCenterIcon] = useState(false);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const centerIconTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.cinesrc;
 
@@ -64,6 +66,13 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     setShowFallbackHint(false);
     setShowSources(false);
   }, [sources, currentSource]);
+
+  const togglePlayPause = useCallback(() => {
+    setIsPaused(prev => !prev);
+    setShowCenterIcon(true);
+    if (centerIconTimerRef.current) clearTimeout(centerIconTimerRef.current);
+    centerIconTimerRef.current = setTimeout(() => setShowCenterIcon(false), 800);
+  }, []);
 
   const handleIframeError = useCallback(() => {
     setIsLoading(false);
@@ -266,6 +275,41 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
               onLoad={() => setIsLoading(false)}
               onError={handleIframeError}
             />
+
+            {/* Click overlay for play/pause toggle */}
+            <div
+              className="absolute inset-0 z-10 cursor-pointer"
+              onClick={togglePlayPause}
+            >
+              {isPaused && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur border border-white/20 flex items-center justify-center">
+                    <Play className="w-8 h-8 text-white ml-0.5" />
+                  </div>
+                </div>
+              )}
+
+              <AnimatePresence>
+                {showCenterIcon && (
+                  <motion.div
+                    key="center-icon"
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+                      {isPaused ? (
+                        <Play className="w-8 h-8 text-white ml-0.5" />
+                      ) : (
+                        <Pause className="w-8 h-8 text-white" />
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </>
         )}
       </motion.div>

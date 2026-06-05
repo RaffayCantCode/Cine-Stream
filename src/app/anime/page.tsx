@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Shuffle } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
-import { fetchJson } from "@/lib/utils";
+import { fetchJson, shuffleArray } from "@/lib/utils";
 
 type AnimeSort = "popular" | "ongoing" | "recent" | "subbed" | "movie" | "search";
 
@@ -24,11 +25,40 @@ export default function AnimeBrowsePage() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(() => Math.floor(Math.random() * 15) + 1);
+  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadKey, setLoadKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const initialLoad = useRef(true);
+
+  const handleShuffleAnime = async () => {
+    setIsLoading(true);
+    const rng = Math.floor(Math.random() * 50) + 1;
+    try {
+      const category = getCategory();
+      const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
+      const res = await fetchJson<{ success: boolean; data: { items: AnimeItem[] } }>(
+        `/api/anime?category=${category}&page=${rng}${genreParam}`,
+        { cacheTtlMs: 60000 }
+      );
+      const merged = res.data?.items || [];
+      const seen = new Set<string>();
+      const filtered = merged.filter((x: AnimeItem) => {
+        if (!x.id || seen.has(x.id)) return false;
+        seen.add(x.id);
+        if (selectedGenre && x.genres) {
+          if (!x.genres.some(g => g.toLowerCase() === selectedGenre.toLowerCase())) return false;
+        }
+        if (sortBy === "movie") return x.type?.toLowerCase().includes("movie");
+        return true;
+      });
+      setItems(shuffleArray(filtered));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to shuffle");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getCategory = useCallback((): string => {
     if (query.trim() || sortBy === "search") return `search&q=${encodeURIComponent(query)}`;
@@ -83,7 +113,7 @@ export default function AnimeBrowsePage() {
   useEffect(() => {
     setItems([]);
     setHasMore(true);
-    setPage(Math.floor(Math.random() * 15) + 1);
+    setPage(1);
     setLoadKey(k => k + 1);
   }, [sortBy, selectedGenre]);
 
@@ -133,6 +163,13 @@ export default function AnimeBrowsePage() {
                 <option value="subbed" className="bg-[#1a1a2e] text-white">Subbed</option>
                 <option value="movie" className="bg-[#1a1a2e] text-white">Movies</option>
               </select>
+              <button
+                type="button"
+                onClick={handleShuffleAnime}
+                className="h-10 px-4 rounded-xl bg-[#1a1a2e] border border-white/20 text-white/80 text-sm font-semibold hover:border-[#D552A3]/50 hover:text-white transition flex items-center gap-2"
+              >
+                <Shuffle className="w-4 h-4" /> Shuffle
+              </button>
             </div>
           </div>
 
