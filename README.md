@@ -2,7 +2,9 @@
 
 StreamVault is a full-featured streaming platform for movies, TV shows, anime, and manga. Built with Next.js 15 and deployed on Vercel.
 
-![StreamVault Banner](https://via.placeholder.com/1200x400/1a1a2e/6366f1?text=StreamVault)
+<img width="1919" height="918" alt="3" src="https://github.com/user-attachments/assets/4269a5a2-46bb-45a1-b28d-186c416f23b1" />
+
+--
 
 ## ✨ Features
 
@@ -20,10 +22,18 @@ StreamVault is a full-featured streaming platform for movies, TV shows, anime, a
 - 🗑️ **Remove Items** - Clear items from your continue list
 - 📱 **Responsive Design** - Works on mobile, tablet, and desktop
 
+<img width="1910" height="918" alt="1" src="https://github.com/user-attachments/assets/accec9b2-4c14-4959-ad24-26ed60a237eb" />
+
+--
+
 ### Streaming
 - Multiple streaming sources for reliability
 - Auto-fallback if one source fails
 - English subtitles where available
+
+- <img width="1917" height="918" alt="2" src="https://github.com/user-attachments/assets/cda4412a-1464-46fd-ba02-63f6be88dba0" />
+
+---
 
 ## 🛠️ Tech Stack
 
