@@ -25,7 +25,7 @@ export default function AnimeBrowsePage() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.floor(Math.random() * 50) + 1);
   const [hasMore, setHasMore] = useState(true);
   const [loadKey, setLoadKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -111,6 +111,7 @@ export default function AnimeBrowsePage() {
 
   // Reset on sort/genre/query change
   useEffect(() => {
+    if (initialLoad.current) return;
     setItems([]);
     setHasMore(true);
     setPage(1);

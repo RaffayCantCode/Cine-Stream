@@ -17,12 +17,12 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
 
-const navItems = [
+const navItems: { href: string; icon: any; label: string; subtitle?: string }[] = [
   { href: "/", icon: Home, label: "Home" },
   { href: "/browse/trending", icon: TrendingUp, label: "Trending" },
   { href: "/browse/movies", icon: Film, label: "Movies" },
   { href: "/browse/tv", icon: Tv, label: "TV Shows" },
-  { href: "/anime", icon: Sparkles, label: "JP Dub + Eng Sub" },
+  { href: "/anime", icon: Sparkles, label: "Anime", subtitle: "JP Dub + Eng Sub" },
 ];
 
 export function Sidebar() {
@@ -134,7 +134,7 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto">
-          {navItems.map(({ href, icon: Icon, label }) => {
+          {navItems.map(({ href, icon: Icon, label, subtitle }) => {
             const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
             
             return (
@@ -158,9 +158,16 @@ export function Sidebar() {
                 
                 <Icon className="w-5 h-5 shrink-0" />
                 
-                <span className="text-sm font-medium truncate">
-                  {label}
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium truncate">
+                    {label}
+                  </span>
+                  {subtitle && (
+                    <span className="text-[10px] text-white/40 truncate leading-tight">
+                      {subtitle}
+                    </span>
+                  )}
+                </div>
               </Link>
             );
           })}

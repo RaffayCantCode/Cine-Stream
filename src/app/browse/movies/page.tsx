@@ -29,7 +29,7 @@ export default function BrowseMoviesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.floor(Math.random() * 100) + 1);
   const [hasMore, setHasMore] = useState(true);
   const initialLoad = useRef(true);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
