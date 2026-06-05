@@ -17,6 +17,7 @@ export async function GET(
       episodeNum: Number(ep.episodeNum || ep.episode || 1),
       title: ep.title || `Episode ${ep.episodeNum || 1}`,
       thumbnail: ep.thumbnail || null,
+      malUrl: ep.malUrl || null,
       isFiller: ep.isFiller || false,
       releasedDate: ep.releasedDate || null,
       description: ep.description || null,

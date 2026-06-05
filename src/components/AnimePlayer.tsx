@@ -22,21 +22,27 @@ function buildSources(animeId: string, malId: string | null | undefined, episode
   const anilistId = animeId.replace(/\D/g, "");
   const myanimelistId = malId?.trim() || "";
 
-  const sourceDefs: { name: string; urlTpl: string; color: string }[] = [
-    { name: "Source 1", urlTpl: `https://vidnest.fun/anime/${anilistId}/${episode}/sub`, color: "from-[#831C91]/30 to-[#D552A3]/20" },
-    { name: "Source 2", urlTpl: `https://vidnest.fun/anime/${anilistId}/${episode}/sub?source=pahe`, color: "from-[#462C7D]/30 to-[#831C91]/20" },
+  // Source 1: VidNest with AniList ID, falls back to MAL ID if available
+  const source1Urls = [`https://vidnest.fun/anime/${anilistId}/${episode}/sub`];
+  if (myanimelistId && myanimelistId !== anilistId) {
+    source1Urls.push(`https://vidnest.fun/anime/${myanimelistId}/${episode}/sub`);
+  }
+
+  const sourceDefs: { name: string; urls: string[]; color: string }[] = [
+    { name: "Source 1", urls: source1Urls, color: "from-[#831C91]/30 to-[#D552A3]/20" },
+    { name: "Source 2", urls: [`https://vidnest.fun/anime/${anilistId}/${episode}/sub?source=pahe`], color: "from-[#462C7D]/30 to-[#831C91]/20" },
   ];
 
   if (myanimelistId) {
     sourceDefs.push(
-      { name: "Source 3", urlTpl: `https://vidnest.fun/anime/${myanimelistId}/${episode}/sub`, color: "from-[#312e81]/40 to-[#4f46e5]/20" },
-      { name: "Source 4", urlTpl: `https://vidnest.fun/anime/${myanimelistId}/${episode}/sub?source=pahe`, color: "from-[#1e293b]/40 to-[#0f172a]/20" }
+      { name: "Source 3", urls: [`https://vidnest.fun/anime/${myanimelistId}/${episode}/sub?quality=1080`], color: "from-[#312e81]/40 to-[#4f46e5]/20" },
+      { name: "Source 4", urls: [`https://vidnest.fun/anime/${myanimelistId}/${episode}/sub?source=pahe`], color: "from-[#1e293b]/40 to-[#0f172a]/20" }
     );
   }
 
   return sourceDefs.map(s => ({
     name: s.name,
-    urls: [s.urlTpl],
+    urls: s.urls,
     color: s.color,
   }));
 }
@@ -244,9 +250,17 @@ export function AnimePlayer({ animeId, malId, animeTitle, episode, onAutoNext }:
                 {isActive ? (
                   <span className="w-1.5 h-1.5 rounded-full bg-[#D552A3] animate-pulse shrink-0 ml-1.5" />
                 ) : (
-                  (source.name === "Source 2" || source.name === "Source 4") && (
-                    <span className="text-[9px] font-bold text-[#D552A3] uppercase shrink-0 ml-1.5">Pahe</span>
-                  )
+                  <>
+                    {source.name === "Source 2" && (
+                      <span className="text-[9px] font-bold text-[#D552A3] uppercase shrink-0 ml-1.5">Pahe</span>
+                    )}
+                    {source.name === "Source 3" && (
+                      <span className="text-[9px] font-bold text-emerald-400 uppercase shrink-0 ml-1.5">HD</span>
+                    )}
+                    {source.name === "Source 4" && (
+                      <span className="text-[9px] font-bold text-[#D552A3] uppercase shrink-0 ml-1.5">Pahe</span>
+                    )}
+                  </>
                 )}
               </button>
             );
