@@ -19,20 +19,24 @@ interface AnimePlayerProps {
 }
 
 function buildSources(animeId: string, malId: string | null | undefined, episode: number): Source[] {
-  const ids = Array.from(
-    new Set([animeId.replace(/\D/g, ""), malId?.trim()].filter((id): id is string => Boolean(id)))
-  );
+  const anilistId = animeId.replace(/\D/g, "");
+  const myanimelistId = malId?.trim() || "";
 
   const sourceDefs: { name: string; urlTpl: string; color: string }[] = [
-    { name: "Source 1", urlTpl: `https://vidnest.fun/anime/{id}/${episode}/sub`, color: "from-[#831C91]/30 to-[#D552A3]/20" },
-    { name: "Source 2", urlTpl: `https://vidnest.fun/animepahe/{id}/${episode}/sub?quality=1080`, color: "from-[#462C7D]/30 to-[#831C91]/20" },
-    { name: "Source 3", urlTpl: `https://vidlink.pro/anime/{id}/${episode}/sub`, color: "from-[#312e81]/40 to-[#4f46e5]/20" },
-    { name: "Source 4", urlTpl: `https://vidnest.fun/pahe/{id}/${episode}/sub`, color: "from-[#1e293b]/40 to-[#0f172a]/20" },
+    { name: "Source 1", urlTpl: `https://vidnest.fun/anime/${anilistId}/${episode}/sub`, color: "from-[#831C91]/30 to-[#D552A3]/20" },
+    { name: "Source 2", urlTpl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/sub?quality=1080`, color: "from-[#462C7D]/30 to-[#831C91]/20" },
   ];
+
+  if (myanimelistId) {
+    sourceDefs.push(
+      { name: "Source 3", urlTpl: `https://vidlink.pro/anime/${myanimelistId}/${episode}/sub`, color: "from-[#312e81]/40 to-[#4f46e5]/20" },
+      { name: "Source 4", urlTpl: `https://vidlink.pro/anime/${myanimelistId}/${episode}/sub?fallback=true`, color: "from-[#1e293b]/40 to-[#0f172a]/20" }
+    );
+  }
 
   return sourceDefs.map(s => ({
     name: s.name,
-    urls: ids.map((id) => s.urlTpl.replace("{id}", id)),
+    urls: [s.urlTpl],
     color: s.color,
   }));
 }

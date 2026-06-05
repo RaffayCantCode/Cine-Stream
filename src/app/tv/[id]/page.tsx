@@ -39,6 +39,7 @@ interface TvShow {
   vote_average?: number;
   first_air_date?: string;
   number_of_seasons?: number;
+  adult?: boolean;
   genres?: { id: number; name: string }[];
   seasons?: Season[];
   credits?: { cast: { id: number; name: string; character: string; profile_path?: string }[] };
@@ -64,6 +65,11 @@ export default function TvDetailPage() {
       setError(null);
       try {
         const data = await fetchJson<TvShow>(`/api/tmdb/tv/${id}`);
+        if (data.adult) {
+          setError("This content is not available.");
+          setShow(null);
+          return;
+        }
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(firstSeason);

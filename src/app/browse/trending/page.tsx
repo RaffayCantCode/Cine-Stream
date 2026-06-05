@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
-import { fetchJson } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 
 type TrendType = "movie" | "tv";
 
@@ -64,7 +64,7 @@ export default function TrendingPage() {
         )
       );
 
-      const merged = allResults.flatMap((r) => r.results || []);
+      const merged = filterReleasedSafeContent(allResults.flatMap((r) => r.results || []));
       const last = allResults[allResults.length - 1];
       const hasMore = last ? last.page < last.total_pages : false;
 

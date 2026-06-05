@@ -5,6 +5,7 @@
 export interface AnimeItem {
   id: string;
   idMal?: string | null;
+  isAdult?: boolean;
   name: string;
   jname?: string | null;
   poster: string;
@@ -36,11 +37,13 @@ export interface EpisodeDetail {
   releasedDate?: string | null;
   isFiller?: boolean;
   isRecap?: boolean;
+  malUrl?: string | null;
 }
 
 interface AniListMedia {
   id: number;
   idMal: number | null;
+  isAdult?: boolean;
   title: { romaji: string; english: string | null; native: string | null };
   coverImage: { large: string; extraLarge: string };
   episodes: number | null;
@@ -66,10 +69,12 @@ function anilistQuery(query: string, variables: Record<string, any>): Promise<an
   }).then((r) => r.json());
 }
 
-function transformAniList(media: AniListMedia): AnimeItem {
+function transformAniList(media: AniListMedia): AnimeItem | null {
+  if (media.isAdult) return null;
   return {
     id: String(media.id),
     idMal: media.idMal ? String(media.idMal) : null,
+    isAdult: media.isAdult || false,
     name: media.title.english || media.title.romaji,
     jname: media.title.native || null,
     poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
@@ -89,11 +94,12 @@ const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
   Page(page: $page, perPage: 50) {
     media(
       type: ANIME,
+      isAdult: false,
       sort: [POPULARITY_DESC],
       genre: $genre,
       search: $q
     ) {
-      id idMal title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
       episodes genres averageScore description status type format season seasonYear
     }
   }
@@ -103,10 +109,11 @@ const TRENDING_QUERY = `query ($page: Int, $genre: String) {
   Page(page: $page, perPage: 50) {
     media(
       type: ANIME,
+      isAdult: false,
       sort: [TRENDING_DESC],
       genre: $genre
     ) {
-      id idMal title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
       episodes genres averageScore description status type format season seasonYear
     }
   }
@@ -116,12 +123,13 @@ const AIRING_QUERY = `query ($page: Int, $genre: String, $season: MediaSeason, $
   Page(page: $page, perPage: 50) {
     media(
       type: ANIME,
+      isAdult: false,
       sort: [POPULARITY_DESC],
       genre: $genre,
       season: $season,
       seasonYear: $year
     ) {
-      id idMal title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
       episodes genres averageScore description status type format season seasonYear
     }
   }
@@ -139,7 +147,7 @@ function getCurrentSeason() {
 export async function searchAnime(query: string, page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(LIST_QUERY, { page, q: query, genre: genre || null });
-    return (data?.data?.Page?.media || []).map(transformAniList);
+    return (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
   } catch {
     return [];
   }
@@ -148,7 +156,7 @@ export async function searchAnime(query: string, page = 1, genre?: string): Prom
 export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
-    return (data?.data?.Page?.media || []).map(transformAniList);
+    return (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
   } catch {
     return [];
   }
@@ -157,7 +165,7 @@ export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeIt
 export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
-    return (data?.data?.Page?.media || []).map(transformAniList);
+    return (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
   } catch {
     return [];
   }
@@ -167,7 +175,7 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
   const { season, year } = getCurrentSeason();
   try {
     const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
-    return (data?.data?.Page?.media || []).map(transformAniList);
+    return (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
   } catch {
     return [];
   }
@@ -206,8 +214,8 @@ export async function getAnimeDetails(id: string): Promise<{
   let media: any = null;
   try {
     const q = `query ($id: Int) {
-      Media(id: $id, type: ANIME) {
-        id idMal title { romaji english native } coverImage { large extraLarge }
+      Media(id: $id, type: ANIME, isAdult: false) {
+        id idMal isAdult title { romaji english native } coverImage { large extraLarge }
         episodes genres averageScore description status type format season seasonYear
       }
     }`;
@@ -227,7 +235,7 @@ export async function getAnimeDetails(id: string): Promise<{
       if (jikanRes.ok) {
         const jData = await jikanRes.json();
         const a = jData.data;
-        if (a) {
+        if (a && a.rating !== "rx") {
           const totalEps = Math.max(a.episodes || 12, 1);
           let episodes: EpisodeDetail[] = [];
           const realEps = await fetchEpisodesFromJikan(numId, String(numId), totalEps);
@@ -277,6 +285,7 @@ export async function getAnimeDetails(id: string): Promise<{
   }
 
   const anime = transformAniList(media);
+  if (!anime) return null;
 
   // Fetch relations separately (don't fail main query if relations time out)
   let relatedSeasons: { id: number; title: string; episodes: number; season: string; seasonYear: number; format: string | null }[] = [];
@@ -428,6 +437,7 @@ async function fetchEpisodesFromJikan(
           releasedDate: ep.aired || null,
           isFiller: ep.filler || false,
           isRecap: ep.recap || false,
+          malUrl: ep.url || null,
         });
       }
 
@@ -438,10 +448,61 @@ async function fetchEpisodesFromJikan(
     }
 
     allEps.sort((a, b) => a.episodeNum - b.episodeNum);
+    if (allEps.length > 0) {
+      await batchScrapeThumbnails(allEps, 10);
+    }
     return allEps.length > 0 ? allEps : null;
   } catch {
     return null;
   }
+}
+
+// Scrape a single MAL episode page for an episode screenshot
+async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(malUrl, {
+      signal: AbortSignal.timeout(4000),
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    // Try Crunchyroll CDN thumbnail (episode-specific screenshot)
+    const crMatch = html.match(/https?:\/\/img\d\.ak\.crunchyroll\.com\/[^"'\s]+\.(?:jpg|jpeg|png|webp)/i);
+    if (crMatch) return crMatch[0];
+
+    // Try any large lazyload image in the video embed
+    const lazyMatch = html.match(/data-src="([^"]+)"[^>]*width="800"/i);
+    if (lazyMatch) return lazyMatch[1];
+
+    // Fall back to og:image (anime poster)
+    const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
+    if (ogMatch) return ogMatch[1];
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Batch-scrape thumbnails for episodes (first maxScrape episodes)
+async function batchScrapeThumbnails(
+  episodes: EpisodeDetail[],
+  maxScrape: number
+): Promise<void> {
+  const toScrape = episodes
+    .filter(ep => ep.malUrl && !ep.thumbnail)
+    .slice(0, maxScrape);
+  if (toScrape.length === 0) return;
+
+  // Fire all at once with 200ms stagger to avoid rate-limit bursts
+  await Promise.allSettled(
+    toScrape.map((ep, i) =>
+      new Promise(resolve => setTimeout(resolve, i * 200))
+        .then(() => scrapeEpisodeThumbnail(ep.malUrl!))
+        .then(thumb => { if (thumb) ep.thumbnail = thumb; })
+    )
+  );
 }
 
 // Main fetch function for the API routes

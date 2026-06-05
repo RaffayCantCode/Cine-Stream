@@ -12,6 +12,24 @@ const ADULT_KEYWORDS = [
   "softcore",
   "xxx",
   "nsfw",
+  "onlyfans",
+  "camgirl",
+  "webcam",
+  "striptease",
+  "burlesque",
+  "erotica",
+  "masturbation",
+  "orgy",
+  "bdsm",
+  "fetish",
+  "provocative",
+  "seduction",
+  "taboo",
+  "playboy",
+  "18+",
+  "r18",
+  "adults only",
+  "mature audience",
 ];
 
 function getAuthHeader(): string {
@@ -62,6 +80,9 @@ function filterTmdbResponse(data: unknown): unknown {
     return data;
   }
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   return {
     ...response,
     results: response.results.filter((item) => {
@@ -73,13 +94,23 @@ function filterTmdbResponse(data: unknown): unknown {
         overview?: string;
         poster_path?: string | null;
         backdrop_path?: string | null;
+        release_date?: string;
+        first_air_date?: string;
       };
 
       if (media.adult === true) return false;
       if (!media.poster_path && !media.backdrop_path) return false;
 
       const searchable = `${media.title || ""} ${media.name || ""} ${media.overview || ""}`.toLowerCase();
-      return !ADULT_KEYWORDS.some((keyword) => searchable.includes(keyword));
+      if (ADULT_KEYWORDS.some((keyword) => searchable.includes(keyword))) return false;
+
+      const releaseStr = media.release_date || media.first_air_date;
+      if (releaseStr) {
+        const releaseDate = new Date(releaseStr);
+        if (!isNaN(releaseDate.getTime()) && releaseDate > today) return false;
+      }
+
+      return true;
     }),
   };
 }

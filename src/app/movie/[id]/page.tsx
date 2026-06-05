@@ -22,6 +22,7 @@ interface Movie {
   vote_average?: number;
   release_date?: string;
   runtime?: number;
+  adult?: boolean;
   genres?: { id: number; name: string }[];
   credits?: { cast: { id: number; name: string; character: string; profile_path?: string }[] };
   similar?: { results: any[] };
@@ -42,6 +43,11 @@ export default function MovieDetailPage() {
       setError(null);
       try {
         const data = await fetchJson<Movie>(`/api/tmdb/movie/${id}`);
+        if (data.adult) {
+          setError("This content is not available.");
+          setMovie(null);
+          return;
+        }
         setMovie(data);
       } catch (error) {
         setMovie(null);

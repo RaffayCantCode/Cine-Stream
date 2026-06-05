@@ -112,7 +112,10 @@ export function formatDate(dateString: string): string {
 
 const ADULT_KEYWORDS = [
   "porn", "adult", "erotic", "sex", "nude", "nudity", "explicit",
-  "hardcore", "softcore", "xxx", "mature", "nsfw",
+  "hardcore", "softcore", "xxx", "nsfw",
+  "onlyfans", "camgirl", "webcam", "striptease", "burlesque", "erotica",
+  "masturbation", "orgy", "bdsm", "fetish", "provocative", "seduction",
+  "taboo", "playboy", "18+", "r18", "adults only", "mature audience",
 ];
 
 export function isTmdbAnime(item: { original_language?: string; genre_ids?: number[] }): boolean {
