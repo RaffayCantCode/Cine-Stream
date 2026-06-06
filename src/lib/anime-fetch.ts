@@ -210,7 +210,7 @@ const RELATIONS_QUERY = `query ($id: Int) {
 const INITIAL_EP_LIMIT = 100;
 
 // Get anime details + related seasons via AniList + Jikan fallback
-export async function getAnimeDetails(id: string, epLimit = INITIAL_EP_LIMIT): Promise<{
+export async function getAnimeDetails(id: string, epLimit = INITIAL_EP_LIMIT, skipEpisodes = false): Promise<{
   anime: AnimeItem;
   episodes: EpisodeDetail[];
   totalEpisodes: number;
@@ -247,8 +247,11 @@ export async function getAnimeDetails(id: string, epLimit = INITIAL_EP_LIMIT): P
         if (a && a.rating !== "rx") {
           const totalEps = Math.max(a.episodes || 12, 1);
           let episodes: EpisodeDetail[] = [];
-          const realEps = await fetchEpisodesFromJikan(numId, String(numId), Math.min(totalEps, epLimit));
-          if (realEps) episodes = realEps;
+
+          if (!skipEpisodes) {
+            const realEps = await fetchEpisodesFromJikan(numId, String(numId), Math.min(totalEps, epLimit));
+            if (realEps) episodes = realEps;
+          }
 
           const existingNums = new Set(episodes.map(e => e.episodeNum));
           for (let i = 1; i <= Math.min(totalEps, epLimit); i++) {
@@ -375,6 +378,36 @@ export async function getAnimeDetails(id: string, epLimit = INITIAL_EP_LIMIT): P
     };
   });
 
+  const totalEpisodes = allSeasons.reduce((sum, s) => sum + Math.max(s.episodes || 1, 1), 0);
+
+  // Skip full episode fetching when only metadata is needed (faster initial load)
+  if (skipEpisodes) {
+    const basicEpisodes: EpisodeDetail[] = [];
+    allSeasons.forEach((s, idx) => {
+      const seasonId = String(s.id);
+      const isMovie = s.format === "MOVIE" || s.format === "SPECIAL" || s.format === "OVA" || s.format === "ONA";
+      const count = isMovie ? 1 : Math.min(Math.max(s.episodes || 1, 1), epLimit);
+      for (let i = 1; i <= count; i++) {
+        basicEpisodes.push({
+          episodeId: `${seasonId}-${i}`,
+          episodeNum: i,
+          title: i === 1 && isMovie ? s.title : `Episode ${i}`,
+          description: null,
+          thumbnail: null,
+          malUrl: null,
+          releasedDate: null,
+          isFiller: false,
+          isRecap: false,
+          seasonNum: idx + 1,
+          seasonId,
+          seasonName: s.title,
+          seasonMalId: s.idMal || null,
+        });
+      }
+    });
+    return { anime, episodes: basicEpisodes, totalEpisodes, seasons };
+  }
+
   // Fetch episodes for ALL seasons sequentially (avoid Jikan rate limits) and combine
   const allCombinedEpisodes: EpisodeDetail[] = [];
   for (const [idx, s] of allSeasons.entries()) {
@@ -433,9 +466,9 @@ export async function getAnimeDetails(id: string, epLimit = INITIAL_EP_LIMIT): P
     allCombinedEpisodes.push(...seasonEps);
   }
 
-  const totalEpisodes = allCombinedEpisodes.length;
+  const realTotal = allCombinedEpisodes.length;
 
-  return { anime, episodes: allCombinedEpisodes, totalEpisodes, seasons };
+  return { anime, episodes: allCombinedEpisodes, totalEpisodes: realTotal, seasons };
 }
 
 // Search via Jikan (fallback)

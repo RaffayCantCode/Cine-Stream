@@ -66,54 +66,61 @@ export default function AnimeDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     const load = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail } }>(`/api/anime/${id}`);
+        // Phase 1: lightweight metadata (instant)
+        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail } }>(`/api/anime/${id}/meta`);
+        if (cancelled) return;
         if (data.success && data.data?.anime) {
           const a = data.data.anime;
           setAnime(a);
           setCurrentSeasonId(id);
+
+          // Sync the season selector to match the URL's season
+          const seasons = a.seasons || [];
+          const matchIdx = seasons.findIndex(s => s.id === id);
+          if (matchIdx >= 0 && matchIdx !== 0) {
+            setCurrentPage(matchIdx);
+          }
         } else {
           throw new Error("Anime not found");
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load anime");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load anime");
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     load();
-  }, [id]);
 
-  const loadEpisodes = useCallback(async (seasonId: string) => {
-    setEpisodesLoading(true);
-    setEpisodes([]);
-    setSelectedEp(null);
-    setCurrentPage(0);
-    try {
-      const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; totalEpisodes: number } }>(`/api/anime/${seasonId}/episodes`);
-      if (data.success && data.data?.episodes) {
-        const sorted = data.data.episodes.sort((a, b) => {
-          if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
-          return a.episodeNum - b.episodeNum;
-        });
-        const withRelease = sorted.map(ep => {
+    // Phase 2: episodes (heavier, loads in background)
+    const loadEps = async () => {
+      setEpisodesLoading(true);
+      try {
+        const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(`/api/anime/${id}/episodes`);
+        if (cancelled) return;
+        if (epData.success && epData.data?.episodes) {
+          const sorted = epData.data.episodes.sort((a, b) => {
+            if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
+            return a.episodeNum - b.episodeNum;
+          });
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          return { ...ep, isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= today };
-        });
-        setEpisodes(withRelease);
-      }
-    } catch { /* silent */ }
-    finally { setEpisodesLoading(false); }
-  }, []);
+          const withRelease = sorted.map(ep => ({
+            ...ep, isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= today
+          }));
+          setEpisodes(withRelease);
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setEpisodesLoading(false); }
+    };
+    loadEps();
 
-  useEffect(() => {
-    if (!id) return;
-    loadEpisodes(id);
-  }, [id, loadEpisodes]);
+    return () => { cancelled = true; };
+  }, [id]);
 
   // Autoplay via URL params (from ContinueWatching, etc.)
   useEffect(() => {
@@ -212,6 +219,13 @@ export default function AnimeDetailPage() {
   const loadedForSeason = seasonTotalRef.current[currentSeasonNum] || currentSeasonEps.length;
   const hasMoreEps = currentSeasonVisible < currentSeasonEps.length;
   const canFetchMore = currentSeasonVisible >= loadedForSeason && currentSeasonEps.length > 0;
+  const seasons = anime?.seasons || [];
+  const currentSeasonInfo = seasons.find(s => s.id === currentSeasonId);
+  const isSpecialFormat = currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("movie")
+    || currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("ova")
+    || currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("ona")
+    || currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("special");
+  const isSingleItem = currentSeasonEps.length <= 1 && isSpecialFormat;
 
   const fetchMoreEpisodes = useCallback(async () => {
     const malId = currentSeasonEps[0]?.seasonMalId;
@@ -332,8 +346,6 @@ export default function AnimeDetailPage() {
     tick();
   }, [thumbEpVersionRef.current, currentSeasonId, id]);
 
-  const seasons = anime?.seasons || [];
-
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
@@ -414,7 +426,7 @@ export default function AnimeDetailPage() {
                         className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
                       >
                         <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
-                        Watch S{episodes[0].seasonNum || 1} E{episodes[0].episodeNum}
+                        {isSingleItem ? `Watch ${currentSeasonInfo?.seasonLabel || "Movie"}` : `Watch S${episodes[0].seasonNum || 1} E${episodes[0].episodeNum}`}
                       </button>
                     ) : !episodesLoading ? (
                       <button
@@ -469,8 +481,14 @@ export default function AnimeDetailPage() {
                     {isPlaying && selectedEp && !episodesLoading && (
                       <div className="mt-4 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                          <span className="text-lg font-black text-white">Episode {selectedEp.episodeNum}</span>
-                          {selectedEp.title && <span className="text-sm text-white/50">— {selectedEp.title}</span>}
+                          {isSingleItem ? (
+                            <span className="text-lg font-black text-white">{selectedEp.title || currentSeasonInfo?.name || anime?.name}</span>
+                          ) : (
+                            <>
+                              <span className="text-lg font-black text-white">Episode {selectedEp.episodeNum}</span>
+                              {selectedEp.title && <span className="text-sm text-white/50">— {selectedEp.title}</span>}
+                            </>
+                          )}
                           {selectedEp.isFiller && (
                             <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded font-bold uppercase">Filler</span>
                           )}
@@ -623,7 +641,7 @@ export default function AnimeDetailPage() {
                       const isNewSeason = !prevEp || prevEp.seasonNum !== ep.seasonNum;
                       return (
                         <div key={ep.episodeId}>
-                          {isNewSeason && (
+                          {isNewSeason && !isSpecialFormat && (
                             <div className="flex items-center gap-3 pt-2 pb-1">
                               <div className="w-1 h-5 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg shadow-[#7288AE]/20" />
                               <span className="text-sm font-bold text-white/70">{ep.seasonName || `Season ${ep.seasonNum || 1}`}</span>
@@ -641,16 +659,18 @@ export default function AnimeDetailPage() {
                                 : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
                             )}
                           >
-                            {/* Episode Number Box (Desktop) */}
-                            <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
-                              <span className="text-sm font-bold text-white/40">{ep.episodeNum}</span>
-                            </div>
+                            {/* Episode Number Box (Desktop) - hidden for non-season formats */}
+                            {!isSpecialFormat && (
+                              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
+                                <span className="text-sm font-bold text-white/40">{ep.episodeNum}</span>
+                              </div>
+                            )}
 
-                            {/* Episode Thumbnail */}
-                            <div className="w-36 md:w-48 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
-                              {ep.thumbnail ? (
+                            {/* Thumbnail - use anime poster for movies */}
+                            <div className={`${isSingleItem ? "w-48 md:w-56 aspect-[2/3]" : "w-36 md:w-48 aspect-video"} shrink-0 rounded-xl overflow-hidden bg-muted relative self-start`}>
+                              {(ep.thumbnail || (isSingleItem && anime?.poster)) ? (
                                 <img
-                                  src={ep.thumbnail}
+                                  src={(isSingleItem && !ep.thumbnail) ? anime!.poster : ep.thumbnail!}
                                   alt={ep.title || `Episode ${ep.episodeNum}`}
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                   loading="lazy"
@@ -685,8 +705,14 @@ export default function AnimeDetailPage() {
                             <div className="flex-1 min-w-0 py-0.5">
                               <div className="flex items-start justify-between gap-2 mb-1.5">
                                 <h4 className="font-bold text-sm leading-tight text-white">
-                                  <span className="sm:hidden text-white/40 mr-1.5">E{ep.episodeNum}.</span>
-                                  {ep.title || `Episode ${ep.episodeNum}`}
+                                  {isSingleItem ? (
+                                    currentSeasonInfo?.name || ep.title || anime?.name
+                                  ) : (
+                                    <>
+                                      <span className="sm:hidden text-white/40 mr-1.5">E{ep.episodeNum}.</span>
+                                      {ep.title || `Episode ${ep.episodeNum}`}
+                                    </>
+                                  )}
                                 </h4>
                                 {ep.isFiller && (
                                   <span className="text-[9px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded shrink-0">
@@ -694,15 +720,15 @@ export default function AnimeDetailPage() {
                                   </span>
                                 )}
                               </div>
-                              {ep.description && (
-                                <p className="text-white/40 text-xs leading-relaxed line-clamp-2">{ep.description}</p>
-                              )}
+                              <p className="text-white/40 text-xs leading-relaxed line-clamp-2">
+                                {isSingleItem ? (anime?.description || ep.description) : (ep.description || "")}
+                              </p>
                             </div>
                           </div>
                       </div>
                       );
                     })}
-                    {hasMoreEps && (
+                    {!isSingleItem && hasMoreEps && (
                       <div className="flex justify-center pt-2 pb-4">
                         <button
                           onClick={loadMoreEpisodes}
@@ -712,7 +738,7 @@ export default function AnimeDetailPage() {
                         </button>
                       </div>
                     )}
-                    {canFetchMore && !hasMoreEps && (
+                    {!isSingleItem && canFetchMore && !hasMoreEps && (
                       <div className="flex justify-center pt-2 pb-4">
                         <button
                           onClick={loadMoreEpisodes}

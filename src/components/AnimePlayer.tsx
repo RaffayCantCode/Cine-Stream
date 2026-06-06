@@ -18,16 +18,36 @@ interface AnimePlayerProps {
   onAutoNext?: () => void;
 }
 
-function buildSources(animeId: string, episode: number): Source[] {
-  const id = animeId.replace(/\D/g, "");
+function buildSources(animeId: string, malId: string | null | undefined, episode: number): Source[] {
+  const anilistId = animeId.replace(/\D/g, "");
+  const malNumeric = malId ? malId.replace(/\D/g, "") : null;
+
+  // Source 1: Default vidnest anime backend (unchanged)
+  const source1Url = `https://vidnest.fun/anime/${anilistId}/${episode}/sub`;
+
+  // Source 2: AnimePahe backend via /animepahe/ path; try AniList ID first, then MAL ID
+  const source2Urls: string[] = [
+    `https://vidnest.fun/animepahe/${anilistId}/${episode}/sub`,
+  ];
+  if (malNumeric) {
+    source2Urls.push(`https://vidnest.fun/animepahe/${malNumeric}/${episode}/sub`);
+  }
+
+  // Source 3: Same default backend but different server nodes for maximum coverage
+  const source3Servers = ["gama", "sigma", "catflix", "delta", "hexa"];
+  const source3Urls: string[] = source3Servers.map(
+    s => `https://vidnest.fun/anime/${anilistId}/${episode}/sub?server=${s}`
+  );
+
   return [
-    { name: "Source 1", urls: [`https://vidnest.fun/anime/${id}/${episode}/sub`], color: "from-[#4B5694]/30 to-[#7288AE]/20" },
-    { name: "Source 2", urls: [`https://vidnest.fun/anime/${id}/${episode}/sub?source=pahe`], color: "from-[#111844]/30 to-[#4B5694]/20" },
+    { name: "Source 1", urls: [source1Url], color: "from-[#4B5694]/30 to-[#7288AE]/20" },
+    { name: "Source 2", urls: source2Urls, color: "from-[#111844]/30 to-[#4B5694]/20" },
+    { name: "Source 3", urls: source3Urls, color: "from-[#1a1a2e]/30 to-[#16213e]/20" },
   ];
 }
 
 export function AnimePlayer({ animeId, malId, animeTitle, episode, onAutoNext }: AnimePlayerProps) {
-  const sources = buildSources(animeId, episode);
+  const sources = buildSources(animeId, malId, episode);
   const [sourceIndex, setSourceIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -42,11 +62,12 @@ export function AnimePlayer({ animeId, malId, animeTitle, episode, onAutoNext }:
   const nextSourceName = sources[(sourceIndex + 1) % sources.length].name;
 
   useEffect(() => {
+    console.log(`[AnimePlayer] Loading: animeId=${animeId}, malId=${malId}, episode=${episode}, title="${animeTitle}"`);
     setIsLoading(true);
     setHasError(false);
     setUrlIndex(0);
     setSourceIndex(0);
-  }, [animeId, malId, episode]);
+  }, [animeId, malId, episode, animeTitle]);
 
   useEffect(() => {
     if (playerRef.current) {
@@ -57,11 +78,12 @@ export function AnimePlayer({ animeId, malId, animeTitle, episode, onAutoNext }:
   const switchSource = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const next = (sourceIndex + 1) % sources.length;
+    console.log(`[AnimePlayer] Switching to ${sources[next].name}, animeId=${animeId}, malId=${malId}, episode=${episode}`);
     setSourceIndex(next);
     setIsLoading(true);
     setHasError(false);
     setUrlIndex(0);
-  }, [sourceIndex, sources.length]);
+  }, [sourceIndex, sources.length, animeId, malId, episode]);
 
   // Auto-advance to next source after 8s if still loading
   useEffect(() => {
@@ -163,9 +185,11 @@ export function AnimePlayer({ animeId, malId, animeTitle, episode, onAutoNext }:
               onError={() => {
                 if (timerRef.current) clearTimeout(timerRef.current);
                 if (urlIndex < currentSource.urls.length - 1) {
+                  console.log(`[AnimePlayer] ${currentSource.name} URL #${urlIndex} failed, trying next URL`);
                   setUrlIndex(c => c + 1);
                   setIsLoading(true);
                 } else {
+                  console.warn(`[AnimePlayer] ${currentSource.name} all URLs failed for animeId=${animeId}, malId=${malId}`);
                   setHasError(true);
                   setIsLoading(false);
                 }
