@@ -63,15 +63,18 @@ export default function AnimeDetailPage() {
   const [currentSeasonId, setCurrentSeasonId] = useState<string>(id);
 
   const playerRef = useRef<HTMLDivElement>(null);
+  const seasonNumRef = useRef(1);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    const load = async () => {
+    seasonNumRef.current = 1;
+
+    // Phase 1: lightweight metadata (instant) + determine active season
+    const loadMeta = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Phase 1: lightweight metadata (instant)
         const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail } }>(`/api/anime/${id}/meta`);
         if (cancelled) return;
         if (data.success && data.data?.anime) {
@@ -79,9 +82,9 @@ export default function AnimeDetailPage() {
           setAnime(a);
           setCurrentSeasonId(id);
 
-          // Sync the season selector to match the URL's season
           const seasons = a.seasons || [];
           const matchIdx = seasons.findIndex(s => s.id === id);
+          seasonNumRef.current = matchIdx >= 0 ? matchIdx + 1 : 1;
           if (matchIdx >= 0 && matchIdx !== 0) {
             setCurrentPage(matchIdx);
           }
@@ -94,11 +97,33 @@ export default function AnimeDetailPage() {
         if (!cancelled) setIsLoading(false);
       }
     };
-    load();
+    loadMeta();
 
-    // Phase 2: episodes (heavier, loads in background)
-    const loadEps = async () => {
+    // Phase 2: fetch ONLY the active season's episodes (fast — single Jikan call)
+    const loadActiveSeason = async () => {
       setEpisodesLoading(true);
+      const seasonNum = seasonNumRef.current;
+      try {
+        const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(
+          `/api/anime/${id}/episodes?seasonNum=${seasonNum}`
+        );
+        if (cancelled) return;
+        if (epData.success && epData.data?.episodes?.length) {
+          const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const withRelease = sorted.map(ep => ({
+            ...ep, isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= today
+          }));
+          setEpisodes(withRelease);
+          setEpisodesLoading(false);
+        }
+      } catch { /* silent */ }
+    };
+    loadActiveSeason();
+
+    // Phase 3: silently fetch ALL seasons' episodes in the background
+    const loadAllSeasons = async () => {
       try {
         const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(`/api/anime/${id}/episodes`);
         if (cancelled) return;
@@ -117,7 +142,7 @@ export default function AnimeDetailPage() {
       } catch { /* silent */ }
       finally { if (!cancelled) setEpisodesLoading(false); }
     };
-    loadEps();
+    loadAllSeasons();
 
     return () => { cancelled = true; };
   }, [id]);
@@ -218,9 +243,10 @@ export default function AnimeDetailPage() {
   const displayedEps = currentSeasonEps.slice(0, currentSeasonVisible);
   const loadedForSeason = seasonTotalRef.current[currentSeasonNum] || currentSeasonEps.length;
   const hasMoreEps = currentSeasonVisible < currentSeasonEps.length;
-  const canFetchMore = currentSeasonVisible >= loadedForSeason && currentSeasonEps.length > 0;
   const seasons = anime?.seasons || [];
   const currentSeasonInfo = seasons.find(s => s.id === currentSeasonId);
+  const seasonTotal = currentSeasonInfo?.totalEpisodes || loadedForSeason;
+  const canFetchMore = currentSeasonVisible >= loadedForSeason && currentSeasonEps.length > 0 && loadedForSeason < seasonTotal;
   const isSpecialFormat = currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("movie")
     || currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("ova")
     || currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("ona")

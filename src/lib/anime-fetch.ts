@@ -498,7 +498,7 @@ export async function searchViaJikan(query: string): Promise<AnimeItem[]> {
 }
 
 // Fetch real episode metadata (titles, thumbnails, airdates) from Jikan
-async function fetchEpisodesFromJikan(
+export async function fetchEpisodesFromJikan(
   malId: number | string,
   anilistId: string,
   maxEpisodes: number
@@ -737,3 +737,4 @@ export async function fetchAnimeApi(
   const items = await getPopularAnime(page, genre);
   return { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
 }
+
