@@ -55,7 +55,7 @@ export default function AnimeBrowsePage() {
       const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
       const res = await fetchJson<{ success: boolean; data: { items: AnimeItem[] } }>(
         `/api/anime?category=${category}&page=${rng}${genreParam}`,
-        { cacheTtlMs: 60000 }
+        { cacheTtlMs: 300000 }
       );
       const merged = res.data?.items || [];
       const seen = new Set<string>();
@@ -91,7 +91,7 @@ export default function AnimeBrowsePage() {
 
       const res = await fetchJson<{ success: boolean; data: { items: AnimeItem[] }; hasMore?: boolean }>(
         `/api/anime?category=${category}&page=${loadPage}${genreParam}`,
-        { cacheTtlMs: 60000 }
+        { cacheTtlMs: 300000 }
       );
 
       const merged = res.data?.items || [];

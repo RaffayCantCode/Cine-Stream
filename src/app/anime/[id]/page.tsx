@@ -65,6 +65,15 @@ export default function AnimeDetailPage() {
   const playerRef = useRef<HTMLDivElement>(null);
   const seasonNumRef = useRef(1);
 
+  function isEpisodeReleased(releasedDate: string | null | undefined): boolean {
+    if (!releasedDate) return true;
+    const d = new Date(releasedDate);
+    if (isNaN(d.getTime())) return true;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return d <= today;
+  }
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -88,6 +97,7 @@ export default function AnimeDetailPage() {
           if (matchIdx >= 0 && matchIdx !== 0) {
             setCurrentPage(matchIdx);
           }
+          loadActiveSeason(seasonNumRef.current);
         } else {
           throw new Error("Anime not found");
         }
@@ -100,9 +110,9 @@ export default function AnimeDetailPage() {
     loadMeta();
 
     // Phase 2: fetch ONLY the active season's episodes (fast — single Jikan call)
-    const loadActiveSeason = async () => {
+    // NOTE: Called from loadMeta() AFTER seasonNumRef is correctly set
+    const loadActiveSeason = async (seasonNum: number) => {
       setEpisodesLoading(true);
-      const seasonNum = seasonNumRef.current;
       try {
         const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(
           `/api/anime/${id}/episodes?seasonNum=${seasonNum}`
@@ -110,17 +120,14 @@ export default function AnimeDetailPage() {
         if (cancelled) return;
         if (epData.success && epData.data?.episodes?.length) {
           const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
           const withRelease = sorted.map(ep => ({
-            ...ep, isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= today
+            ...ep, isReleased: isEpisodeReleased(ep.releasedDate)
           }));
           setEpisodes(withRelease);
-          setEpisodesLoading(false);
         }
       } catch { /* silent */ }
+      finally { if (!cancelled) setEpisodesLoading(false); }
     };
-    loadActiveSeason();
 
     // Phase 3: silently fetch ALL seasons' episodes in the background
     const loadAllSeasons = async () => {
@@ -132,10 +139,8 @@ export default function AnimeDetailPage() {
             if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
             return a.episodeNum - b.episodeNum;
           });
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
           const withRelease = sorted.map(ep => ({
-            ...ep, isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= today
+            ...ep, isReleased: isEpisodeReleased(ep.releasedDate)
           }));
           setEpisodes(withRelease);
         }
@@ -172,6 +177,31 @@ export default function AnimeDetailPage() {
     return () => cancelAnimationFrame(id);
   }, [selectedEp?.episodeId, isPlaying, episodesLoading]);
 
+  const fetchSeasonEpisodes = useCallback(async (seasonNum: number) => {
+    setEpisodesLoading(true);
+    try {
+      const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(
+        `/api/anime/${id}/episodes?seasonNum=${seasonNum}`
+      );
+      if (epData.success && epData.data?.episodes?.length) {
+        const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
+        const withRelease = sorted.map(ep => ({
+          ...ep, isReleased: isEpisodeReleased(ep.releasedDate)
+        }));
+        setEpisodes(prev => {
+          const existing = new Set(prev.map(e => e.episodeId));
+          const unique = withRelease.filter(e => !existing.has(e.episodeId));
+          if (unique.length === 0) return prev;
+          return [...prev, ...unique].sort((a, b) => {
+            if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
+            return a.episodeNum - b.episodeNum;
+          });
+        });
+      }
+    } catch { /* silent */ }
+    finally { setEpisodesLoading(false); }
+  }, [id]);
+
   const handleSeasonClick = (season: SeasonInfo) => {
     if (season.id === currentSeasonId) return;
     setCurrentSeasonId(season.id);
@@ -179,6 +209,10 @@ export default function AnimeDetailPage() {
     setSelectedEp(null);
     const seasonIdx = seasons.findIndex(s => s.id === season.id);
     if (seasonIdx >= 0) setCurrentPage(seasonIdx);
+    const sn = seasonIdx + 1;
+    if (!episodeGroups[sn] || episodeGroups[sn].length === 0) {
+      fetchSeasonEpisodes(sn);
+    }
   };
 
   const handleWatchEpisode = (ep: Episode) => {
@@ -277,7 +311,7 @@ export default function AnimeDetailPage() {
           seasonId: currentSeasonId,
           seasonName: currentSeasonEps[0]?.seasonName,
           seasonMalId: malId,
-          isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= new Date(),
+          isReleased: isEpisodeReleased(ep.releasedDate),
         }));
         setEpisodes(prev => {
           const existing = new Set(prev.map(e => e.episodeNum));
@@ -378,8 +412,22 @@ export default function AnimeDetailPage() {
 
       <main className="md:pl-56 lg:pl-64 pt-0 bleed-header">
         {isLoading ? (
-          <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6">
-            <div className="w-full h-[60vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background animate-pulse" />
+          <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
+            <div className="w-full h-[55vh] md:h-[65vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
+              <div className="flex gap-6 items-end w-full">
+                <div className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl bg-white/[0.06]" />
+                <div className="flex-1 space-y-3 max-w-2xl pb-2">
+                  <div className="h-3 w-16 rounded-full bg-white/[0.06]" />
+                  <div className="h-8 w-3/4 rounded-lg bg-white/[0.06]" />
+                  <div className="h-4 w-1/2 rounded-lg bg-white/[0.04]" />
+                  <div className="flex gap-2 mt-2">
+                    <div className="h-5 w-14 rounded-full bg-white/[0.05]" />
+                    <div className="h-5 w-16 rounded-full bg-white/[0.05]" />
+                    <div className="h-5 w-12 rounded-full bg-white/[0.05]" />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         ) : error ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
@@ -629,22 +677,21 @@ export default function AnimeDetailPage() {
 
                   {/* Season Selector (single set of season buttons) */}
                   {seasons.length > 1 && (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {seasons.map((season) => {
                         const isActive = season.id === currentSeasonId;
                         return (
                           <button
                             key={season.id}
                             onClick={() => handleSeasonClick(season)}
-                            disabled={isActive}
                             className={cn(
-                              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
+                              "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200",
                               isActive
-                                ? "bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white shadow-md shadow-[#4B5694]/25"
-                                : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
+                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                                : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
                             )}
                           >
-                            {season.seasonLabel} ({season.totalEpisodes} {season.totalEpisodes === 1 ? "ep" : "eps"})
+                            {season.seasonLabel} ({season.totalEpisodes} eps)
                           </button>
                         );
                       })}
@@ -659,13 +706,21 @@ export default function AnimeDetailPage() {
                     ))}
                   </div>
                 ) : displayedEps.length ? (
-                  <div className="space-y-3 pt-2">
-                    {displayedEps.map((ep, epIdx) => {
-                      const isSelected = selectedEp?.episodeId === ep.episodeId;
-                      const isUnreleased = ep.isReleased === false;
-                      const prevEp = epIdx > 0 ? displayedEps[epIdx - 1] : null;
-                      const isNewSeason = !prevEp || prevEp.seasonNum !== ep.seasonNum;
-                      return (
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentSeasonId}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.25 }}
+                      className="space-y-3 pt-2"
+                    >
+                      {displayedEps.map((ep, epIdx) => {
+                        const isSelected = selectedEp?.episodeId === ep.episodeId;
+                        const isUnreleased = ep.isReleased === false;
+                        const prevEp = epIdx > 0 ? displayedEps[epIdx - 1] : null;
+                        const isNewSeason = !prevEp || prevEp.seasonNum !== ep.seasonNum;
+                        return (
                         <div key={ep.episodeId}>
                           {isNewSeason && !isSpecialFormat && (
                             <div className="flex items-center gap-3 pt-2 pb-1">
@@ -685,14 +740,14 @@ export default function AnimeDetailPage() {
                                 : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
                             )}
                           >
-                            {/* Episode Number Box (Desktop) - hidden for non-season formats */}
+                            {/* Episode Number Box (Desktop) */}
                             {!isSpecialFormat && (
                               <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
                                 <span className="text-sm font-bold text-white/40">{ep.episodeNum}</span>
                               </div>
                             )}
 
-                            {/* Thumbnail - use anime poster for movies */}
+                            {/* Thumbnail */}
                             <div className={`${isSingleItem ? "w-48 md:w-56 aspect-[2/3]" : "w-36 md:w-48 aspect-video"} shrink-0 rounded-xl overflow-hidden bg-muted relative self-start`}>
                               {(ep.thumbnail || (isSingleItem && anime?.poster)) ? (
                                 <img
@@ -775,7 +830,8 @@ export default function AnimeDetailPage() {
                         </button>
                       </div>
                     )}
-                  </div>
+                    </motion.div>
+                  </AnimatePresence>
                 ) : (
                   <div className="p-8 text-center text-white/30 text-sm">
                     No episodes available
