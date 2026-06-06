@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MediaRow } from "@/components/MediaRow";
-import { Film, Tv, Sparkles, TrendingUp, Star, Clapperboard, ChevronRight, Library, Globe } from "lucide-react";
+import { ContinueWatching } from "@/components/ContinueWatching";
+import { ChevronRight } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
+import { PROVIDERS } from "@/lib/providers";
 
 interface MediaItem {
   id: number;
@@ -41,39 +43,6 @@ function shuffleArray<T>(array: T[]): T[] {
   }
   return arr;
 }
-
-const portalCards = [
-  {
-    title: "Cinema",
-    subtitle: "Movies",
-    description: "Blockbusters, indie darlings, timeless classics — the big screen experience at home.",
-    icon: Film,
-    href: "/browse/movies",
-    gradient: "from-[#111844] via-[#1a2268] to-[#4B5694]",
-    borderColor: "border-[#4B5694]/50",
-    accentColor: "bg-[#4B5694]",
-  },
-  {
-    title: "Series",
-    subtitle: "TV Shows",
-    description: "Binge-worthy seasons, gripping dramas, and laugh-out-loud comedies.",
-    icon: Tv,
-    href: "/browse/tv",
-    gradient: "from-[#111844] via-[#1e2a50] to-[#7288AE]",
-    borderColor: "border-[#7288AE]/50",
-    accentColor: "bg-[#7288AE]",
-  },
-  {
-    title: "Anime",
-    subtitle: "JP Dub + Eng Sub",
-    description: "Japanese audio, English subtitles — from classics to seasonal hits.",
-    icon: Sparkles,
-    href: "/anime",
-    gradient: "from-[#111844] via-[#2a2244] to-[#EAE0CF]",
-    borderColor: "border-[#EAE0CF]/30",
-    accentColor: "bg-[#EAE0CF]",
-  },
-];
 
 export default function Home() {
   const [heroIndex, setHeroIndex] = useState(0);
@@ -181,87 +150,6 @@ export default function Home() {
       <Sidebar />
       <main className="md:pl-56 lg:pl-64 bleed-header">
 
-        {/* ─── UNIVERSE PORTAL ─── */}
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-[#111844]/60 via-[#111844]/20 to-background pointer-events-none" />
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#4B5694]/5 rounded-full blur-[120px]" />
-          <div className="absolute top-0 right-1/4 w-80 h-80 bg-[#7288AE]/5 rounded-full blur-[100px]" />
-
-          <div className="relative px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto pt-24 md:pt-28 pb-12 md:pb-16">
-            <div className="flex flex-col lg:flex-row lg:items-end gap-6 lg:gap-16 mb-10">
-              <div className="max-w-xl">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-[2px] bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] rounded-full" />
-                  <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#7288AE]">Unlimited</span>
-                </div>
-                <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-[1.05]">
-                  <span className="text-[#EAE0CF]">Movies.</span>
-                  <br />
-                  <span className="text-[#EAE0CF]">TV.</span>
-                  <br />
-                  <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">Anime.</span>
-                </h1>
-                <p className="text-[#7288AE] text-base md:text-lg mt-4 font-medium leading-relaxed max-w-md">
-                  All in one place. Stream everything you love — curated, premium, and always fresh.
-                </p>
-                <div className="flex items-center gap-4 mt-6">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase text-[#7288AE]/60">
-                    <Clapperboard className="w-3.5 h-3.5" />
-                    <span>10K+ Titles</span>
-                  </div>
-                  <div className="w-px h-4 bg-[#7288AE]/20" />
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase text-[#7288AE]/60">
-                    <Star className="w-3.5 h-3.5" />
-                    <span>Curated</span>
-                  </div>
-                  <div className="w-px h-4 bg-[#7288AE]/20" />
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase text-[#7288AE]/60">
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>HD Quality</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="hidden lg:flex items-center gap-1 text-[#EAE0CF]/30">
-                {[...Array(3)].map((_, i) => (
-                  <span key={i} className="text-2xl font-black" style={{ opacity: 0.6 - i * 0.15 }}>✦</span>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
-              {portalCards.map((card) => (
-                <Link
-                  key={card.title}
-                  href={card.href}
-                  className="group relative overflow-hidden rounded-2xl border transition-all duration-500 hover:scale-[1.02] active:scale-[0.98]"
-                  style={{ borderColor: "rgba(114, 136, 174, 0.15)" }}
-                >
-                  <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-80`} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/[0.04] to-transparent rounded-bl-full" />
-
-                  <div className="relative p-6 md:p-7">
-                    <div className={`w-12 h-12 rounded-xl ${card.accentColor}/20 border ${card.borderColor} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                      <card.icon className={`w-6 h-6 text-[#EAE0CF]`} />
-                    </div>
-
-                    <h3 className="text-xl font-black text-[#EAE0CF] mb-0.5">{card.title}</h3>
-                    <p className="text-[11px] font-bold tracking-widest uppercase text-[#7288AE]/80 mb-3">{card.subtitle}</p>
-                    <p className="text-sm text-[#7288AE]/70 leading-relaxed mb-5 line-clamp-2">{card.description}</p>
-
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-[#EAE0CF]/80 group-hover:text-[#EAE0CF] transition-colors">
-                      <span>Explore</span>
-                      <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* ─── HERO BANNER ─── */}
         {hero ? (
           <HeroBanner key={hero.id} item={hero} />
@@ -278,6 +166,9 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* ─── CONTINUE WATCHING (logged-in users only) ─── */}
+        <ContinueWatching />
 
         <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto py-12 space-y-12">
 
@@ -334,6 +225,52 @@ export default function Home() {
             isLoading={isLoading}
             seeAllHref="/browse/trending"
           />
+
+          {/* ─── STREAMING SERVICE UNIVERSE ─── */}
+          <section>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-[2px] bg-gradient-to-r from-[#7288AE] to-transparent rounded-full" />
+              <div>
+                <h2 className="text-lg font-black text-[#EAE0CF] tracking-tight">View Media From</h2>
+                <p className="text-[9px] text-[#7288AE]/50 font-semibold tracking-[0.15em] uppercase">Pick a streaming service</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+              {PROVIDERS.map((p) => (
+                <Link
+                  key={p.slug}
+                  href={`/browse/provider/${p.slug}`}
+                  className="group relative overflow-hidden rounded-xl border border-white/10 p-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:border-white/20"
+                  style={{
+                    background: `linear-gradient(135deg, ${p.color}30 0%, ${p.color}10 100%)`,
+                    boxShadow: `inset 0 0 0 1px ${p.color}20`,
+                  }}
+                >
+                  <div
+                    className="absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-40 group-hover:opacity-70 transition-opacity duration-500"
+                    style={{ background: p.color }}
+                  />
+                  <div className="relative flex items-center gap-3">
+                    <div
+                      className="w-11 h-11 rounded-lg flex items-center justify-center font-black text-base shrink-0 border border-white/10 transition-transform duration-300 group-hover:scale-110"
+                      style={{ background: p.color, color: p.textColor }}
+                    >
+                      {p.short}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold text-white group-hover:text-white transition-colors truncate">
+                        {p.name}
+                      </span>
+                      <span className="block text-[10px] text-white/40 font-medium tracking-wide uppercase">
+                        View titles
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-white/30 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
 
           {/* ─── FRANCHISE UNIVERSE ─── */}
           <section>

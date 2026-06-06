@@ -85,7 +85,7 @@ export default function BrowseMoviesPage() {
     if (initialLoad.current) return;
     setMovies([]);
     setHasMore(true);
-    nextBatchRef.current = 2;
+    nextBatchRef.current = 1;
     setPage(1);
   }, [selectedGenre, sortBy, debouncedSearch]);
 
@@ -162,7 +162,7 @@ export default function BrowseMoviesPage() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
+  }, [isLoading, hasMore]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -279,23 +279,21 @@ export default function BrowseMoviesPage() {
           </div>
         )}
 
-        {movies.length > 0 && (
-          <div
-            ref={sentinelRef}
-            className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
-          >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
-                <span className="text-sm font-medium text-white/50">Loading more...</span>
-              </div>
-            ) : hasMore ? (
-              <span className="text-xs">Scroll down for more</span>
-            ) : (
-              <span className="text-xs text-white/20">No more results</span>
-            )}
-          </div>
-        )}
+        <div
+          ref={sentinelRef}
+          className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
+        >
+          {isLoading && movies.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
+              <span className="text-sm font-medium text-white/50">Loading more...</span>
+            </div>
+          ) : movies.length > 0 && hasMore ? (
+            <span className="text-xs">Scroll down for more</span>
+          ) : movies.length > 0 && !hasMore ? (
+            <span className="text-xs text-white/20">No more results</span>
+          ) : null}
+        </div>
       </div>
       </main>
     </div>

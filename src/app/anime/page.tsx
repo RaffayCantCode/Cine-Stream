@@ -115,6 +115,7 @@ export default function AnimeBrowsePage() {
       setHasMore(false);
     } finally {
       setIsLoading(false);
+      initialLoad.current = false;
     }
   }, [getCategory, selectedGenre, sortBy]);
 
@@ -130,7 +131,6 @@ export default function AnimeBrowsePage() {
   // Initial load and reload on page change
   useEffect(() => {
     const mode = initialLoad.current;
-    initialLoad.current = false;
     loadAnime(page, mode);
   }, [page, loadKey]);
 
@@ -156,7 +156,7 @@ export default function AnimeBrowsePage() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
+  }, [isLoading, hasMore]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -251,23 +251,21 @@ export default function AnimeBrowsePage() {
             ))}
           </div>
 
-          {items.length > 0 && (
-            <div
-              ref={sentinelRef}
-              className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
-                  <span className="text-sm font-medium text-white/50">Loading more...</span>
-                </div>
-              ) : hasMore ? (
-                <span className="text-xs">Scroll down for more</span>
-              ) : (
-                <span className="text-xs text-white/20">No more results</span>
-              )}
-            </div>
-          )}
+          <div
+            ref={sentinelRef}
+            className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
+          >
+            {isLoading && items.length > 0 ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
+                <span className="text-sm font-medium text-white/50">Loading more...</span>
+              </div>
+            ) : items.length > 0 && hasMore ? (
+              <span className="text-xs">Scroll down for more</span>
+            ) : items.length > 0 && !hasMore ? (
+              <span className="text-xs text-white/20">No more results</span>
+            ) : null}
+          </div>
         </div>
       </main>
     </div>

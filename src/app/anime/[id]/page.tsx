@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { fetchJson, cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ interface Episode {
 export default function AnimeDetailPage() {
   const params = useParams();
   const id = params?.id as string;
+  const { status: authStatus } = useSession();
 
   const [anime, setAnime] = useState<AnimeDetail | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -120,6 +122,29 @@ export default function AnimeDetailPage() {
       }, 150);
     }
   }, [selectedEp?.episodeId]);
+
+  // Record watch history when an episode is selected (logged-in users only)
+  useEffect(() => {
+    if (!selectedEp || !anime || authStatus !== "authenticated") return;
+
+    const numericId = parseInt(anime.id, 10);
+    if (Number.isNaN(numericId)) return;
+
+    fetch("/api/watch-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mediaId: numericId,
+        mediaType: "anime",
+        title: anime.name,
+        posterPath: anime.poster || null,
+        backdropPath: null,
+        season: selectedEp.seasonNum || 1,
+        episode: selectedEp.episodeNum,
+        episodeName: selectedEp.title || `Episode ${selectedEp.episodeNum}`,
+      }),
+    }).catch(() => {});
+  }, [selectedEp?.episodeId, anime?.id, authStatus]);
 
   const handleSeasonClick = async (season: SeasonInfo) => {
     if (season.id === currentSeasonId) return;

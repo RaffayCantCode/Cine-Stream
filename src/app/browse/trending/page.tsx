@@ -59,7 +59,7 @@ export default function TrendingPage() {
     try {
       const pages = append
         ? [nextBatchRef.current[tab], nextBatchRef.current[tab] + 1, nextBatchRef.current[tab] + 2]
-        : [startPage];
+        : [startPage, startPage + 1, startPage + 2];
 
       const allResults = await Promise.all(
         pages.map((p) =>
@@ -124,7 +124,7 @@ export default function TrendingPage() {
     observer.observe(node);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, timeWindow, current.isLoading, current.hasMore]);
 
   const title = useMemo(() => (activeTab === "movie" ? "Trending Movies" : "Trending TV Shows"), [activeTab]);
 

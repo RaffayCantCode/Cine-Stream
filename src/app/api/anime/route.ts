@@ -3,16 +3,27 @@ import { fetchAnimeApi } from "@/lib/anime-fetch";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const category = searchParams.get("category") || "popular";
+  const categoryRaw = searchParams.get("category") || "popular";
   const page = parseInt(searchParams.get("page") || "1", 10);
   const q = searchParams.get("q") || "";
   const genre = searchParams.get("genre") || "";
+
+  let category = categoryRaw;
+  let searchKeyword = q;
+  if (categoryRaw.startsWith("search&q=")) {
+    category = "search";
+    try {
+      searchKeyword = decodeURIComponent(categoryRaw.substring("search&q=".length));
+    } catch {
+      searchKeyword = categoryRaw.substring("search&q=".length);
+    }
+  }
 
   try {
     let data: any;
 
     if (category === "search") {
-      const endpoint = `/search?keyword=${encodeURIComponent(q)}&page=${page}${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`;
+      const endpoint = `/search?keyword=${encodeURIComponent(searchKeyword)}&page=${page}${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`;
       data = await fetchAnimeApi(endpoint);
     } else if (category === "airing") {
       data = await fetchAnimeApi(`/airing?page=${page}${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`);

@@ -8,7 +8,7 @@ import { z } from "zod";
 
 const AddWatchHistorySchema = z.object({
   mediaId: z.number().int(),
-  mediaType: z.enum(["movie", "tv"]),
+  mediaType: z.enum(["movie", "tv", "anime"]),
   title: z.string(),
   posterPath: z.string().nullable().optional(),
   backdropPath: z.string().nullable().optional(),

@@ -10,7 +10,7 @@ import useSWR, { mutate } from "swr";
 interface WatchHistoryItem {
   id: number;
   mediaId: number;
-  mediaType: "movie" | "tv";
+  mediaType: "movie" | "tv" | "anime";
   title: string;
   posterPath: string | null;
   season?: number;
@@ -47,6 +47,10 @@ export function ContinueWatching() {
     e.preventDefault();
     if (item.mediaType === "movie") {
       router.push(`/movie/${item.mediaId}?autoplay=1`);
+    } else if (item.mediaType === "anime") {
+      const season = item.season ?? 1;
+      const episode = item.episode ?? 1;
+      router.push(`/anime/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
     } else {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
@@ -67,14 +71,18 @@ export function ContinueWatching() {
             const detailHref =
               item.mediaType === "movie"
                 ? `/movie/${item.mediaId}`
+                : item.mediaType === "anime"
+                ? `/anime/${item.mediaId}`
                 : `/tv/${item.mediaId}`;
             const posterUrl = item.posterPath
-              ? `https://image.tmdb.org/t/p/w342${item.posterPath}`
+              ? item.mediaType === "anime"
+                ? item.posterPath
+                : `https://image.tmdb.org/t/p/w342${item.posterPath}`
               : null;
 
             return (
               <motion.div
-                key={`${item.mediaType}-${item.mediaId}`}
+                key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05, duration: 0.35 }}
@@ -99,6 +107,12 @@ export function ContinueWatching() {
                       </div>
                     )}
 
+                    {item.mediaType === "anime" && (
+                      <div className="absolute top-2 left-2 bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md backdrop-blur-sm tracking-wider uppercase">
+                        Anime
+                      </div>
+                    )}
+
                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <button
                         onClick={(e) => handlePlay(item, e)}
@@ -109,7 +123,7 @@ export function ContinueWatching() {
                       </button>
                     </div>
 
-                    {item.mediaType === "tv" && item.season != null && item.episode != null && (
+                    {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
                       <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white/80">
                         S{item.season} E{item.episode}
                       </div>
@@ -127,7 +141,7 @@ export function ContinueWatching() {
                   <h4 className="text-xs font-semibold text-white/80 line-clamp-1 leading-tight">
                     {item.title}
                   </h4>
-                  {item.mediaType === "tv" && item.episodeName && (
+                  {(item.mediaType === "tv" || item.mediaType === "anime") && item.episodeName && (
                     <p className="text-[10px] text-white/40 mt-0.5 line-clamp-1">
                       {item.episodeName}
                     </p>

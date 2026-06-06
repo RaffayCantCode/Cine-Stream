@@ -10,6 +10,14 @@ export async function GET(request: NextRequest) {
   const params: Record<string, string> = { sort_by: sortBy, page };
   if (genreId) params.with_genres = genreId;
 
+  const withProviders = searchParams.get("withProviders");
+  const watchRegion = searchParams.get("watchRegion");
+  if (withProviders) {
+    params.with_watch_providers = withProviders;
+    params.watch_region = watchRegion || "US";
+    params.with_watch_monetization_types = "flatrate";
+  }
+
   try {
     const data = await tmdbFetch("/discover/tv", params);
     return Response.json(data);
