@@ -1,14 +1,27 @@
 import { NextRequest } from "next/server";
-import { fetchAnimeApi } from "@/lib/anime-fetch";
+import { fetchAnimeApi, fetchEpisodesFromJikanPage } from "@/lib/anime-fetch";
 import { searchTmdbShow, fetchTmdbEpisodeData } from "@/lib/tmdb";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const seasonMalId = searchParams.get("seasonMalId") || null;
+  const batchSize = 100;
 
   try {
+    // Fetching a specific page for a season (lazy-load more episodes)
+    if (seasonMalId && page > 1) {
+      const newEps = await fetchEpisodesFromJikanPage(seasonMalId, id, page, batchSize);
+      return Response.json({
+        success: true,
+        data: { episodes: newEps, totalEpisodes: 0 },
+      });
+    }
+
     const data = await fetchAnimeApi(`/series/${id}`, true);
     const rawEpisodes = data?.data?.episodes || [];
     const totalEps = data?.data?.totalEpisodes || rawEpisodes.length || 0;

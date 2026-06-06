@@ -84,6 +84,22 @@ export interface TmdbEpisodeData {
 /**
  * Search TMDB for a TV show by name + year, return the TMDB show ID.
  */
+function normalizeName(s: string): string[] {
+  const stopWords = new Set(["the", "a", "an", "of", "and", "in", "to", "for", "with", "on", "at", "by", "is", "das", "der", "die", "el", "la", "le", "les"]);
+  return s.toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !stopWords.has(w));
+}
+
+function nameMatches(searchName: string, tmdbName: string): boolean {
+  const words = normalizeName(searchName);
+  if (words.length === 0) return true;
+  const tmdbWords = new Set(normalizeName(tmdbName));
+  const matched = words.filter(w => tmdbWords.has(w)).length;
+  return matched / words.length >= 0.5;
+}
+
 export async function searchTmdbShow(name: string, year?: number): Promise<number | null> {
   const cacheKey = `${name}:${year || ""}`;
   const cached = tmdbShowCache.get(cacheKey);
@@ -95,23 +111,21 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
     const data = await tmdbFetch("/search/tv", params) as { results?: { id: number; name: string; first_air_date?: string }[] };
     const results = data?.results || [];
 
-    // Try to match by year first
-    if (year) {
-      for (const show of results) {
+    for (const show of results) {
+      if (!nameMatches(name, show.name)) continue;
+      if (year) {
         const showYear = show.first_air_date ? parseInt(show.first_air_date.slice(0, 4), 10) : 0;
         if (showYear && Math.abs(showYear - year) <= 1) {
           tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
           return show.id;
         }
+      } else {
+        tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
+        return show.id;
       }
     }
 
-    // Fallback: use the first result if available
-    if (results.length > 0) {
-      tmdbShowCache.set(cacheKey, { id: results[0].id, expires: Date.now() + 86400000 });
-      return results[0].id;
-    }
-
+    // No match with name check — don't cache a wrong result, but don't block retries either
     return null;
   } catch {
     return null;

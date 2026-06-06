@@ -36,10 +36,10 @@ export function Sidebar() {
       {/* Mobile Top Header */}
       <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
-          <img src="/logo-icon.svg" alt="CineVault" className="w-8 h-8 drop-shadow-lg" />
+          <img src="/logo-icon.svg" alt="CineStream" className="w-8 h-8 drop-shadow-lg" />
           <span className="font-bold text-lg tracking-wider">
             <span className="text-white">CINE</span>
-            <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">VAULT</span>
+            <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">STREAM</span>
           </span>
         </Link>
 
@@ -124,10 +124,10 @@ export function Sidebar() {
         {/* Logo */}
         <div className="p-4 md:p-3 lg:p-4">
           <Link href="/" className="flex items-center gap-3">
-            <img src="/logo-icon.svg" alt="CineVault" className="w-10 h-10 shrink-0 drop-shadow-lg" />
+            <img src="/logo-icon.svg" alt="CineStream" className="w-10 h-10 shrink-0 drop-shadow-lg" />
             <span className="font-bold text-xl tracking-wider">
-              <span className="text-white">STREAM</span>
-              <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">VAULT</span>
+              <span className="text-white">CINE</span>
+              <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">STREAM</span>
             </span>
           </Link>
         </div>

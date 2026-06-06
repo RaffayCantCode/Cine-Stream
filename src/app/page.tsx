@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MediaRow } from "@/components/MediaRow";
 import { ContinueWatching } from "@/components/ContinueWatching";
-import { ChevronRight, Info } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import { ProviderIcon } from "@/components/ProviderIcon";
@@ -58,7 +58,7 @@ export default function Home() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showInfo, setShowInfo] = useState(false);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -155,105 +155,16 @@ export default function Home() {
       <Sidebar />
       <main className="md:pl-56 lg:pl-64 bleed-header">
 
-        {/* ─── INFO BUTTON ─── */}
-        <button
-          onClick={() => setShowInfo(true)}
+        {/* ─── INFO LINK ─── */}
+        <Link
+          href="/landing"
           className="fixed top-4 right-4 z-50 w-9 h-9 rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all"
           title="About this site"
         >
-          <Info className="w-4 h-4 text-white/60" />
-        </button>
-
-        {/* ─── INFO MODAL ─── */}
-        {showInfo && (
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-            onClick={() => setShowInfo(false)}
-          >
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="relative max-w-lg w-full bg-[#0a0e1a] border border-white/[0.08] rounded-2xl p-6 md:p-8 shadow-2xl max-h-[85vh] overflow-y-auto"
-            >
-              <button
-                onClick={() => setShowInfo(false)}
-                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all text-white/40 hover:text-white/80"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                </svg>
-              </button>
-
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-xl font-bold text-white mb-1">About Stream Vault</h2>
-                  <p className="text-xs text-white/40 font-medium tracking-wider uppercase">Disclaimer &amp; Privacy</p>
-                </div>
-
-                <div className="space-y-4 text-sm text-white/60 leading-relaxed">
-                  <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-3">
-                    <h3 className="font-bold text-white text-sm">No Content Hosting</h3>
-                    <p>
-                      Stream Vault does not host, store, upload, or distribute any copyrighted media files on its servers. 
-                      All movies, TV shows, and anime content displayed on this site are sourced exclusively from third-party 
-                      streaming providers and APIs.
-                    </p>
-                  </div>
-
-                  <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-3">
-                    <h3 className="font-bold text-white text-sm">Third-Party Sources</h3>
-                    <p>
-                      This site acts solely as an index and discovery platform. Media metadata, cover art, and streaming 
-                      links are provided by third-party services including TMDB (The Movie Database), AniList, Jikan 
-                      (MyAnimeList API), and various streaming aggregators. We do not control or endorse the content 
-                      served by these sources.
-                    </p>
-                  </div>
-
-                  <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-3">
-                    <h3 className="font-bold text-white text-sm">Copyright &amp; Fair Use</h3>
-                    <p>
-                      All product names, logos, brands, and trademarks displayed on this website are the property of 
-                      their respective owners. Stream Vault is not affiliated with, endorsed by, or connected to any 
-                      of the content providers or studios referenced herein.
-                    </p>
-                    <p>
-                      If you believe any content infringes on your copyright, please contact the respective third-party 
-                      source directly. We will remove any references upon valid takedown requests directed at the 
-                      originating provider.
-                    </p>
-                  </div>
-
-                  <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-3">
-                    <h3 className="font-bold text-white text-sm">Privacy</h3>
-                    <p>
-                      Stream Vault does not collect, store, or share personal data. Minimal local storage is used for 
-                      preferences (theme, continue-watching progress) and session management via authentication tokens. 
-                      No analytics or tracking scripts are employed on this site.
-                    </p>
-                  </div>
-
-                  <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-3">
-                    <h3 className="font-bold text-white text-sm">Disclaimer</h3>
-                    <p>
-                      This is a non-commercial, educational project. All content displayed is sourced from 
-                      third-party providers. No affiliation with any studio or network is claimed.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    onClick={() => setShowInfo(false)}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-lg hover:shadow-[#4B5694]/25 transition-all"
-                  >
-                    Got it
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+          </svg>
+        </Link>
 
         {/* ─── HERO BANNER ─── */}
         {hero ? (
@@ -435,9 +346,9 @@ export default function Home() {
           {/* ─── FOOTER TAG ─── */}
           <footer className="border-t border-[#7288AE]/10 pt-8 pb-4 text-center">
             <div className="flex items-center justify-center gap-2 mb-3">
-              <img src="/logo-icon.svg" alt="CineVault" className="w-6 h-6 opacity-50" />
+              <img src="/logo-icon.svg" alt="CineStream" className="w-6 h-6 opacity-50" />
               <span className="text-sm font-bold tracking-wider text-[#7288AE]/40">
-                CINE<span className="text-[#EAE0CF]/40">VAULT</span>
+                CINE<span className="text-[#EAE0CF]/40">STREAM</span>
               </span>
             </div>
             <p className="text-[10px] text-[#7288AE]/30 font-medium tracking-wider">

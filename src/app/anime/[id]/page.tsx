@@ -140,14 +140,13 @@ export default function AnimeDetailPage() {
     return () => cancelAnimationFrame(id);
   }, [selectedEp?.episodeId, isPlaying, episodesLoading]);
 
-  const handleSeasonClick = async (season: SeasonInfo) => {
+  const handleSeasonClick = (season: SeasonInfo) => {
     if (season.id === currentSeasonId) return;
     setCurrentSeasonId(season.id);
     setIsPlaying(false);
     setSelectedEp(null);
     const seasonIdx = seasons.findIndex(s => s.id === season.id);
     if (seasonIdx >= 0) setCurrentPage(seasonIdx);
-    loadEpisodes(season.id);
   };
 
   const handleWatchEpisode = (ep: Episode) => {
@@ -191,18 +190,74 @@ export default function AnimeDetailPage() {
   const currentIdx = episodes.findIndex(e => e.episodeId === selectedEp?.episodeId);
 
   const [visiblePerSeason, setVisiblePerSeason] = useState<Record<number, number>>({});
+  const [loadingMore, setLoadingMore] = useState(false);
+  const seasonPageRef = useRef<Record<number, number>>({});
+  const seasonTotalRef = useRef<Record<number, number>>({});
+
+  useEffect(() => {
+    if (episodes.length === 0) return;
+    const counts: Record<number, number> = {};
+    for (const ep of episodes) {
+      const sn = ep.seasonNum || 1;
+      counts[sn] = (counts[sn] || 0) + 1;
+    }
+    seasonTotalRef.current = counts;
+    seasonPageRef.current = {};
+  }, [episodes]);
 
   const currentSeasonNum = currentPage + 1;
   const currentSeasonVisible = visiblePerSeason[currentSeasonNum] || EPISODES_PER_PAGE;
   const currentSeasonEps = episodeGroups[currentSeasonNum] || [];
   const displayedEps = currentSeasonEps.slice(0, currentSeasonVisible);
+  const loadedForSeason = seasonTotalRef.current[currentSeasonNum] || currentSeasonEps.length;
   const hasMoreEps = currentSeasonVisible < currentSeasonEps.length;
+  const canFetchMore = currentSeasonVisible >= loadedForSeason && currentSeasonEps.length > 0;
+
+  const fetchMoreEpisodes = useCallback(async () => {
+    const malId = currentSeasonEps[0]?.seasonMalId;
+    if (!malId) return;
+    const page = (seasonPageRef.current[currentSeasonNum] || 1) + 1;
+    seasonPageRef.current[currentSeasonNum] = page;
+    setLoadingMore(true);
+    try {
+      const data = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(
+        `/api/anime/${id}/episodes?seasonMalId=${malId}&page=${page}`
+      );
+      if (data.success && data.data?.episodes?.length) {
+        const newEps: Episode[] = data.data.episodes.map(ep => ({
+          episodeId: `${id}-${ep.episodeNum}`,
+          episodeNum: ep.episodeNum,
+          title: ep.title,
+          thumbnail: ep.thumbnail,
+          malUrl: ep.malUrl,
+          isFiller: ep.isFiller,
+          releasedDate: ep.releasedDate,
+          description: ep.description,
+          seasonNum: currentSeasonNum,
+          seasonId: currentSeasonId,
+          seasonName: currentSeasonEps[0]?.seasonName,
+          seasonMalId: malId,
+          isReleased: !ep.releasedDate || new Date(ep.releasedDate) <= new Date(),
+        }));
+        setEpisodes(prev => {
+          const existing = new Set(prev.map(e => e.episodeNum));
+          const unique = newEps.filter(e => !existing.has(e.episodeNum));
+          return [...prev, ...unique].sort((a, b) => a.episodeNum - b.episodeNum);
+        });
+      }
+    } catch { /* silent */ }
+    finally { setLoadingMore(false); }
+  }, [id, currentSeasonNum, currentSeasonId, currentSeasonEps]);
 
   const loadMoreEpisodes = () => {
+    const nextCount = (visiblePerSeason[currentSeasonNum] || EPISODES_PER_PAGE) + EPISODES_PER_PAGE;
     setVisiblePerSeason(prev => ({
       ...prev,
-      [currentSeasonNum]: (prev[currentSeasonNum] || EPISODES_PER_PAGE) + EPISODES_PER_PAGE,
+      [currentSeasonNum]: nextCount,
     }));
+    if (nextCount >= loadedForSeason) {
+      fetchMoreEpisodes();
+    }
   };
 
   const handlePrev = () => {
@@ -234,10 +289,9 @@ export default function AnimeDetailPage() {
   const thumbEpVersionRef = useRef(0);
   useEffect(() => {
     thumbEpVersionRef.current++;
+    thumbnailFetchingRef.current.clear();
   }, [episodes.length, currentSeasonId]);
   useEffect(() => {
-    if (thumbTimerRef.current) clearTimeout(thumbTimerRef.current);
-
     const loading = thumbnailFetchingRef.current;
     const currentEps = episodes.filter(ep => ep.seasonId === currentSeasonId);
     const needThumb = currentEps.filter(ep => !ep.thumbnail && ep.malUrl && !loading.has(ep.episodeId));
@@ -252,11 +306,13 @@ export default function AnimeDetailPage() {
       }
     }
 
-    let i = 0;
     const BATCH = 6;
+    const total = needThumb.length;
+    let pos = 0;
+
     const tick = () => {
-      const batch = needThumb.slice(i, i + BATCH);
-      i += BATCH;
+      const batch = needThumb.slice(pos, pos + BATCH);
+      pos += BATCH;
       for (const ep of batch) {
         loading.add(ep.episodeId);
         fetch(`/api/anime/thumbnail?url=${encodeURIComponent(ep.malUrl!)}`)
@@ -271,12 +327,10 @@ export default function AnimeDetailPage() {
           .catch(() => {})
           .finally(() => loading.delete(ep.episodeId));
       }
-      if (i < needThumb.length) thumbTimerRef.current = setTimeout(tick, 200);
+      if (pos < total) thumbTimerRef.current = setTimeout(tick, 200);
     };
     tick();
-
-    return () => { if (thumbTimerRef.current) clearTimeout(thumbTimerRef.current); };
-  }, [thumbEpVersionRef.current, currentSeasonId, id, selectedEp?.episodeId]);
+  }, [thumbEpVersionRef.current, currentSeasonId, id]);
 
   const seasons = anime?.seasons || [];
 
@@ -518,32 +572,6 @@ export default function AnimeDetailPage() {
                 </div>
               </div>
 
-              {/* Season Selector */}
-              {seasons.length > 1 && (
-                <div className="max-w-5xl mx-auto w-full">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {seasons.map((season) => {
-                      const isActive = season.id === currentSeasonId;
-                      return (
-                        <button
-                          key={season.id}
-                          onClick={() => handleSeasonClick(season)}
-                          disabled={isActive}
-                          className={cn(
-                            "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
-                            isActive
-                              ? "bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white shadow-md shadow-[#4B5694]/25"
-                              : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
-                          )}
-                        >
-                          {season.seasonLabel} ({season.totalEpisodes} {season.totalEpisodes === 1 ? "ep" : "eps"})
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Visually Stunning Episodes Section (Below the Player) */}
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
@@ -555,29 +583,24 @@ export default function AnimeDetailPage() {
                     </span>
                   </div>
 
-                  {/* Range Tabs Selector (Jump directly between sets of 30 episodes) */}
-                  {totalPages > 1 && (
+                  {/* Season Selector (single set of season buttons) */}
+                  {seasons.length > 1 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {Object.entries(episodeGroups).map(([seasonNum, eps]) => {
-                        const groupIdx = parseInt(seasonNum) - 1;
-                        const isCurrentPage = currentPage === groupIdx;
-                        const season = anime?.seasons?.[groupIdx];
-                        const label = season?.seasonLabel || `Season ${seasonNum}`;
+                      {seasons.map((season) => {
+                        const isActive = season.id === currentSeasonId;
                         return (
                           <button
-                            key={seasonNum}
-                            onClick={() => {
-                              setCurrentPage(groupIdx);
-                              if (season) setCurrentSeasonId(season.id);
-                            }}
+                            key={season.id}
+                            onClick={() => handleSeasonClick(season)}
+                            disabled={isActive}
                             className={cn(
-                              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                              isCurrentPage 
-                                ? "bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white shadow-md shadow-[#4B5694]/25" 
+                              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
+                              isActive
+                                ? "bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white shadow-md shadow-[#4B5694]/25"
                                 : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
                             )}
                           >
-                            {label}
+                            {season.seasonLabel} ({season.totalEpisodes} {season.totalEpisodes === 1 ? "ep" : "eps"})
                           </button>
                         );
                       })}
@@ -686,6 +709,17 @@ export default function AnimeDetailPage() {
                           className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
                         >
                           Show {Math.min(EPISODES_PER_PAGE, currentSeasonEps.length - currentSeasonVisible)} More Episodes
+                        </button>
+                      </div>
+                    )}
+                    {canFetchMore && !hasMoreEps && (
+                      <div className="flex justify-center pt-2 pb-4">
+                        <button
+                          onClick={loadMoreEpisodes}
+                          disabled={loadingMore}
+                          className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all disabled:opacity-50"
+                        >
+                          {loadingMore ? "Loading..." : `Load Next ${EPISODES_PER_PAGE} Episodes`}
                         </button>
                       </div>
                     )}

@@ -103,7 +103,7 @@ export interface JikanResponse {
 export async function getTopAnime(page: number = 1, limit: number = 25): Promise<any> {
   try {
     const res = await fetch(`${JIKAN_BASE}/top/anime?page=${page}&limit=${limit}`, {
-      headers: { "User-Agent": "CineVault/1.0" },
+      headers: { "User-Agent": "CineStream/1.0" },
       next: { revalidate: 300 },
     });
     if (!res.ok) throw new Error(`Jikan returned ${res.status}`);
@@ -119,7 +119,7 @@ export async function getTopAnime(page: number = 1, limit: number = 25): Promise
 export async function getCurrentlyAiring(page: number = 1, limit: number = 25): Promise<any> {
   try {
     const res = await fetch(`${JIKAN_BASE}/seasons/now?page=${page}&limit=${limit}`, {
-      headers: { "User-Agent": "CineVault/1.0" },
+      headers: { "User-Agent": "CineStream/1.0" },
       next: { revalidate: 300 },
     });
     if (!res.ok) throw new Error(`Jikan returned ${res.status}`);
@@ -137,7 +137,7 @@ export async function searchAnime(query: string, page: number = 1, limit: number
     const res = await fetch(
       `${JIKAN_BASE}/anime?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}&sfw`,
       {
-        headers: { "User-Agent": "CineVault/1.0" },
+        headers: { "User-Agent": "CineStream/1.0" },
         next: { revalidate: 300 },
       }
     );
@@ -154,7 +154,7 @@ export async function searchAnime(query: string, page: number = 1, limit: number
 export async function getAnimeDetails(malId: number): Promise<any> {
   try {
     const res = await fetch(`${JIKAN_BASE}/anime/${malId}`, {
-      headers: { "User-Agent": "CineVault/1.0" },
+      headers: { "User-Agent": "CineStream/1.0" },
       next: { revalidate: 300 },
     });
     if (!res.ok) throw new Error(`Jikan returned ${res.status}`);
@@ -207,7 +207,7 @@ export async function getRecentAnime(page: number = 1, limit: number = 25): Prom
     const res = await fetch(
       `${JIKAN_BASE}/seasons/${currentYear}/${currentSeason}?page=${page}&limit=${limit}`,
       {
-        headers: { "User-Agent": "CineVault/1.0" },
+        headers: { "User-Agent": "CineStream/1.0" },
         next: { revalidate: 300 },
       }
     );

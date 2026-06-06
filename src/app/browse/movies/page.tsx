@@ -30,6 +30,7 @@ export default function BrowseMoviesPage() {
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   const [page, setPage] = useState(() => Math.floor(Math.random() * 100) + 1);
+  const [loadKey, setLoadKey] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -87,6 +88,7 @@ export default function BrowseMoviesPage() {
     setHasMore(true);
     nextBatchRef.current = 1;
     setPage(1);
+    setLoadKey(k => k + 1);
   }, [selectedGenre, sortBy, debouncedSearch]);
 
   useEffect(() => {
@@ -147,7 +149,7 @@ export default function BrowseMoviesPage() {
     };
 
     fetchMovies();
-  }, [selectedGenre, sortBy, page, debouncedSearch]);
+  }, [page, loadKey]);
 
   useEffect(() => {
     const node = sentinelRef.current;

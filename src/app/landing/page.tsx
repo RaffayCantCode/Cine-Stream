@@ -41,10 +41,10 @@ export default function LandingPage() {
       <nav className="fixed top-0 inset-x-0 z-50 h-16 flex items-center px-6 md:px-12">
         <div className="max-w-screen-2xl mx-auto w-full flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <img src="/logo-icon.svg" alt="CineVault" className="w-9 h-9" />
+            <img src="/logo-icon.svg" alt="CineStream" className="w-9 h-9" />
             <span className="font-bold text-xl tracking-wider">
               <span className="text-[#EAE0CF]">CINE</span>
-              <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">VAULT</span>
+              <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">STREAM</span>
             </span>
           </Link>
           <Link
@@ -152,9 +152,9 @@ export default function LandingPage() {
       <footer className="relative border-t border-[#7288AE]/10 py-10">
         <div className="max-w-screen-2xl mx-auto px-6 md:px-12 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/logo-icon.svg" alt="CineVault" className="w-6 h-6 opacity-40" />
+            <img src="/logo-icon.svg" alt="CineStream" className="w-6 h-6 opacity-40" />
             <span className="text-sm font-bold tracking-wider text-[#7288AE]/40">
-              CINE<span className="text-[#EAE0CF]/40">VAULT</span>
+              CINE<span className="text-[#EAE0CF]/40">STREAM</span>
             </span>
           </div>
           <p className="text-[10px] text-[#7288AE]/30 font-medium tracking-wider">

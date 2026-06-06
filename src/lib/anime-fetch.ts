@@ -207,8 +207,10 @@ const RELATIONS_QUERY = `query ($id: Int) {
   }
 }`;
 
+const INITIAL_EP_LIMIT = 100;
+
 // Get anime details + related seasons via AniList + Jikan fallback
-export async function getAnimeDetails(id: string): Promise<{
+export async function getAnimeDetails(id: string, epLimit = INITIAL_EP_LIMIT): Promise<{
   anime: AnimeItem;
   episodes: EpisodeDetail[];
   totalEpisodes: number;
@@ -245,11 +247,11 @@ export async function getAnimeDetails(id: string): Promise<{
         if (a && a.rating !== "rx") {
           const totalEps = Math.max(a.episodes || 12, 1);
           let episodes: EpisodeDetail[] = [];
-          const realEps = await fetchEpisodesFromJikan(numId, String(numId), totalEps);
+          const realEps = await fetchEpisodesFromJikan(numId, String(numId), Math.min(totalEps, epLimit));
           if (realEps) episodes = realEps;
 
           const existingNums = new Set(episodes.map(e => e.episodeNum));
-          for (let i = 1; i <= totalEps; i++) {
+          for (let i = 1; i <= Math.min(totalEps, epLimit); i++) {
             if (!existingNums.has(i)) {
               episodes.push({
                 episodeId: `${id}-${i}`,
@@ -396,14 +398,15 @@ export async function getAnimeDetails(id: string): Promise<{
       ? Math.max(s.episodes || 1, 1)
       : Math.max(s.episodes || 12, 1);
 
+    const seasonCap = Math.min(maxEp, epLimit);
     let seasonEps: EpisodeDetail[] = [];
     if (seasonMalId) {
-      const realEps = await fetchEpisodesFromJikan(seasonMalId, seasonId, maxEp);
+      const realEps = await fetchEpisodesFromJikan(seasonMalId, seasonId, seasonCap);
       if (realEps) seasonEps = realEps;
     }
 
     const existingNums = new Set(seasonEps.map(e => e.episodeNum));
-    for (let i = 1; i <= Math.min(maxEp, 500); i++) {
+    for (let i = 1; i <= seasonCap; i++) {
       if (!existingNums.has(i)) {
         seasonEps.push({
           episodeId: `${seasonId}-${i}`,
@@ -440,7 +443,7 @@ export async function searchViaJikan(query: string): Promise<AnimeItem[]> {
   try {
     const res = await fetch(
       `${JIKAN_BASE}/anime?q=${encodeURIComponent(query)}&limit=25&sfw`,
-      { headers: { "User-Agent": "CineVault/1.0" }, signal: AbortSignal.timeout(6000) }
+      { headers: { "User-Agent": "CineStream/1.0" }, signal: AbortSignal.timeout(6000) }
     );
     if (!res.ok) return [];
     const data = await res.json();
@@ -476,7 +479,7 @@ async function fetchEpisodesFromJikan(
     while (hasMore && allEps.length < maxEpisodes) {
       const res = await fetch(
         `${JIKAN_BASE}/anime/${malId}/episodes?page=${page}`,
-        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineVault/1.0" } }
+        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" } }
       );
       if (res.status === 429 && retries < 3) {
         retries++;
@@ -515,6 +518,64 @@ async function fetchEpisodesFromJikan(
     return allEps.length > 0 ? allEps : null;
   } catch {
     return null;
+  }
+}
+
+// Fetch episodes from Jikan starting at a specific page (for lazy-loading more episodes)
+export async function fetchEpisodesFromJikanPage(
+  malId: number | string,
+  anilistId: string,
+  startPage: number,
+  limit: number
+): Promise<EpisodeDetail[]> {
+  try {
+    const allEps: EpisodeDetail[] = [];
+    let page = startPage;
+    let hasMore = true;
+    let retries = 0;
+
+    while (hasMore && allEps.length < limit) {
+      const res = await fetch(
+        `${JIKAN_BASE}/anime/${malId}/episodes?page=${page}`,
+        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" } }
+      );
+      if (res.status === 429 && retries < 3) {
+        retries++;
+        await new Promise(r => setTimeout(r, 1500 * retries));
+        continue;
+      }
+      if (!res.ok) break;
+
+      const data = await res.json();
+      const pageEps = data.data || [];
+      if (pageEps.length === 0) break;
+
+      for (const ep of pageEps) {
+        const epNum = typeof ep.episode === "number" ? ep.episode : ep.mal_id;
+        if (!epNum) continue;
+        allEps.push({
+          episodeId: `${anilistId}-${epNum}`,
+          episodeNum: epNum,
+          title: ep.title || `Episode ${epNum}`,
+          description: ep.synopsis || null,
+          thumbnail: ep.images?.jpg?.image_url || null,
+          releasedDate: ep.aired || null,
+          isFiller: ep.filler || false,
+          isRecap: ep.recap || false,
+          malUrl: ep.url || null,
+        });
+      }
+
+      const totalPages = data.pagination?.last_visible_page || page;
+      hasMore = page < totalPages && allEps.length < limit;
+      page++;
+      if (hasMore) await new Promise(r => setTimeout(r, 350));
+    }
+
+    allEps.sort((a, b) => a.episodeNum - b.episodeNum);
+    return allEps;
+  } catch {
+    return [];
   }
 }
 
