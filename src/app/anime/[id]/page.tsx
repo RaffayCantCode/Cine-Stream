@@ -42,27 +42,12 @@ interface Episode {
   releasedDate?: string;
   isReleased?: boolean;
   description?: string;
+  vote_average?: number;
+  runtime?: number;
   seasonNum?: number;
   seasonId?: string;
   seasonName?: string;
   seasonMalId?: number | null;
-}
-
-interface TmdbEpisode {
-  episodeNum: number;
-  title: string;
-  thumbnail: string | null;
-  description: string | null;
-  vote_average?: number;
-  runtime?: number;
-}
-
-interface TmdbSeasonData {
-  id: number;
-  season_number: number;
-  name: string;
-  overview: string;
-  episodes: TmdbEpisode[];
 }
 
 export default function AnimeDetailPage() {
@@ -83,11 +68,8 @@ export default function AnimeDetailPage() {
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
   const [showSeasonGuide, setShowSeasonGuide] = useState(false);
 
-  // TMDB season data (for rich episode display — same UX as the TV show page)
-  const [tmdbSeason, setTmdbSeason] = useState<TmdbSeasonData | null>(null);
-  const [tmdbSeasonLoading, setTmdbSeasonLoading] = useState(false);
   const tmdbIdRef = useRef<number | null>(null);
-  const tmdbSeasonRef = useRef<number | null>(null);
+  const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
 
   interface FranchiseNode {
     id: number;
@@ -123,8 +105,9 @@ export default function AnimeDetailPage() {
     if (!forceReload && loadedSeasonIds.current.has(seasonId)) return;
 
     setEpisodesLoading(true);
+    setSeasonOverview(null);
     try {
-      const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[] } }>(
+      const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}`
       );
       if (epData.success && epData.data?.episodes?.length) {
@@ -141,6 +124,7 @@ export default function AnimeDetailPage() {
           });
           return merged;
         });
+        setSeasonOverview(epData.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
       }
     } catch { /* silent */ }
@@ -152,15 +136,13 @@ export default function AnimeDetailPage() {
     if (!id) return;
     let cancelled = false;
     loadedSeasonIds.current.clear();
-    setTmdbSeason(null);
     tmdbIdRef.current = null;
-    tmdbSeasonRef.current = null;
 
     const loadMeta = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[] } }>(`/api/anime/${id}/meta`);
+        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(`/api/anime/${id}/meta`);
         if (cancelled) return;
         if (data.success && data.data?.anime) {
           const a = data.data.anime;
@@ -226,71 +208,8 @@ export default function AnimeDetailPage() {
     return () => cancelAnimationFrame(animId);
   }, [selectedEp?.episodeId, isPlaying, episodesLoading]);
 
-  // ── Fetch TMDB season for display (matches the TV show page UX) ────────
-  // Maps a franchise position to a TMDB season number:
-  //   "Season N"   → TMDB season N
-  //   "Special N"  → TMDB season 0  (TMDB convention for specials)
-  //   "Movie N"    → no TMDB data
-  //   "OVA N"      → no TMDB data
-  const seasonIdxForTmdb = useCallback((season: SeasonInfo, allSeasons: SeasonInfo[]): number | null => {
-    const label = season.seasonLabel || "";
-    if (/^Season\s+\d+$/i.test(label)) {
-      const idx = allSeasons.findIndex(s => s.id === season.id);
-      return idx >= 0 ? idx + 1 : null;
-    }
-    if (/^Special\s+\d+$/i.test(label)) {
-      return 0; // TMDB stores specials in season 0
-    }
-    return null; // Movies/OVAs have no TMDB season equivalent
-  }, []);
-
-  useEffect(() => {
-    if (!tmdbIdRef.current || !anime) return;
-    const seasons = anime.seasons || [];
-    const season = seasons.find(s => s.id === currentSeasonId);
-    if (!season) return;
-    const tmdbSeasonNum = seasonIdxForTmdb(season, seasons);
-    if (tmdbSeasonNum === null) {
-      setTmdbSeason(null);
-      tmdbSeasonRef.current = null;
-      return;
-    }
-    let cancelled = false;
-    setTmdbSeasonLoading(true);
-    setTmdbSeason(null);
-    fetch(`/api/tmdb/tv/${tmdbIdRef.current}/season/${tmdbSeasonNum}`)
-      .then(r => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        if (data && data.id && Array.isArray(data.episodes)) {
-          const mapped: TmdbSeasonData = {
-            id: data.id,
-            season_number: data.season_number,
-            name: data.name || "",
-            overview: data.overview || "",
-            episodes: (data.episodes || []).map((ep: any) => ({
-              episodeNum: ep.episode_number,
-              title: ep.name || "",
-              thumbnail: ep.still_path
-                ? `https://image.tmdb.org/t/p/w300${ep.still_path}`
-                : null,
-              description: ep.overview || null,
-              vote_average: ep.vote_average,
-              runtime: ep.runtime,
-            })),
-          };
-          setTmdbSeason(mapped);
-          tmdbSeasonRef.current = tmdbSeasonNum;
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setTmdbSeason(null);
-      })
-      .finally(() => {
-        if (!cancelled) setTmdbSeasonLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [currentSeasonId, anime, seasonIdxForTmdb]);
+  // ── Season overview text from TMDB (included in episodes response) ────
+  // The episodes endpoint now returns TMDB-enriched data directly with seasonOverview
 
   // ── Season click handler ────────────────────────────────────────────────
   const handleSeasonClick = useCallback((season: SeasonInfo) => {
@@ -298,7 +217,6 @@ export default function AnimeDetailPage() {
     setCurrentSeasonId(season.id);
     setIsPlaying(false);
     setSelectedEp(null);
-    setTmdbSeason(null); // will refetch on season change
     loadSeasonEpisodes(season.id);
   }, [currentSeasonId, loadSeasonEpisodes]);
 
@@ -374,6 +292,21 @@ export default function AnimeDetailPage() {
   );
 
   const isSingleItem = currentSeasonEps.length <= 1 && isSpecialFormat;
+
+  // Ensure AnimePlayer always gets a valid numeric AniList ID for streaming URLs
+  // Synthetic season IDs (generated by buildSeasonsFromTmdb for unmatched TMDB seasons)
+  // start with "tmdb-" and won't work as streaming identifiers.
+  // Fall back to the page's main AniList ID in that case.
+  const streamingAnimeId = useMemo(() => {
+    const id = selectedEp?.seasonId || currentSeasonId;
+    if (id.startsWith("tmdb-")) return anime?.id || id;
+    return id;
+  }, [selectedEp?.seasonId, currentSeasonId, anime?.id]);
+
+  const streamingMalId = useMemo(() => {
+    if (selectedEp?.seasonMalId != null) return String(selectedEp.seasonMalId);
+    return anime?.idMal || null;
+  }, [selectedEp?.seasonMalId, anime?.idMal]);
 
   // ── Prev / Next episode ─────────────────────────────────────────────────
   const handlePrev = useCallback(() => {
@@ -588,8 +521,8 @@ export default function AnimeDetailPage() {
                           transition={{ duration: 0.3 }}
                         >
                           <AnimePlayer
-                            animeId={selectedEp.seasonId || currentSeasonId}
-                            malId={selectedEp.seasonMalId != null ? String(selectedEp.seasonMalId) : null}
+                            animeId={streamingAnimeId}
+                            malId={streamingMalId}
                             animeTitle={selectedEp.seasonName || anime.name}
                             episode={selectedEp.episodeNum}
                             onAutoNext={handleAutoNext}
@@ -654,9 +587,7 @@ export default function AnimeDetailPage() {
                         <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
                           {currentSeasonEps.map((ep) => {
                             const isSelected = selectedEp?.episodeId === ep.episodeId;
-                            // Prefer TMDB title (richer display) when available
-                            const tmdbEp = tmdbSeason?.episodes.find(t => t.episodeNum === ep.episodeNum);
-                            const displayTitle = tmdbEp?.title || ep.title || `Episode ${ep.episodeNum}`;
+                            const displayTitle = ep.title || `Episode ${ep.episodeNum}`;
                             return (
                               <button
                                 key={ep.episodeId}
@@ -841,61 +772,11 @@ export default function AnimeDetailPage() {
                   )}
                 </div>
 
-                {/* ── TMDB-Powered Episode Display (matches TV show page UX) ── */}
+                {/* ── Episode Display (TMDB-enriched data from server) ── */}
                 {(() => {
-                  // Build a list of episodes with merged display + streaming data
-                  // TMDB provides: title, thumbnail, description, rating, runtime
-                  // Jikan/AniList provides: episodeId, seasonId, seasonMalId (for streaming)
-                  type DisplayEp = {
-                    epNum: number;
-                    displayTitle: string;
-                    displayThumbnail: string | null;
-                    displayDescription: string | null;
-                    vote_average?: number;
-                    runtime?: number;
-                    jikanEp: Episode | null;
-                    isUnreleased: boolean;
-                    isFiller: boolean;
-                    releasedDate?: string;
-                  };
-
-                  // If we have TMDB data, use it; otherwise fall back to Jikan
-                  let displayEps: DisplayEp[] = [];
-
-                  if (tmdbSeason && tmdbSeason.episodes.length > 0) {
-                    const jikanByNum = new Map(currentSeasonEps.map(j => [j.episodeNum, j]));
-                    displayEps = tmdbSeason.episodes.map(tmdb => {
-                      const jikan = jikanByNum.get(tmdb.episodeNum) || null;
-                      return {
-                        epNum: tmdb.episodeNum,
-                        displayTitle: tmdb.title || jikan?.title || (isSingleItem ? (anime?.name || "") : `Episode ${tmdb.episodeNum}`),
-                        displayThumbnail: tmdb.thumbnail,
-                        displayDescription: tmdb.description,
-                        vote_average: tmdb.vote_average,
-                        runtime: tmdb.runtime,
-                        jikanEp: jikan,
-                        isUnreleased: jikan?.isReleased === false,
-                        isFiller: jikan?.isFiller || false,
-                        releasedDate: jikan?.releasedDate,
-                      };
-                    });
-                  } else if (currentSeasonEps.length > 0) {
-                    // Fallback: Jikan data only (no TMDB)
-                    displayEps = currentSeasonEps.map(j => ({
-                      epNum: j.episodeNum,
-                      displayTitle: j.title || (isSingleItem ? (anime?.name || "") : `Episode ${j.episodeNum}`),
-                      displayThumbnail: j.thumbnail || (isSingleItem ? anime?.poster || null : null),
-                      displayDescription: j.description || (isSingleItem ? anime?.description || null : null),
-                      jikanEp: j,
-                      isUnreleased: j.isReleased === false,
-                      isFiller: j.isFiller || false,
-                      releasedDate: j.releasedDate,
-                    }));
-                  }
-
-                  const isLoading_ = episodesLoading || (tmdbIdRef.current && !tmdbSeason && tmdbSeasonLoading);
-
-                  if (isLoading_ && displayEps.length === 0) {
+                  // Episodes are already TMDB-enriched from the server endpoint
+                  // currentSeasonEps has titles, thumbnails, descriptions, ratings, runtimes from TMDB
+                  if (episodesLoading && currentSeasonEps.length === 0) {
                     return (
                       <div className="flex flex-col items-center justify-center p-12 rounded-2xl border border-white/[0.06] bg-white/[0.02] min-h-[260px] text-center backdrop-blur-md relative overflow-hidden">
                         <div className="absolute inset-0 bg-gradient-to-tr from-[#4B5694]/5 via-transparent to-[#7288AE]/5 animate-pulse" />
@@ -913,7 +794,7 @@ export default function AnimeDetailPage() {
                     );
                   }
 
-                  if (displayEps.length === 0) {
+                  if (currentSeasonEps.length === 0) {
                     return (
                       <div className="p-8 text-center text-white/30 text-sm">
                         No episodes available
@@ -921,8 +802,8 @@ export default function AnimeDetailPage() {
                     );
                   }
 
-                  const sliceEps = displayEps.slice(0, visibleCount);
-                  const hasMore = visibleCount < displayEps.length;
+                  const sliceEps = currentSeasonEps.slice(0, visibleCount);
+                  const hasMore = visibleCount < currentSeasonEps.length;
 
                   return (
                     <AnimatePresence mode="wait">
@@ -933,48 +814,30 @@ export default function AnimeDetailPage() {
                         exit={{ opacity: 0, y: -8 }}
                         transition={{ duration: 0.25 }}
                       >
-                        {/* Season description (TMDB overview) */}
-                        {tmdbSeason?.overview && (
+                        {/* Season description (TMDB overview from episodes response) */}
+                        {seasonOverview && (
                           <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic">
-                            {tmdbSeason.overview}
+                            {seasonOverview}
                           </p>
                         )}
 
                         <div className="space-y-3">
                           {sliceEps.map((ep, i) => {
-                            const isSelected = selectedEp?.episodeId === ep.jikanEp?.episodeId;
-                            const isUnreleased = ep.isUnreleased;
-                            const thumbSrc = ep.displayThumbnail
+                            const isSelected = selectedEp?.episodeId === ep.episodeId;
+                            const isUnreleased = ep.isReleased === false;
+                            const thumbSrc = ep.thumbnail
                               || (isSingleItem && anime?.poster)
                               || null;
+                            const displayTitle = ep.title || (isSingleItem ? (anime?.name || "") : `Episode ${ep.episodeNum}`);
                             return (
                               <motion.div
-                                key={`${currentSeasonId}-${ep.epNum}-${ep.jikanEp?.episodeId || 'tmdb'}`}
+                                key={`${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`}
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.025, duration: 0.3 }}
                                 onClick={() => {
                                   if (isUnreleased) return;
-                                  // Prefer Jikan ep (has streaming metadata); build a synthetic one if only TMDB exists
-                                  let toPlay = ep.jikanEp;
-                                  if (!toPlay) {
-                                    const seasonMalId = currentSeasonInfo?.idMal ?? null;
-                                    toPlay = {
-                                      episodeId: `${currentSeasonId}-${ep.epNum}`,
-                                      episodeNum: ep.epNum,
-                                      title: ep.displayTitle,
-                                      thumbnail: ep.displayThumbnail,
-                                      description: ep.displayDescription || undefined,
-                                      seasonNum: currentSeasonInfo ? seasons.findIndex(s => s.id === currentSeasonId) + 1 : 1,
-                                      seasonId: currentSeasonId,
-                                      seasonName: currentSeasonInfo?.name,
-                                      seasonMalId,
-                                    } as Episode;
-                                    console.log(`[Anime Click] Synthetic episode for ${currentSeasonId}/${ep.epNum} (no Jikan match). AniList=${currentSeasonId}, MAL=${seasonMalId}`);
-                                  } else {
-                                    console.log(`[Anime Click] Playing ${toPlay.seasonId}/${toPlay.episodeNum} (AniList=${toPlay.seasonId}, MAL=${toPlay.seasonMalId}) via Jikan`);
-                                  }
-                                  handleWatchEpisode(toPlay);
+                                  handleWatchEpisode(ep);
                                 }}
                                 className={cn(
                                   "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
@@ -986,9 +849,9 @@ export default function AnimeDetailPage() {
                                 )}
                               >
                                 {/* Episode Number — show for any season with 2+ episodes */}
-                                {displayEps.length > 1 && (
+                                {currentSeasonEps.length > 1 && (
                                   <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
-                                    <span className="text-sm font-bold text-white/40">{ep.epNum}</span>
+                                    <span className="text-sm font-bold text-white/40">{ep.episodeNum}</span>
                                   </div>
                                 )}
 
@@ -997,7 +860,7 @@ export default function AnimeDetailPage() {
                                   {thumbSrc ? (
                                     <img
                                       src={thumbSrc}
-                                      alt={ep.displayTitle || `Episode ${ep.epNum}`}
+                                      alt={displayTitle || `Episode ${ep.episodeNum}`}
                                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                       loading="lazy"
                                     />
@@ -1027,8 +890,8 @@ export default function AnimeDetailPage() {
                                 <div className="flex-1 min-w-0 py-0.5">
                                   <div className="flex items-start justify-between gap-2 mb-1.5">
                                     <h4 className="font-bold text-sm leading-tight text-white">
-                                      <span className="sm:hidden text-white/40 mr-1.5">E{ep.epNum}.</span>
-                                      {ep.displayTitle}
+                                      <span className="sm:hidden text-white/40 mr-1.5">E{ep.episodeNum}.</span>
+                                      {displayTitle}
                                     </h4>
                                     <div className="flex items-center gap-1.5 shrink-0">
                                       {ep.vote_average && ep.vote_average > 0 && (
@@ -1049,9 +912,9 @@ export default function AnimeDetailPage() {
                                       {new Date(ep.releasedDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
                                     </p>
                                   )}
-                                  {ep.displayDescription && (
+                                  {ep.description && (
                                     <p className="text-white/40 text-xs leading-relaxed line-clamp-2">
-                                      {ep.displayDescription}
+                                      {ep.description}
                                     </p>
                                   )}
                                   {ep.runtime && ep.runtime > 0 && (
@@ -1068,7 +931,7 @@ export default function AnimeDetailPage() {
                                 onClick={() => setVisibleCount(c => c + EPISODES_PER_PAGE)}
                                 className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
                               >
-                                Show {Math.min(EPISODES_PER_PAGE, displayEps.length - visibleCount)} More Episodes
+                                Show {Math.min(EPISODES_PER_PAGE, currentSeasonEps.length - visibleCount)} More Episodes
                               </button>
                             </div>
                           )}

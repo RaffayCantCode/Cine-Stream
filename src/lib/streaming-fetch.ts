@@ -26,27 +26,27 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 3",
-    baseUrl: "https://ezvidapi.com",
-    type: "ezvidapi",
+    baseUrl: "https://vidsrc.to",
+    type: "vidsrcto",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://ezvidapi.com",
+    healthCheckUrl: "https://vidsrc.to",
   },
   {
     name: "Source 4",
-    baseUrl: "https://apiplayer.ru",
-    type: "apiplayer",
+    baseUrl: "https://embed.su",
+    type: "embedsu",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://apiplayer.ru",
+    healthCheckUrl: "https://embed.su",
   },
   {
     name: "Source 5",
-    baseUrl: "https://screenscape.me",
-    type: "screenscape",
-    quality: "HD",
+    baseUrl: "https://multiembed.mov",
+    type: "multiembed",
+    quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://screenscape.me",
+    healthCheckUrl: "https://multiembed.mov",
   },
 ];
 
@@ -61,20 +61,17 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "ezvidapi":
-      // Premium: ad-free, 4 providers with auto-failover, edge-cached 12 regions, 40+ VTT subtitle languages
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?provider=vidsrc`;
-
-    case "apiplayer":
-      // Premium: multi-source failover, HLS quality selector, OpenSubtitles, postMessage API, resume watching, skip intro
+    case "vidsrcto":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "screenscape":
-      // Premium: clean embed, postMessage watch history + progress API, language selection
-      if (type === "movie") return `${api.baseUrl}/embed?tmdb=${id}&type=movie&lan=eng`;
-      return `${api.baseUrl}/embed?tmdb=${id}&type=tv&s=${season ?? 1}&e=${episode ?? 1}&lan=eng`;
+    case "embedsu":
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "multiembed":
+      if (type === "movie") return `${api.baseUrl}/?video_id=${id}&tmdb=1`;
+      return `${api.baseUrl}/?video_id=${id}&tmdb=1&s=${season ?? 1}&e=${episode ?? 1}`;
 
     default:
       return "";

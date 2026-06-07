@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { getAnimeDetails } from "@/lib/anime-fetch";
-import { searchTmdbShow } from "@/lib/tmdb";
 
 export async function GET(
   _request: NextRequest,
@@ -17,18 +16,7 @@ export async function GET(
       );
     }
 
-    const { anime, totalEpisodes, seasons, openedSeasonId, franchiseNodes } = data;
-
-    // Look up TMDB show ID once for the franchise (used by the page for TMDB episode data)
-    let tmdbId: number | null = null;
-    try {
-      tmdbId = await searchTmdbShow(anime.name, anime.seasonYear || undefined);
-      if (!tmdbId && anime.jname) {
-        tmdbId = await searchTmdbShow(anime.jname, anime.seasonYear || undefined);
-      }
-    } catch {
-      tmdbId = null;
-    }
+    const { anime, totalEpisodes, seasons, openedSeasonId, franchiseNodes, tmdbId, tmdbSeasonMap } = data;
 
     return Response.json({
       success: true,
@@ -41,6 +29,7 @@ export async function GET(
           tmdbId,
         },
         franchiseNodes,
+        tmdbSeasonMap,
       },
     });
   } catch (error) {
