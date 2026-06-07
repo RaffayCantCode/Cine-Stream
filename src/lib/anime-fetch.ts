@@ -195,15 +195,12 @@ function deduplicateAnime(items: AnimeItem[]): AnimeItem[] {
   });
 }
 
-// Group anime by franchise (normalized title) — keeps only the first/most relevant entry per franchise
+// Group anime by franchise — keeps only the first entry per exact normalized title
+// Does NOT strip season/part markers to prevent merging different entries
 function groupByFranchise(items: AnimeItem[]): AnimeItem[] {
   const grouped = new Map<string, AnimeItem>();
   for (const item of items) {
     const normalized = item.name
-      .replace(/\s*season\s+\d+/gi, '')
-      .replace(/\s*part\s+\d+/gi, '')
-      .replace(/\s*(?:final|first|second|third|fourth|fifth)\s*season/gi, '')
-      .replace(/\s*cour\s+\d+/gi, '')
       .replace(/\s*\(tv\)\s*$/i, '')
       .replace(/\s*\(.*?\)\s*$/g, '')
       .replace(/:$/, '')
@@ -212,7 +209,6 @@ function groupByFranchise(items: AnimeItem[]): AnimeItem[] {
     if (!grouped.has(normalized)) {
       grouped.set(normalized, item);
     } else {
-      // Prefer entry with MAL ID (more canonical) or shorter name
       const existing = grouped.get(normalized)!;
       if (!existing.idMal && item.idMal) {
         grouped.set(normalized, item);
@@ -449,6 +445,63 @@ function setCachedDetail(key: string, data: any) {
 const INITIAL_EP_LIMIT = 100;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// VALIDATION FUNCTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function validateSeason(
+  season: SeasonInfo,
+  animeName: string,
+  nodes: FranchiseNode[]
+): { valid: boolean; warnings: string[] } {
+  const warnings: string[] = [];
+
+  // Check episode count is reasonable
+  if (season.totalEpisodes <= 0) {
+    warnings.push(`Season "${season.seasonLabel}" has 0 episodes`);
+  }
+  if (season.totalEpisodes > 1000) {
+    warnings.push(`Season "${season.seasonLabel}" has suspiciously many episodes (${season.totalEpisodes})`);
+  }
+
+  // Check season label makes sense given format
+  const node = nodes.find(n => n.id === parseInt(season.id, 10));
+  if (node) {
+    if (node.format === "MOVIE" && !season.seasonLabel.startsWith("Movie")) {
+      warnings.push(`Season "${season.seasonLabel}" is a movie but labeled as non-movie`);
+    }
+    if (node.format === "OVA" && !season.seasonLabel.startsWith("OVA") && !season.seasonLabel.startsWith("Special")) {
+      warnings.push(`Season "${season.seasonLabel}" is OVA but labeled differently`);
+    }
+  }
+
+  return { valid: warnings.length === 0, warnings };
+}
+
+function validateEpisode(
+  ep: EpisodeDetail,
+  season: SeasonInfo,
+  allEps: EpisodeDetail[]
+): { valid: boolean; warnings: string[] } {
+  const warnings: string[] = [];
+
+  // Check episode number is within expected range
+  if (ep.episodeNum < 1) {
+    warnings.push(`Episode ${ep.episodeNum} has invalid number`);
+  }
+  if (ep.episodeNum > (season.totalEpisodes + 5)) {
+    warnings.push(`Episode ${ep.episodeNum} exceeds season total (${season.totalEpisodes})`);
+  }
+
+  // Check for duplicate episode numbers
+  const sameNum = allEps.filter(e => e.episodeNum === ep.episodeNum);
+  if (sameNum.length > 1) {
+    warnings.push(`Duplicate episode number ${ep.episodeNum} in season "${season.seasonLabel}"`);
+  }
+
+  return { valid: warnings.length === 0, warnings };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN DETAIL FUNCTION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -468,6 +521,7 @@ export async function getAnimeDetails(
   totalEpisodes: number;
   seasons: SeasonInfo[];
   openedSeasonId: string;
+  franchiseNodes: FranchiseNode[];
 } | null> {
   const numId = parseInt(id, 10);
   if (isNaN(numId)) return null;
@@ -491,7 +545,7 @@ export async function getAnimeDetails(
     // AniList failed — try Jikan fallback
   }
 
-  // Jikan fallback for the main metadata
+  // Jikan fallback for the main metadata (use ONLY if we have valid MAL ID)
   if (!media) {
     try {
       const jikanRes = await fetch(
@@ -537,9 +591,15 @@ export async function getAnimeDetails(
             seasonLabel: "Episodes", totalEpisodes: totalEps,
             isCurrent: true, idMal: a.mal_id,
           };
+          // Validate
+          const val = validateSeason(jikanSeason, animeItem.name, []);
+          if (val.warnings.length > 0) {
+            console.warn(`[Validation] Jikan fallback season warnings for ${id}:`, val.warnings);
+          }
           const jikanResult = {
             anime: animeItem, episodes, totalEpisodes: totalEps,
             seasons: [jikanSeason], openedSeasonId: id,
+            franchiseNodes: [] as FranchiseNode[],
           };
           setCachedDetail(cacheKey, jikanResult);
           return jikanResult;
@@ -552,59 +612,83 @@ export async function getAnimeDetails(
   const anime = transformAniList(media);
   if (!anime) return null;
 
-  // Step 2: Since we are keeping it independent, seasons list has only 1 entry representing the requested anime itself.
-  const formatStr = media.format || "TV";
-  const seasonLabel = ["MOVIE", "OVA", "SPECIAL"].includes(formatStr)
-    ? formatStr.charAt(0) + formatStr.slice(1).toLowerCase()
-    : "Episodes";
+  // Step 2: Build the franchise graph to find all related entries
+  let franchiseNodes: FranchiseNode[] = [];
+  try {
+    franchiseNodes = await buildFranchiseGraph(numId);
+  } catch {
+    // If franchise graph fails, continue with just this entry
+  }
 
-  const seasons: SeasonInfo[] = [{
-    id: String(media.id),
-    name: anime.name,
-    seasonLabel: seasonLabel,
-    totalEpisodes: media.episodes || 12,
-    isCurrent: true,
-    idMal: media.idMal || null,
-  }];
+  // Ensure current media is in the graph
+  const currentInGraph = franchiseNodes.find(n => n.id === numId);
+  if (!currentInGraph) {
+    franchiseNodes.push({
+      id: numId,
+      idMal: media.idMal || null,
+      title: anime.name,
+      episodes: media.episodes || null,
+      season: media.season || null,
+      seasonYear: media.seasonYear || null,
+      format: media.format || null,
+    });
+  }
 
-  const totalEpisodes = seasons[0].totalEpisodes;
+  // Step 3: Build season list from franchise graph
+  const seasons = buildSeasonList(franchiseNodes, numId);
 
-  // Step 3: If skipEpisodes, generate placeholder episodes for this single anime
+  // Step 4: Find the opened season (the one matching the requested ID)
+  const openedSeasonIndex = seasons.findIndex(s => s.id === id);
+  const openedSeason = seasons[openedSeasonIndex >= 0 ? openedSeasonIndex : 0];
+  const activeSeasonId = openedSeason?.id || id;
+
+  // Validate all seasons
+  for (const s of seasons) {
+    const val = validateSeason(s, anime.name, franchiseNodes);
+    if (val.warnings.length > 0) {
+      console.warn(`[Validation] Season warnings for "${s.name}":`, val.warnings);
+    }
+  }
+
+  // Step 5: If skipEpisodes, generate placeholder episodes for the active season only
   if (skipEpisodes) {
     const basicEpisodes: EpisodeDetail[] = [];
-    const seasonId = seasons[0].id;
-    const isSpecialFormat = ["Movie", "OVA", "Special"].includes(seasons[0].seasonLabel);
-    const count = isSpecialFormat ? 1 : Math.min(seasons[0].totalEpisodes, epLimit);
+    const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel.startsWith(t));
+    const count = isSpecialFormat ? 1 : Math.min(openedSeason.totalEpisodes, epLimit);
     for (let i = 1; i <= count; i++) {
       basicEpisodes.push({
-        episodeId: `${seasonId}-${i}`,
+        episodeId: `${activeSeasonId}-${i}`,
         episodeNum: i,
-        title: i === 1 && isSpecialFormat ? seasons[0].name : `Episode ${i}`,
+        title: i === 1 && isSpecialFormat ? openedSeason.name : `Episode ${i}`,
         description: null, thumbnail: null, malUrl: null,
         releasedDate: null, isFiller: false, isRecap: false,
-        seasonNum: 1,
-        seasonId,
-        seasonName: seasons[0].name,
-        seasonMalId: seasons[0].idMal || null,
+        seasonNum: openedSeasonIndex + 1,
+        seasonId: activeSeasonId,
+        seasonName: openedSeason.name,
+        seasonMalId: openedSeason.idMal || null,
       });
     }
-    const skipResult = { anime, episodes: basicEpisodes, totalEpisodes, seasons, openedSeasonId: id };
+    const skipResult = {
+      anime,
+      episodes: basicEpisodes,
+      totalEpisodes: openedSeason.totalEpisodes,
+      seasons,
+      openedSeasonId: activeSeasonId,
+      franchiseNodes,
+    };
     setCachedDetail(cacheKey, skipResult);
     return skipResult;
   }
 
-  // Step 4: Fetch real episodes for the single season
+  // Step 6: Fetch real episodes for the active season
   const allCombinedEpisodes: EpisodeDetail[] = [];
-  const s = seasons[0];
-  const seasonId = s.id;
-  const seasonMalId = s.idMal;
-  const isSpecialFormat = ["Movie", "OVA", "Special"].includes(s.seasonLabel);
-  const maxEp = isSpecialFormat ? Math.max(s.totalEpisodes, 1) : Math.max(s.totalEpisodes, 1);
+  const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel.startsWith(t));
+  const maxEp = isSpecialFormat ? Math.max(openedSeason.totalEpisodes, 1) : Math.max(openedSeason.totalEpisodes, 1);
   const seasonCap = Math.min(maxEp, epLimit);
   let seasonEps: EpisodeDetail[] = [];
 
-  if (seasonMalId) {
-    const realEps = await fetchEpisodesFromJikan(seasonMalId, seasonId, seasonCap);
+  if (openedSeason.idMal) {
+    const realEps = await fetchEpisodesFromJikan(openedSeason.idMal, activeSeasonId, seasonCap);
     if (realEps) seasonEps = realEps;
   }
 
@@ -613,7 +697,7 @@ export async function getAnimeDetails(
   for (let i = 1; i <= seasonCap; i++) {
     if (!existingNums.has(i)) {
       seasonEps.push({
-        episodeId: `${seasonId}-${i}`,
+        episodeId: `${activeSeasonId}-${i}`,
         episodeNum: i,
         title: `Episode ${i}`,
         description: null, thumbnail: null, malUrl: null,
@@ -624,11 +708,19 @@ export async function getAnimeDetails(
 
   seasonEps.sort((a, b) => a.episodeNum - b.episodeNum);
   seasonEps.forEach(ep => {
-    ep.seasonNum = 1;
-    ep.seasonId = seasonId;
-    ep.seasonName = s.name;
-    ep.seasonMalId = seasonMalId || null;
+    ep.seasonNum = openedSeasonIndex + 1;
+    ep.seasonId = activeSeasonId;
+    ep.seasonName = openedSeason.name;
+    ep.seasonMalId = openedSeason.idMal || null;
   });
+
+  // Validate episodes
+  for (const ep of seasonEps) {
+    const val = validateEpisode(ep, openedSeason, seasonEps);
+    if (val.warnings.length > 0) {
+      console.warn(`[Validation] Episode ${ep.episodeNum} warnings:`, val.warnings);
+    }
+  }
 
   allCombinedEpisodes.push(...seasonEps);
 
@@ -637,7 +729,8 @@ export async function getAnimeDetails(
     episodes: allCombinedEpisodes,
     totalEpisodes: allCombinedEpisodes.length,
     seasons,
-    openedSeasonId: id,
+    openedSeasonId: activeSeasonId,
+    franchiseNodes,
   };
   setCachedDetail(cacheKey, fullResult);
   return fullResult;

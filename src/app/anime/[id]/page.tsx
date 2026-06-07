@@ -8,7 +8,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { fetchJson, cn } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AnimeDetail {
@@ -60,6 +60,20 @@ export default function AnimeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Franchise node data for Season Guide
+  const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
+  const [showSeasonGuide, setShowSeasonGuide] = useState(false);
+
+  interface FranchiseNode {
+    id: number;
+    idMal: number | null;
+    title: string;
+    episodes: number | null;
+    season: string | null;
+    seasonYear: number | null;
+    format: string | null;
+  }
 
   // currentSeasonId tracks the ACTIVE season by its AniList ID
   const [currentSeasonId, setCurrentSeasonId] = useState<string>(id);
@@ -118,11 +132,12 @@ export default function AnimeDetailPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail } }>(`/api/anime/${id}/meta`);
+        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[] } }>(`/api/anime/${id}/meta`);
         if (cancelled) return;
         if (data.success && data.data?.anime) {
           const a = data.data.anime;
           setAnime(a);
+          if (data.data.franchiseNodes) setFranchiseNodes(data.data.franchiseNodes);
 
           // Determine which season should be pre-selected:
           // 1) The openedSeasonId returned by the server (the URL ID resolves to its canonical season)
@@ -580,7 +595,55 @@ export default function AnimeDetailPage() {
                       <h3 className="text-base font-bold text-white mb-3">Synopsis</h3>
                       <p className="text-white/60 text-sm leading-relaxed whitespace-pre-line">{anime.description || "No synopsis available."}</p>
                     </div>
+
+                    {/* ── Season Guide Section ── */}
+                    {franchiseNodes.length > 1 && (
+                      <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl">
+                        <button
+                          onClick={() => setShowSeasonGuide(!showSeasonGuide)}
+                          className="flex items-center justify-between w-full text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <BookOpen className="w-4 h-4 text-[#7288AE]" />
+                            <h3 className="text-base font-bold text-white">Season Guide</h3>
+                          </div>
+                          <ChevronRight className={`w-4 h-4 text-white/40 transition-transform ${showSeasonGuide ? "rotate-90" : ""}`} />
+                        </button>
+
+                        {showSeasonGuide && (
+                          <div className="mt-4 space-y-2">
+                            {seasons.map((s, idx) => {
+                              const node = franchiseNodes.find(n => n.id === parseInt(s.id, 10));
+                              const isActive = s.id === currentSeasonId;
+                              const yearStr = node?.seasonYear ? String(node.seasonYear) : "";
+                              return (
+                                <button
+                                  key={s.id}
+                                  onClick={() => handleSeasonClick(s)}
+                                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                                    isActive
+                                      ? "bg-gradient-to-r from-[#111844]/30 to-[#7288AE]/20 border border-[#7288AE]/30 text-white"
+                                      : "bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-white/60 hover:text-white"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <span className="text-[#7288AE] font-bold shrink-0 w-16 text-left">{s.seasonLabel}</span>
+                                    <span className="truncate">{s.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                                    {yearStr && <span className="text-white/30 text-[10px]">{yearStr}</span>}
+                                    <span className="text-white/40 text-[10px] bg-white/[0.06] px-2 py-0.5 rounded-md">{s.totalEpisodes} eps</span>
+                                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#7288AE] animate-pulse" />}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+
                   <div>
                     <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl space-y-4">
                       <h3 className="text-base font-bold text-white">Details</h3>
@@ -611,6 +674,36 @@ export default function AnimeDetailPage() {
                           <span className="text-white/40 block mb-1">Year</span>
                           <span className="text-white font-semibold text-sm">{anime.seasonYear || "N/A"}</span>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* ── Source Reference ── */}
+                    <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl space-y-3">
+                      <h3 className="text-base font-bold text-white">Anime Reference</h3>
+                      <p className="text-[10px] text-white/40 leading-relaxed">
+                        Verify this anime&apos;s information on the original source provider.
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        <a
+                          href={`https://anilist.co/anime/${anime.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-[#4B5694]/20 to-[#7288AE]/10 border border-[#7288AE]/20 text-white/80 hover:text-white hover:border-[#7288AE]/40 text-xs font-bold transition-all"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          View on AniList
+                        </a>
+                        {anime.idMal && (
+                          <a
+                            href={`https://myanimelist.net/anime/${anime.idMal}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.06] hover:border-white/20 text-white/60 hover:text-white text-xs font-bold transition-all"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                            View on MyAnimeList
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>

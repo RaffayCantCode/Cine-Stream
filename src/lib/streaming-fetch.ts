@@ -4,6 +4,7 @@ interface StreamingAPIConfig {
   type: string;
   quality: "Best" | "HD" | "Backup";
   supportsNativeFullscreen?: boolean;
+  healthCheckUrl?: string;
 }
 
 const STREAMING_APIS: StreamingAPIConfig[] = [
@@ -13,71 +14,60 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     type: "cinesrc",
     quality: "Best",
     supportsNativeFullscreen: true,
+    healthCheckUrl: "https://cinesrc.st",
   },
   {
     name: "Source 2",
-    baseUrl: "https://vidking.net",
-    type: "vidking",
+    baseUrl: "https://vidsrc.fyi",
+    type: "vidsrcfyi",
     quality: "Best",
     supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidsrc.fyi",
   },
   {
     name: "Source 3",
     baseUrl: "https://vidsrc.mov",
     type: "vidsrcmov",
-    quality: "HD",
+    quality: "Best",
+    healthCheckUrl: "https://vidsrc.mov",
   },
   {
     name: "Source 4",
-    baseUrl: "https://multiembed.mov",
-    type: "multiembed",
+    baseUrl: "https://vidlink.pro",
+    type: "vidlink",
     quality: "HD",
     supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidlink.pro",
   },
   {
     name: "Source 5",
-    baseUrl: "https://2embed.cc",
-    type: "2embed",
-    quality: "Backup",
+    baseUrl: "https://vidsrc.to",
+    type: "vidsrcto",
+    quality: "HD",
+    healthCheckUrl: "https://vidsrc.to",
   },
 ];
 
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number): string {
   switch (api.type) {
     case "cinesrc":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}`;
-      }
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}?s=${season ?? 1}&e=${episode ?? 1}`;
 
+    case "vidsrcfyi":
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
     case "vidsrcmov":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}`;
-      }
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "vidking":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}`;
-      }
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+    case "vidlink":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "multiembed":
-      if (type === "movie") {
-        return `${api.baseUrl}/?video_id=${id}&tmdb=1`;
-      }
-      return `${api.baseUrl}/?video_id=${id}&tmdb=1&s=${season ?? 1}&e=${episode ?? 1}`;
-
-    case "2embed":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/${id}`;
-      }
-      return `${api.baseUrl}/embedtv/${id}?s=${season ?? 1}&e=${episode ?? 1}`;
-
-    case "autoembed":
-      if (type === "movie") {
-        return `${api.baseUrl}/embed/movie/${id}`;
-      }
+    case "vidsrcto":
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     default:
@@ -106,4 +96,31 @@ export function getStreamingSources(type: "movie" | "tv", id: number, season?: n
 export function getPrimarySource(type: "movie" | "tv", id: number, season?: number, episode?: number): StreamingSource {
   const sources = getStreamingSources(type, id, season, episode);
   return sources[0];
+}
+
+// Server-side health check: returns map of source type -> alive status
+export async function checkSourceHealth(): Promise<Record<string, boolean>> {
+  const results: Record<string, boolean> = {};
+  const checks = STREAMING_APIS.map(async (api) => {
+    try {
+      const res = await fetch(api.healthCheckUrl || api.baseUrl, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(5000),
+      });
+      results[api.type] = res.ok || res.status < 500;
+    } catch {
+      results[api.type] = false;
+    }
+  });
+  await Promise.allSettled(checks);
+  STREAMING_APIS.forEach((api) => {
+    if (results[api.type] === undefined) results[api.type] = false;
+  });
+  return results;
+}
+
+// Get sources excluding known unhealthy ones
+export async function getHealthySources(type: "movie" | "tv", id: number, season?: number, episode?: number): Promise<StreamingSource[]> {
+  const health = await checkSourceHealth();
+  return getStreamingSources(type, id, season, episode).filter((s) => health[s.type] !== false);
 }
