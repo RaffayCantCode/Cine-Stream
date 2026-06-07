@@ -2,6 +2,80 @@ import { NextRequest } from "next/server";
 import { fetchAnimeApi, fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails } from "@/lib/anime-fetch";
 import { searchTmdbShow, fetchTmdbEpisodeData } from "@/lib/tmdb";
 
+function parseAnimeTitleAndSeason(rawName: string): { baseTitle: string; tmdbSeason: number } {
+  let baseTitle = rawName;
+  let tmdbSeason = 1;
+
+  // Pattern for "Season N"
+  const seasonMatch = rawName.match(/[\s:]+Season\s+(\d+)/i);
+  if (seasonMatch) {
+    tmdbSeason = parseInt(seasonMatch[1], 10);
+    baseTitle = rawName.replace(/[\s:]+Season\s+(\d+).*/i, "").trim();
+    return { baseTitle, tmdbSeason };
+  }
+
+  // Word-based seasons
+  const wordSeasons: Record<string, number> = {
+    first: 1,
+    second: 2,
+    third: 3,
+    fourth: 4,
+    fifth: 5,
+    sixth: 6,
+    seventh: 7,
+    eighth: 8,
+    ninth: 9,
+    tenth: 10
+  };
+
+  for (const [word, num] of Object.entries(wordSeasons)) {
+    const wordRegex = new RegExp(`[\\s:]+${word}\\s+season`, "i");
+    if (wordRegex.test(rawName)) {
+      tmdbSeason = num;
+      baseTitle = rawName.replace(new RegExp(`[\\s:]+${word}\\s+season.*`, "i"), "").trim();
+      return { baseTitle, tmdbSeason };
+    }
+  }
+
+  // "Nth Season" pattern
+  const nthMatch = rawName.match(/[\s:]+(\d+)(?:st|nd|rd|th)\s+Season/i);
+  if (nthMatch) {
+    tmdbSeason = parseInt(nthMatch[1], 10);
+    baseTitle = rawName.replace(/[\s:]+(\d+)(?:st|nd|rd|th)\s+Season.*/i, "").trim();
+    return { baseTitle, tmdbSeason };
+  }
+
+  // "Final Season"
+  if (/Final\s+Season/i.test(rawName)) {
+    tmdbSeason = 4; // AoT Final Season is Season 4
+    baseTitle = rawName.replace(/[\s:]+Final\s+Season.*/i, "").trim();
+    return { baseTitle, tmdbSeason };
+  }
+
+  // Strip split cour / part suffixes from TMDB search
+  if (/Part\s+\d+/i.test(rawName)) {
+    baseTitle = rawName.replace(/[\s:]+Part\s+\d+.*/i, "").trim();
+  }
+  if (/Cour\s+\d+/i.test(rawName)) {
+    baseTitle = rawName.replace(/[\s:]+Cour\s+\d+.*/i, "").trim();
+  }
+
+  // Clean trailing punctuation
+  baseTitle = baseTitle.replace(/[\s:-]+$/, "").trim();
+
+  return { baseTitle, tmdbSeason };
+}
+
+function cleanTitleForMatching(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const episodesCache = new Map<string, { data: any; expires: number }>();
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -15,14 +89,22 @@ export async function GET(
   const seasonNumParam = parseInt(searchParams.get("seasonNum") || "", 10);
   const batchSize = 100;
 
+  const cacheKey = `${id}:${searchParams.toString()}`;
+  const cached = episodesCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return Response.json(cached.data);
+  }
+
   try {
     // ── Lazy-load more episodes for a season (pagination) ──────────────────
     if (seasonMalId && page > 1) {
       const newEps = await fetchEpisodesFromJikanPage(seasonMalId, seasonId || id, page, batchSize);
-      return Response.json({
+      const resPayload = {
         success: true,
         data: { episodes: newEps, totalEpisodes: 0 },
-      });
+      };
+      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 }); // 30 mins
+      return Response.json(resPayload);
     }
 
     // ── Fetch a specific season's episodes by its AniList ID (preferred) ───
@@ -98,18 +180,49 @@ export async function GET(
       }
       seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
 
-      // TMDB enrichment for this season
+      // TMDB enrichment for this season (with season parsing & dynamic offset calculation)
       try {
         const animeName = meta.anime.name;
         const animeJname = meta.anime.jname;
         const seasonYear: number | undefined = meta.anime.seasonYear ?? undefined;
+
+        const parsed = parseAnimeTitleAndSeason(animeName);
+        const parsedJ = animeJname ? parseAnimeTitleAndSeason(animeJname) : null;
+
         let tmdbId: number | null = null;
-        if (animeName) tmdbId = await searchTmdbShow(animeName, seasonYear);
-        if (!tmdbId && animeJname) tmdbId = await searchTmdbShow(animeJname, seasonYear);
+        if (parsed.baseTitle) tmdbId = await searchTmdbShow(parsed.baseTitle, seasonYear);
+        if (!tmdbId && parsedJ?.baseTitle) tmdbId = await searchTmdbShow(parsedJ.baseTitle, seasonYear);
+
         if (tmdbId) {
-          const tmdbEpisodes = await fetchTmdbEpisodeData(tmdbId, [seasonNumFromList]);
+          // Fetch the parsed season episodes from TMDB
+          const seasonsToFetch = [parsed.tmdbSeason];
+          const tmdbEpisodes = await fetchTmdbEpisodeData(tmdbId, seasonsToFetch);
+
+          // Try to match by title to find an episode number offset (crucial for split-cours/parts)
+          let matchedOffset: number | null = null;
+          for (const ep of seasonEps) {
+            const jTitle = ep.title ? cleanTitleForMatching(ep.title) : "";
+            // Skip generic episode/special titles
+            if (!jTitle || jTitle.startsWith("episode ") || jTitle.startsWith("special ")) continue;
+
+            for (const tmdbEp of tmdbEpisodes.values()) {
+              const tTitle = tmdbEp.title ? cleanTitleForMatching(tmdbEp.title) : "";
+              if (!tTitle) continue;
+
+              if (jTitle === tTitle) {
+                matchedOffset = tmdbEp.episodeNum - ep.episodeNum;
+                break;
+              }
+            }
+            if (matchedOffset !== null) break;
+          }
+
+          const offset = matchedOffset !== null ? matchedOffset : 0;
+
+          // Apply TMDB enrichment with the calculated offset
           seasonEps = seasonEps.map((ep: any) => {
-            const key = `${seasonNumFromList}-${ep.episodeNum}`;
+            const targetEpNum = ep.episodeNum + offset;
+            const key = `${parsed.tmdbSeason}-${targetEpNum}`;
             const tmdb = tmdbEpisodes.get(key);
             if (!tmdb) return ep;
             return {
@@ -120,12 +233,16 @@ export async function GET(
             };
           });
         }
-      } catch { /* skip TMDB */ }
+      } catch (err) {
+        console.error("[TMDB Enrichment Error]:", err);
+      }
 
-      return Response.json({
+      const resPayload = {
         success: true,
         data: { episodes: seasonEps, totalEpisodes: meta.totalEpisodes },
-      });
+      };
+      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 }); // 30 mins
+      return Response.json(resPayload);
     }
 
     // ── Fallback: fetch by season index (backward compat) ──────────────────
@@ -207,10 +324,12 @@ export async function GET(
         } catch { /* skip TMDB */ }
       }
 
-      return Response.json({
+      const resPayload = {
         success: true,
         data: { episodes: seasonEps, totalEpisodes: meta.totalEpisodes },
-      });
+      };
+      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 }); // 30 mins
+      return Response.json(resPayload);
     }
 
     // ── Default: fetch ALL seasons' episodes ───────────────────────────────
@@ -257,10 +376,12 @@ export async function GET(
       }
     }
 
-    return Response.json({
+    const resPayload = {
       success: true,
       data: { episodes, totalEpisodes: totalEps },
-    });
+    };
+    episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 }); // 30 mins
+    return Response.json(resPayload);
   } catch (error) {
     console.error("[Anime Episodes Error]:", error);
     return Response.json(

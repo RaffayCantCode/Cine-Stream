@@ -40,6 +40,8 @@ function getAuthHeader(): string {
   return `Bearer ${token}`;
 }
 
+const tmdbApiCache = new Map<string, { data: any; expires: number }>();
+
 export async function tmdbFetch(
   path: string,
   params?: Record<string, string>
@@ -54,12 +56,18 @@ export async function tmdbFetch(
     }
   }
 
+  const cacheKey = url.toString();
+  const cached = tmdbApiCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+
   const res = await fetch(url.toString(), {
     headers: {
       Authorization: getAuthHeader(),
       "Content-Type": "application/json",
     },
-    next: { revalidate: 60 },
+    next: { revalidate: 600 },
   });
 
   if (!res.ok) {
@@ -67,7 +75,10 @@ export async function tmdbFetch(
   }
 
   const data = await res.json();
-  return filterTmdbResponse(data);
+  const filtered = filterTmdbResponse(data);
+  
+  tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + 300000 }); // Cache for 5 mins
+  return filtered;
 }
 
 // In-memory cache for TMDB anime show lookups (keyed by anime name + year)
@@ -111,6 +122,7 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
     const data = await tmdbFetch("/search/tv", params) as { results?: { id: number; name: string; first_air_date?: string }[] };
     const results = data?.results || [];
 
+    // First pass: try with year match
     for (const show of results) {
       if (!nameMatches(name, show.name)) continue;
       if (year) {
@@ -120,6 +132,14 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
           return show.id;
         }
       } else {
+        tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
+        return show.id;
+      }
+    }
+
+    // Second pass: fallback to first name match (essential for sequels/later seasons)
+    for (const show of results) {
+      if (nameMatches(name, show.name)) {
         tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
         return show.id;
       }

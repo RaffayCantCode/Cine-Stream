@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     return Response.json({
       success: true,
       data: { items },
-      hasMore: items.length >= 50,
+      hasMore: items.length > 0,
     });
   } catch (error) {
     console.error("[Anime API Route Error]:", error);
