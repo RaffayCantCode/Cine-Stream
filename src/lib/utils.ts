@@ -116,6 +116,11 @@ const ADULT_KEYWORDS = [
   "onlyfans", "camgirl", "webcam", "striptease", "burlesque", "erotica",
   "masturbation", "orgy", "bdsm", "fetish", "provocative", "seduction",
   "taboo", "playboy", "18+", "r18", "adults only", "mature audience",
+  "sensual", "lust", "passion", "naked", "escort", "gigolo", "swinger",
+  "swingers", "erotique", "erotico", "erotism", "strip", "pleasure",
+  "affair", "mistress", "adultery", "intercourse", "fetishism", "hentai",
+  "eroticism", "eroticas", "camshow", "sensuality", "erotisme", "orgasm",
+  "kamasutra", "voyeur", "seduce", "seduced", "seduction"
 ];
 
 export function isTmdbAnime(item: { original_language?: string; genre_ids?: number[] }): boolean {
@@ -132,7 +137,7 @@ export function filterReleasedSafeContent<T extends {
   title?: string;
   name?: string;
   overview?: string;
-}>(items: T[]): T[] {
+}>(items: T[], isSearch = false): T[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -140,8 +145,18 @@ export function filterReleasedSafeContent<T extends {
     if (item.adult === true) return false;
 
     const textToCheck = `${item.title || ""} ${item.name || ""} ${item.overview || ""}`.toLowerCase();
-    if (ADULT_KEYWORDS.some((keyword) => textToCheck.includes(keyword))) {
-      return false;
+    
+    // For non-search (browse feeds), filter aggressively out any softcore/erotic titles
+    if (!isSearch) {
+      if (ADULT_KEYWORDS.some((keyword) => textToCheck.includes(keyword))) {
+        return false;
+      }
+    } else {
+      // In search, allow moderate/R-rated/softcore titles to be found, but block hardcore items
+      const hardcoreKeywords = ["porn", "hardcore", "xxx", "onlyfans", "camgirl", "webcam", "masturbation", "orgy", "adults only"];
+      if (hardcoreKeywords.some((keyword) => textToCheck.includes(keyword))) {
+        return false;
+      }
     }
 
     const releaseStr = item.release_date || item.first_air_date;

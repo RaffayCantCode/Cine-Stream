@@ -3,7 +3,7 @@
 // Streaming: iframe embed sources only (no HLS)
 
 import { isAdultContent } from "./content-filter";
-import { tmdbFetch, searchTmdbShow, fetchTmdbEpisodeData } from "./tmdb";
+import { tmdbFetch, searchTmdbShow, fetchTmdbEpisodeData, getCleanBaseTitle } from "./tmdb";
 
 export interface AnimeItem {
   id: string;
@@ -32,6 +32,8 @@ export interface SeasonInfo {
   idMal?: number | null;
   seasonYear?: number | null;
   tmdbSeasonNumber?: number | null;
+  tmdbId?: number | null;
+  episodeOffset?: number;
 }
 
 export interface EpisodeDetail {
@@ -748,59 +750,98 @@ export async function getAnimeDetails(
     tmdbId = null;
   }
 
-  // Step 3: Build season list — only for the CURRENT anime, not the whole franchise
-  let seasons: SeasonInfo[];
-  if (tmdbId) {
-    try {
-      const tmdbResult = await buildSeasonsFromTmdb(tmdbId, numId, media.idMal ? Number(media.idMal) : null);
-      seasons = tmdbResult.seasons;
-      tmdbSeasonMap = tmdbResult.tmdbSeasonMap;
-    } catch {
-      // Fall back to single-season entry if TMDB fails
-      tmdbId = null;
-      seasons = [{
-        id: id,
-        name: anime.name,
-        seasonLabel: "Season 1",
-        totalEpisodes: Math.max(media.episodes || 12, 1),
-        isCurrent: true,
-        idMal: media.idMal || null,
-        seasonYear: media.seasonYear || null,
-      }];
+  // Step 3: Build season list from the AniList franchise graph
+  const baseSeasons = buildSeasonList(franchiseNodes, numId);
+  const mappedSeasons: SeasonInfo[] = [];
+  const uniqueTmdbIds = new Set<number>();
+  
+  // Resolve TMDB show IDs for each AniList season in parallel
+  const tmdbIds: Record<string, number | null> = {};
+  await Promise.all(
+    baseSeasons.map(async (s) => {
+      try {
+        let tid = await searchTmdbShow(s.name, s.seasonYear || undefined);
+        if (!tid) {
+          const baseTitle = getCleanBaseTitle(s.name);
+          tid = await searchTmdbShow(baseTitle, s.seasonYear || undefined);
+        }
+        tmdbIds[s.id] = tid;
+        if (tid) uniqueTmdbIds.add(tid);
+      } catch {
+        tmdbIds[s.id] = null;
+      }
+    })
+  );
+
+  // Fetch TMDB seasons for each unique TMDB ID in parallel
+  const showSeasonsMap: Record<number, { season_number: number; episode_count: number }[]> = {};
+  await Promise.all(
+    Array.from(uniqueTmdbIds).map(async (tid) => {
+      try {
+        const showData = await tmdbFetch(`/tv/${tid}`) as {
+          seasons?: { season_number: number; episode_count: number }[];
+        };
+        showSeasonsMap[tid] = (showData?.seasons || []).filter(s => s.season_number >= 0 && s.episode_count > 0);
+      } catch {
+        showSeasonsMap[tid] = [];
+      }
+    })
+  );
+
+  // Group and map each AniList season to its TMDB season number and episodeOffset
+  const mappedEpisodesCount: Record<string, number> = {}; // key: "tmdbId-seasonNum" -> total mapped episodes count
+
+  for (const s of baseSeasons) {
+    const tid = tmdbIds[s.id];
+    let tmdbSeasonNum: number | null = null;
+    let episodeOffset = 0;
+
+    if (tid) {
+      const tmdbSeasons = showSeasonsMap[tid] || [];
+      const parsedSeasonNum = parseSeasonNumberFromTitle(s.name);
+
+      // Find the best TMDB season to map to
+      let tmdbSeason = tmdbSeasons.find(ts => ts.season_number === parsedSeasonNum);
+      if (!tmdbSeason) {
+        const candidates = tmdbSeasons.filter(ts => ts.season_number <= parsedSeasonNum && ts.season_number > 0);
+        if (candidates.length > 0) {
+          tmdbSeason = candidates.sort((a, b) => b.season_number - a.season_number)[0];
+        }
+      }
+      if (!tmdbSeason) {
+        tmdbSeason = tmdbSeasons.find(ts => ts.season_number > 0);
+      }
+      if (!tmdbSeason && tmdbSeasons.length > 0) {
+        tmdbSeason = tmdbSeasons[0];
+      }
+
+      if (tmdbSeason) {
+        tmdbSeasonNum = tmdbSeason.season_number;
+        const key = `${tid}-${tmdbSeasonNum}`;
+        episodeOffset = mappedEpisodesCount[key] || 0;
+        mappedEpisodesCount[key] = episodeOffset + s.totalEpisodes;
+        
+        // Also populate tmdbSeasonMap for backward compatibility
+        tmdbSeasonMap[s.id] = tmdbSeasonNum;
+      }
     }
-  } else {
-    // Single season entry for the current anime (no franchise merging)
-    seasons = [{
-      id: id,
-      name: anime.name,
-      seasonLabel: "Season 1",
-      totalEpisodes: Math.max(media.episodes || 12, 1),
-      isCurrent: true,
-      idMal: media.idMal || null,
-      seasonYear: media.seasonYear || null,
-    }];
+
+    mappedSeasons.push({
+      ...s,
+      tmdbId: tid,
+      tmdbSeasonNumber: tmdbSeasonNum,
+      episodeOffset: episodeOffset,
+    });
   }
 
   // Step 4: Find the opened season (the one matching the requested ID)
-  let openedSeasonIndex = seasons.findIndex(s => s.id === id);
-  if (openedSeasonIndex === -1 && tmdbId && seasons.length > 0) {
-    const parsedSeasonNum = parseSeasonNumberFromTitle(anime.name);
-    const matchedSeasonIdx = seasons.findIndex(s => s.tmdbSeasonNumber === parsedSeasonNum);
-    if (matchedSeasonIdx !== -1) {
-      openedSeasonIndex = matchedSeasonIdx;
-    } else {
-      // Fallback: find the first season with season number > 0 (avoiding Specials/Season 0 by default)
-      const firstRealSeasonIdx = seasons.findIndex(s => s.tmdbSeasonNumber !== undefined && s.tmdbSeasonNumber !== null && s.tmdbSeasonNumber > 0);
-      if (firstRealSeasonIdx !== -1) {
-        openedSeasonIndex = firstRealSeasonIdx;
-      }
-    }
-  }
-  const openedSeason = seasons[openedSeasonIndex >= 0 ? openedSeasonIndex : 0];
+  let openedSeasonIndex = mappedSeasons.findIndex(s => s.id === id);
+  if (openedSeasonIndex === -1) openedSeasonIndex = 0;
+  const openedSeason = mappedSeasons[openedSeasonIndex];
   const activeSeasonId = openedSeason?.id || id;
 
   // Validate all seasons
-  for (const s of seasons) {
+  for (const s of mappedSeasons) {
     const val = validateSeason(s, anime.name, franchiseNodes);
     if (val.warnings.length > 0) {
       console.warn(`[Validation] Season warnings for "${s.name}":`, val.warnings);
@@ -829,7 +870,7 @@ export async function getAnimeDetails(
       anime,
       episodes: basicEpisodes,
       totalEpisodes: openedSeason.totalEpisodes,
-      seasons,
+      seasons: mappedSeasons,
       openedSeasonId: activeSeasonId,
       franchiseNodes,
       tmdbId,
@@ -887,7 +928,7 @@ export async function getAnimeDetails(
     anime,
     episodes: allCombinedEpisodes,
     totalEpisodes: allCombinedEpisodes.length,
-    seasons,
+    seasons: mappedSeasons,
     openedSeasonId: activeSeasonId,
     franchiseNodes,
     tmdbId,

@@ -2,34 +2,14 @@ const TMDB_BASE = "https://api.themoviedb.org/3";
 
 const ADULT_KEYWORDS = [
   "porn",
-  "adult",
-  "erotic",
-  "sex",
-  "nude",
-  "nudity",
-  "explicit",
   "hardcore",
-  "softcore",
   "xxx",
-  "nsfw",
   "onlyfans",
   "camgirl",
   "webcam",
-  "striptease",
-  "burlesque",
-  "erotica",
   "masturbation",
   "orgy",
-  "bdsm",
-  "fetish",
-  "provocative",
-  "seduction",
-  "taboo",
-  "playboy",
-  "18+",
-  "r18",
   "adults only",
-  "mature audience",
 ];
 
 function getAuthHeader(): string {
@@ -102,7 +82,7 @@ export interface TmdbSeason {
   episodes: TmdbEpisodeData[];
 }
 
-function getCleanBaseTitle(title: string): string {
+export function getCleanBaseTitle(title: string): string {
   let base = title
     .replace(/\s+(?:[0-9]+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+season\b/i, "")
     .replace(/\s+season\s+[0-9]+\b/i, "")
@@ -173,9 +153,13 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
 
     if (results.length === 0) return null;
 
-    // Prefer Japanese-language results (actual anime, not live-action lookalikes)
-    const japaneseResults = results.filter(r => r.original_language === "ja");
-    const candidatePool = japaneseResults.length > 0 ? japaneseResults : results;
+    // Prioritize animation results (genre ID 16) to avoid matching live-action adaptations of anime series
+    const animationResults = results.filter(r => r.genre_ids?.includes(16));
+    const animPool = animationResults.length > 0 ? animationResults : results;
+
+    // Prefer Japanese-language results within the animation pool
+    const japaneseResults = animPool.filter(r => r.original_language === "ja");
+    const candidatePool = japaneseResults.length > 0 ? japaneseResults : animPool;
 
     // First pass: Japanese name match + year match
     for (const show of candidatePool) {

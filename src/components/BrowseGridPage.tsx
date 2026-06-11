@@ -46,7 +46,17 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           (data.results || []).map((item) => (mediaType ? { ...item, media_type: mediaType } : item))
         );
 
-        setItems((prev) => (isAppend ? [...prev, ...merged] : merged));
+        setItems((prev) => {
+          const combined = isAppend ? [...prev, ...merged] : merged;
+          const seen = new Set();
+          return combined.filter((item) => {
+            if (!item || !item.id) return false;
+            const key = `${item.media_type || mediaType || ""}-${item.id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        });
 
         const last = allResults[allResults.length - 1];
         const totalPages = last?.total_pages ?? 1;
@@ -72,7 +82,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
         if (isLoading || !hasMore) return;
         setPage((p) => p + 3);
       },
-      { rootMargin: "0px 0px 1500px 0px" }
+      { rootMargin: "0px 0px 3000px 0px" }
     );
 
     observer.observe(node);

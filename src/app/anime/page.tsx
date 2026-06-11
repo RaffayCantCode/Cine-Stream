@@ -107,7 +107,16 @@ export default function AnimeBrowsePage() {
         return true;
       });
 
-      setItems(prev => replace ? filtered : [...prev, ...filtered]);
+      setItems(prev => {
+        const combined = replace ? filtered : [...prev, ...filtered];
+        const seen = new Set();
+        return combined.filter(item => {
+          if (!item || !item.id) return false;
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+      });
       setHasMore(res.hasMore !== false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load anime");
@@ -152,7 +161,7 @@ export default function AnimeBrowsePage() {
         if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
         setPage(p => p + 1);
       },
-      { rootMargin: "0px 0px 1500px 0px" }
+      { rootMargin: "0px 0px 3000px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();

@@ -58,7 +58,17 @@ export default function FranchisePage() {
           seen.add(item.id);
           return item.poster_path && (item.media_type === "movie" || item.media_type === "tv");
         });
-        setItems((prev) => (page === 1 ? unique : [...prev, ...unique]));
+        setItems((prev) => {
+          const combined = page === 1 ? unique : [...prev, ...unique];
+          const seenIds = new Set();
+          return combined.filter((item) => {
+            if (!item || !item.id) return false;
+            const key = `${item.media_type || "movie"}-${item.id}`;
+            if (seenIds.has(key)) return false;
+            seenIds.add(key);
+            return true;
+          });
+        });
         const last = allResults[allResults.length - 1];
         setHasMore(last ? (last.total_pages ?? 1) > pages[pages.length - 1] : false);
       } catch (e) {
@@ -80,7 +90,7 @@ export default function FranchisePage() {
         if (isLoading || !hasMore) return;
         setPage((p) => p + 3);
       },
-      { rootMargin: "0px 0px 1500px 0px" }
+      { rootMargin: "0px 0px 3000px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();

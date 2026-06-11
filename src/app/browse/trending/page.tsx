@@ -90,16 +90,27 @@ export default function TrendingPage() {
       const last = allResults[allResults.length - 1];
       const more = last ? last.page < last.total_pages : false;
 
-      setState((prev) => ({
-        ...prev,
-        [tab]: {
-          ...prev[tab],
-          isLoading: false,
-          items: append ? [...prev[tab].items, ...merged] : merged,
-          page: startPage,
-          hasMore: more,
-        },
-      }));
+      setState((prev) => {
+        const combined = append ? [...prev[tab].items, ...merged] : merged;
+        const seenIds = new Set();
+        const deduplicated = combined.filter((item) => {
+          if (!item || !item.id) return false;
+          const key = `${item.media_type || tab}-${item.id}`;
+          if (seenIds.has(key)) return false;
+          seenIds.add(key);
+          return true;
+        });
+        return {
+          ...prev,
+          [tab]: {
+            ...prev[tab],
+            isLoading: false,
+            items: deduplicated,
+            page: startPage,
+            hasMore: more,
+          },
+        };
+      });
 
       if (append) {
         nextBatchRef.current[tab] += 3;
@@ -134,7 +145,7 @@ export default function TrendingPage() {
         if (loadingRef.current[tab] || !hasMoreRef.current[tab]) return;
         loadPage(tab, 1, true);
       },
-      { rootMargin: "0px 0px 1500px 0px" }
+      { rootMargin: "0px 0px 3000px 0px" }
     );
 
     observer.observe(node);

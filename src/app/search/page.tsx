@@ -65,7 +65,7 @@ export default function SearchPage() {
       if (tmdbResult.status === "fulfilled") {
         const filtered = filterReleasedSafeContent(tmdbResult.value.results
           ?.filter((r) => (r.media_type === "movie" || r.media_type === "tv"))
-          || []);
+          || [], true);
         setResults(filtered);
       } else {
         setResults([]);

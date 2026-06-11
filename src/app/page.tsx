@@ -10,6 +10,8 @@ import { ChevronRight } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import { ProviderIcon } from "@/components/ProviderIcon";
+import { AnimeRow } from "@/components/AnimeRow";
+import type { AnimeItem } from "@/components/AnimeCard";
 
 interface MediaItem {
   id: number;
@@ -58,6 +60,8 @@ export default function Home() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [animeList, setAnimeList] = useState<AnimeItem[]>([]);
+  const [animeLoading, setAnimeLoading] = useState(true);
 
 
   useEffect(() => {
@@ -66,39 +70,24 @@ export default function Home() {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const [tr, pm, pt, np, gm] = await Promise.all([
-          fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/trending?type=all&timeWindow=week&page=1`,
-            { cacheTtlMs: 180000 }
-          ),
-          fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/movies/popular?page=1`,
-            { cacheTtlMs: 180000 }
-          ),
-          fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/tv/top-rated?page=1`,
-            { cacheTtlMs: 180000 }
-          ),
-          fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/movies/now-playing?page=1`,
-            { cacheTtlMs: 180000 }
-          ),
-          fetchJson<{ genres: Genre[] }>(
-            "/api/tmdb/genres/movies",
-            { cacheTtlMs: 86400000 }
-          ),
-        ]);
+        const data = await fetchJson<{
+          trending: { results: MediaItem[] };
+          popular: { results: MediaItem[] };
+          topRated: { results: MediaItem[] };
+          nowPlaying: { results: MediaItem[] };
+          genres: { genres: Genre[] };
+        }>("/api/tmdb/home", { cacheTtlMs: 180000 });
 
         if (cancelled) return;
 
-        const trendingSafe = filterReleasedSafeContent(tr.results || []);
-        const popularSafe = filterReleasedSafeContent(pm.results || []).map(
+        const trendingSafe = filterReleasedSafeContent(data.trending?.results || []);
+        const popularSafe = filterReleasedSafeContent(data.popular?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         );
-        const topSafe = filterReleasedSafeContent(pt.results || []).map(
+        const topSafe = filterReleasedSafeContent(data.topRated?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
         );
-        const recentSafe = filterReleasedSafeContent(np.results || []).map(
+        const recentSafe = filterReleasedSafeContent(data.nowPlaying?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         );
 
@@ -110,7 +99,20 @@ export default function Home() {
           ...popularSafe.slice(0, 10),
           ...topSafe.slice(0, 10),
         ]));
-        setGenres((gm.genres || []).slice(0, 18));
+        setGenres((data.genres?.genres || []).slice(0, 18));
+
+        // fetch anime
+        setAnimeLoading(true);
+        try {
+          const animeData = await fetchJson<{ success: boolean; data: any[] }>(
+            "/api/anime?category=trending&page=1",
+            { cacheTtlMs: 300000 }
+          );
+          if (animeData.success && animeData.data) {
+            setAnimeList(shuffleArray(animeData.data).slice(0, 15));
+          }
+        } catch { /* silent fallback */ }
+        finally { setAnimeLoading(false); }
       } catch (e) {
         if (!cancelled) {
           setLoadError(
@@ -312,21 +314,12 @@ export default function Home() {
 
           {/* ─── ANIME SPOTLIGHT ─── */}
           <section>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-[2px] bg-gradient-to-r from-[#7288AE] to-transparent rounded-full" />
-              <div className="flex items-center gap-4 flex-wrap">
-                <div>
-                  <h2 className="text-lg font-black text-[#EAE0CF] tracking-tight">Anime Universe</h2>
-                  <p className="text-[9px] text-[#7288AE]/50 font-semibold tracking-[0.15em] uppercase">Japanese audio with English subtitles</p>
-                </div>
-                <Link
-                  href="/anime"
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-[#EAE0CF] text-xs font-bold hover:shadow-lg hover:shadow-[#4B5694]/30 transition-all flex items-center gap-2"
-                >
-                  Browse Anime <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
+            <AnimeRow
+              title="Trending Anime"
+              items={animeList}
+              isLoading={animeLoading}
+              seeAllHref="/anime"
+            />
           </section>
 
           <MediaRow

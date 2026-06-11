@@ -15,7 +15,7 @@ interface AnimeRowProps {
 function SkeletonCard({ index }: { index: number }) {
   return (
     <div
-      className="aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 rounded-xl bg-muted/40 animate-pulse"
+      className="aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 rounded-2xl shimmer"
       style={{ animationDelay: `${index * 80}ms` }}
     />
   );
@@ -62,16 +62,12 @@ export function AnimeRow({ title, items, isLoading, seeAllHref }: AnimeRowProps)
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="py-5 md:py-7 space-y-4"
+      className="py-6 md:py-8 space-y-5"
     >
-      <div className="flex items-center justify-between px-5 md:px-10">
+      <div className="flex items-center justify-between px-5 md:px-14">
         <div className="flex items-center gap-3">
-          {/* Violet accent for anime rows */}
-          <div className="w-1 h-5 bg-[#4B5694] rounded-full" />
-          <h2 className="text-base md:text-lg font-bold text-white tracking-wide">{title}</h2>
-          <span className="text-[10px] font-bold tracking-widest text-[#7288AE] bg-[#4B5694]/10 border border-[#7288AE]/20 px-2 py-0.5 rounded-full uppercase">
-            🇯🇵 JP Sub/Dub
-          </span>
+          <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg shadow-[#7288AE]/20" />
+          <h2 className="text-lg md:text-2xl font-black text-white tracking-tight">{title}</h2>
         </div>
         <div className="flex items-center gap-2">
           <div className="hidden md:flex items-center gap-1">
@@ -79,42 +75,47 @@ export function AnimeRow({ title, items, isLoading, seeAllHref }: AnimeRowProps)
               type="button"
               onClick={() => scrollByAmount("left")}
               disabled={!canScrollLeft}
-              className="w-9 h-9 rounded-full border border-[#7288AE]/20 bg-[#4B5694]/[0.05] text-white/70 hover:text-white hover:bg-[#4B5694]/[0.12] disabled:opacity-40 disabled:hover:bg-[#4B5694]/[0.05] transition"
+              className="w-10 h-10 rounded-xl border border-white/10 bg-white/[0.05] text-white/70 hover:text-white hover:bg-white/[0.12] hover:border-[#7288AE]/30 disabled:opacity-30 transition-all duration-200 backdrop-blur-sm"
               aria-label="Scroll left"
             >
-              <ChevronLeft className="w-4 h-4 mx-auto" />
+              <ChevronLeft className="w-5 h-5 mx-auto" />
             </button>
             <button
               type="button"
               onClick={() => scrollByAmount("right")}
               disabled={!canScrollRight}
-              className="w-9 h-9 rounded-full border border-[#7288AE]/20 bg-[#4B5694]/[0.05] text-white/70 hover:text-white hover:bg-[#4B5694]/[0.12] disabled:opacity-40 disabled:hover:bg-[#4B5694]/[0.05] transition"
+              className="w-10 h-10 rounded-xl border border-white/10 bg-white/[0.05] text-white/70 hover:text-white hover:bg-white/[0.12] hover:border-[#7288AE]/30 disabled:opacity-30 transition-all duration-200 backdrop-blur-sm"
               aria-label="Scroll right"
             >
-              <ChevronRight className="w-4 h-4 mx-auto" />
+              <ChevronRight className="w-5 h-5 mx-auto" />
             </button>
           </div>
           {seeAllHref && (
             <a
               href={seeAllHref}
-              className="flex items-center gap-0.5 text-xs font-semibold text-[#7288AE]/70 hover:text-[#7288AE] transition-colors group"
+              className="flex items-center gap-1 text-xs font-semibold text-white/50 hover:text-[#7288AE] transition-colors group px-3 py-2 rounded-lg hover:bg-white/[0.05]"
             >
               See all
-              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </a>
           )}
         </div>
       </div>
 
-      <div ref={scrollerRef} className="w-full overflow-x-auto pb-4 pt-2 hide-scrollbar">
-        <div className="flex gap-3 md:gap-4 px-5 md:px-10 w-max">
-          {isLoading
-            ? Array.from({ length: 8 }).map((_, i) => (
-                <SkeletonCard key={i} index={i} />
-              ))
-            : items?.map((item, i) => (
-                <AnimeCard key={item.id} item={item} index={i} />
-              ))}
+      <div className="relative">
+        <div className="absolute left-0 top-0 bottom-4 w-16 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+
+        <div ref={scrollerRef} className="w-full overflow-x-auto pb-6 pt-2 hide-scrollbar">
+          <div className="flex gap-4 md:gap-5 px-5 md:px-14 w-max">
+            {isLoading
+              ? Array.from({ length: 8 }).map((_, i) => (
+                  <SkeletonCard key={i} index={i} />
+                ))
+              : items?.map((item, i) => (
+                  <AnimeCard key={item.id} item={item} index={i} />
+                ))}
+          </div>
         </div>
       </div>
     </motion.div>

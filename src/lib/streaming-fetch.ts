@@ -26,27 +26,27 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 3",
-    baseUrl: "https://vidsrc.to",
-    type: "vidsrcto",
+    baseUrl: "https://vidsrc.xyz",
+    type: "vidsrcxyz",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidsrc.to",
+    healthCheckUrl: "https://vidsrc.xyz",
   },
   {
     name: "Source 4",
-    baseUrl: "https://www.2embed.stream",
-    type: "2embed",
+    baseUrl: "https://vidlink.pro",
+    type: "vidlink",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://www.2embed.stream",
+    healthCheckUrl: "https://vidlink.pro",
   },
   {
     name: "Source 5",
-    baseUrl: "https://multiembed.mov",
-    type: "multiembed",
+    baseUrl: "https://embed.su",
+    type: "embedsu",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://multiembed.mov",
+    healthCheckUrl: "https://embed.su",
   },
 ];
 
@@ -61,17 +61,17 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "vidsrcto":
+    case "vidsrcxyz":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "2embed":
+    case "vidlink":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "embedsu":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
-
-    case "multiembed":
-      if (type === "movie") return `${api.baseUrl}/?video_id=${id}&tmdb=1`;
-      return `${api.baseUrl}/?video_id=${id}&tmdb=1&s=${season ?? 1}&e=${episode ?? 1}`;
 
     default:
       return "";

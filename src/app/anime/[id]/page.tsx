@@ -308,6 +308,19 @@ export default function AnimeDetailPage() {
     return anime?.idMal || null;
   }, [selectedEp?.seasonMalId, anime?.idMal]);
 
+  const rootSeason = useMemo(() => {
+    return seasons[0] || null;
+  }, [seasons]);
+
+  const currentSeason = useMemo(() => {
+    const sId = selectedEp?.seasonId || currentSeasonId;
+    return seasons.find(s => s.id === sId) || null;
+  }, [seasons, selectedEp?.seasonId, currentSeasonId]);
+
+  const currentEpisodeOffset = useMemo(() => {
+    return currentSeason?.episodeOffset || 0;
+  }, [currentSeason]);
+
   // ── Prev / Next episode ─────────────────────────────────────────────────
   const handlePrev = useCallback(() => {
     if (currentIdx > 0) {
@@ -525,6 +538,9 @@ export default function AnimeDetailPage() {
                             malId={streamingMalId}
                             animeTitle={selectedEp.seasonName || anime.name}
                             episode={selectedEp.episodeNum}
+                            rootAnimeId={rootSeason?.id || anime?.id}
+                            rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
+                            episodeOffset={currentEpisodeOffset}
                             onAutoNext={handleAutoNext}
                           />
                         </motion.div>

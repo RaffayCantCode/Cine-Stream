@@ -125,8 +125,18 @@ export default function BrowseTvPage() {
           })
         );
 
-        const allItems = results.flatMap((r) => filterReleasedSafeContent(r.results || []));
-        setShows((prev) => (initialLoad.current ? allItems : [...prev, ...allItems]));
+        const allItems = results.flatMap((r) => filterReleasedSafeContent(r.results || [], !!debouncedSearch.trim()));
+        setShows((prev) => {
+          const combined = initialLoad.current ? allItems : [...prev, ...allItems];
+          const seenIds = new Set();
+          return combined.filter((item) => {
+            if (!item || !item.id) return false;
+            const key = `${item.media_type || "tv"}-${item.id}`;
+            if (seenIds.has(key)) return false;
+            seenIds.add(key);
+            return true;
+          });
+        });
 
         const last = results[results.length - 1];
         const totalPages = last?.total_pages ?? 1;
@@ -159,7 +169,7 @@ export default function BrowseTvPage() {
         if (isLoadingRef.current || !hasMoreRef.current) return;
         setPage((p) => p + 1);
       },
-      { rootMargin: "0px 0px 1500px 0px" }
+      { rootMargin: "0px 0px 3000px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();

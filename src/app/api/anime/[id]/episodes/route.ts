@@ -48,54 +48,49 @@ export async function GET(
       }
 
       const seasonNumFromList = meta.seasons.findIndex(s => s.id === seasonId) + 1;
-      const isTMDBReady = meta.tmdbId && meta.tmdbSeasonMap && season.tmdbSeasonNumber !== undefined && season.tmdbSeasonNumber !== null;
+      const tmdbId = (season as any).tmdbId;
+      const tmdbSeasonNum = season.tmdbSeasonNumber;
+      const episodeOffset = (season as any).episodeOffset || 0;
+      const isTMDBReady = tmdbId && tmdbSeasonNum !== undefined && tmdbSeasonNum !== null;
 
       let seasonEps: any[] = [];
-
       let seasonOverview: string | null = null;
 
       if (isTMDBReady) {
         // ── TMDB is the source of truth for episodes ─────────────────────
-        const tmdbSeasonNum = season.tmdbSeasonNumber!;
-        const tmdbEpisodes = await fetchTmdbEpisodeData(meta.tmdbId!, [tmdbSeasonNum]);
-
-        // Calculate global episode offset for this TMDB season.
-        // TMDB seasons restart episode numbering at 1; Jikan uses global numbering.
-        let episodeOffset = 0;
-        for (const s of meta.seasons) {
-          if (!s.tmdbSeasonNumber || s.tmdbSeasonNumber <= 0) continue;
-          if (s.tmdbSeasonNumber === tmdbSeasonNum) break;
-          episodeOffset += s.totalEpisodes;
-        }
+        const tmdbEpisodes = await fetchTmdbEpisodeData(tmdbId, [tmdbSeasonNum]);
 
         // Get Jikan data using the anime's MAL ID for thumbnails/descriptions
         let jikanEps: any[] = [];
-        const animeMalId = (meta.anime as any)?.idMal || season.idMal;
+        const animeMalId = season.idMal;
         if (animeMalId) {
           try {
+            // Note: Jikan episode numbering is specific to this AniList season (starts at 1)
             const realEps = await fetchEpisodesFromJikan(
               animeMalId, season.id,
-              episodeOffset + season.totalEpisodes
+              season.totalEpisodes
             );
             if (realEps) jikanEps = realEps;
           } catch { /* use TMDB-only */ }
         }
 
         // Build episodes from TMDB, overlay Jikan data
-        for (const [, tmdbEp] of tmdbEpisodes) {
-          const globalEpNum = episodeOffset + tmdbEp.episodeNum;
-          const jikanMatch = jikanEps.find(j => j.episodeNum === globalEpNum);
+        for (let i = 1; i <= season.totalEpisodes; i++) {
+          const tmdbEpNum = episodeOffset + i;
+          const tmdbEp = tmdbEpisodes.get(`${tmdbSeasonNum}-${tmdbEpNum}`);
+          const jikanMatch = jikanEps.find(j => j.episodeNum === i);
+          
           seasonEps.push({
-            episodeId: jikanMatch?.episodeId || `${season.id}-${tmdbEp.episodeNum}`,
-            episodeNum: tmdbEp.episodeNum,
-            title: tmdbEp.title || jikanMatch?.title || `Episode ${tmdbEp.episodeNum}`,
-            thumbnail: tmdbEp.thumbnail || jikanMatch?.thumbnail || null,
+            episodeId: jikanMatch?.episodeId || `${season.id}-${i}`,
+            episodeNum: i,
+            title: tmdbEp?.title || jikanMatch?.title || `Episode ${i}`,
+            thumbnail: tmdbEp?.thumbnail || jikanMatch?.thumbnail || null,
             malUrl: jikanMatch?.malUrl || null,
             isFiller: jikanMatch?.isFiller || false,
             releasedDate: jikanMatch?.releasedDate || null,
-            description: tmdbEp.description || jikanMatch?.description || null,
-            vote_average: tmdbEp.vote_average,
-            runtime: tmdbEp.runtime,
+            description: tmdbEp?.description || jikanMatch?.description || null,
+            vote_average: tmdbEp?.vote_average,
+            runtime: tmdbEp?.runtime,
             seasonNum: seasonNumFromList,
             seasonId: season.id,
             seasonName: season.name,
@@ -105,32 +100,9 @@ export async function GET(
 
         // Fetch TMDB season overview
         try {
-          const tmdbSeasonData = await tmdbFetch(`/tv/${meta.tmdbId}/season/${tmdbSeasonNum}`) as { overview?: string };
+          const tmdbSeasonData = await tmdbFetch(`/tv/${tmdbId}/season/${tmdbSeasonNum}`) as { overview?: string };
           if (tmdbSeasonData) seasonOverview = tmdbSeasonData.overview || null;
         } catch { /* no overview */ }
-
-        // Fill gaps: if TMDB has fewer episodes than expected, add placeholders
-        const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
-        for (let i = 1; i <= season.totalEpisodes; i++) {
-          if (!covered.has(i)) {
-            const globalEpNum = episodeOffset + i;
-            const jikanPlaceholder = jikanEps.find(j => j.episodeNum === globalEpNum);
-            seasonEps.push({
-              episodeId: jikanPlaceholder?.episodeId || `${season.id}-${i}`,
-              episodeNum: i,
-              title: jikanPlaceholder?.title || `Episode ${i}`,
-              thumbnail: jikanPlaceholder?.thumbnail || null,
-              malUrl: jikanPlaceholder?.malUrl || null,
-              isFiller: jikanPlaceholder?.isFiller || false,
-              releasedDate: jikanPlaceholder?.releasedDate || null,
-              description: jikanPlaceholder?.description || null,
-              seasonNum: seasonNumFromList,
-              seasonId: season.id,
-              seasonName: season.name,
-              seasonMalId: season.idMal || null,
-            });
-          }
-        }
       } else {
         // ── No TMDB: use Jikan episodes ────────────────────────────────────
         // Start with placeholder episodes from meta
@@ -212,72 +184,46 @@ export async function GET(
       let seasonEps: any[] = [];
 
       if (season) {
-        const isTMDBReady = meta.tmdbId && meta.tmdbSeasonMap && season.tmdbSeasonNumber !== undefined && season.tmdbSeasonNumber !== null;
+        const tmdbId = (season as any).tmdbId;
+        const tmdbSeasonNum = season.tmdbSeasonNumber;
+        const episodeOffset = (season as any).episodeOffset || 0;
+        const isTMDBReady = tmdbId && tmdbSeasonNum !== undefined && tmdbSeasonNum !== null;
 
         if (isTMDBReady) {
-          const tmdbSeasonNum = season.tmdbSeasonNumber!;
-          const tmdbEpisodes = await fetchTmdbEpisodeData(meta.tmdbId!, [tmdbSeasonNum]);
-
-          let episodeOffset = 0;
-          for (const s of meta.seasons) {
-            if (!s.tmdbSeasonNumber || s.tmdbSeasonNumber <= 0) continue;
-            if (s.tmdbSeasonNumber === tmdbSeasonNum) break;
-            episodeOffset += s.totalEpisodes;
-          }
+          const tmdbEpisodes = await fetchTmdbEpisodeData(tmdbId, [tmdbSeasonNum]);
 
           let jikanEps: any[] = [];
-          const animeMalId = (meta.anime as any)?.idMal || season.idMal;
+          const animeMalId = season.idMal;
           if (animeMalId) {
             try {
               const realEps = await fetchEpisodesFromJikan(
                 animeMalId, String(season.id),
-                episodeOffset + season.totalEpisodes
+                season.totalEpisodes
               );
               if (realEps) jikanEps = realEps;
             } catch { /* use TMDB-only */ }
           }
 
-          for (const [, tmdbEp] of tmdbEpisodes) {
-            const globalEpNum = episodeOffset + tmdbEp.episodeNum;
-            const jikanMatch = jikanEps.find(j => j.episodeNum === globalEpNum);
+          for (let i = 1; i <= season.totalEpisodes; i++) {
+            const tmdbEpNum = episodeOffset + i;
+            const tmdbEp = tmdbEpisodes.get(`${tmdbSeasonNum}-${tmdbEpNum}`);
+            const jikanMatch = jikanEps.find(j => j.episodeNum === i);
             seasonEps.push({
-              episodeId: jikanMatch?.episodeId || `${season.id}-${tmdbEp.episodeNum}`,
-              episodeNum: tmdbEp.episodeNum,
-              title: tmdbEp.title || jikanMatch?.title || `Episode ${tmdbEp.episodeNum}`,
-              thumbnail: tmdbEp.thumbnail || jikanMatch?.thumbnail || null,
+              episodeId: jikanMatch?.episodeId || `${season.id}-${i}`,
+              episodeNum: i,
+              title: tmdbEp?.title || jikanMatch?.title || `Episode ${i}`,
+              thumbnail: tmdbEp?.thumbnail || jikanMatch?.thumbnail || null,
               malUrl: jikanMatch?.malUrl || null,
               isFiller: jikanMatch?.isFiller || false,
               releasedDate: jikanMatch?.releasedDate || null,
-              description: tmdbEp.description || jikanMatch?.description || null,
-              vote_average: tmdbEp.vote_average,
-              runtime: tmdbEp.runtime,
+              description: tmdbEp?.description || jikanMatch?.description || null,
+              vote_average: tmdbEp?.vote_average,
+              runtime: tmdbEp?.runtime,
               seasonNum: seasonNumParam,
               seasonId: String(season.id),
               seasonName: season.name,
               seasonMalId: season.idMal || null,
             });
-          }
-
-          const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
-          for (let i = 1; i <= season.totalEpisodes; i++) {
-            if (!covered.has(i)) {
-              const globalEpNum = episodeOffset + i;
-              const jikanPlaceholder = jikanEps.find(j => j.episodeNum === globalEpNum);
-              seasonEps.push({
-                episodeId: jikanPlaceholder?.episodeId || `${season.id}-${i}`,
-                episodeNum: i,
-                title: jikanPlaceholder?.title || `Episode ${i}`,
-                thumbnail: jikanPlaceholder?.thumbnail || null,
-                malUrl: jikanPlaceholder?.malUrl || null,
-                isFiller: jikanPlaceholder?.isFiller || false,
-                releasedDate: jikanPlaceholder?.releasedDate || null,
-                description: jikanPlaceholder?.description || null,
-                vote_average: null, runtime: null,
-                seasonNum: seasonNumParam,
-                seasonId: String(season.id), seasonName: season.name,
-                seasonMalId: season.idMal || null,
-              });
-            }
           }
         } else {
           const seasonInfo = meta.episodes.filter(e => e.seasonNum === seasonNumParam);
@@ -343,66 +289,66 @@ export async function GET(
     if (!meta) throw new Error("Anime not found");
 
     let episodes: any[] = [];
-    const isTMDBReady = meta.tmdbId && meta.tmdbSeasonMap;
+    
+    // Group and fetch episodes for each mapped season
+    for (const season of meta.seasons) {
+      const tmdbId = (season as any).tmdbId;
+      const tmdbSeasonNum = season.tmdbSeasonNumber;
+      const episodeOffset = (season as any).episodeOffset || 0;
+      const isTMDBReady = tmdbId && tmdbSeasonNum !== undefined && tmdbSeasonNum !== null;
+      const seasonIdx = meta.seasons.indexOf(season) + 1;
 
-    if (isTMDBReady) {
-      // Fetch Jikan data once for the whole anime
-      let allJikanEps: any[] = [];
-      const animeMalId = (meta.anime as any)?.idMal;
-      if (animeMalId) {
-        try {
-          const totalEps = meta.seasons.reduce((sum, s) => sum + (s.tmdbSeasonNumber && s.tmdbSeasonNumber > 0 ? s.totalEpisodes : 0), 0);
-          const realEps = await fetchEpisodesFromJikan(animeMalId, id, totalEps || 500);
-          if (realEps) allJikanEps = realEps;
-        } catch { /* use TMDB-only */ }
-      }
+      if (isTMDBReady) {
+        const tmdbEpisodes = await fetchTmdbEpisodeData(tmdbId, [tmdbSeasonNum]);
+        let jikanEps: any[] = [];
+        const animeMalId = season.idMal;
+        if (animeMalId) {
+          try {
+            const realEps = await fetchEpisodesFromJikan(animeMalId, season.id, season.totalEpisodes);
+            if (realEps) jikanEps = realEps;
+          } catch { /* use TMDB-only */ }
+        }
 
-      // Build episodes from all TMDB seasons
-      let episodeOffset = 0;
-      for (const season of meta.seasons) {
-        if (season.tmdbSeasonNumber === undefined || season.tmdbSeasonNumber === null) continue;
-        const tmdbEpisodes = await fetchTmdbEpisodeData(meta.tmdbId!, [season.tmdbSeasonNumber]);
-        const seasonIdx = meta.seasons.findIndex(s => s.id === season.id) + 1;
-
-        for (const [, tmdbEp] of tmdbEpisodes) {
-          const globalEpNum = episodeOffset + tmdbEp.episodeNum;
-          const jikanMatch = allJikanEps.find((j: any) => j.episodeNum === globalEpNum);
+        for (let i = 1; i <= season.totalEpisodes; i++) {
+          const tmdbEpNum = episodeOffset + i;
+          const tmdbEp = tmdbEpisodes.get(`${tmdbSeasonNum}-${tmdbEpNum}`);
+          const jikanMatch = jikanEps.find(j => j.episodeNum === i);
           episodes.push({
-            episodeId: jikanMatch?.episodeId || `${season.id}-${tmdbEp.episodeNum}`,
-            episodeNum: tmdbEp.episodeNum,
-            title: tmdbEp.title || jikanMatch?.title || `Episode ${tmdbEp.episodeNum}`,
-            thumbnail: tmdbEp.thumbnail || jikanMatch?.thumbnail || null,
+            episodeId: jikanMatch?.episodeId || `${season.id}-${i}`,
+            episodeNum: i,
+            title: tmdbEp?.title || jikanMatch?.title || `Episode ${i}`,
+            thumbnail: tmdbEp?.thumbnail || jikanMatch?.thumbnail || null,
             malUrl: jikanMatch?.malUrl || null,
             isFiller: jikanMatch?.isFiller || false,
             releasedDate: jikanMatch?.releasedDate || null,
-            description: tmdbEp.description || jikanMatch?.description || null,
-            vote_average: tmdbEp.vote_average,
-            runtime: tmdbEp.runtime,
+            description: tmdbEp?.description || jikanMatch?.description || null,
+            vote_average: tmdbEp?.vote_average,
+            runtime: tmdbEp?.runtime,
             seasonNum: seasonIdx,
             seasonId: season.id,
             seasonName: season.name,
             seasonMalId: season.idMal || null,
           });
         }
-
-        if (season.tmdbSeasonNumber > 0) episodeOffset += season.totalEpisodes;
+      } else {
+        // Fallback to placeholders or meta episodes for this season
+        const metaEpsForSeason = meta.episodes.filter(e => e.seasonId === season.id);
+        const seasonEps = metaEpsForSeason.map((ep: any) => ({
+          episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
+          episodeNum: Number(ep.episodeNum || 1),
+          title: ep.title || `Episode ${ep.episodeNum || 1}`,
+          thumbnail: ep.thumbnail || null,
+          malUrl: ep.malUrl || null,
+          isFiller: ep.isFiller || false,
+          releasedDate: ep.releasedDate || null,
+          description: ep.description || null,
+          seasonNum: seasonIdx,
+          seasonId: season.id,
+          seasonName: season.name,
+          seasonMalId: season.idMal || null,
+        }));
+        episodes.push(...seasonEps);
       }
-    } else {
-      // Fallback: use meta episodes (placeholders from AniList)
-      episodes = meta.episodes.map((ep: any) => ({
-        episodeId: ep.episodeId || `${id}-${ep.episodeNum}`,
-        episodeNum: Number(ep.episodeNum || ep.episode || 1),
-        title: ep.title || `Episode ${ep.episodeNum || 1}`,
-        thumbnail: ep.thumbnail || null,
-        malUrl: ep.malUrl || null,
-        isFiller: ep.isFiller || false,
-        releasedDate: ep.releasedDate || null,
-        description: ep.description || null,
-        seasonNum: ep.seasonNum || null,
-        seasonId: ep.seasonId || null,
-        seasonName: ep.seasonName || null,
-        seasonMalId: ep.seasonMalId || null,
-      }));
     }
 
     const resPayload = {

@@ -17,9 +17,9 @@ interface VideoPlayerProps {
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   cinesrc: { bg: "bg-[#4B5694]", badge: "bg-[#4B5694]/20 text-[#7288AE]" },
   vidsrcfyi: { bg: "bg-cyan-600", badge: "bg-cyan-500/20 text-cyan-300" },
-  vidsrcto: { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
-  "2embed": { bg: "bg-teal-600", badge: "bg-teal-500/20 text-teal-300" },
-  multiembed: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
+  vidsrcxyz: { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
+  vidlink: { bg: "bg-teal-600", badge: "bg-teal-500/20 text-teal-300" },
+  embedsu: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -40,8 +40,6 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   const [healthChecked, setHealthChecked] = useState(false);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoFailoverCount = useRef(0);
 
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.cinesrc;
 
@@ -67,7 +65,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
 
   const sources = activeSources;
 
-  // Auto-failover: if a source doesn't load within timeout, try next
+  // Manual fallback: switch to the next source in the list
   const switchToNext = useCallback(() => {
     const currentIndex = sources.findIndex((s) => s.name === currentSource.name);
     const nextIndex = (currentIndex + 1) % sources.length;
@@ -80,27 +78,12 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     setCurrentSource(nextSource);
     setError(null);
     setIsLoading(true);
-    autoFailoverCount.current++;
   }, [sources, currentSource]);
-
-  useEffect(() => {
-    if (!isLoading || !healthChecked) return;
-    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
-    loadTimerRef.current = setTimeout(() => {
-      if (isLoading && sources.length > 1) {
-        switchToNext();
-      }
-    }, DEFAULT_TIMEOUT);
-    return () => {
-      if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
-    };
-  }, [isLoading, currentSource, healthChecked, sources.length, switchToNext]);
 
   useEffect(() => {
     setCurrentSource(sources[0]);
     setError(null);
     setIsLoading(true);
-    autoFailoverCount.current = 0;
   }, [sources]);
 
   const handleSourceChange = (source: StreamingSource) => {
@@ -108,7 +91,6 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     setError(null);
     setIsLoading(true);
     setShowSources(false);
-    autoFailoverCount.current = 0;
   };
 
   const handleIframeError = useCallback(() => {
@@ -168,7 +150,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setError(null); setCurrentSource(sources[0]); setIsLoading(true); autoFailoverCount.current = 0; }}
+            onClick={() => { setError(null); setCurrentSource(sources[0]); setIsLoading(true); }}
             className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all"
             title="Retry"
           >
