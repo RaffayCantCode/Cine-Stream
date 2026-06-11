@@ -134,13 +134,13 @@ export default function TrendingPage() {
         if (loadingRef.current[tab] || !hasMoreRef.current[tab]) return;
         loadPage(tab, 1, true);
       },
-      { rootMargin: "800px" }
+      { rootMargin: "0px 0px 1500px 0px" }
     );
 
     observer.observe(node);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, timeWindow, current.isLoading, current.hasMore]);
+  }, [activeTab, timeWindow, current.isLoading, current.hasMore, current.items.length]);
 
   const title = useMemo(() => {
     if (activeTab === "movie") return "Trending Movies";
@@ -195,6 +195,7 @@ export default function TrendingPage() {
 
           <div
             ref={sentinelRef}
+            style={{ overflowAnchor: "none" }}
             className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
           >
             {current.isLoading && current.items.length > 0 ? (

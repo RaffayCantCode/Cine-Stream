@@ -72,12 +72,12 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
         if (isLoading || !hasMore) return;
         setPage((p) => p + 3);
       },
-      { rootMargin: "300px" }
+      { rootMargin: "0px 0px 1500px 0px" }
     );
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading, hasMore]);
+  }, [isLoading, hasMore, items.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -107,7 +107,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
             ))}
           </div>
 
-          <div ref={sentinelRef} className="h-20 flex items-center justify-center text-white/40 text-sm font-medium">
+          <div ref={sentinelRef} style={{ overflowAnchor: "none" }} className="h-20 flex items-center justify-center text-white/40 text-sm font-medium">
             {isLoading && items.length > 0 ? (
               <span className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#7288AE] animate-pulse" />

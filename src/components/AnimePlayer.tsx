@@ -47,8 +47,8 @@ function buildSources(animeId: string, malId: string | null | undefined, episode
        `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/sub`]
     : [`https://animeplay.cfd/stream/ani/${anilistId}/${episode}/sub`];
 
-  // Source 5: VidPlus anime backend (AniList ID) — great reliability for anime
-  const source5Url = `https://player.vidplus.to/embed/anime/${anilistId}/${episode}?dub=false`;
+  // Source 5: NinjaStream anime backend (AniList ID) — reliable multi-server
+  const source5Url = `https://ninjasheild.stream/map/anime/${anilistId}/${episode}/sub`;
 
   return [
     { name: "Source 1", urls: [source1Url], color: "from-[#4B5694]/30 to-[#7288AE]/20" },

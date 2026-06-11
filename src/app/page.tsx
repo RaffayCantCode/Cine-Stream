@@ -65,23 +65,22 @@ export default function Home() {
     const load = async () => {
       setIsLoading(true);
       setLoadError(null);
-      const rngPage = (max: number) => Math.floor(Math.random() * max) + 1;
       try {
         const [tr, pm, pt, np, gm] = await Promise.all([
           fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/trending?type=all&timeWindow=week&page=${rngPage(5)}`,
+            `/api/tmdb/trending?type=all&timeWindow=week&page=1`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/movies/popular?page=${rngPage(5)}`,
+            `/api/tmdb/movies/popular?page=1`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/tv/top-rated?page=${rngPage(5)}`,
+            `/api/tmdb/tv/top-rated?page=1`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ results: MediaItem[] }>(
-            `/api/tmdb/movies/now-playing?page=${rngPage(3)}`,
+            `/api/tmdb/movies/now-playing?page=1`,
             { cacheTtlMs: 180000 }
           ),
           fetchJson<{ genres: Genre[] }>(

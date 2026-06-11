@@ -447,9 +447,47 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
  * ALL seasons belong to the current anime — no cross-franchise matching.
  * Uses synthetic IDs (tmdb-{tmdbId}-s{num}) to avoid linking to other anime.
  */
+function parseSeasonNumberFromTitle(title: string): number {
+  const normalized = title.toLowerCase();
+  
+  const seasonMatch = normalized.match(/season\s*([0-9]+)/);
+  if (seasonMatch) return parseInt(seasonMatch[1], 10);
+
+  const romanMatch = normalized.match(/season\s*(i{1,3}|iv|v|vi{1,3}|ix|x)\b/);
+  if (romanMatch) {
+    const roman = romanMatch[1];
+    const romanMap: Record<string, number> = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+    return romanMap[roman] || 1;
+  }
+  
+  if (normalized.includes("second season") || normalized.includes("2nd season")) return 2;
+  if (normalized.includes("third season") || normalized.includes("3rd season")) return 3;
+  if (normalized.includes("fourth season") || normalized.includes("4th season")) return 4;
+  if (normalized.includes("fifth season") || normalized.includes("5th season")) return 5;
+  if (normalized.includes("sixth season") || normalized.includes("6th season")) return 6;
+  if (normalized.includes("seventh season") || normalized.includes("7th season")) return 7;
+  if (normalized.includes("eighth season") || normalized.includes("8th season")) return 8;
+  if (normalized.includes("ninth season") || normalized.includes("9th season")) return 9;
+  if (normalized.includes("tenth season") || normalized.includes("10th season")) return 10;
+  if (normalized.includes("final season")) return 4;
+  
+  const romanEndMatch = normalized.match(/\s+(ii|iii|iv|v|vi|vii|viii|ix|x)$/);
+  if (romanEndMatch) {
+    const roman = romanEndMatch[1];
+    const romanMap: Record<string, number> = { ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+    return romanMap[roman] || 1;
+  }
+
+  const numEndMatch = normalized.match(/\s+([2-9])$/);
+  if (numEndMatch) return parseInt(numEndMatch[1], 10);
+
+  return 1;
+}
+
 async function buildSeasonsFromTmdb(
   tmdbId: number,
-  currentId: number
+  currentId: number,
+  mainMalId: number | null
 ): Promise<{ seasons: SeasonInfo[]; tmdbSeasonMap: Record<string, number> }> {
   const showData = await tmdbFetch(`/tv/${tmdbId}`) as {
     seasons?: { season_number: number; name: string; episode_count: number; overview?: string }[];
@@ -476,7 +514,7 @@ async function buildSeasonsFromTmdb(
       seasonLabel: label,
       totalEpisodes: Math.max(epCount, 1),
       isCurrent: first,
-      idMal: null,
+      idMal: mainMalId,
       seasonYear: null,
       tmdbSeasonNumber: seasonNum,
     });
@@ -714,7 +752,7 @@ export async function getAnimeDetails(
   let seasons: SeasonInfo[];
   if (tmdbId) {
     try {
-      const tmdbResult = await buildSeasonsFromTmdb(tmdbId, numId);
+      const tmdbResult = await buildSeasonsFromTmdb(tmdbId, numId, media.idMal ? Number(media.idMal) : null);
       seasons = tmdbResult.seasons;
       tmdbSeasonMap = tmdbResult.tmdbSeasonMap;
     } catch {
@@ -744,7 +782,20 @@ export async function getAnimeDetails(
   }
 
   // Step 4: Find the opened season (the one matching the requested ID)
-  const openedSeasonIndex = seasons.findIndex(s => s.id === id);
+  let openedSeasonIndex = seasons.findIndex(s => s.id === id);
+  if (openedSeasonIndex === -1 && tmdbId && seasons.length > 0) {
+    const parsedSeasonNum = parseSeasonNumberFromTitle(anime.name);
+    const matchedSeasonIdx = seasons.findIndex(s => s.tmdbSeasonNumber === parsedSeasonNum);
+    if (matchedSeasonIdx !== -1) {
+      openedSeasonIndex = matchedSeasonIdx;
+    } else {
+      // Fallback: find the first season with season number > 0 (avoiding Specials/Season 0 by default)
+      const firstRealSeasonIdx = seasons.findIndex(s => s.tmdbSeasonNumber !== undefined && s.tmdbSeasonNumber !== null && s.tmdbSeasonNumber > 0);
+      if (firstRealSeasonIdx !== -1) {
+        openedSeasonIndex = firstRealSeasonIdx;
+      }
+    }
+  }
   const openedSeason = seasons[openedSeasonIndex >= 0 ? openedSeasonIndex : 0];
   const activeSeasonId = openedSeason?.id || id;
 

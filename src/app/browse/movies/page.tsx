@@ -160,11 +160,11 @@ export default function BrowseMoviesPage() {
         if (isLoadingRef.current || !hasMoreRef.current) return;
         setPage((p) => p + 1);
       },
-      { rootMargin: "800px" }
+      { rootMargin: "0px 0px 1500px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading, hasMore]);
+  }, [isLoading, hasMore, movies.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -283,6 +283,7 @@ export default function BrowseMoviesPage() {
 
         <div
           ref={sentinelRef}
+          style={{ overflowAnchor: "none" }}
           className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
         >
           {isLoading && movies.length > 0 ? (

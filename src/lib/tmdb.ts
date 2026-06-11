@@ -102,23 +102,48 @@ export interface TmdbSeason {
   episodes: TmdbEpisodeData[];
 }
 
-/**
- * Search TMDB for a TV show by name + year, return the TMDB show ID.
- */
+function getCleanBaseTitle(title: string): string {
+  let base = title
+    .replace(/\s+(?:[0-9]+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+season\b/i, "")
+    .replace(/\s+season\s+[0-9]+\b/i, "")
+    .replace(/\s+s[0-9]+\b/i, "")
+    .replace(/\s+part\s+[0-9]+\b/i, "")
+    .replace(/\s+cour\s+[0-9]+\b/i, "")
+    .replace(/\s+final\s+season\b/i, "")
+    .replace(/\s+第\s*[0-9]+\s*期/g, "")
+    .trim();
+
+  const parts = base.split(/\s+-\s+|:\s*|：\s*|–\s*/);
+  if (parts.length > 1) {
+    const firstPart = parts[0].trim();
+    if (firstPart.length > 2) {
+      base = firstPart;
+    }
+  }
+
+  return base;
+}
+
 function normalizeName(s: string): string[] {
   const stopWords = new Set(["the", "a", "an", "of", "and", "in", "to", "for", "with", "on", "at", "by", "is", "das", "der", "die", "el", "la", "le", "les"]);
   return s.toLowerCase()
-    .replace(/[^\w\s]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
     .split(/\s+/)
-    .filter(w => w.length > 1 && !stopWords.has(w));
+    .filter(w => w.length > 0 && !stopWords.has(w));
 }
 
 function nameMatches(searchName: string, tmdbName: string): boolean {
   const words = normalizeName(searchName);
   if (words.length === 0) return true;
-  const tmdbWords = new Set(normalizeName(tmdbName));
-  const matched = words.filter(w => tmdbWords.has(w)).length;
-  return matched / words.length >= 0.5;
+  const tmdbWords = normalizeName(tmdbName);
+  if (tmdbWords.length === 0) return true;
+
+  const tmdbWordsSet = new Set(tmdbWords);
+  const matched = words.filter(w => tmdbWordsSet.has(w)).length;
+  
+  const minLength = Math.min(words.length, tmdbWords.length);
+  const ratio = matched / minLength;
+  return ratio >= 0.75;
 }
 
 export async function searchTmdbShow(name: string, year?: number): Promise<number | null> {
@@ -127,14 +152,34 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
   if (cached && cached.expires > Date.now()) return cached.id;
 
   try {
-    const cleanName = name.replace(/[^\w\s]/g, "").trim();
-    const params: Record<string, string> = { query: cleanName };
-    const data = await tmdbFetch("/search/tv", params) as { results?: { id: number; name: string; first_air_date?: string }[] };
-    const results = data?.results || [];
+    const baseTitle = getCleanBaseTitle(name);
+    const queries = [baseTitle, name];
+    let results: any[] = [];
+    let queryUsed = "";
 
-    // First pass: try with year match
-    for (const show of results) {
-      if (!nameMatches(name, show.name)) continue;
+    for (const query of queries) {
+      if (!query) continue;
+      const cleanQuery = query.replace(/[^\p{L}\p{N}\s]/gu, "").trim();
+      if (!cleanQuery) continue;
+      
+      const params: Record<string, string> = { query: cleanQuery, language: "en-US" };
+      const data = await tmdbFetch("/search/tv", params) as { results?: any[] };
+      if (data?.results?.length) {
+        results = data.results;
+        queryUsed = query;
+        break;
+      }
+    }
+
+    if (results.length === 0) return null;
+
+    // Prefer Japanese-language results (actual anime, not live-action lookalikes)
+    const japaneseResults = results.filter(r => r.original_language === "ja");
+    const candidatePool = japaneseResults.length > 0 ? japaneseResults : results;
+
+    // First pass: Japanese name match + year match
+    for (const show of candidatePool) {
+      if (!nameMatches(queryUsed, show.name)) continue;
       if (year) {
         const showYear = show.first_air_date ? parseInt(show.first_air_date.slice(0, 4), 10) : 0;
         if (showYear && Math.abs(showYear - year) <= 1) {
@@ -147,15 +192,24 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
       }
     }
 
-    // Second pass: fallback to first name match (essential for sequels/later seasons)
-    for (const show of results) {
-      if (nameMatches(name, show.name)) {
+    // Second pass: Japanese name match only (relax year)
+    for (const show of candidatePool) {
+      if (nameMatches(queryUsed, show.name)) {
         tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
         return show.id;
       }
     }
 
-    // No match with name check — don't cache a wrong result, but don't block retries either
+    // Third pass: non-Japanese results only if nothing Japanese matched
+    if (japaneseResults.length === 0) {
+      for (const show of results) {
+        if (nameMatches(queryUsed, show.name)) {
+          tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
+          return show.id;
+        }
+      }
+    }
+
     return null;
   } catch {
     return null;

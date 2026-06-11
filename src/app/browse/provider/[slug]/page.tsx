@@ -119,11 +119,11 @@ export default function ProviderPage() {
         if (isLoadingRef.current || !hasMoreRef.current) return;
         setPage((p) => p + 1);
       },
-      { rootMargin: "800px" }
+      { rootMargin: "0px 0px 1500px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [items.length > 0]);
+  }, [isLoading, hasMore, items.length]);
 
   if (!provider) {
     return (
@@ -196,7 +196,7 @@ export default function ProviderPage() {
           </div>
 
           {items.length > 0 && (
-            <div ref={sentinelRef} className="w-full py-12 flex flex-col items-center justify-center text-white/40">
+            <div ref={sentinelRef} style={{ overflowAnchor: "none" }} className="w-full py-12 flex flex-col items-center justify-center text-white/40">
               {isLoading ? (
                 <span className="text-sm font-medium text-white/50">Loading more...</span>
               ) : hasMore ? (
