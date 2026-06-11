@@ -34,11 +34,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 4",
-    baseUrl: "https://embed.su",
-    type: "embedsu",
+    baseUrl: "https://www.2embed.stream",
+    type: "2embed",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://embed.su",
+    healthCheckUrl: "https://www.2embed.stream",
   },
   {
     name: "Source 5",
@@ -65,7 +65,7 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "embedsu":
+    case "2embed":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 

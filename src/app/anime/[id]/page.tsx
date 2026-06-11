@@ -687,7 +687,7 @@ export default function AnimeDetailPage() {
 
               {/* ── Episodes Section ── */}
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
-                {/* ── Season Guide Section (moved here from sidebar) ── */}
+                {/* ── Season Guide Section (franchise order reference) ── */}
                 {franchiseNodes.length > 1 && (
                   <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden">
                     <button
@@ -698,7 +698,7 @@ export default function AnimeDetailPage() {
                         <BookOpen className="w-4 h-4 text-[#7288AE]" />
                         <h3 className="text-base font-bold text-white">Season Guide</h3>
                         <span className="text-[10px] text-white/30 font-medium">
-                          {seasons.length} {seasons.length === 1 ? "entry" : "entries"}
+                          {franchiseNodes.length} {franchiseNodes.length === 1 ? "entry" : "entries"}
                         </span>
                       </div>
                       <ChevronRight className={`w-4 h-4 text-white/40 transition-transform ${showSeasonGuide ? "rotate-90" : ""}`} />
@@ -706,14 +706,14 @@ export default function AnimeDetailPage() {
 
                     {showSeasonGuide && (
                       <div className="px-5 pb-5 space-y-2 border-t border-white/[0.06] pt-4">
-                        {seasons.map((s) => {
-                          const node = franchiseNodes.find(n => n.id === parseInt(s.id, 10));
-                          const isActive = s.id === currentSeasonId;
-                          const yearStr = node?.seasonYear ? String(node.seasonYear) : "";
+                        {franchiseNodes.map((node) => {
+                          const nodeId = String(node.id);
+                          const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
+                          const formatLabel = node.format === "TV" ? "TV" : node.format || "";
                           return (
-                            <button
-                              key={s.id}
-                              onClick={() => handleSeasonClick(s)}
+                            <Link
+                              key={node.id}
+                              href={`/anime/${node.id}`}
                               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
                                 isActive
                                   ? "bg-gradient-to-r from-[#111844]/30 to-[#7288AE]/20 border border-[#7288AE]/30 text-white"
@@ -721,15 +721,15 @@ export default function AnimeDetailPage() {
                               }`}
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                <span className="text-[#7288AE] font-bold shrink-0 w-16 text-left">{s.seasonLabel}</span>
-                                <span className="truncate">{s.name}</span>
+                                <span className="text-[#7288AE] font-bold shrink-0 w-16 text-left uppercase">{formatLabel}</span>
+                                <span className="truncate">{node.title}</span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0 ml-2">
-                                {yearStr && <span className="text-white/30 text-[10px]">{yearStr}</span>}
-                                <span className="text-white/40 text-[10px] bg-white/[0.06] px-2 py-0.5 rounded-md">{s.totalEpisodes} eps</span>
+                                {node.seasonYear && <span className="text-white/30 text-[10px]">{node.seasonYear}</span>}
+                                <span className="text-white/40 text-[10px] bg-white/[0.06] px-2 py-0.5 rounded-md">{node.episodes || "?"} eps</span>
                                 {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#7288AE] animate-pulse" />}
                               </div>
-                            </button>
+                            </Link>
                           );
                         })}
                       </div>

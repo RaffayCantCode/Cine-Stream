@@ -444,13 +444,11 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
 
 /**
  * Build season list from TMDB show data.
- * Uses TMDB season structure as the source of truth.
- * Each TMDB season becomes a SeasonInfo entry.
- * Tries to match TMDB seasons to AniList franchise nodes by position.
+ * ALL seasons belong to the current anime — no cross-franchise matching.
+ * Uses synthetic IDs (tmdb-{tmdbId}-s{num}) to avoid linking to other anime.
  */
 async function buildSeasonsFromTmdb(
   tmdbId: number,
-  franchiseNodes: FranchiseNode[],
   currentId: number
 ): Promise<{ seasons: SeasonInfo[]; tmdbSeasonMap: Record<string, number> }> {
   const showData = await tmdbFetch(`/tv/${tmdbId}`) as {
@@ -465,42 +463,24 @@ async function buildSeasonsFromTmdb(
   const seasons: SeasonInfo[] = [];
   const tmdbSeasonMap: Record<string, number> = {};
 
-  // TV entries from AniList, ordered by air date, for matching
-  const tvNodes = franchiseNodes
-    .filter(n => n.format === "TV" || n.format === "TV_SHORT" || n.format === "ONA")
-    .sort((a, b) => {
-      const yearA = a.seasonYear || 9999;
-      const yearB = b.seasonYear || 9999;
-      if (yearA !== yearB) return yearA - yearB;
-      const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-      return seasonOrder.indexOf(a.season || "FALL") - seasonOrder.indexOf(b.season || "FALL");
-    });
-
+  let first = true;
   for (const tmdbSeason of sorted) {
     const seasonNum = tmdbSeason.season_number;
-    // TMDB season 0 is "Specials", handle it as a special section
     const label = seasonNum === 0 ? "Specials" : `Season ${seasonNum}`;
     const epCount = tmdbSeason.episode_count || 0;
-
-    // Match TMDB season to an AniList node by position
-    // TMDB season N → Nth TV entry in the AniList franchise
-    let node: FranchiseNode | null = null;
-    if (seasonNum > 0 && seasonNum - 1 < tvNodes.length) {
-      node = tvNodes[seasonNum - 1];
-    }
-
-    const seasonId = node ? String(node.id) : `tmdb-${tmdbId}-s${seasonNum}`;
+    const seasonId = `tmdb-${tmdbId}-s${seasonNum}`;
 
     seasons.push({
       id: seasonId,
       name: tmdbSeason.name || label,
       seasonLabel: label,
       totalEpisodes: Math.max(epCount, 1),
-      isCurrent: node ? node.id === currentId : seasonNum === 1,
-      idMal: node?.idMal || null,
-      seasonYear: node?.seasonYear || null,
+      isCurrent: first,
+      idMal: null,
+      seasonYear: null,
       tmdbSeasonNumber: seasonNum,
     });
+    first = false;
 
     tmdbSeasonMap[seasonId] = seasonNum;
   }
@@ -730,20 +710,37 @@ export async function getAnimeDetails(
     tmdbId = null;
   }
 
-  // Step 3: Build season list — prefer TMDB structure when available
+  // Step 3: Build season list — only for the CURRENT anime, not the whole franchise
   let seasons: SeasonInfo[];
   if (tmdbId) {
     try {
-      const tmdbResult = await buildSeasonsFromTmdb(tmdbId, franchiseNodes, numId);
+      const tmdbResult = await buildSeasonsFromTmdb(tmdbId, numId);
       seasons = tmdbResult.seasons;
       tmdbSeasonMap = tmdbResult.tmdbSeasonMap;
     } catch {
-      // Fall back to AniList-based season building if TMDB fails
-      seasons = buildSeasonList(franchiseNodes, numId);
+      // Fall back to single-season entry if TMDB fails
       tmdbId = null;
+      seasons = [{
+        id: id,
+        name: anime.name,
+        seasonLabel: "Season 1",
+        totalEpisodes: Math.max(media.episodes || 12, 1),
+        isCurrent: true,
+        idMal: media.idMal || null,
+        seasonYear: media.seasonYear || null,
+      }];
     }
   } else {
-    seasons = buildSeasonList(franchiseNodes, numId);
+    // Single season entry for the current anime (no franchise merging)
+    seasons = [{
+      id: id,
+      name: anime.name,
+      seasonLabel: "Season 1",
+      totalEpisodes: Math.max(media.episodes || 12, 1),
+      isCurrent: true,
+      idMal: media.idMal || null,
+      seasonYear: media.seasonYear || null,
+    }];
   }
 
   // Step 4: Find the opened season (the one matching the requested ID)

@@ -33,16 +33,29 @@ function buildSources(animeId: string, malId: string | null | undefined, episode
     source2Urls.push(`https://vidnest.fun/animepahe/${malNumeric}/${episode}/sub`);
   }
 
-  // Source 3: Same default backend but different server nodes for maximum coverage
-  const source3Servers = ["gama", "sigma", "catflix", "delta", "hexa"];
-  const source3Urls: string[] = source3Servers.map(
-    s => `https://vidnest.fun/anime/${anilistId}/${episode}/sub?server=${s}`
-  );
+  // Source 3: AnimePlay (AniList endpoint) — replaces old vidnest server-param source
+  const source3Urls: string[] = [
+    `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/sub`,
+  ];
+  if (malNumeric) {
+    source3Urls.push(`https://animeplay.cfd/stream/mal/${malNumeric}/${episode}/sub`);
+  }
+
+  // Source 4: AnimePlay (MAL endpoint) as a dedicated source for better coverage
+  const source4Urls: string[] = malNumeric
+    ? [`https://animeplay.cfd/stream/mal/${malNumeric}/${episode}/sub`,
+       `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/sub`]
+    : [`https://animeplay.cfd/stream/ani/${anilistId}/${episode}/sub`];
+
+  // Source 5: VidPlus anime backend (AniList ID) — great reliability for anime
+  const source5Url = `https://player.vidplus.to/embed/anime/${anilistId}/${episode}?dub=false`;
 
   return [
     { name: "Source 1", urls: [source1Url], color: "from-[#4B5694]/30 to-[#7288AE]/20" },
     { name: "Source 2", urls: source2Urls, color: "from-[#111844]/30 to-[#4B5694]/20" },
-    { name: "Source 3", urls: source3Urls, color: "from-[#1a1a2e]/30 to-[#16213e]/20" },
+    { name: "Source 3", urls: source3Urls, color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
+    { name: "Source 4", urls: source4Urls, color: "from-[#2a9d8f]/30 to-[#2ecc71]/20" },
+    { name: "Source 5", urls: [source5Url], color: "from-[#6c5ce7]/30 to-[#a29bfe]/20" },
   ];
 }
 
