@@ -26,6 +26,70 @@ function mapAbsoluteToTmdb(
   return { seasonNumber: 1, episodeNumber: absEpNum };
 }
 
+// Robust helper to consolidate and enrich episode lists from AniZip, Jikan, and Kitsu
+async function getEnrichedEpisodesList(
+  seasonId: string,
+  seasonName: string,
+  totalEpisodes: number,
+  idMal: number | string | null
+): Promise<any[]> {
+  let seasonEps: any[] = [];
+
+  // 1. Try AniZip first
+  try {
+    const aniZipEps = await fetchEpisodesFromAniZip(seasonId, totalEpisodes);
+    if (aniZipEps && aniZipEps.length > 0) {
+      seasonEps = aniZipEps;
+    }
+  } catch { /* ignore */ }
+
+  // 2. If we lack thumbnails or summaries, overlay from Jikan
+  const lacksMetadata = seasonEps.length === 0 || seasonEps.some(e => !e.thumbnail || !e.description);
+  if (lacksMetadata && idMal) {
+    try {
+      const jikanEps = await fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes);
+      if (jikanEps && jikanEps.length > 0) {
+        if (seasonEps.length === 0) {
+          seasonEps = jikanEps;
+        } else {
+          seasonEps = seasonEps.map((ep) => {
+            const jEp = jikanEps.find(je => je.episodeNum === ep.episodeNum);
+            return {
+              ...ep,
+              thumbnail: ep.thumbnail || jEp?.thumbnail || null,
+              description: ep.description || jEp?.description || null,
+            };
+          });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 3. If we STILL lack thumbnails or summaries, overlay from Kitsu
+  const stillLacksMetadata = seasonEps.length === 0 || seasonEps.some(e => !e.thumbnail || !e.description);
+  if (stillLacksMetadata) {
+    try {
+      const kitsuEps = await fetchEpisodesFromKitsu(seasonName, totalEpisodes);
+      if (kitsuEps && kitsuEps.length > 0) {
+        if (seasonEps.length === 0) {
+          seasonEps = kitsuEps;
+        } else {
+          seasonEps = seasonEps.map((ep) => {
+            const kEp = kitsuEps.find(ke => ke.episodeNum === ep.episodeNum);
+            return {
+              ...ep,
+              thumbnail: ep.thumbnail || kEp?.thumbnail || null,
+              description: ep.description || kEp?.description || null,
+            };
+          });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  return seasonEps;
+}
+
 const episodesCache = new Map<string, { data: any; expires: number }>();
 
 export async function GET(
@@ -92,29 +156,8 @@ export async function GET(
           }
         } catch { /* ignore */ }
 
-        // Get overlay data using AniZip (or Jikan/Kitsu fallback) for thumbnails/descriptions
-        let overlayEps: any[] = [];
-        try {
-          const realEps = await fetchEpisodesFromAniZip(season.id, season.totalEpisodes);
-          if (realEps && realEps.length > 0) overlayEps = realEps;
-        } catch { /* fallback */ }
-
-        if (overlayEps.length === 0 && season.idMal) {
-          try {
-            const realEps = await fetchEpisodesFromJikan(
-              season.idMal, season.id,
-              season.totalEpisodes
-            );
-            if (realEps) overlayEps = realEps;
-          } catch { /* fallback */ }
-        }
-
-        if (overlayEps.length === 0) {
-          try {
-            const realEps = await fetchEpisodesFromKitsu(season.name, season.totalEpisodes);
-            if (realEps) overlayEps = realEps;
-          } catch { /* use TMDB-only */ }
-        }
+        // Get overlay data using our enriched helper
+        const overlayEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
 
         // Calculate needed TMDB seasons
         const neededSeasons = new Set<number>();
@@ -170,68 +213,16 @@ export async function GET(
           if (tmdbSeasonData) seasonOverview = tmdbSeasonData.overview || null;
         } catch { /* no overview */ }
       } else {
-        // ── No TMDB: use AniZip/Jikan episodes ────────────────────────────────────
-        const metaEpsForSeason = meta.episodes.filter(e => e.seasonId === seasonId);
-        seasonEps = metaEpsForSeason.map((ep: any) => ({
-          episodeId: ep.episodeId || `${seasonId}-${ep.episodeNum}`,
-          episodeNum: Number(ep.episodeNum || 1),
-          title: ep.title || `Episode ${ep.episodeNum || 1}`,
-          thumbnail: ep.thumbnail || null,
-          malUrl: ep.malUrl || null,
-          isFiller: ep.isFiller || false,
-          releasedDate: ep.releasedDate || null,
-          description: ep.description || null,
+        // ── No TMDB: use enriched episodes ────────────────────────────────────
+        const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
+        seasonEps = enrichedEps.map((ep) => ({
+          ...ep,
+          episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
           seasonNum: seasonNumFromList,
           seasonId: season.id,
           seasonName: season.name,
           seasonMalId: season.idMal || null,
         }));
-
-        let resolvedEps: any[] | null = null;
-        try {
-          resolvedEps = await fetchEpisodesFromAniZip(season.id, season.totalEpisodes);
-        } catch { /* try Jikan */ }
-
-        if (resolvedEps && resolvedEps.length > 0) {
-          seasonEps = resolvedEps.map((ep) => ({
-            ...ep,
-            episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-            seasonNum: seasonNumFromList,
-            seasonId: season.id,
-            seasonName: season.name,
-            seasonMalId: season.idMal || null,
-          }));
-        } else if (season.idMal) {
-          try {
-            const realEps = await fetchEpisodesFromJikan(season.idMal, season.id, season.totalEpisodes);
-            if (realEps && realEps.length > 0) {
-              seasonEps = realEps.map((ep) => ({
-                ...ep,
-                episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-                seasonNum: seasonNumFromList,
-                seasonId: season.id,
-                seasonName: season.name,
-                seasonMalId: season.idMal,
-              }));
-            }
-          } catch { /* try Kitsu */ }
-        }
-
-        if ((!resolvedEps || resolvedEps.length === 0) && (!seasonEps || seasonEps.length === 0 || seasonEps.every(e => !e.thumbnail || !e.description))) {
-          try {
-            const realEps = await fetchEpisodesFromKitsu(season.name, season.totalEpisodes);
-            if (realEps && realEps.length > 0) {
-              seasonEps = realEps.map((ep) => ({
-                ...ep,
-                episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-                seasonNum: seasonNumFromList,
-                seasonId: season.id,
-                seasonName: season.name,
-                seasonMalId: season.idMal || null,
-              }));
-            }
-          } catch { /* use placeholders */ }
-        }
 
         const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
         const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel.startsWith(t));
@@ -293,28 +284,8 @@ export async function GET(
             }
           } catch { /* ignore */ }
 
-          let overlayEps: any[] = [];
-          try {
-            const realEps = await fetchEpisodesFromAniZip(String(season.id), season.totalEpisodes);
-            if (realEps) overlayEps = realEps;
-          } catch { /* try Jikan */ }
-
-          if (overlayEps.length === 0 && season.idMal) {
-            try {
-              const realEps = await fetchEpisodesFromJikan(
-                season.idMal, String(season.id),
-                season.totalEpisodes
-              );
-              if (realEps) overlayEps = realEps;
-            } catch { /* try Kitsu */ }
-          }
-
-          if (overlayEps.length === 0) {
-            try {
-              const realEps = await fetchEpisodesFromKitsu(season.name, season.totalEpisodes);
-              if (realEps) overlayEps = realEps;
-            } catch { /* use TMDB-only */ }
-          }
+          // Get overlay data using our enriched helper
+          const overlayEps = await getEnrichedEpisodesList(String(season.id), season.name, season.totalEpisodes, season.idMal || null);
 
           const neededSeasons = new Set<number>();
           overlayEps.forEach(ep => {
@@ -362,67 +333,16 @@ export async function GET(
             });
           }
         } else {
-          const seasonInfo = meta.episodes.filter(e => e.seasonNum === seasonNumParam);
-          seasonEps = seasonInfo.map((ep: any) => ({
+          // Use our enriched helper directly
+          const enrichedEps = await getEnrichedEpisodesList(String(season.id), season.name, season.totalEpisodes, season.idMal || null);
+          seasonEps = enrichedEps.map((ep) => ({
+            ...ep,
             episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-            episodeNum: Number(ep.episodeNum || 1),
-            title: ep.title || `Episode ${ep.episodeNum || 1}`,
-            thumbnail: ep.thumbnail || null,
-            malUrl: ep.malUrl || null,
-            isFiller: ep.isFiller || false,
-            releasedDate: ep.releasedDate || null,
-            description: ep.description || null,
             seasonNum: seasonNumParam,
             seasonId: String(season.id),
             seasonName: season.name,
             seasonMalId: season.idMal || null,
           }));
-
-          let resolvedEps: any[] | null = null;
-          try {
-            resolvedEps = await fetchEpisodesFromAniZip(String(season.id), 100);
-          } catch { /* try Jikan */ }
-
-          if (resolvedEps && resolvedEps.length > 0) {
-            seasonEps = resolvedEps.map((ep) => ({
-              ...ep,
-              episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-              seasonNum: seasonNumParam,
-              seasonId: String(season.id),
-              seasonName: season.name,
-              seasonMalId: season.idMal || null,
-            }));
-          } else if (season.idMal) {
-            try {
-              const realEps = await fetchEpisodesFromJikan(season.idMal, String(season.id), 100);
-              if (realEps && realEps.length > 0) {
-                seasonEps = realEps.map((ep) => ({
-                  ...ep,
-                  episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-                  seasonNum: seasonNumParam,
-                  seasonId: String(season.id),
-                  seasonName: season.name,
-                  seasonMalId: season.idMal,
-                }));
-              }
-            } catch { /* try Kitsu */ }
-          }
-
-          if ((!resolvedEps || resolvedEps.length === 0) && (!seasonEps || seasonEps.length === 0 || seasonEps.every(e => !e.thumbnail || !e.description))) {
-            try {
-              const realEps = await fetchEpisodesFromKitsu(season.name, season.totalEpisodes);
-              if (realEps && realEps.length > 0) {
-                seasonEps = realEps.map((ep) => ({
-                  ...ep,
-                  episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-                  seasonNum: seasonNumParam,
-                  seasonId: String(season.id),
-                  seasonName: season.name,
-                  seasonMalId: season.idMal || null,
-                }));
-              }
-            } catch { /* use placeholders */ }
-          }
 
           const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
           const isSpecial = ["Movie", "OVA", "Special"].some(t => season.seasonLabel.startsWith(t));
@@ -475,25 +395,8 @@ export async function GET(
           }
         } catch { /* ignore */ }
 
-        let overlayEps: any[] = [];
-        try {
-          const realEps = await fetchEpisodesFromAniZip(season.id, season.totalEpisodes);
-          if (realEps) overlayEps = realEps;
-        } catch { /* try Jikan */ }
-
-        if (overlayEps.length === 0 && season.idMal) {
-          try {
-            const realEps = await fetchEpisodesFromJikan(season.idMal, season.id, season.totalEpisodes);
-            if (realEps) overlayEps = realEps;
-          } catch { /* try Kitsu */ }
-        }
-
-        if (overlayEps.length === 0) {
-          try {
-            const realEps = await fetchEpisodesFromKitsu(season.name, season.totalEpisodes);
-            if (realEps) overlayEps = realEps;
-          } catch { /* use TMDB-only */ }
-        }
+        // Get overlay data using our enriched helper
+        const overlayEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
 
         const neededSeasons = new Set<number>();
         overlayEps.forEach(ep => {
@@ -540,52 +443,16 @@ export async function GET(
           });
         }
       } else {
-        let resolvedEps: any[] | null = null;
-        try {
-          resolvedEps = await fetchEpisodesFromAniZip(season.id, season.totalEpisodes);
-        } catch { /* try Jikan */ }
-
-        let seasonEps: any[] = [];
-        if (resolvedEps && resolvedEps.length > 0) {
-          seasonEps = resolvedEps.map((ep) => ({
-            ...ep,
-            episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-            seasonNum: seasonIdx,
-            seasonId: season.id,
-            seasonName: season.name,
-            seasonMalId: season.idMal || null,
-          }));
-        } else if (season.idMal) {
-          try {
-            const realEps = await fetchEpisodesFromJikan(season.idMal, season.id, season.totalEpisodes);
-            if (realEps && realEps.length > 0) {
-              seasonEps = realEps.map((ep) => ({
-                ...ep,
-                episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-                seasonNum: seasonIdx,
-                seasonId: season.id,
-                seasonName: season.name,
-                seasonMalId: season.idMal,
-              }));
-            }
-          } catch { /* try Kitsu */ }
-        }
-
-        if ((!resolvedEps || resolvedEps.length === 0) && (!seasonEps || seasonEps.length === 0 || seasonEps.every(e => !e.thumbnail || !e.description))) {
-          try {
-            const realEps = await fetchEpisodesFromKitsu(season.name, season.totalEpisodes);
-            if (realEps && realEps.length > 0) {
-              seasonEps = realEps.map((ep) => ({
-                ...ep,
-                episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-                seasonNum: seasonIdx,
-                seasonId: season.id,
-                seasonName: season.name,
-                seasonMalId: season.idMal || null,
-              }));
-            }
-          } catch { /* ignore */ }
-        }
+        // Use our enriched helper directly
+        const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
+        let seasonEps: any[] = enrichedEps.map((ep) => ({
+          ...ep,
+          episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
+          seasonNum: seasonIdx,
+          seasonId: season.id,
+          seasonName: season.name,
+          seasonMalId: season.idMal || null,
+        }));
 
         if (!seasonEps || seasonEps.length === 0) {
           const metaEpsForSeason = meta.episodes.filter(e => e.seasonId === season.id);

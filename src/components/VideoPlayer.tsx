@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward } from "lucide-react";
+import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward, ExternalLink } from "lucide-react";
 import { StreamingSource, getStreamingSources } from "@/lib/streaming-fetch";
 import { fetchJson } from "@/lib/utils";
 
@@ -15,10 +15,9 @@ interface VideoPlayerProps {
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
+  vidsrcto: { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
   vidlink: { bg: "bg-teal-600", badge: "bg-teal-500/20 text-teal-300" },
-  vidsrcfyi: { bg: "bg-cyan-600", badge: "bg-cyan-500/20 text-cyan-300" },
-  cinesrc: { bg: "bg-[#4B5694]", badge: "bg-[#4B5694]/20 text-[#7288AE]" },
-  embedsu: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
+  twoembed: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -40,7 +39,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.cinesrc;
+  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vidsrcto;
 
   // Check source health on mount
   useEffect(() => {
@@ -148,6 +147,16 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
           )}
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href={currentSource?.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-white/50 hover:text-white text-xs font-bold transition-all"
+            title="Open in New Tab (External Player)"
+          >
+            <ExternalLink className="w-4 h-4" />
+            <span className="hidden sm:inline">New Tab</span>
+          </a>
           <button
             onClick={() => { setError(null); setCurrentSource(sources[0]); setIsLoading(true); }}
             className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all"
@@ -176,7 +185,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
           >
             {sources.map((source) => {
               const isActive = currentSource?.name === source.name;
-              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.cinesrc;
+              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.vidsrcto;
               return (
                 <button
                   key={source.name}

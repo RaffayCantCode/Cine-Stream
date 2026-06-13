@@ -10,6 +10,14 @@ interface StreamingAPIConfig {
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
     name: "Source 1",
+    baseUrl: "https://vidsrc.to",
+    type: "vidsrcto",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidsrc.to",
+  },
+  {
+    name: "Source 2",
     baseUrl: "https://vidlink.pro",
     type: "vidlink",
     quality: "Best",
@@ -17,48 +25,27 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://vidlink.pro",
   },
   {
-    name: "Source 2",
-    baseUrl: "https://vidsrc.fyi",
-    type: "vidsrcfyi",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidsrc.fyi",
-  },
-  {
     name: "Source 3",
-    baseUrl: "https://cinesrc.st",
-    type: "cinesrc",
+    baseUrl: "https://www.2embed.cc",
+    type: "twoembed",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://cinesrc.st",
-  },
-  {
-    name: "Source 4",
-    baseUrl: "https://embed.su",
-    type: "embedsu",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://embed.su",
+    healthCheckUrl: "https://www.2embed.cc",
   },
 ];
 
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number): string {
   switch (api.type) {
-    case "vidlink":
-      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
-      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
-
-    case "vidsrcfyi":
+    case "vidsrcto":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "cinesrc":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
-      // optimized: autonext enables auto-play next episode
-      return `${api.baseUrl}/embed/tv/${id}?s=${season ?? 1}&e=${episode ?? 1}&autonext=true`;
+    case "vidlink":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=4b5694`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=4b5694`;
 
-    case "embedsu":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
+    case "twoembed":
+      if (type === "movie") return `${api.baseUrl}/embed/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     default:

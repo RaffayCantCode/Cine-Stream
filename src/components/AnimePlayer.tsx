@@ -6,7 +6,7 @@ import { Server, Maximize2, RotateCcw, SkipForward } from "lucide-react";
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animepahe" | "animeplay" | "ninjastream";
+  provider: "vidnest" | "animepahe" | "animeplay" | "vidlink";
   color: string;
 }
 
@@ -22,10 +22,10 @@ interface AnimePlayerProps {
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Vidnest", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
-  { name: "AnimePahe", provider: "animepahe", color: "from-[#111844]/30 to-[#4B5694]/20" },
-  { name: "AnimePlay", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
-  { name: "NinjaStream", provider: "ninjastream", color: "from-[#6c5ce7]/30 to-[#a29bfe]/20" },
+  { name: "Source 1", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
+  { name: "Source 2", provider: "animepahe", color: "from-[#111844]/30 to-[#4B5694]/20" },
+  { name: "Source 3", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
+  { name: "Source 4", provider: "vidlink", color: "from-[#6c5ce7]/30 to-[#a29bfe]/20" },
 ];
 
 export function AnimePlayer({
@@ -105,17 +105,15 @@ export function AnimePlayer({
               : `https://vidnest.fun/anime/${(rootAnimeId || animeId)?.replace(/\D/g, "")}/${absoluteEpisode}/sub`;
             break;
           case "animepahe":
-            fallbackUrl = `https://vidnest.fun/animepahe/${(malId || animeId)?.replace(/\D/g, "")}/${episode}/sub`;
+            fallbackUrl = `https://vidnest.fun/animepahe/${(malId || rootMalId || animeId || rootAnimeId || "").replace(/\D/g, "")}/${episode}/sub`;
             break;
           case "animeplay":
             fallbackUrl = currentAnilistClean
               ? `https://animeplay.cfd/stream/ani/${currentAnilistClean}/${episode}/sub`
-              : `https://animeplay.cfd/stream/mal/${(malId || animeId)?.replace(/\D/g, "")}/${episode}/sub`;
+              : `https://animeplay.cfd/stream/mal/${(malId || rootMalId || animeId || rootAnimeId || "").replace(/\D/g, "")}/${episode}/sub`;
             break;
-          case "ninjastream":
-            fallbackUrl = currentAnilistClean
-              ? `https://ninjasheild.stream/map/anime/${currentAnilistClean}/${episode}/sub`
-              : `https://ninjasheild.stream/map/anime/${(rootAnimeId || animeId)?.replace(/\D/g, "")}/${absoluteEpisode}/sub`;
+          case "vidlink":
+            fallbackUrl = `https://vidlink.pro/anime/${(malId || rootMalId || animeId || rootAnimeId || "").replace(/\D/g, "")}/${episode}/sub?fallback=true`;
             break;
         }
         setCurrentUrl(fallbackUrl);
