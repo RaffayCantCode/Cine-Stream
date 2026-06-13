@@ -128,14 +128,24 @@ export default function AnimeBrowsePage() {
     }
   }, [getCategory, selectedGenre, sortBy]);
 
-  // Auto-switch to search mode when user types
+  // Trigger loading state and clear items immediately on typing
+  useEffect(() => {
+    if (query.trim()) {
+      setIsLoading(true);
+      setItems([]);
+    }
+  }, [query]);
+
+  // Auto-switch to search mode when user types, and restore popular when cleared
   useEffect(() => {
     if (initialLoad.current) return;
     if (debouncedQuery.trim()) {
       setSortBy("search");
       setSelectedGenre(null);
+    } else if (sortBy === "search") {
+      setSortBy("popular");
     }
-  }, [debouncedQuery]);
+  }, [debouncedQuery, sortBy]);
 
   // Initial load and reload on page change
   useEffect(() => {

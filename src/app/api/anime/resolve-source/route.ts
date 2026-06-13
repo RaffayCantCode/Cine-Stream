@@ -56,17 +56,17 @@ export async function GET(request: NextRequest) {
     let defaultUrl = "";
     switch (provider) {
       case "vidnest":
-        defaultUrl = anilistIdResolved 
-          ? `https://vidnest.fun/anime/${anilistIdResolved}/${episode}/sub`
-          : `https://vidnest.fun/anime/${malIdResolved || ""}/${episode}/sub`;
+        defaultUrl = malIdResolved 
+          ? `https://vidnest.fun/anime/${malIdResolved}/${episode}/sub`
+          : `https://vidnest.fun/anime/${anilistIdResolved || ""}/${episode}/sub`;
         break;
       case "animepahe":
         defaultUrl = `https://vidnest.fun/animepahe/${malIdResolved || anilistIdResolved || ""}/${episode}/sub`;
         break;
       case "animeplay":
-        defaultUrl = anilistIdResolved
-          ? `https://animeplay.cfd/stream/ani/${anilistIdResolved}/${episode}/sub`
-          : `https://animeplay.cfd/stream/mal/${malIdResolved || ""}/${episode}/sub`;
+        defaultUrl = malIdResolved
+          ? `https://animeplay.cfd/stream/mal/${malIdResolved}/${episode}/sub`
+          : `https://animeplay.cfd/stream/ani/${anilistIdResolved || ""}/${episode}/sub`;
         break;
       case "vidlink":
         defaultUrl = `https://vidlink.pro/anime/${malIdResolved || anilistIdResolved || ""}/${episode}/sub?fallback=true`;
@@ -85,9 +85,13 @@ export async function GET(request: NextRequest) {
         const seasonApiUrl = `https://new.vidnest.fun/hianime/anime/${anilistIdResolved}/${episode}/sub`;
         const seasonWorks = await testUrl(seasonApiUrl);
         if (seasonWorks) {
-          resolvedUrl = `https://vidnest.fun/anime/${anilistIdResolved}/${episode}/sub`;
+          resolvedUrl = malIdResolved
+            ? `https://vidnest.fun/anime/${malIdResolved}/${episode}/sub`
+            : `https://vidnest.fun/anime/${anilistIdResolved}/${episode}/sub`;
         } else {
-          resolvedUrl = `https://vidnest.fun/anime/${mainAnilistId}/${absoluteEpisode}/sub`;
+          resolvedUrl = mainMalId
+            ? `https://vidnest.fun/anime/${mainMalId}/${absoluteEpisode}/sub`
+            : `https://vidnest.fun/anime/${mainAnilistId}/${absoluteEpisode}/sub`;
         }
         break;
       }
@@ -109,9 +113,13 @@ export async function GET(request: NextRequest) {
         const seasonApiUrl = `https://new.vidnest.fun/hianime/anime/${anilistIdResolved}/${episode}/sub`;
         const seasonWorks = await testUrl(seasonApiUrl);
         if (seasonWorks) {
-          resolvedUrl = `https://animeplay.cfd/stream/ani/${anilistIdResolved}/${episode}/sub`;
+          resolvedUrl = malIdResolved
+            ? `https://animeplay.cfd/stream/mal/${malIdResolved}/${episode}/sub`
+            : `https://animeplay.cfd/stream/ani/${anilistIdResolved}/${episode}/sub`;
         } else {
-          resolvedUrl = `https://animeplay.cfd/stream/ani/${mainAnilistId}/${absoluteEpisode}/sub`;
+          resolvedUrl = mainMalId
+            ? `https://animeplay.cfd/stream/mal/${mainMalId}/${absoluteEpisode}/sub`
+            : `https://animeplay.cfd/stream/ani/${mainAnilistId}/${absoluteEpisode}/sub`;
         }
         break;
       }

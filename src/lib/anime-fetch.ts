@@ -489,7 +489,8 @@ function parseSeasonNumberFromTitle(title: string): number {
 async function buildSeasonsFromTmdb(
   tmdbId: number,
   currentId: number,
-  mainMalId: number | null
+  mainMalId: number | null,
+  expectedEpisodeCount?: number | null
 ): Promise<{ seasons: SeasonInfo[]; tmdbSeasonMap: Record<string, number> }> {
   const showData = await tmdbFetch(`/tv/${tmdbId}`) as {
     seasons?: { season_number: number; name: string; episode_count: number; overview?: string }[];
@@ -507,29 +508,59 @@ async function buildSeasonsFromTmdb(
   let accumulatedEpisodes = 0;
   for (const tmdbSeason of sorted) {
     const seasonNum = tmdbSeason.season_number;
-    const label = seasonNum === 0 ? "Specials" : `Season ${seasonNum}`;
     const epCount = tmdbSeason.episode_count || 0;
-    const seasonId = `tmdb-${tmdbId}-s${seasonNum}`;
 
-    seasons.push({
-      id: seasonId,
-      name: tmdbSeason.name || label,
-      seasonLabel: label,
-      totalEpisodes: Math.max(epCount, 1),
-      isCurrent: first,
-      idMal: mainMalId,
-      seasonYear: null,
-      tmdbSeasonNumber: seasonNum,
-      tmdbId: tmdbId,
-      episodeOffset: accumulatedEpisodes,
-    });
-    first = false;
+    // Check if we should split this season (e.g. TMDB Season 1 has 24 episodes but MAL/Jikan expects 12)
+    if (seasonNum > 0 && expectedEpisodeCount && epCount > expectedEpisodeCount) {
+      const parts = Math.ceil(epCount / expectedEpisodeCount);
+      for (let p = 0; p < parts; p++) {
+        const partEpCount = Math.min(expectedEpisodeCount, epCount - p * expectedEpisodeCount);
+        if (partEpCount <= 0) continue;
 
-    if (seasonNum > 0) {
-      accumulatedEpisodes += epCount;
+        const partSeasonNum = seasonNum + p;
+        const label = `Season ${partSeasonNum}`;
+        const seasonId = `tmdb-${tmdbId}-s${seasonNum}-p${p}`;
+
+        seasons.push({
+          id: seasonId,
+          name: tmdbSeason.name ? `${tmdbSeason.name} Part ${p + 1}` : label,
+          seasonLabel: label,
+          totalEpisodes: partEpCount,
+          isCurrent: first,
+          idMal: mainMalId,
+          seasonYear: null,
+          tmdbSeasonNumber: seasonNum,
+          tmdbId: tmdbId,
+          episodeOffset: accumulatedEpisodes,
+        });
+        first = false;
+        accumulatedEpisodes += partEpCount;
+        tmdbSeasonMap[seasonId] = seasonNum;
+      }
+    } else {
+      const label = seasonNum === 0 ? "Specials" : `Season ${seasonNum}`;
+      const seasonId = `tmdb-${tmdbId}-s${seasonNum}`;
+
+      seasons.push({
+        id: seasonId,
+        name: tmdbSeason.name || label,
+        seasonLabel: label,
+        totalEpisodes: Math.max(epCount, 1),
+        isCurrent: first,
+        idMal: mainMalId,
+        seasonYear: null,
+        tmdbSeasonNumber: seasonNum,
+        tmdbId: tmdbId,
+        episodeOffset: accumulatedEpisodes,
+      });
+      first = false;
+
+      if (seasonNum > 0) {
+        accumulatedEpisodes += epCount;
+      }
+
+      tmdbSeasonMap[seasonId] = seasonNum;
     }
-
-    tmdbSeasonMap[seasonId] = seasonNum;
   }
 
   return { seasons, tmdbSeasonMap };
@@ -632,6 +663,30 @@ export async function getAnimeDetails(
   tmdbId?: number | null;
   tmdbSeasonMap?: Record<string, number>;
 } | null> {
+  const isMalInput = id.startsWith("mal-");
+  const malIdNum = parseInt(id.replace("mal-", ""), 10);
+  if (isNaN(malIdNum)) return null;
+
+  let resolvedFromMal = false;
+  if (isMalInput) {
+    try {
+      const q = `query ($idMal: Int) {
+        Media(idMal: $idMal, type: ANIME) {
+          id
+        }
+      }`;
+      const res = await anilistQuery(q, { idMal: malIdNum });
+      if (res?.data?.Media?.id) {
+        id = String(res.data.Media.id);
+        resolvedFromMal = true;
+      } else {
+        id = String(malIdNum);
+      }
+    } catch {
+      id = String(malIdNum);
+    }
+  }
+
   const numId = parseInt(id, 10);
   if (isNaN(numId)) return null;
 
@@ -652,17 +707,19 @@ export async function getAnimeDetails(
 
   // Step 1: Fetch main media metadata for the requested ID
   let media: any = null;
-  try {
-    const q = `query ($id: Int) {
-      Media(id: $id, type: ANIME, isAdult: false) {
-        id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-        episodes genres averageScore description status type format season seasonYear
-      }
-    }`;
-    const data = await anilistQuery(q, { id: numId });
-    media = data?.data?.Media;
-  } catch {
-    // AniList failed — try Jikan fallback
+  if (!isMalInput || resolvedFromMal) {
+    try {
+      const q = `query ($id: Int) {
+        Media(id: $id, type: ANIME, isAdult: false) {
+          id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+          episodes genres averageScore description status type format season seasonYear
+        }
+      }`;
+      const data = await anilistQuery(q, { id: numId });
+      media = data?.data?.Media;
+    } catch {
+      // AniList failed — try Jikan fallback
+    }
   }
 
   // Jikan fallback for the main metadata (use ONLY if we have valid MAL ID)
@@ -737,7 +794,7 @@ export async function getAnimeDetails(
 
           if (tmdbId) {
             try {
-              const tmdbData = await buildSeasonsFromTmdb(tmdbId, numId, a.mal_id);
+              const tmdbData = await buildSeasonsFromTmdb(tmdbId, numId, a.mal_id, totalEps);
               if (tmdbData && tmdbData.seasons.length > 0) {
                 seasonsList = tmdbData.seasons;
                 const season1 = seasonsList.find(s => s.tmdbSeasonNumber === 1) || seasonsList[0];
@@ -1045,7 +1102,8 @@ export async function searchViaJikan(query: string): Promise<AnimeItem[]> {
     if (!res.ok) return [];
     const data = await res.json();
     return (data.data || []).map((a: any) => ({
-      id: String(a.mal_id),
+      id: "mal-" + String(a.mal_id),
+      idMal: String(a.mal_id),
       name: a.title_english || a.title,
       jname: a.title_japanese || null,
       poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
@@ -1323,11 +1381,25 @@ export async function fetchAnimeApi(
   let result: any;
   if (isSearch) {
     const keyword = params.get("keyword") || params.get("q") || "";
-    let items = await searchAnime(keyword, page, genre);
-    if (items.length === 0) {
-      items = await searchViaJikan(keyword);
+    const [anilistItems, jikanItems] = await Promise.all([
+      searchAnime(keyword, page, genre).catch(() => []),
+      searchViaJikan(keyword).catch(() => []),
+    ]);
+
+    const combined = [...anilistItems];
+    const seenNames = new Set(anilistItems.map(item => item.name.toLowerCase()));
+    const seenMalIds = new Set(anilistItems.map(item => item.idMal).filter(Boolean));
+
+    for (const item of jikanItems) {
+      const lowerName = item.name.toLowerCase();
+      if (!seenNames.has(lowerName) && (!item.idMal || !seenMalIds.has(item.idMal))) {
+        combined.push(item);
+        seenNames.add(lowerName);
+        if (item.idMal) seenMalIds.add(item.idMal);
+      }
     }
-    result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
+
+    result = { success: true, data: combined.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
   } else if (isAiring) {
     const items = await getAiringAnime(page, genre);
     result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
