@@ -10,14 +10,6 @@ interface StreamingAPIConfig {
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
     name: "Source 1",
-    baseUrl: "https://embed.smashystream.com",
-    type: "smashy",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://embed.smashystream.com",
-  },
-  {
-    name: "Source 2",
     baseUrl: "https://vixsrc.to",
     type: "vixsrc",
     quality: "Best",
@@ -25,39 +17,47 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://vixsrc.to",
   },
   {
-    name: "Source 3",
-    baseUrl: "https://multiembed.mov",
-    type: "multiembed",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://multiembed.mov",
-  },
-  {
-    name: "Source 4",
+    name: "Source 2",
     baseUrl: "https://www.2embed.cc",
     type: "twoembed",
     quality: "Best",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://www.2embed.cc",
   },
+  {
+    name: "Source 3",
+    baseUrl: "https://vidlink.pro",
+    type: "vidlink",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidlink.pro",
+  },
+  {
+    name: "Source 4",
+    baseUrl: "https://vidsrc.to",
+    type: "vidsrc",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidsrc.to",
+  },
 ];
 
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number): string {
   switch (api.type) {
-    case "smashy":
-      if (type === "movie") return `${api.baseUrl}/playere.php?tmdb=${id}`;
-      return `${api.baseUrl}/playere.php?tmdb=${id}&season=${season ?? 1}&episode=${episode ?? 1}`;
-
     case "vixsrc":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "multiembed":
-      if (type === "movie") return `${api.baseUrl}/?video_id=${id}&tmdb=1`;
-      return `${api.baseUrl}/?video_id=${id}&s=${season ?? 1}&e=${episode ?? 1}&tmdb=1`;
-
     case "twoembed":
       if (type === "movie") return `${api.baseUrl}/embed/${id}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "vidlink":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=4b5694`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=4b5694`;
+
+    case "vidsrc":
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     default:

@@ -42,6 +42,7 @@ export default function AnimeBrowsePage() {
   const initialLoad = useRef(true);
   const isLoadingRef = useRef(false);
   const hasMoreRef = useRef(true);
+  const lastFetchedUrlRef = useRef("");
 
   isLoadingRef.current = isLoading;
   hasMoreRef.current = hasMore;
@@ -85,14 +86,20 @@ export default function AnimeBrowsePage() {
     setIsLoading(true);
     setError(null);
 
-    try {
-      const category = getCategory();
-      const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
+    const category = getCategory();
+    const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
+    const fetchUrl = `/api/anime?category=${category}&page=${loadPage}${genreParam}`;
+    lastFetchedUrlRef.current = fetchUrl;
 
+    try {
       const res = await fetchJson<{ success: boolean; data: { items: AnimeItem[] }; hasMore?: boolean }>(
-        `/api/anime?category=${category}&page=${loadPage}${genreParam}`,
+        fetchUrl,
         { cacheTtlMs: 300000 }
       );
+
+      if (lastFetchedUrlRef.current !== fetchUrl) {
+        return;
+      }
 
       const merged = res.data?.items || [];
 
@@ -119,12 +126,15 @@ export default function AnimeBrowsePage() {
       });
       setHasMore(res.hasMore !== false);
     } catch (e) {
+      if (lastFetchedUrlRef.current !== fetchUrl) return;
       setError(e instanceof Error ? e.message : "Failed to load anime");
       if (replace) setItems([]);
       setHasMore(false);
     } finally {
-      setIsLoading(false);
-      initialLoad.current = false;
+      if (lastFetchedUrlRef.current === fetchUrl) {
+        setIsLoading(false);
+        initialLoad.current = false;
+      }
     }
   }, [getCategory, selectedGenre, sortBy]);
 

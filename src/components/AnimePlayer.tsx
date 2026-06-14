@@ -96,31 +96,33 @@ export function AnimePlayer({
         // Client-side fallback if server-side resolve API fails
         const absoluteEpisode = (episodeOffset || 0) + episode;
         const currentAnilistClean = animeId?.replace(/\D/g, "") || null;
-        const currentMalClean = malId?.replace(/\D/g, "") || rootMalId?.replace(/\D/g, "") || null;
+        const currentMalClean = malId?.replace(/\D/g, "") || null;
         const mainAnilistClean = rootAnimeId?.replace(/\D/g, "") || currentAnilistClean;
         const mainMalClean = rootMalId?.replace(/\D/g, "") || currentMalClean;
+
+        const isSequel = currentAnilistClean && mainAnilistClean && currentAnilistClean !== mainAnilistClean;
+        const epToUse = isSequel ? episode : (episodeOffset || 0) > 0 ? absoluteEpisode : episode;
+        const idToUseAni = isSequel ? currentAnilistClean : mainAnilistClean;
+        const idToUseMal = isSequel ? (currentMalClean || mainMalClean) : mainMalClean;
+
         let fallbackUrl = "";
 
         switch (currentSource.provider) {
           case "vidnest":
-            fallbackUrl = currentMalClean
-              ? `https://vidnest.fun/anime/${currentMalClean}/${episode}/sub`
-              : currentAnilistClean
-                ? `https://vidnest.fun/anime/${currentAnilistClean}/${episode}/sub`
-                : `https://vidnest.fun/anime/${mainMalClean || mainAnilistClean || ""}/${absoluteEpisode}/sub`;
+            fallbackUrl = idToUseAni
+              ? `https://vidnest.fun/anime/${idToUseAni}/${epToUse}/sub`
+              : `https://vidnest.fun/anime/${idToUseMal || ""}/${epToUse}/sub`;
             break;
           case "animepahe":
-            fallbackUrl = `https://vidnest.fun/animepahe/${currentMalClean || currentAnilistClean || ""}/${episode}/sub`;
+            fallbackUrl = `https://vidnest.fun/animepahe/${idToUseMal || idToUseAni || ""}/${epToUse}/sub`;
             break;
           case "animeplay":
-            fallbackUrl = currentMalClean
-              ? `https://animeplay.cfd/stream/mal/${currentMalClean}/${episode}/sub`
-              : currentAnilistClean
-                ? `https://animeplay.cfd/stream/ani/${currentAnilistClean}/${episode}/sub`
-                : `https://animeplay.cfd/stream/mal/${mainMalClean || mainAnilistClean || ""}/${episode}/sub`;
+            fallbackUrl = idToUseMal
+              ? `https://animeplay.cfd/stream/mal/${idToUseMal}/${epToUse}/sub`
+              : `https://animeplay.cfd/stream/ani/${idToUseAni || ""}/${epToUse}/sub`;
             break;
           case "vidlink":
-            fallbackUrl = `https://vidlink.pro/anime/${currentMalClean || currentAnilistClean || ""}/${episode}/sub?fallback=true`;
+            fallbackUrl = `https://vidlink.pro/anime/${idToUseMal || idToUseAni || ""}/${epToUse}/sub?fallback=true`;
             break;
         }
         setCurrentUrl(fallbackUrl);

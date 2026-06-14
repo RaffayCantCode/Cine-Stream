@@ -15,10 +15,10 @@ interface VideoPlayerProps {
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
-  smashy: { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
   vixsrc: { bg: "bg-teal-600", badge: "bg-teal-500/20 text-teal-300" },
-  multiembed: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
   twoembed: { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
+  vidlink: { bg: "bg-violet-600", badge: "bg-violet-500/20 text-violet-300" },
+  vidsrc: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -40,7 +40,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.smashy;
+  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vixsrc;
 
   // Check source health on mount
   useEffect(() => {
@@ -186,7 +186,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
           >
             {sources.map((source) => {
               const isActive = currentSource?.name === source.name;
-              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.smashy;
+              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.vixsrc;
               return (
                 <button
                   key={source.name}
