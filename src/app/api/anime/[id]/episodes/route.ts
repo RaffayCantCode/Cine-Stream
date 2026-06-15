@@ -7,23 +7,38 @@ interface TmdbSeasonMin {
   episode_count: number;
 }
 
-function mapAbsoluteToTmdb(
-  absEpNum: number,
+function mapRelativeToTmdb(
+  relativeEpNum: number,
+  startSeasonNum: number,
   tmdbSeasonsList: TmdbSeasonMin[]
 ): { seasonNumber: number; episodeNumber: number } {
-  let remaining = absEpNum;
+  let remaining = relativeEpNum;
+  let foundStart = false;
+
+  const hasStartSeason = tmdbSeasonsList.some(s => s.season_number === startSeasonNum);
+
   for (const s of tmdbSeasonsList) {
+    if (hasStartSeason) {
+      if (s.season_number === startSeasonNum) {
+        foundStart = true;
+      }
+      if (!foundStart) continue;
+    } else {
+      foundStart = true;
+    }
+
     const count = s.episode_count || 0;
     if (remaining <= count) {
       return { seasonNumber: s.season_number, episodeNumber: remaining };
     }
     remaining -= count;
   }
+
   if (tmdbSeasonsList.length > 0) {
     const last = tmdbSeasonsList[tmdbSeasonsList.length - 1];
     return { seasonNumber: last.season_number, episodeNumber: remaining + (last.episode_count || 0) };
   }
-  return { seasonNumber: 1, episodeNumber: absEpNum };
+  return { seasonNumber: startSeasonNum, episodeNumber: relativeEpNum };
 }
 
 // Robust helper to consolidate and enrich episode lists from AniZip, Jikan, and Kitsu
@@ -164,8 +179,9 @@ export async function GET(
         overlayEps.forEach(ep => {
           if (ep.seasonNumber) neededSeasons.add(ep.seasonNumber);
         });
+        const startSeason = tmdbSeasonNum || 1;
         for (let i = 1; i <= season.totalEpisodes; i++) {
-          const mapped = mapAbsoluteToTmdb(episodeOffset + i, tmdbSeasonsList);
+          const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
           neededSeasons.add(mapped.seasonNumber);
         }
 
@@ -182,7 +198,7 @@ export async function GET(
           let tmdbEpisode = matchEp?.episodeNumber || null;
 
           if (!tmdbSeason || !tmdbEpisode) {
-            const mapped = mapAbsoluteToTmdb(episodeOffset + i, tmdbSeasonsList);
+            const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
             tmdbSeason = mapped.seasonNumber;
             tmdbEpisode = mapped.episodeNumber;
           }
@@ -292,8 +308,9 @@ export async function GET(
           overlayEps.forEach(ep => {
             if (ep.seasonNumber) neededSeasons.add(ep.seasonNumber);
           });
+          const startSeason = tmdbSeasonNum || 1;
           for (let i = 1; i <= season.totalEpisodes; i++) {
-            const mapped = mapAbsoluteToTmdb(episodeOffset + i, tmdbSeasonsList);
+            const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
             neededSeasons.add(mapped.seasonNumber);
           }
 
@@ -309,7 +326,7 @@ export async function GET(
             let tmdbEpisode = matchEp?.episodeNumber || null;
 
             if (!tmdbSeason || !tmdbEpisode) {
-              const mapped = mapAbsoluteToTmdb(episodeOffset + i, tmdbSeasonsList);
+              const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
               tmdbSeason = mapped.seasonNumber;
               tmdbEpisode = mapped.episodeNumber;
             }
@@ -404,8 +421,9 @@ export async function GET(
         overlayEps.forEach(ep => {
           if (ep.seasonNumber) neededSeasons.add(ep.seasonNumber);
         });
+        const startSeason = tmdbSeasonNum || 1;
         for (let i = 1; i <= season.totalEpisodes; i++) {
-          const mapped = mapAbsoluteToTmdb(episodeOffset + i, tmdbSeasonsList);
+          const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
           neededSeasons.add(mapped.seasonNumber);
         }
 
@@ -421,7 +439,7 @@ export async function GET(
           let tmdbEpisode = matchEp?.episodeNumber || null;
 
           if (!tmdbSeason || !tmdbEpisode) {
-            const mapped = mapAbsoluteToTmdb(episodeOffset + i, tmdbSeasonsList);
+            const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
             tmdbSeason = mapped.seasonNumber;
             tmdbEpisode = mapped.episodeNumber;
           }

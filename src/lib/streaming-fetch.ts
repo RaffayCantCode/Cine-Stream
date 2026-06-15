@@ -88,8 +88,17 @@ export function getPrimarySource(type: "movie" | "tv", id: number, season?: numb
   return sources[0];
 }
 
+const healthCache = {
+  data: null as Record<string, boolean> | null,
+  expires: 0
+};
+
 // Server-side health check: returns map of source type -> alive status
 export async function checkSourceHealth(): Promise<Record<string, boolean>> {
+  if (healthCache.data && healthCache.expires > Date.now()) {
+    return healthCache.data;
+  }
+
   const results: Record<string, boolean> = {};
   const checks = STREAMING_APIS.map(async (api) => {
     try {
@@ -106,6 +115,10 @@ export async function checkSourceHealth(): Promise<Record<string, boolean>> {
   STREAMING_APIS.forEach((api) => {
     if (results[api.type] === undefined) results[api.type] = false;
   });
+
+  healthCache.data = results;
+  healthCache.expires = Date.now() + 600000; // Cache for 10 minutes
+
   return results;
 }
 
