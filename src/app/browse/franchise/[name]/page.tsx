@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { fetchJson } from "@/lib/utils";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Film, Tv, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface MediaItem {
   id: number;
@@ -17,6 +18,15 @@ interface MediaItem {
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
+  original_language?: string;
+  genre_ids?: number[];
+}
+
+interface FranchiseResponse {
+  results: MediaItem[];
+  curated: boolean;
+  description?: string;
+  name?: string;
 }
 
 export default function FranchisePage() {
@@ -25,108 +35,141 @@ export default function FranchisePage() {
   const decodedName = decodeURIComponent(name);
 
   const [items, setItems] = useState<MediaItem[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [description, setDescription] = useState<string | null>(null);
+  const [isCurated, setIsCurated] = useState(false);
 
   useEffect(() => {
     setItems([]);
-    setPage(1);
-    setHasMore(true);
-  }, [name]);
+    setIsLoading(true);
+    setError(null);
+    setDescription(null);
 
-  useEffect(() => {
     const load = async () => {
-      setIsLoading(true);
-      setError(null);
       try {
-        const pages = page === 1 ? [1, 2, 3] : [page, page + 1, page + 2];
-        const allResults = await Promise.all(
-          pages.map((p) =>
-            fetchJson<{ results: MediaItem[]; total_pages?: number }>(
-              `/api/tmdb/search?query=${encodeURIComponent(decodedName)}&type=multi&page=${p}`,
-              { cacheTtlMs: 60000 }
-            )
-          )
+        const data = await fetchJson<FranchiseResponse>(
+          `/api/tmdb/franchise?name=${encodeURIComponent(decodedName)}`,
+          { cacheTtlMs: 300000 }
         );
-        const merged = allResults.flatMap((r) => r.results || []);
-        const seen = new Set<number>();
-        const unique = merged.filter((item) => {
-          if (!item.id || seen.has(item.id)) return false;
-          seen.add(item.id);
-          return item.poster_path && (item.media_type === "movie" || item.media_type === "tv");
-        });
-        setItems((prev) => {
-          const combined = page === 1 ? unique : [...prev, ...unique];
-          const seenIds = new Set();
-          return combined.filter((item) => {
-            if (!item || !item.id) return false;
-            const key = `${item.media_type || "movie"}-${item.id}`;
-            if (seenIds.has(key)) return false;
-            seenIds.add(key);
-            return true;
-          });
-        });
-        const last = allResults[allResults.length - 1];
-        setHasMore(last ? (last.total_pages ?? 1) > pages[pages.length - 1] : false);
+
+        setItems(data.results || []);
+        setDescription(data.description || null);
+        setIsCurated(data.curated ?? false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load");
-        setHasMore(false);
+        setError(e instanceof Error ? e.message : "Failed to load franchise");
       } finally {
         setIsLoading(false);
       }
     };
-    load();
-  }, [name, page, decodedName]);
 
-  useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting) return;
-        if (isLoading || !hasMore) return;
-        setPage((p) => p + 3);
-      },
-      { rootMargin: "0px 0px 3000px 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [isLoading, hasMore, items.length]);
+    load();
+  }, [name, decodedName]);
+
+  const movieCount = items.filter((i) => i.media_type === "movie").length;
+  const tvCount = items.filter((i) => i.media_type === "tv").length;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
         <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
-          <div className="mb-8 flex items-center gap-4">
-            <Link href="/" className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/60 hover:text-white transition-all">
-              <ArrowLeft className="w-5 h-5" />
+
+          {/* ─── Header ─── */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="mb-10"
+          >
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white/80 transition-colors mb-6 group"
+            >
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              Back to home
             </Link>
-            <div>
-              <h1 className="text-4xl font-bold text-white">{decodedName}</h1>
-              <p className="text-sm text-white/40 mt-2">Movies &amp; TV shows from this franchise</p>
-            </div>
-          </div>
 
-          {error && <div className="mb-6 text-sm text-red-300">{error}</div>}
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-            {items.map((item, idx) => (
-              <div key={`${item.media_type}-${item.id}-${idx}`} className="w-full h-full flex justify-center">
-                <MediaCard item={{ ...item, media_type: item.media_type || "movie" }} index={idx} />
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  {isCurated && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.15em] uppercase px-2.5 py-1 rounded-full bg-[#4B5694]/20 border border-[#7288AE]/20 text-[#7288AE]">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      Curated
+                    </span>
+                  )}
+                </div>
+                <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-3">
+                  {decodedName}
+                </h1>
+                {description && (
+                  <p className="text-sm text-white/50 max-w-xl leading-relaxed">
+                    {description}
+                  </p>
+                )}
               </div>
-            ))}
-            {isLoading && items.length === 0 && Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="aspect-[2/3] rounded-lg bg-white/[0.03] animate-pulse" />
-            ))}
+
+              {/* Stats badges */}
+              {!isLoading && items.length > 0 && (
+                <div className="flex items-center gap-3 shrink-0 mt-1">
+                  {movieCount > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                      <Film className="w-4 h-4 text-[#7288AE]" />
+                      <span className="text-sm font-semibold text-white">{movieCount}</span>
+                      <span className="text-xs text-white/40">{movieCount === 1 ? "Film" : "Films"}</span>
+                    </div>
+                  )}
+                  {tvCount > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                      <Tv className="w-4 h-4 text-[#7288AE]" />
+                      <span className="text-sm font-semibold text-white">{tvCount}</span>
+                      <span className="text-xs text-white/40">{tvCount === 1 ? "Series" : "Series"}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {error && (
+            <div className="mb-6 text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              {error}
+            </div>
+          )}
+
+          {/* ─── Grid ─── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+            {isLoading
+              ? Array.from({ length: 12 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="aspect-[2/3] rounded-2xl shimmer"
+                    style={{ animationDelay: `${i * 50}ms` }}
+                  />
+                ))
+              : items.map((item, idx) => (
+                  <motion.div
+                    key={`${item.media_type}-${item.id}`}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.03, duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+                    className="flex justify-center"
+                  >
+                    <MediaCard
+                      item={{ ...item, media_type: item.media_type || "movie" }}
+                      index={idx}
+                    />
+                  </motion.div>
+                ))}
           </div>
 
-          <div ref={sentinelRef} style={{ overflowAnchor: "none" }} className="h-20 flex items-center justify-center text-white/40 text-sm">
-            {isLoading && items.length > 0 ? "Loading more..." : hasMore ? "Scroll for more" : "End of results"}
-          </div>
+          {!isLoading && items.length === 0 && !error && (
+            <div className="text-center py-24 text-white/30">
+              <p className="text-lg font-semibold mb-2">No titles found</p>
+              <p className="text-sm">This franchise doesn&apos;t have any titles available yet.</p>
+            </div>
+          )}
         </div>
       </main>
     </div>

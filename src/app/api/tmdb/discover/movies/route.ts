@@ -6,12 +6,16 @@ export async function GET(request: NextRequest) {
   const genreId = searchParams.get("genreId");
   const sortBy = searchParams.get("sortBy") || "popularity.desc";
   const page = searchParams.get("page") || "1";
+  const withProviders = searchParams.get("withProviders");
+  const watchRegion = searchParams.get("watchRegion");
+  const minVote = searchParams.get("minVote");
+  const year = searchParams.get("year");
 
   const params: Record<string, string> = { sort_by: sortBy, page };
   if (genreId) params.with_genres = genreId;
+  if (minVote) params["vote_average.gte"] = minVote;
+  if (year) params.primary_release_year = year;
 
-  const withProviders = searchParams.get("withProviders");
-  const watchRegion = searchParams.get("watchRegion");
   if (withProviders) {
     params.with_watch_providers = withProviders;
     params.watch_region = watchRegion || "US";

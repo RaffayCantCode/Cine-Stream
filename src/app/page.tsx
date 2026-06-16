@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MediaRow } from "@/components/MediaRow";
 import { ContinueWatching } from "@/components/ContinueWatching";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { AnimeRow } from "@/components/AnimeRow";
 import type { AnimeItem } from "@/components/AnimeCard";
+import { motion } from "framer-motion";
 
 interface MediaItem {
   id: number;
@@ -32,24 +33,117 @@ interface Genre {
   name: string;
 }
 
-const FRANCHISES = [
-  "Marvel", "DC", "Star Wars", "Harry Potter",
-  "Fast & Furious", "Transformers", "John Wick",
-  "Mission Impossible", "Disney", "Pixar",
-  "Lord of the Rings", "James Bond", "Jurassic Park",
-  "The Simpsons", "Avatar", "Spider-Verse",
-  "Batman", "Dune", "Top Gun", "Creed",
-];
 
-function shuffleArray<T>(array: T[]): T[] {
+
+// ─── Session-stable shuffle ───────────────────────────────────────────────────
+// We want different results every SESSION (new tab / new browser open) but
+// stable within the same session (so a page reload within a tab keeps the same order).
+function getSessionSeed(): number {
+  try {
+    const key = "cs-shuffle-seed";
+    const existing = sessionStorage.getItem(key);
+    if (existing) return parseInt(existing, 10);
+    const seed = Math.floor(Math.random() * 1_000_000);
+    sessionStorage.setItem(key, String(seed));
+    return seed;
+  } catch {
+    return Math.floor(Math.random() * 1_000_000);
+  }
+}
+
+// Seeded pseudo-random number generator (mulberry32)
+function mulberry32(seed: number) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function sessionShuffle<T>(array: T[], salt: string = ""): T[] {
+  const seed = getSessionSeed() ^ salt.split("").reduce((a, c) => a ^ c.charCodeAt(0), 0);
+  const rng = mulberry32(seed);
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
 }
 
+// Preload first N poster images so they render without a flash
+function preloadImages(items: MediaItem[], count = 8) {
+  items.slice(0, count).forEach((item) => {
+    if (!item.poster_path) return;
+    const url = `https://image.tmdb.org/t/p/w342${item.poster_path}`;
+    const img = new Image();
+    img.src = url;
+  });
+}
+
+// ─── Section entrance animation ───────────────────────────────────────────────
+function Section({
+  children,
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1], delay }}
+    >
+      {children}
+    </motion.section>
+  );
+}
+
+// ─── Section heading ──────────────────────────────────────────────────────────
+function SectionHeading({
+  title,
+  subtitle,
+  icon: Icon,
+  href,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  href?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-[2px] bg-gradient-to-r from-[#7288AE] to-transparent rounded-full" />
+        <div>
+          <div className="flex items-center gap-2">
+            {Icon && <Icon className="w-4 h-4 text-[#7288AE]" />}
+            <h2 className="text-lg font-black text-[#EAE0CF] tracking-tight">{title}</h2>
+          </div>
+          {subtitle && (
+            <p className="text-[9px] text-[#7288AE]/50 font-semibold tracking-[0.15em] uppercase mt-0.5">
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
+      {href && (
+        <Link
+          href={href}
+          className="flex items-center gap-1 text-xs font-semibold text-white/40 hover:text-[#7288AE] transition-colors group"
+        >
+          See all <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [trending, setTrending] = useState<MediaItem[]>([]);
@@ -62,24 +156,28 @@ export default function Home() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [animeList, setAnimeList] = useState<AnimeItem[]>([]);
   const [animeLoading, setAnimeLoading] = useState(true);
-
+  const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
     const load = async () => {
       setIsLoading(true);
       setLoadError(null);
+
       try {
         const data = await fetchJson<{
           trending: { results: MediaItem[] };
           popular: { results: MediaItem[] };
           topRated: { results: MediaItem[] };
           nowPlaying: { results: MediaItem[] };
+          upcoming: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home", { cacheTtlMs: 180000 });
+        }>("/api/tmdb/home", { cacheTtlMs: 120000 }); // 2 min cache — fresher data
 
         if (cancelled) return;
 
+        // Filter each pool
         const trendingSafe = filterReleasedSafeContent(data.trending?.results || []);
         const popularSafe = filterReleasedSafeContent(data.popular?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
@@ -90,34 +188,55 @@ export default function Home() {
         const recentSafe = filterReleasedSafeContent(data.nowPlaying?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         );
+        const upcomingSafe = filterReleasedSafeContent(data.upcoming?.results || []).map(
+          (i) => ({ ...i, media_type: "movie" as const })
+        );
 
-        setTrending(shuffleArray(trendingSafe));
-        setPopular(shuffleArray(popularSafe));
-        setTopRated(shuffleArray(topSafe));
-        setRecent(shuffleArray(recentSafe));
-        setRecommended(shuffleArray([
-          ...popularSafe.slice(0, 10),
-          ...topSafe.slice(0, 10),
-        ]));
+        // Session-seeded shuffles — different every browser session, stable within
+        const shuffledTrending = sessionShuffle(trendingSafe, "trending");
+        const shuffledPopular = sessionShuffle(popularSafe, "popular");
+        const shuffledTopRated = sessionShuffle(topSafe, "toprated");
+        const shuffledRecent = sessionShuffle(
+          [...recentSafe, ...upcomingSafe],
+          "recent"
+        );
+
+        // Recommended: weighted random sample from all pools
+        const recPool = [...popularSafe, ...topSafe, ...trendingSafe];
+        // Weight by vote_average so higher-quality titles appear more often
+        const weightedPool = recPool.filter((i) => (i.vote_average ?? 0) >= 7.0);
+        const shuffledRec = sessionShuffle(
+          weightedPool.length >= 20 ? weightedPool : recPool,
+          "recommended"
+        );
+
+        setTrending(shuffledTrending);
+        setPopular(shuffledPopular);
+        setTopRated(shuffledTopRated);
+        setRecent(shuffledRecent);
+        setRecommended(shuffledRec);
         setGenres((data.genres?.genres || []).slice(0, 18));
 
-        // fetch anime
+        // Preload first 8 poster images while the hero is loading
+        preloadImages(shuffledTrending);
+        preloadImages(shuffledPopular, 4);
+
+        // Fetch anime
         setAnimeLoading(true);
         try {
-          const animeData = await fetchJson<{ success: boolean; data: any[] }>(
+          const animeData = await fetchJson<{ success: boolean; data: AnimeItem[] }>(
             "/api/anime?category=trending&page=1",
             { cacheTtlMs: 300000 }
           );
           if (animeData.success && animeData.data) {
-            setAnimeList(shuffleArray(animeData.data).slice(0, 15));
+            setAnimeList(sessionShuffle(animeData.data, "anime").slice(0, 15));
           }
         } catch { /* silent fallback */ }
         finally { setAnimeLoading(false); }
+
       } catch (e) {
         if (!cancelled) {
-          setLoadError(
-            e instanceof Error ? e.message : "Failed to load content"
-          );
+          setLoadError(e instanceof Error ? e.message : "Failed to load content");
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -128,27 +247,32 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
+  // ─── Hero pool ─────────────────────────────────────────────────────────────
   const heroPool = useMemo(() => {
-    const pool = [...trending.slice(0, 5), ...popular.slice(0, 5)];
+    const pool = [...trending.slice(0, 8), ...popular.slice(0, 5)];
     const unique: MediaItem[] = [];
     const seen = new Set<number>();
     for (const item of pool) {
-      if (!seen.has(item.id)) {
+      // Only use items with a backdrop for the hero
+      if (!seen.has(item.id) && item.backdrop_path) {
         seen.add(item.id);
         unique.push(item);
       }
     }
-    return unique.slice(0, 5);
+    return unique.slice(0, 7);
   }, [trending, popular]);
 
   const hero = heroPool[heroIndex];
 
   useEffect(() => {
     if (heroPool.length <= 1) return;
-    const interval = setInterval(() => {
+    if (heroTimerRef.current) clearInterval(heroTimerRef.current);
+    heroTimerRef.current = setInterval(() => {
       setHeroIndex((prev) => (prev + 1) % heroPool.length);
-    }, 8000);
-    return () => clearInterval(interval);
+    }, 9000);
+    return () => {
+      if (heroTimerRef.current) clearInterval(heroTimerRef.current);
+    };
   }, [heroPool]);
 
   return (
@@ -169,7 +293,27 @@ export default function Home() {
 
         {/* ─── HERO BANNER ─── */}
         {hero ? (
-          <HeroBanner key={hero.id} item={hero} />
+          <div className="relative">
+            <HeroBanner key={hero.id} item={hero} />
+            {/* Hero dot indicators */}
+            {heroPool.length > 1 && (
+              <div className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
+                {heroPool.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setHeroIndex(i)}
+                    className={`transition-all duration-300 rounded-full ${
+                      i === heroIndex
+                        ? "w-6 h-1.5 bg-white"
+                        : "w-1.5 h-1.5 bg-white/30 hover:bg-white/50"
+                    }`}
+                    aria-label={`Go to slide ${i + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           !loadError && (
             <div className="h-[50vh] bg-[#111844]/30 animate-pulse" />
@@ -184,20 +328,115 @@ export default function Home() {
           </div>
         )}
 
-        {/* ─── CONTINUE WATCHING (logged-in users only) ─── */}
+        {/* ─── CONTINUE WATCHING ─── */}
         <ContinueWatching />
 
-        <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto py-12 space-y-12">
+        <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto py-8 space-y-10">
+
+          {/* ─── 1. TRENDING NOW ─── */}
+          <Section>
+            <MediaRow
+              title="Trending Now"
+              items={trending}
+              isLoading={isLoading}
+              seeAllHref="/browse/trending"
+              accentIcon={<TrendingUp className="w-4 h-4 text-[#7288AE]" />}
+            />
+          </Section>
+
+          {/* ─── 2. POPULAR NOW ─── */}
+          <Section>
+            <MediaRow
+              title="Popular Movies"
+              items={popular}
+              isLoading={isLoading}
+              seeAllHref="/browse/movies/popular"
+              accentIcon={<Flame className="w-4 h-4 text-orange-400" />}
+            />
+          </Section>
+
+          {/* ─── 3. TOP RATED ─── */}
+          <Section>
+            <MediaRow
+              title="Top Rated TV"
+              items={topRated}
+              isLoading={isLoading}
+              seeAllHref="/browse/tv/top-rated"
+              accentIcon={<Star className="w-4 h-4 text-amber-400" />}
+            />
+          </Section>
+
+          {/* ─── STREAMING SERVICES ─── */}
+          <Section>
+            <SectionHeading
+              title="Streaming Services"
+              subtitle="Browse by platform"
+            />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {PROVIDERS.map((p) => (
+                <Link
+                  key={p.slug}
+                  href={`/browse/provider/${p.slug}`}
+                  className="group relative overflow-hidden rounded-2xl border border-white/[0.07] transition-all duration-500 hover:scale-[1.03] hover:-translate-y-1 focus:outline-none"
+                  style={{
+                    background: `linear-gradient(145deg, ${p.color}22 0%, ${p.color}08 60%, transparent 100%)`,
+                    boxShadow: `0 0 0 1px ${p.color}18, 0 8px 32px ${p.color}10`,
+                  }}
+                >
+                  {/* Animated background glow blob */}
+                  <div
+                    className="absolute -inset-4 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-2xl"
+                    style={{ background: `radial-gradient(circle at 60% 40%, ${p.color}30, transparent 70%)` }}
+                  />
+                  {/* Top accent stripe */}
+                  <div
+                    className="absolute top-0 inset-x-0 h-[2px] rounded-t-2xl opacity-60 group-hover:opacity-100 transition-opacity"
+                    style={{ background: `linear-gradient(to right, transparent, ${p.color}, transparent)` }}
+                  />
+
+                  <div className="relative p-5 flex flex-col gap-4 h-full min-h-[110px]">
+                    {/* Logo + glow */}
+                    <div className="flex items-start justify-between">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-white/10 shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
+                        style={{
+                          background: p.color,
+                          color: p.textColor,
+                          boxShadow: `0 4px 16px ${p.color}50`,
+                        }}
+                      >
+                        <ProviderIcon slug={p.slug} className="w-6 h-6" />
+                      </div>
+                      <ChevronRight
+                        className="w-4 h-4 text-white/20 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all mt-1"
+                      />
+                    </div>
+
+                    {/* Name + tagline */}
+                    <div>
+                      <span className="block text-base font-black text-white tracking-tight group-hover:text-white transition-colors">
+                        {p.name}
+                      </span>
+                      <span
+                        className="block text-[10px] font-bold tracking-[0.18em] uppercase mt-0.5 transition-colors"
+                        style={{ color: `${p.color}99` }}
+                      >
+                        Browse library
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </Section>
 
           {/* ─── GENRE UNIVERSE ─── */}
-          <section>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-[2px] bg-gradient-to-r from-[#7288AE] to-transparent rounded-full" />
-              <div>
-                <h2 className="text-lg font-black text-[#EAE0CF] tracking-tight">Genre Universe</h2>
-                <p className="text-[9px] text-[#7288AE]/50 font-semibold tracking-[0.15em] uppercase">Browse by category</p>
-              </div>
-            </div>
+          <Section>
+            <SectionHeading
+              title="Genre Universe"
+              subtitle="Browse by category"
+              href="/browse/movies"
+            />
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {genres.slice(0, 12).map((genre) => (
                 <Link
@@ -217,123 +456,40 @@ export default function Home() {
                 <ChevronRight className="w-3 h-3 text-[#7288AE]" />
               </Link>
             </div>
-          </section>
+          </Section>
 
-          {/* ─── CONTENT ROWS ─── */}
-          <section className="relative">
-            <MediaRow
-              title="Popular Now"
-              items={popular}
-              isLoading={isLoading}
-              seeAllHref="/browse/movies/popular"
-            />
-          </section>
 
-          <MediaRow
-            title="Top Rated"
-            items={topRated}
-            isLoading={isLoading}
-            seeAllHref="/browse/tv/top-rated"
-          />
-
-          <MediaRow
-            title="Trending Now"
-            items={trending}
-            isLoading={isLoading}
-            seeAllHref="/browse/trending"
-          />
-
-          {/* ─── STREAMING SERVICE UNIVERSE ─── */}
-          <section>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-[2px] bg-gradient-to-r from-[#7288AE] to-transparent rounded-full" />
-              <div>
-                <h2 className="text-lg font-black text-[#EAE0CF] tracking-tight">View Media From</h2>
-                <p className="text-[9px] text-[#7288AE]/50 font-semibold tracking-[0.15em] uppercase">Pick a streaming service</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
-              {PROVIDERS.map((p) => (
-                <Link
-                  key={p.slug}
-                  href={`/browse/provider/${p.slug}`}
-                  className="group relative overflow-hidden rounded-xl border border-white/10 p-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:border-white/20"
-                  style={{
-                    background: `linear-gradient(135deg, ${p.color}30 0%, ${p.color}10 100%)`,
-                    boxShadow: `inset 0 0 0 1px ${p.color}20`,
-                  }}
-                >
-                  <div
-                    className="absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-40 group-hover:opacity-70 transition-opacity duration-500"
-                    style={{ background: p.color }}
-                  />
-                  <div className="relative flex items-center gap-3">
-                    <div
-                      className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0 border border-white/10 transition-transform duration-300 group-hover:scale-110"
-                      style={{ background: p.color, color: p.textColor }}
-                    >
-                      <ProviderIcon slug={p.slug} className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold text-white group-hover:text-white transition-colors truncate">
-                        {p.name}
-                      </span>
-                      <span className="block text-[10px] text-white/40 font-medium tracking-wide uppercase">
-                        View titles
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-white/30 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-
-          {/* ─── FRANCHISE UNIVERSE ─── */}
-          <section>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-[2px] bg-gradient-to-r from-[#7288AE] to-transparent rounded-full" />
-              <div>
-                <h2 className="text-lg font-black text-[#EAE0CF] tracking-tight">Franchise Universe</h2>
-                <p className="text-[9px] text-[#7288AE]/50 font-semibold tracking-[0.15em] uppercase">Curated collections</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {FRANCHISES.map((name) => (
-                <Link
-                  key={name}
-                  href={`/browse/franchise/${encodeURIComponent(name)}`}
-                  className="group relative overflow-hidden rounded-xl border border-[#7288AE]/10 bg-gradient-to-br from-[#111844]/80 to-[#1a2268]/30 p-4 hover:border-[#7288AE]/25 hover:shadow-lg hover:shadow-[#4B5694]/10 transition-all duration-300"
-                >
-                  <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-[#7288AE]/5 rounded-full blur-2xl group-hover:bg-[#4B5694]/10 transition-all" />
-                  <span className="text-sm font-bold text-[#EAE0CF]/70 group-hover:text-[#EAE0CF] transition-colors">{name}</span>
-                </Link>
-              ))}
-            </div>
-          </section>
 
           {/* ─── ANIME SPOTLIGHT ─── */}
-          <section>
+          <Section>
             <AnimeRow
               title="Trending Anime"
               items={animeList}
               isLoading={animeLoading}
               seeAllHref="/anime"
             />
-          </section>
+          </Section>
 
-          <MediaRow
-            title="Recently Added"
-            items={recent}
-            isLoading={isLoading}
-            seeAllHref="/browse/movies"
-          />
+          {/* ─── RECENTLY ADDED ─── */}
+          <Section>
+            <MediaRow
+              title="Recently Added"
+              items={recent}
+              isLoading={isLoading}
+              seeAllHref="/browse/movies"
+              accentIcon={<Clock className="w-4 h-4 text-[#7288AE]" />}
+            />
+          </Section>
 
-          <MediaRow
-            title="Recommended For You"
-            items={recommended}
-            isLoading={isLoading}
-          />
+          {/* ─── RECOMMENDED FOR YOU ─── */}
+          <Section>
+            <MediaRow
+              title="Recommended For You"
+              items={recommended}
+              isLoading={isLoading}
+              accentIcon={<Sparkles className="w-4 h-4 text-violet-400" />}
+            />
+          </Section>
 
           {/* ─── FOOTER TAG ─── */}
           <footer className="border-t border-[#7288AE]/10 pt-8 pb-4 text-center">

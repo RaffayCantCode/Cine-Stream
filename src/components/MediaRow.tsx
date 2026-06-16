@@ -21,6 +21,8 @@ interface MediaRowProps {
   items?: MediaItem[];
   isLoading?: boolean;
   seeAllHref?: string;
+  /** Optional icon node displayed before the title */
+  accentIcon?: React.ReactNode;
 }
 
 function SkeletonCard({ index }: { index: number }) {
@@ -32,7 +34,7 @@ function SkeletonCard({ index }: { index: number }) {
   );
 }
 
-export function MediaRow({ title, items, isLoading, seeAllHref }: MediaRowProps) {
+export function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: MediaRowProps) {
   if (!isLoading && (!items || items.length === 0)) return null;
 
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -78,7 +80,10 @@ export function MediaRow({ title, items, isLoading, seeAllHref }: MediaRowProps)
       <div className="flex items-center justify-between px-5 md:px-14">
         <div className="flex items-center gap-3">
           <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg shadow-[#7288AE]/20" />
-          <h2 className="text-lg md:text-2xl font-black text-white tracking-tight">{title}</h2>
+          <div className="flex items-center gap-2">
+            {accentIcon}
+            <h2 className="text-lg md:text-2xl font-black text-white tracking-tight">{title}</h2>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="hidden md:flex items-center gap-1">

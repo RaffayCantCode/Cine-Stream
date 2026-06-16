@@ -18,6 +18,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        {/* ─── Performance: open connections to image CDN before images are needed ─── */}
+        <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://image.tmdb.org" />
+        {/* Anime image sources */}
+        <link rel="preconnect" href="https://api.anipub.xyz" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://api.anipub.xyz" />
+        <link rel="dns-prefetch" href="https://api.tatakai.me" />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>

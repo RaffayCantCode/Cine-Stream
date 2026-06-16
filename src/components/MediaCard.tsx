@@ -48,7 +48,6 @@ export const MediaCard = memo(function MediaCard({ item, index = 0 }: MediaCardP
         href={link}
         className="group relative block aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 overflow-hidden rounded-2xl bg-muted/50 transition-all duration-500 hover:scale-[1.08] hover:z-10 focus:outline-none will-change-transform"
         style={{ transformOrigin: "center bottom" }}
-        prefetch={false}
       >
         {posterUrl ? (
           <img

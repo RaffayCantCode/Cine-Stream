@@ -43,12 +43,22 @@ export function AnimePlayer({
   const [isResolving, setIsResolving] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [showSpinner, setShowSpinner] = useState(true);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
 
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
+
+  // Auto-dismiss spinner after 3.5 seconds to prevent frozen overlay
+  useEffect(() => {
+    setShowSpinner(true);
+    const timer = setTimeout(() => {
+      setShowSpinner(false);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [currentUrl]);
 
   useEffect(() => {
     console.log(`[AnimePlayer] Parameters updated: animeId=${animeId}, malId=${malId}, episode=${episode}, rootAnimeId=${rootAnimeId}, rootMalId=${rootMalId}, episodeOffset=${episodeOffset}`);
@@ -217,13 +227,10 @@ export function AnimePlayer({
           </div>
         ) : (
           <>
-            {(isResolving || isLoading) && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
+            {showSpinner && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none">
                 <div className="text-center">
-                  <div className="w-10 h-10 border-3 border-white/10 border-t-[#7288AE] rounded-full animate-spin mx-auto mb-3" />
-                  <p className="text-white/50 text-sm font-medium">
-                    {isResolving ? "Resolving Stream ID..." : `Loading ${currentSource.name}...`}
-                  </p>
+                  <div className="w-10 h-10 border-3 border-white/15 border-t-[#7288AE] rounded-full animate-spin mx-auto" />
                 </div>
               </div>
             )}
@@ -236,11 +243,12 @@ export function AnimePlayer({
                 allowFullScreen
                 referrerPolicy="strict-origin-when-cross-origin"
                 title={`${animeTitle} - Episode ${episode}`}
-                onLoad={() => { setIsLoading(false); setHasError(false); }}
+                onLoad={() => { setIsLoading(false); setHasError(false); setShowSpinner(false); }}
                 onError={() => {
                   console.warn(`[AnimePlayer] ${currentSource.name} failed to load`);
                   setHasError(true);
                   setIsLoading(false);
+                  setShowSpinner(false);
                 }}
               />
             )}

@@ -36,6 +36,16 @@ export async function tmdbFetch(
     }
   }
 
+  // Dynamic cache times (in seconds) based on path type
+  let revalidate = 7200; // default 2 hours (discover, popular, trending)
+  if (path.includes("/movie/") || path.includes("/tv/")) {
+    revalidate = 86400; // 24 hours for movies/TV details, seasons, episodes, cast
+  } else if (path.includes("/genre/") || path.includes("/configuration")) {
+    revalidate = 86400 * 7; // 7 days for configuration/genres list
+  } else if (path.includes("/search/")) {
+    revalidate = 3600; // 1 hour for search queries
+  }
+
   const cacheKey = url.toString();
   const cached = tmdbApiCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
@@ -47,7 +57,7 @@ export async function tmdbFetch(
       Authorization: getAuthHeader(),
       "Content-Type": "application/json",
     },
-    next: { revalidate: 600 },
+    next: { revalidate },
   });
 
   if (!res.ok) {
@@ -57,7 +67,7 @@ export async function tmdbFetch(
   const data = await res.json();
   const filtered = filterTmdbResponse(data);
   
-  tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + 300000 }); // Cache for 5 mins
+  tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + (revalidate * 1000) });
   return filtered;
 }
 

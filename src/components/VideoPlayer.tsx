@@ -35,12 +35,22 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   const [currentSource, setCurrentSource] = useState<StreamingSource>(allSources[0]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSpinner, setShowSpinner] = useState(true);
   const [showSources, setShowSources] = useState(false);
   const [healthChecked, setHealthChecked] = useState(false);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vixsrc;
+
+  // Auto-dismiss spinner after 3.5 seconds to prevent frozen overlay
+  useEffect(() => {
+    setShowSpinner(true);
+    const timer = setTimeout(() => {
+      setShowSpinner(false);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [currentSource?.url]);
 
   // Check source health on mount
   useEffect(() => {
@@ -250,18 +260,10 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
           </div>
         ) : (
           <>
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
+            {showSpinner && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none">
                 <div className="text-center">
-                  <div className="w-14 h-14 border-4 border-white/10 border-t-[#4B5694] rounded-full animate-spin mx-auto mb-4" />
-                  <p className="text-white/60 text-sm font-medium">Loading {currentSource?.name || "player"}...</p>
-                  {sources.length > 1 && (
-                    <button onClick={switchToNext}
-                      className="mt-4 px-4 py-2 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 mx-auto"
-                    >
-                      <SkipForward className="w-3.5 h-3.5" /> Switch Source
-                    </button>
-                  )}
+                  <div className="w-14 h-14 border-4 border-white/10 border-t-[#4B5694] rounded-full animate-spin mx-auto" />
                 </div>
               </div>
             )}
@@ -273,7 +275,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
               allowFullScreen={true}
               referrerPolicy="strict-origin-when-cross-origin"
               title={title || "Watch"}
-              onLoad={() => setIsLoading(false)}
+              onLoad={() => { setIsLoading(false); setShowSpinner(false); }}
               onError={handleIframeError}
             />
           </>
