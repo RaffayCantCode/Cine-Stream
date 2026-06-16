@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { MediaRow } from "@/components/MediaRow";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Play, Star, Calendar, ExternalLink, CheckCircle2, Loader2 } from "lucide-react";
-import { cn, fetchJson } from "@/lib/utils";
+import { cn, fetchJson, shuffleArray } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 
@@ -499,7 +499,7 @@ export default function TvDetailPage() {
 
         {show.similar?.results && show.similar.results.length > 0 && (
           <div className="-mx-5 md:-mx-10">
-            <MediaRow title="More Like This" items={show.similar.results} />
+            <MediaRow title="More Like This" items={shuffleArray(show.similar.results)} />
           </div>
         )}
         </div>

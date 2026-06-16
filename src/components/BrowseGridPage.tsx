@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
-import { fetchJson } from "@/lib/utils";
+import { fetchJson, shuffleArray } from "@/lib/utils";
 
 interface BrowseGridPageProps {
   title: string;
@@ -32,22 +32,57 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
       setError(null);
       try {
         const isAppend = page > 1;
-        const pages = isAppend ? [page, page + 1, page + 2] : [1];
+        const sep = endpoint.includes("?") ? "&" : "?";
+        let merged: any[] = [];
+        let totalPages = 1;
 
-        const allResults = await Promise.all(
-          pages.map((p) =>
-            fetchJson<{ results: any[]; page?: number; total_pages?: number }>(`${endpoint}?page=${p}`, {
-              cacheTtlMs: 120000,
-            })
-          )
-        );
+        if (isAppend) {
+          const pages = [page, page + 1, page + 2];
+          const allResults = await Promise.all(
+            pages.map((p) =>
+              fetchJson<{ results: any[]; page?: number; total_pages?: number }>(
+                `${endpoint}${sep}page=${p}`,
+                { cacheTtlMs: 120000 }
+              )
+            )
+          );
+          merged = allResults.flatMap((data) => data.results || []);
+          const last = allResults[allResults.length - 1];
+          totalPages = last?.total_pages ?? 1;
+        } else {
+          // Initial load
+          const data = await fetchJson<{ results: any[]; page?: number; total_pages?: number }>(
+            `${endpoint}${sep}page=1`,
+            { cacheTtlMs: 120000 }
+          );
+          let results = data.results || [];
+          totalPages = data.total_pages ?? 1;
 
-        const merged = allResults.flatMap((data) =>
-          (data.results || []).map((item) => (mediaType ? { ...item, media_type: mediaType } : item))
+          if (totalPages > 1) {
+            const maxPage = Math.min(totalPages, 20);
+            const randomPage = Math.floor(Math.random() * maxPage) + 1;
+            if (randomPage !== 1) {
+              try {
+                const randData = await fetchJson<{ results: any[] }>(
+                  `${endpoint}${sep}page=${randomPage}`,
+                  { cacheTtlMs: 120000 }
+                );
+                results = [...results, ...randData.results];
+              } catch (e) {
+                console.error("Failed to fetch random page in BrowseGridPage", e);
+              }
+            }
+          }
+          // Shuffle the initial results to randomize them on every refresh
+          merged = shuffleArray(results);
+        }
+
+        const mapped = merged.map((item) =>
+          mediaType ? { ...item, media_type: mediaType } : item
         );
 
         setItems((prev) => {
-          const combined = isAppend ? [...prev, ...merged] : merged;
+          const combined = isAppend ? [...prev, ...mapped] : mapped;
           const seen = new Set();
           return combined.filter((item) => {
             if (!item || !item.id) return false;
@@ -58,9 +93,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           });
         });
 
-        const last = allResults[allResults.length - 1];
-        const totalPages = last?.total_pages ?? 1;
-        setHasMore(last?.page ? last.page < totalPages : false);
+        setHasMore(isAppend ? (page + 2) < totalPages : 1 < totalPages);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load content");
         setHasMore(false);

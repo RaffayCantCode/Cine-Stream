@@ -29,13 +29,20 @@ export default function BrowseMoviesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
-  const [page, setPage] = useState(() => Math.floor(Math.random() * 100) + 1);
+  const [page, setPage] = useState<number | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const initialLoad = useRef(true);
-  const nextBatchRef = useRef(page + 1);
+  const nextBatchRef = useRef<number>(2);
+
+  // Set random starting page client-side on mount
+  useEffect(() => {
+    const randomPage = Math.floor(Math.random() * 100) + 1;
+    setPage(randomPage);
+    nextBatchRef.current = randomPage + 1;
+  }, []);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const isLoadingRef = useRef(false);
   const hasMoreRef = useRef(true);
@@ -92,6 +99,7 @@ export default function BrowseMoviesPage() {
   }, [selectedGenre, sortBy, debouncedSearch]);
 
   useEffect(() => {
+    if (page === null) return;
     const fetchMovies = async () => {
       setIsLoading(true);
       setError(null);
@@ -128,7 +136,7 @@ export default function BrowseMoviesPage() {
 
         const allItems = results.flatMap((r) => filterReleasedSafeContent(r.results || [], !!debouncedSearch.trim()));
         setMovies((prev) => {
-          const combined = initialLoad.current ? allItems : [...prev, ...allItems];
+          const combined = initialLoad.current ? shuffleArray(allItems) : [...prev, ...allItems];
           const seenIds = new Set();
           return combined.filter((item) => {
             if (!item || !item.id) return false;
@@ -168,7 +176,7 @@ export default function BrowseMoviesPage() {
       (entries) => {
         if (!entries[0].isIntersecting) return;
         if (isLoadingRef.current || !hasMoreRef.current) return;
-        setPage((p) => p + 1);
+        setPage((p) => (p !== null ? p + 1 : null));
       },
       { rootMargin: "0px 0px 3000px 0px" }
     );

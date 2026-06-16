@@ -35,7 +35,13 @@ export default function AnimeBrowsePage() {
   const debouncedQuery = useDebounce(query, 400);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(() => Math.floor(Math.random() * 50) + 1);
+  const [page, setPage] = useState<number | null>(null);
+
+  // Set random starting page client-side on mount
+  useEffect(() => {
+    const randomPage = Math.floor(Math.random() * 50) + 1;
+    setPage(randomPage);
+  }, []);
   const [hasMore, setHasMore] = useState(true);
   const [loadKey, setLoadKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -115,7 +121,7 @@ export default function AnimeBrowsePage() {
       });
 
       setItems(prev => {
-        const combined = replace ? filtered : [...prev, ...filtered];
+        let combined = replace ? shuffleArray(filtered) : [...prev, ...filtered];
         const seen = new Set();
         return combined.filter(item => {
           if (!item || !item.id) return false;
@@ -159,6 +165,7 @@ export default function AnimeBrowsePage() {
 
   // Initial load and reload on page change
   useEffect(() => {
+    if (page === null) return;
     const mode = initialLoad.current;
     loadAnime(page, mode);
   }, [page, loadKey]);
@@ -179,7 +186,7 @@ export default function AnimeBrowsePage() {
     const observer = new IntersectionObserver(
       entries => {
         if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
-        setPage(p => p + 1);
+        setPage(p => (p !== null ? p + 1 : null));
       },
       { rootMargin: "0px 0px 3000px 0px" }
     );

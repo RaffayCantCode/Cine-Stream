@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaRow } from "@/components/MediaRow";
-import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent, shuffleArray } from "@/lib/utils";
 import { getProviderBySlug, PROVIDERS } from "@/lib/providers";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import Link from "next/link";
@@ -98,6 +98,7 @@ export default function ProviderPage() {
   const [loadMorePage, setLoadMorePage] = useState(1);
   const [hasMoreMovies, setHasMoreMovies] = useState(true);
   const [hasMoreTv, setHasMoreTv] = useState(true);
+  const [heroIndex, setHeroIndex] = useState<number>(-1);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [sortBy, setSortBy] = useState<SortKey>("popularity.desc");
@@ -137,11 +138,44 @@ export default function ProviderPage() {
         fetchProviderItems(provider.id, provider.region, "tv", sortBy, page, minVote),
       ]);
 
+      let finalMovies = movieData.results;
+      let finalTv = tvData.results;
+
+      if (reset) {
+        const movieMax = Math.min(movieData.total_pages, 10);
+        const tvMax = Math.min(tvData.total_pages, 10);
+
+        const movieRandPage = movieMax > 1 ? Math.floor(Math.random() * movieMax) + 1 : 1;
+        const tvRandPage = tvMax > 1 ? Math.floor(Math.random() * tvMax) + 1 : 1;
+
+        const promises: Promise<any>[] = [];
+        if (movieRandPage > 1) {
+          promises.push(
+            fetchProviderItems(provider.id, provider.region, "movie", sortBy, movieRandPage, minVote)
+              .then(res => { finalMovies = [...finalMovies, ...res.results]; })
+              .catch(e => console.error("Failed to fetch random provider movies page", e))
+          );
+        }
+        if (tvRandPage > 1) {
+          promises.push(
+            fetchProviderItems(provider.id, provider.region, "tv", sortBy, tvRandPage, minVote)
+              .then(res => { finalTv = [...finalTv, ...res.results]; })
+              .catch(e => console.error("Failed to fetch random provider tv page", e))
+          );
+        }
+        if (promises.length > 0) {
+          await Promise.all(promises);
+        }
+
+        finalMovies = shuffleArray(finalMovies);
+        finalTv = shuffleArray(finalTv);
+      }
+
       const cleanMovies = filterReleasedSafeContent(
-        movieData.results.map((i) => ({ ...i, media_type: "movie" as const }))
+        finalMovies.map((i) => ({ ...i, media_type: "movie" as const }))
       );
       const cleanTv = filterReleasedSafeContent(
-        tvData.results.map((i) => ({ ...i, media_type: "tv" as const }))
+        finalTv.map((i) => ({ ...i, media_type: "tv" as const }))
       );
 
       setMovies((prev) => {
@@ -175,6 +209,7 @@ export default function ProviderPage() {
 
   // Initial load + re-load on filter/sort change
   useEffect(() => {
+    setHeroIndex(-1);
     setLoadMorePage(1);
     loadData(1, true);
   }, [slug, sortBy]);
@@ -205,16 +240,25 @@ export default function ProviderPage() {
   }, [viewMode, filterType, hasMoreMovies, hasMoreTv, loadData]);
 
   // ── hero item (best backdrop from all content) ────────────────────────────
-  const heroItem = useMemo(() => {
-    // Only pick from the first 20 movies/tv shows to prevent it changing when infinite scroll appends more
+  const pool = useMemo(() => {
     const firstMovies = movies.slice(0, 20);
     const firstTv = tvShows.slice(0, 20);
-    const pool = [...firstMovies, ...firstTv].filter((i) => i.backdrop_path && i.vote_average && i.vote_average >= 7);
+    return [...firstMovies, ...firstTv].filter((i) => i.backdrop_path && i.vote_average && i.vote_average >= 7);
+  }, [movies, tvShows]);
+
+  useEffect(() => {
+    if (pool.length > 0 && heroIndex === -1) {
+      setHeroIndex(Math.floor(Math.random() * pool.length));
+    }
+  }, [pool, heroIndex]);
+
+  const heroItem = useMemo(() => {
     if (pool.length === 0) return null;
-    // Stable daily index to keep hero fresh but consistent during browsing sessions
-    const stableIndex = provider ? (provider.id + new Date().getDate()) % Math.min(pool.length, 8) : 0;
-    return pool[stableIndex] || pool[0];
-  }, [movies, tvShows, provider]);
+    if (heroIndex >= 0 && heroIndex < pool.length) {
+      return pool[heroIndex];
+    }
+    return pool[0];
+  }, [pool, heroIndex]);
 
   // ── derived display items ─────────────────────────────────────────────────
   const displayMovies = filterType === "tv" ? [] : movies;

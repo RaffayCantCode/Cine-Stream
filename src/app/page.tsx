@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MediaRow } from "@/components/MediaRow";
 import { ContinueWatching } from "@/components/ContinueWatching";
-import { ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import { ProviderIcon } from "@/components/ProviderIcon";
@@ -39,16 +39,7 @@ interface Genre {
 // We want different results every SESSION (new tab / new browser open) but
 // stable within the same session (so a page reload within a tab keeps the same order).
 function getSessionSeed(): number {
-  try {
-    const key = "cs-shuffle-seed";
-    const existing = sessionStorage.getItem(key);
-    if (existing) return parseInt(existing, 10);
-    const seed = Math.floor(Math.random() * 1_000_000);
-    sessionStorage.setItem(key, String(seed));
-    return seed;
-  } catch {
-    return Math.floor(Math.random() * 1_000_000);
-  }
+  return Math.floor(Math.random() * 1_000_000);
 }
 
 // Seeded pseudo-random number generator (mulberry32)
@@ -157,6 +148,31 @@ export default function Home() {
   const [animeList, setAnimeList] = useState<AnimeItem[]>([]);
   const [animeLoading, setAnimeLoading] = useState(true);
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Touch swipe gesture states for mobile Hero banner
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+    setTouchEndX(null);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX === null || touchEndX === null) return;
+    const distance = touchStartX - touchEndX;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+    if (isLeftSwipe && heroPool.length > 1) {
+      setHeroIndex((prev) => (prev + 1) % heroPool.length);
+    } else if (isRightSwipe && heroPool.length > 1) {
+      setHeroIndex((prev) => (prev - 1 + heroPool.length) % heroPool.length);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -293,7 +309,12 @@ export default function Home() {
 
         {/* ─── HERO BANNER ─── */}
         {hero ? (
-          <div className="relative">
+          <div 
+            className="relative group/hero select-none"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
             <HeroBanner key={hero.id} item={hero} />
             {/* Hero dot indicators */}
             {heroPool.length > 1 && (
@@ -305,13 +326,34 @@ export default function Home() {
                     onClick={() => setHeroIndex(i)}
                     className={`transition-all duration-300 rounded-full ${
                       i === heroIndex
-                        ? "w-6 h-1.5 bg-white"
+                        ? "w-6 h-1.5 bg-white shadow-md"
                         : "w-1.5 h-1.5 bg-white/30 hover:bg-white/50"
                     }`}
                     aria-label={`Go to slide ${i + 1}`}
                   />
                 ))}
               </div>
+            )}
+            {/* Hero Left/Right swipe/navigation buttons */}
+            {heroPool.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setHeroIndex((prev) => (prev - 1 + heroPool.length) % heroPool.length)}
+                  className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 md:opacity-0 md:group-hover/hero:opacity-100"
+                  aria-label="Previous slide"
+                >
+                  <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 group-hover:-translate-x-0.5 transition-transform text-white" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeroIndex((prev) => (prev + 1) % heroPool.length)}
+                  className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 md:opacity-0 md:group-hover/hero:opacity-100"
+                  aria-label="Next slide"
+                >
+                  <ChevronRight className="w-5 h-5 md:w-6 md:h-6 group-hover:translate-x-0.5 transition-transform text-white" />
+                </button>
+              </>
             )}
           </div>
         ) : (

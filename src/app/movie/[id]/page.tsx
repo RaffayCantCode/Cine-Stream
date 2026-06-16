@@ -10,7 +10,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { Play, Star, Clock, Calendar, ExternalLink } from "lucide-react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
-import { fetchJson } from "@/lib/utils";
+import { fetchJson, shuffleArray } from "@/lib/utils";
 
 interface Movie {
   id: number;
@@ -312,7 +312,7 @@ export default function MovieDetailPage() {
 
         {movie.similar?.results && movie.similar.results.length > 0 && (
           <div className="-mx-5 md:-mx-10">
-            <MediaRow title="More Like This" items={movie.similar.results} />
+            <MediaRow title="More Like This" items={shuffleArray(movie.similar.results)} />
           </div>
         )}
         </div>
