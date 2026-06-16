@@ -2,9 +2,9 @@
 
 CineStream is a full-featured streaming platform for movies, TV shows, anime, and manga. Built with Next.js 15 and deployed on Vercel.
 
-<img width="1919" height="918" alt="3" src="https://github.com/user-attachments/assets/4269a5a2-46bb-45a1-b28d-186c416f23b1" />
+<img width="1920" height="920" alt="1" src="https://github.com/user-attachments/assets/a1568e8b-91da-4300-9824-722f7328f50e" />
 
---
+---
 
 ## ✨ Features
 
@@ -22,16 +22,29 @@ CineStream is a full-featured streaming platform for movies, TV shows, anime, an
 - 🗑️ **Remove Items** - Clear items from your continue list
 - 📱 **Responsive Design** - Works on mobile, tablet, and desktop
 
-<img width="1910" height="918" alt="1" src="https://github.com/user-attachments/assets/accec9b2-4c14-4959-ad24-26ed60a237eb" />
 
---
+<img width="1908" height="917" alt="3" src="https://github.com/user-attachments/assets/9e95443f-5348-4f5b-86bd-8bdf29032ef3" />
+
+---
 
 ### Streaming
 - Multiple streaming sources for reliability
 - Auto-fallback if one source fails
 - English subtitles where available
 
-- <img width="1917" height="918" alt="2" src="https://github.com/user-attachments/assets/cda4412a-1464-46fd-ba02-63f6be88dba0" />
+
+<img width="1908" height="923" alt="2" src="https://github.com/user-attachments/assets/a1773ced-df97-4776-b397-d1acf5dd0b09" />
+
+
+---
+
+### Anime Streaming (Japanese Dub With English Subtitles)
+- Multiple streaming sources for reliability
+- Auto-fallback if one source fails
+- Currently in work!
+
+
+<img width="1897" height="918" alt="4" src="https://github.com/user-attachments/assets/8d187927-b04a-4263-a337-2ca6cac34344" />
 
 ---
 
@@ -48,7 +61,6 @@ CineStream is a full-featured streaming platform for movies, TV shows, anime, an
 | **Vercel Postgres** | Database |
 | **Framer Motion** | Animations |
 | **TMDB API** | Movie/TV Data |
-| **MangaDex API** | Manga Data |
 | **Jikan API** | Anime Metadata |
 
 ## 🚀 Getting Started
