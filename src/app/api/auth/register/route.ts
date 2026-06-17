@@ -62,8 +62,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("[Register Error]:", error);
+    const message = error instanceof Error ? error.message : "Failed to create account";
     return Response.json(
-      { error: "Failed to create account" },
+      { error: message },
       { status: 500 }
     );
   }
