@@ -316,9 +316,9 @@ export default function Home() {
             onTouchEnd={handleTouchEnd}
           >
             <HeroBanner key={hero.id} item={hero} />
-            {/* Hero dot indicators */}
+            {/* Hero dot indicators — sit just above the bottom edge of the hero */}
             {heroPool.length > 1 && (
-              <div className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
                 {heroPool.map((_, i) => (
                   <button
                     key={i}
@@ -334,24 +334,24 @@ export default function Home() {
                 ))}
               </div>
             )}
-            {/* Hero Left/Right swipe/navigation buttons */}
+            {/* Hero Left/Right navigation buttons — hidden on mobile (swipe handles it) */}
             {heroPool.length > 1 && (
               <>
                 <button
                   type="button"
                   onClick={() => setHeroIndex((prev) => (prev - 1 + heroPool.length) % heroPool.length)}
-                  className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 md:opacity-0 md:group-hover/hero:opacity-100"
+                  className="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 opacity-0 group-hover/hero:opacity-100"
                   aria-label="Previous slide"
                 >
-                  <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 group-hover:-translate-x-0.5 transition-transform text-white" />
+                  <ChevronLeft className="w-6 h-6 group-hover:-translate-x-0.5 transition-transform text-white" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setHeroIndex((prev) => (prev + 1) % heroPool.length)}
-                  className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 md:opacity-0 md:group-hover/hero:opacity-100"
+                  className="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 opacity-0 group-hover/hero:opacity-100"
                   aria-label="Next slide"
                 >
-                  <ChevronRight className="w-5 h-5 md:w-6 md:h-6 group-hover:translate-x-0.5 transition-transform text-white" />
+                  <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform text-white" />
                 </button>
               </>
             )}

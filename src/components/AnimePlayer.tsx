@@ -25,6 +25,7 @@ const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
   { name: "Source 2", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
   { name: "Source 3", provider: "animepahe", color: "from-[#111844]/30 to-[#4B5694]/20" },
+  { name: "Source 4", provider: "vidlink", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
 ];
 
 export function AnimePlayer({
@@ -112,7 +113,9 @@ export function AnimePlayer({
         const isSequel = currentAnilistClean && mainAnilistClean && currentAnilistClean !== mainAnilistClean;
         const epToUse = isSequel ? episode : (episodeOffset || 0) > 0 ? absoluteEpisode : episode;
         const idToUseAni = isSequel ? currentAnilistClean : mainAnilistClean;
-        const idToUseMal = isSequel ? currentMalClean : mainMalClean;
+        // If current and root MAL ID are the same, the season lacks its own MAL ID — don't use it
+        const hasOwnMalId = currentMalClean && currentMalClean !== mainMalClean;
+        const idToUseMal = hasOwnMalId ? (isSequel ? currentMalClean : mainMalClean) : null;
 
         let fallbackUrl = "";
 
@@ -129,6 +132,9 @@ export function AnimePlayer({
             fallbackUrl = idToUseMal
               ? `https://animeplay.cfd/stream/mal/${idToUseMal}/${epToUse}/sub`
               : `https://animeplay.cfd/stream/ani/${idToUseAni || ""}/${epToUse}/sub`;
+            break;
+          case "vidlink":
+            fallbackUrl = `https://vidlink.pro/anime/${idToUseMal || idToUseAni || ""}/${epToUse}/sub?fallback=true`;
             break;
 
         }

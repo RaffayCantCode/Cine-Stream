@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
   const watchRegion = searchParams.get("watchRegion");
   const minVote = searchParams.get("minVote");
   const year = searchParams.get("year");
+  // Per-provider monetization override (defaults to "flatrate")
+  const monetizationTypes = searchParams.get("monetizationTypes") || "flatrate";
 
   const params: Record<string, string> = { sort_by: sortBy, page };
   if (genreId) params.with_genres = genreId;
@@ -19,11 +21,12 @@ export async function GET(request: NextRequest) {
   if (withProviders) {
     params.with_watch_providers = withProviders;
     params.watch_region = watchRegion || "US";
-    params.with_watch_monetization_types = "flatrate";
+    params.with_watch_monetization_types = monetizationTypes;
   }
 
   try {
-    const data = await tmdbFetch("/discover/movie", params);
+    // Skip all caches for provider-filtered requests — ensures fresh results after any config change
+    const data = await tmdbFetch("/discover/movie", params, { noCache: !!withProviders });
     return Response.json(data);
   } catch (error) {
     return Response.json({ error: "Failed to discover movies" }, { status: 500 });

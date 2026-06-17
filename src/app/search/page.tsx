@@ -91,11 +91,22 @@ export default function SearchPage() {
     search();
   }, [debouncedQuery]);
 
+  // Build unified results ordered: movies → TV shows → anime
   const filteredResults = activeTab === "movies"
     ? results.filter((r) => r.media_type === "movie")
     : activeTab === "tv"
     ? results.filter((r) => r.media_type === "tv")
+    : activeTab === "anime"
+    ? []
     : results;
+
+  const unifiedResults = activeTab === "all"
+    ? [
+        ...results.filter((r) => r.media_type === "movie").map((r, i) => ({ type: "media" as const, item: r, idx: i })),
+        ...results.filter((r) => r.media_type === "tv").map((r, i) => ({ type: "media" as const, item: r, idx: results.filter((m) => m.media_type === "movie").length + i })),
+        ...animeResults.map((a, i) => ({ type: "anime" as const, item: a, idx: results.length + i })),
+      ]
+    : [];
 
   const totalCount = filteredResults.length + (activeTab === "all" || activeTab === "anime" ? animeResults.length : 0);
   const hasAnime = animeResults.length > 0;
@@ -170,16 +181,24 @@ export default function SearchPage() {
           </div>
         ) : hasResults ? (
           <div className="space-y-10">
-            {/* Anime Results — shown first with special section header */}
-            {(activeTab === "all" || activeTab === "anime") && animeResults.length > 0 && (
+            {activeTab === "all" ? (
+              /* Unified grid: movies → TV shows → anime */
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-1 h-5 bg-[#4B5694] rounded-full" />
-                  <h2 className="text-lg font-bold text-white">Anime Results</h2>
-                  <span className="text-[10px] font-bold text-[#7288AE] bg-[#4B5694]/10 border border-[#7288AE]/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    🇯🇵 Japanese Dub · English Subs
-                  </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+                  {unifiedResults.map((r) => (
+                    <div key={`${r.type}-${r.type === "media" ? (r.item as MediaItem).id : (r.item as AnimeItem).id}`} className="w-full h-full flex justify-center">
+                      {r.type === "media" ? (
+                        <MediaCard item={r.item as MediaItem} index={r.idx} />
+                      ) : (
+                        <AnimeCard item={r.item as AnimeItem} index={r.idx} />
+                      )}
+                    </div>
+                  ))}
                 </div>
+              </motion.div>
+            ) : activeTab === "anime" ? (
+              /* Anime-only tab */
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                   {animeResults.map((item, i) => (
                     <div key={item.id} className="w-full h-full flex justify-center">
@@ -188,17 +207,9 @@ export default function SearchPage() {
                   ))}
                 </div>
               </motion.div>
-            )}
-
-            {/* TMDB Results */}
-            {activeTab !== "anime" && filteredResults.length > 0 && (
+            ) : (
+              /* Movies/TV tab */
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                {activeTab === "all" && (
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-1 h-5 bg-primary rounded-full" />
-                    <h2 className="text-lg font-bold text-white">Movies & TV Shows</h2>
-                  </div>
-                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                   {filteredResults.map((item) => (
                     <div key={`${item.media_type}-${item.id}`} className="w-full h-full flex justify-center">

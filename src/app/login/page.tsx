@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { Input } from "@/components/ui/Input";
-import { Github, Chrome, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function LoginPage() {
@@ -90,32 +90,6 @@ export default function LoginPage() {
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
             </button>
           </form>
-
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-background text-white/40">Or continue with</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => signIn("google", { callbackUrl: "/" })}
-              className="flex items-center justify-center gap-2 h-12 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] rounded-lg text-white font-medium transition-colors"
-            >
-              <Chrome className="w-5 h-5" />
-              Google
-            </button>
-            <button
-              onClick={() => signIn("github", { callbackUrl: "/" })}
-              className="flex items-center justify-center gap-2 h-12 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] rounded-lg text-white font-medium transition-colors"
-            >
-              <Github className="w-5 h-5" />
-              GitHub
-            </button>
-          </div>
 
           <p className="text-center mt-8 text-white/40 text-sm">
             Don&apos;t have an account?{" "}

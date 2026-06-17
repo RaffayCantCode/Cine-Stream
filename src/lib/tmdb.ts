@@ -24,7 +24,8 @@ const tmdbApiCache = new Map<string, { data: any; expires: number }>();
 
 export async function tmdbFetch(
   path: string,
-  params?: Record<string, string>
+  params?: Record<string, string>,
+  options?: { noCache?: boolean }
 ): Promise<unknown> {
   const url = new URL(`${TMDB_BASE}${path}`);
   url.searchParams.set("include_adult", "false");
@@ -47,18 +48,27 @@ export async function tmdbFetch(
   }
 
   const cacheKey = url.toString();
-  const cached = tmdbApiCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) {
-    return cached.data;
+
+  // Skip in-memory cache when caller requests fresh data (e.g. provider pages)
+  if (!options?.noCache) {
+    const cached = tmdbApiCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return cached.data;
+    }
   }
 
-  const res = await fetch(url.toString(), {
+  const fetchOptions: RequestInit = {
     headers: {
       Authorization: getAuthHeader(),
       "Content-Type": "application/json",
     },
-    next: { revalidate },
-  });
+    // When noCache is requested, bypass Next.js fetch cache entirely
+    ...(options?.noCache
+      ? { cache: "no-store" as RequestCache }
+      : { next: { revalidate } }),
+  };
+
+  const res = await fetch(url.toString(), fetchOptions);
 
   if (!res.ok) {
     throw new Error(`TMDB fetch failed: ${res.status} ${res.statusText}`);
@@ -66,8 +76,11 @@ export async function tmdbFetch(
 
   const data = await res.json();
   const filtered = filterTmdbResponse(data);
-  
-  tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + (revalidate * 1000) });
+
+  // Only store in in-memory cache when caching is enabled
+  if (!options?.noCache) {
+    tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + (revalidate * 1000) });
+  }
   return filtered;
 }
 

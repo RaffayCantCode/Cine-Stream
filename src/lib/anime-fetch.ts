@@ -83,13 +83,28 @@ interface FranchiseNode {
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
 
-function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
-  return fetch(ANILIST_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(8000),
-  }).then((r) => r.json());
+async function anilistQuery(query: string, variables: Record<string, any>, retries = 2): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(ANILIST_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ query, variables }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.status === 429 && attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      return await res.json();
+    } catch {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      throw new Error("AniList query failed");
+    }
+  }
 }
 
 function transformAniList(media: AniListMedia): AnimeItem | null {
@@ -186,6 +201,18 @@ function getCurrentSeason() {
   };
 }
 
+function filterUnreleased(items: AnimeItem[]): AnimeItem[] {
+  return items.filter(item => {
+    const s = item.status;
+    if (!s) return true;
+    // AniList statuses
+    if (s === "NOT_YET_RELEASED" || s === "CANCELLED") return false;
+    // Jikan statuses
+    if (s === "Not yet aired" || s === "Cancelled") return false;
+    return true;
+  });
+}
+
 function deduplicateAnime(items: AnimeItem[]): AnimeItem[] {
   const seen = new Set<string>();
   const seenMal = new Set<string>();
@@ -226,7 +253,7 @@ function groupByFranchise(items: AnimeItem[]): AnimeItem[] {
 export async function searchAnime(query: string, page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(LIST_QUERY, { page, q: query, genre: genre || null });
-    return deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]);
+    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
   } catch {
     return [];
   }
@@ -235,7 +262,7 @@ export async function searchAnime(query: string, page = 1, genre?: string): Prom
 export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
-    return deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]);
+    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
   } catch {
     return [];
   }
@@ -244,7 +271,7 @@ export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeIt
 export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
-    return deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]);
+    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
   } catch {
     return [];
   }
@@ -254,7 +281,7 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
   const { season, year } = getCurrentSeason();
   try {
     const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
-    return deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]);
+    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
   } catch {
     return [];
   }
@@ -471,6 +498,15 @@ function parseSeasonNumberFromTitle(title: string): number {
   if (normalized.includes("eighth season") || normalized.includes("8th season")) return 8;
   if (normalized.includes("ninth season") || normalized.includes("9th season")) return 9;
   if (normalized.includes("tenth season") || normalized.includes("10th season")) return 10;
+  // For titles with "final season", try to find an explicit season number first
+  // e.g. "Season 4 Final Season" or "4th Final Season" or "Final Season 4"
+  const finalSeasonNum = normalized.match(/(?:season\s*)?(\d+)(?:st|nd|rd|th)?\s+final\s+season/i)
+    || normalized.match(/final\s+season\s+(\d+)/i);
+  if (finalSeasonNum) return parseInt(finalSeasonNum[1], 10);
+  // Default heuristic: most anime with "final season" in the title are on their 4th season
+  // (e.g. Attack on Titan, My Hero Academia, Haikyuu, etc.)
+  // NOTE: We intentionally do NOT match "final season.*?(\d+)" because it incorrectly
+  // captures "2" from "Final Season Part 2", mapping it to TMDB season 2 instead of 4.
   if (normalized.includes("final season")) return 4;
   
   const romanEndMatch = normalized.match(/\s+(ii|iii|iv|v|vi|vii|viii|ix|x)$/);
@@ -577,7 +613,7 @@ function getCachedDetail(key: string) {
   return null;
 }
 function setCachedDetail(key: string, data: any) {
-  animeDetailCache.set(key, { data, expires: Date.now() + 300000 }); // 5 min TTL
+  animeDetailCache.set(key, { data, expires: Date.now() + 1800000 }); // 30 min TTL
 }
 
 const INITIAL_EP_LIMIT = 100;
@@ -1399,7 +1435,7 @@ export async function fetchAnimeApi(
       }
     }
 
-    result = { success: true, data: combined.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
+    result = { success: true, data: filterUnreleased(combined).filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
   } else if (isAiring) {
     const items = await getAiringAnime(page, genre);
     result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };

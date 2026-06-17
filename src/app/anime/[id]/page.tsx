@@ -8,7 +8,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { fetchJson, cn } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2 } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AnimeDetail {
@@ -242,6 +242,8 @@ export default function AnimeDetailPage() {
       }
     }
   }, [authStatus, anime]);
+
+  const [gridMode, setGridMode] = useState(false);
 
   // ── Derived state ───────────────────────────────────────────────────────
   const EPISODES_PER_PAGE = 20;
@@ -749,16 +751,26 @@ export default function AnimeDetailPage() {
                   </div>
                 )}
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg" />
-                    <h2 className="text-2xl font-black text-white tracking-tight">Episodes</h2>
-                    {currentSeasonInfo && (
-                      <span className="text-xs bg-white/[0.06] text-white/50 px-2.5 py-1 rounded-full font-semibold">
-                        {currentSeasonInfo.seasonLabel}
-                      </span>
-                    )}
-                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg" />
+                      <h2 className="text-2xl font-black text-white tracking-tight">Episodes</h2>
+                      {currentSeasonInfo && (
+                        <span className="text-xs bg-white/[0.06] text-white/50 px-2.5 py-1 rounded-full font-semibold">
+                          {currentSeasonInfo.seasonLabel}
+                        </span>
+                      )}
+                      {!episodesLoading && currentSeasonEps.length > 0 && (
+                        <button
+                          onClick={() => setGridMode(g => !g)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white/[0.06] hover:bg-white/[0.10] text-white/60 hover:text-white border border-white/[0.06]"
+                          title={gridMode ? "Switch to list view" : "Switch to compact grid view"}
+                        >
+                          {gridMode ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
+                          {gridMode ? "List" : "Grid"}
+                        </button>
+                      )}
+                    </div>
 
                   {/* ── Season Tabs ── */}
                   {seasons.length > 1 && (
@@ -814,6 +826,59 @@ export default function AnimeDetailPage() {
                       <div className="p-8 text-center text-white/30 text-sm">
                         No episodes available
                       </div>
+                    );
+                  }
+
+                  if (gridMode) {
+                    const sliceEps = currentSeasonEps.slice(0, visibleCount);
+                    const hasMore = visibleCount < currentSeasonEps.length;
+                    return (
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={`grid-${currentSeasonId}`}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-1.5">
+                            {sliceEps.map((ep) => {
+                              const isSelected = selectedEp?.episodeId === ep.episodeId;
+                              const isUnreleased = ep.isReleased === false;
+                              return (
+                                <button
+                                  key={ep.episodeId}
+                                  onClick={() => { if (isUnreleased) return; handleWatchEpisode(ep); }}
+                                  disabled={isUnreleased}
+                                  className={cn(
+                                    "aspect-square rounded-lg text-xs font-bold transition-all flex items-center justify-center relative",
+                                    isSelected
+                                      ? "bg-gradient-to-br from-[#4B5694] to-[#7288AE] text-white shadow-md shadow-[#4B5694]/30 scale-105"
+                                      : isUnreleased
+                                      ? "bg-white/[0.03] text-white/20 cursor-not-allowed"
+                                      : "bg-white/[0.06] hover:bg-white/[0.12] text-white/70 hover:text-white border border-white/[0.06] hover:border-white/20"
+                                  )}
+                                >
+                                  {ep.isFiller && !isSelected && (
+                                    <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-amber-400" />
+                                  )}
+                                  {ep.episodeNum}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {hasMore && (
+                            <div className="flex justify-center pt-4 pb-2">
+                              <button
+                                onClick={() => setVisibleCount(c => c + EPISODES_PER_PAGE)}
+                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
+                              >
+                                Show {Math.min(EPISODES_PER_PAGE, currentSeasonEps.length - visibleCount)} More Episodes
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
+                      </AnimatePresence>
                     );
                   }
 

@@ -1,17 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-async function testUrl(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      signal: AbortSignal.timeout(1500),
-    });
-    return res.status === 200;
-  } catch {
-    return false;
-  }
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const provider = searchParams.get("provider") || "";
@@ -49,106 +37,42 @@ export async function GET(request: NextRequest) {
     } catch { /* ignore */ }
   }
 
-  // Optimized path: If not a sequel (or current ID matches root ID), return the Season URL immediately
+  // Determine which ID/episode strategy to use:
+  // - For sequels (currentAnilistId !== mainAnilistId): each season has its own AniList ID
+  //   with 1-based episode numbering (e.g. S2 E1 = ID 20958, episode 1).
+  //   Use the season-specific ID with the relative episode number.
+  // - For non-sequels (same ID): all episodes are under one root AniList ID with
+  //   continuous episode numbering, so use absoluteEpisode (offset + episode).
   const isSequel = currentAnilistId && mainAnilistId && currentAnilistId !== mainAnilistId;
+  const idToUse = anilistIdResolved || mainAnilistId;
+  const malToUse = malIdResolved || mainMalId;
+  const epToUse = isSequel ? episode : (episodeOffset > 0 ? absoluteEpisode : episode);
 
-  if (!isSequel) {
-    let defaultUrl = "";
-    const epToUse = episodeOffset > 0 ? absoluteEpisode : episode;
-    switch (provider) {
-      case "vidnest":
-        defaultUrl = anilistIdResolved 
-          ? `https://vidnest.fun/anime/${anilistIdResolved}/${epToUse}/sub`
-          : `https://vidnest.fun/anime/${malIdResolved || ""}/${epToUse}/sub`;
-        break;
-      case "animepahe":
-        defaultUrl = `https://vidnest.fun/animepahe/${malIdResolved || anilistIdResolved || ""}/${epToUse}/sub`;
-        break;
-      case "animeplay":
-        defaultUrl = malIdResolved
-          ? `https://animeplay.cfd/stream/mal/${malIdResolved}/${epToUse}/sub`
-          : `https://animeplay.cfd/stream/ani/${anilistIdResolved || ""}/${epToUse}/sub`;
-        break;
-      case "vidlink":
-        defaultUrl = `https://vidlink.pro/anime/${malIdResolved || anilistIdResolved || ""}/${epToUse}/sub?fallback=true`;
-        break;
-    }
-    return NextResponse.json({ success: true, url: defaultUrl, checked: false });
+  // If the current season doesn't have its own MAL ID, the frontend falls back
+  // to the root MAL ID (currentMalId === mainMalId). When that happens and the
+  // season has its own AniList ID, prefer the AniList ID over the misleading MAL ID.
+  const hasOwnMalId = currentMalId && currentMalId !== mainMalId;
+  const providerAniId = idToUse;
+  const providerMalId = hasOwnMalId ? malToUse : null;
+
+  let defaultUrl = "";
+  switch (provider) {
+    case "vidnest":
+      defaultUrl = providerAniId
+        ? `https://vidnest.fun/anime/${providerAniId}/${epToUse}/sub`
+        : `https://vidnest.fun/anime/${providerMalId || ""}/${epToUse}/sub`;
+      break;
+    case "animepahe":
+      defaultUrl = `https://vidnest.fun/animepahe/${providerMalId || providerAniId || ""}/${epToUse}/sub`;
+      break;
+    case "animeplay":
+      defaultUrl = providerMalId
+        ? `https://animeplay.cfd/stream/mal/${providerMalId}/${epToUse}/sub`
+        : `https://animeplay.cfd/stream/ani/${providerAniId || ""}/${epToUse}/sub`;
+      break;
+    case "vidlink":
+      defaultUrl = `https://vidlink.pro/anime/${providerMalId || providerAniId || ""}/${epToUse}/sub?fallback=true`;
+      break;
   }
-
-  // Sequel path: Perform ping checks to find the correct ID under the hood
-  try {
-    let resolvedUrl = "";
-
-    switch (provider) {
-      case "vidnest": {
-        // Ping Season ID first
-        const seasonApiUrl = `https://new.vidnest.fun/hianime/anime/${anilistIdResolved}/${episode}/sub`;
-        const seasonWorks = await testUrl(seasonApiUrl);
-        if (seasonWorks) {
-          resolvedUrl = anilistIdResolved
-            ? `https://vidnest.fun/anime/${anilistIdResolved}/${episode}/sub`
-            : `https://vidnest.fun/anime/${malIdResolved}/${episode}/sub`;
-        } else {
-          resolvedUrl = mainAnilistId
-            ? `https://vidnest.fun/anime/${mainAnilistId}/${absoluteEpisode}/sub`
-            : `https://vidnest.fun/anime/${mainMalId}/${absoluteEpisode}/sub`;
-        }
-        break;
-      }
-
-      case "animepahe": {
-        // Ping Season AniList ID to see if Season is mapped on Gogo/HiAnime
-        const seasonApiUrl = `https://new.vidnest.fun/hianime/anime/${anilistIdResolved}/${episode}/sub`;
-        const seasonWorks = await testUrl(seasonApiUrl);
-        if (seasonWorks) {
-          resolvedUrl = `https://vidnest.fun/animepahe/${malIdResolved || anilistIdResolved}/${episode}/sub`;
-        } else {
-          resolvedUrl = `https://vidnest.fun/animepahe/${mainMalId || mainAnilistId}/${absoluteEpisode}/sub`;
-        }
-        break;
-      }
-
-      case "animeplay": {
-        // Ping Season AniList ID to verify
-        const seasonApiUrl = `https://new.vidnest.fun/hianime/anime/${anilistIdResolved}/${episode}/sub`;
-        const seasonWorks = await testUrl(seasonApiUrl);
-        if (seasonWorks) {
-          resolvedUrl = malIdResolved
-            ? `https://animeplay.cfd/stream/mal/${malIdResolved}/${episode}/sub`
-            : `https://animeplay.cfd/stream/ani/${anilistIdResolved}/${episode}/sub`;
-        } else {
-          resolvedUrl = mainMalId
-            ? `https://animeplay.cfd/stream/mal/${mainMalId}/${absoluteEpisode}/sub`
-            : `https://animeplay.cfd/stream/ani/${mainAnilistId}/${absoluteEpisode}/sub`;
-        }
-        break;
-      }
-
-      case "vidlink": {
-        const targetMal = malIdResolved;
-        const seasonApiUrl = `https://new.vidnest.fun/hianime/anime/${anilistIdResolved}/${episode}/sub`;
-        const seasonWorks = await testUrl(seasonApiUrl);
-        if (seasonWorks) {
-          resolvedUrl = targetMal
-            ? `https://vidlink.pro/anime/${targetMal}/${episode}/sub?fallback=true`
-            : `https://vidlink.pro/anime/${anilistIdResolved}/${episode}/sub?fallback=true`;
-        } else {
-          resolvedUrl = mainMalId
-            ? `https://vidlink.pro/anime/${mainMalId}/${absoluteEpisode}/sub?fallback=true`
-            : `https://vidlink.pro/anime/${mainAnilistId}/${absoluteEpisode}/sub?fallback=true`;
-        }
-        break;
-      }
-
-      default:
-        return NextResponse.json({ error: "Invalid provider", success: false }, { status: 400 });
-    }
-
-    return NextResponse.json({ success: true, url: resolvedUrl, checked: true });
-  } catch (error) {
-    console.error("[Source Resolver Error]:", error);
-    // Fall back to Season URL in case of error
-    return NextResponse.json({ success: true, url: `https://vidnest.fun/anime/${anilistIdResolved}/${episode}/sub`, checked: false });
-  }
+  return NextResponse.json({ success: true, url: defaultUrl, checked: false });
 }

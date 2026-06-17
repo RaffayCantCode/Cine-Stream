@@ -12,20 +12,21 @@ function mapRelativeToTmdb(
   startSeasonNum: number,
   tmdbSeasonsList: TmdbSeasonMin[]
 ): { seasonNumber: number; episodeNumber: number } {
+  // If the start season doesn't exist in TMDB, use it directly
+  // rather than accidentally counting from the first TMDB season.
+  const hasStartSeason = tmdbSeasonsList.some(s => s.season_number === startSeasonNum);
+  if (!hasStartSeason) {
+    return { seasonNumber: startSeasonNum, episodeNumber: relativeEpNum };
+  }
+
   let remaining = relativeEpNum;
   let foundStart = false;
 
-  const hasStartSeason = tmdbSeasonsList.some(s => s.season_number === startSeasonNum);
-
   for (const s of tmdbSeasonsList) {
-    if (hasStartSeason) {
-      if (s.season_number === startSeasonNum) {
-        foundStart = true;
-      }
-      if (!foundStart) continue;
-    } else {
+    if (s.season_number === startSeasonNum) {
       foundStart = true;
     }
+    if (!foundStart) continue;
 
     const count = s.episode_count || 0;
     if (remaining <= count) {
@@ -133,22 +134,52 @@ export async function GET(
         success: true,
         data: { episodes: newEps, totalEpisodes: 0 },
       };
-      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+      if (newEps.length > 0) {
+        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+      }
       return Response.json(resPayload);
     }
 
     // ── Fetch a specific season's episodes by its AniList ID ───────────────
     if (seasonId) {
-      const meta = await getAnimeDetails(id, 100, true);
-      if (!meta) throw new Error("Anime not found");
+      console.log(`[Episodes API] Fetching seasonId=${seasonId} for anime id=${id}`);
+      let meta = await getAnimeDetails(id, 100, true);
+      if (!meta) {
+        console.error(`[Episodes API] getAnimeDetails returned null for id=${id}`);
+        throw new Error("Anime not found");
+      }
 
-      const season = meta.seasons.find(s => s.id === seasonId);
+      let season = meta.seasons.find(s => s.id === seasonId);
+      console.log(`[Episodes API] Initial season lookup: found=${!!season}, available seasons:`, meta.seasons.map(s => ({ id: s.id, name: s.name, label: s.seasonLabel, totalEp: s.totalEpisodes, tmdbId: (s as any).tmdbId, tmdbSeasonNum: s.tmdbSeasonNumber })));
+
       if (!season) {
+        // Cache might be stale (AniList API transient failure on earlier fetch).
+        // Force a fresh fetch with a different cache key.
+        console.log(`[Episodes API] Season not found, forcing fresh fetch`);
+        const freshMeta = await getAnimeDetails(id, 99, true);
+        if (freshMeta) {
+          meta = freshMeta;
+          season = meta.seasons.find(s => s.id === seasonId);
+          console.log(`[Episodes API] Fresh fetch season lookup: found=${!!season}`);
+        }
+      }
+      if (!season) {
+        console.warn(`[Episodes API] Season ${seasonId} not found in any meta result`);
         return Response.json({
           success: true,
           data: { episodes: [], totalEpisodes: 0 },
         });
       }
+
+      console.log(`[Episodes API] Season data:`, {
+        id: season.id,
+        name: season.name,
+        label: season.seasonLabel,
+        totalEpisodes: season.totalEpisodes,
+        tmdbId: (season as any).tmdbId,
+        tmdbSeasonNum: season.tmdbSeasonNumber,
+        episodeOffset: (season as any).episodeOffset,
+      });
 
       const seasonNumFromList = meta.seasons.findIndex(s => s.id === seasonId) + 1;
       const tmdbId = (season as any).tmdbId;
@@ -159,6 +190,14 @@ export async function GET(
       let seasonEps: any[] = [];
       let seasonOverview: string | null = null;
 
+      // Guard against zero/undefined totalEpisodes — default to 12 for TV seasons
+      const safeTotalEpisodes = Math.max(season.totalEpisodes || 12, 1);
+      if (safeTotalEpisodes !== season.totalEpisodes) {
+        console.warn(`[Episodes API] Clamped totalEpisodes from ${season.totalEpisodes} to ${safeTotalEpisodes} for seasonId=${seasonId}`);
+      }
+
+      console.log(`[Episodes API] TMDB ready: ${isTMDBReady}, tmdbId: ${tmdbId}, tmdbSeasonNum: ${tmdbSeasonNum}, totalEpisodes: ${safeTotalEpisodes}`);
+
       if (isTMDBReady) {
         // ── TMDB is the source of truth for episodes ─────────────────────
         let tmdbSeasonsList: TmdbSeasonMin[] = [];
@@ -168,11 +207,17 @@ export async function GET(
             tmdbSeasonsList = showData.seasons
               .filter(s => s.season_number > 0)
               .sort((a, b) => a.season_number - b.season_number);
+            console.log(`[Episodes API] TMDB show seasons:`, tmdbSeasonsList);
+          } else {
+            console.warn(`[Episodes API] TMDB show data has no seasons for tmdbId=${tmdbId}`);
           }
-        } catch { /* ignore */ }
+        } catch (e) {
+          console.error(`[Episodes API] TMDB show fetch failed for tmdbId=${tmdbId}:`, e);
+        }
 
         // Get overlay data using our enriched helper
-        const overlayEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
+        const overlayEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
+        console.log(`[Episodes API] Overlay episodes count: ${overlayEps.length}`);
 
         // Calculate needed TMDB seasons
         const neededSeasons = new Set<number>();
@@ -180,58 +225,83 @@ export async function GET(
           if (ep.seasonNumber) neededSeasons.add(ep.seasonNumber);
         });
         const startSeason = tmdbSeasonNum || 1;
-        for (let i = 1; i <= season.totalEpisodes; i++) {
+        for (let i = 1; i <= safeTotalEpisodes; i++) {
           const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
           neededSeasons.add(mapped.seasonNumber);
         }
 
         const seasonNumbers = Array.from(neededSeasons);
+        console.log(`[Episodes API] Needed TMDB seasons:`, seasonNumbers);
         const tmdbEpisodes = seasonNumbers.length > 0
           ? await fetchTmdbEpisodeData(tmdbId, seasonNumbers)
           : new Map<string, any>();
+        console.log(`[Episodes API] TMDB episodes fetched count: ${tmdbEpisodes.size}`);
 
-        // Build episodes from TMDB, overlay AniZip/Jikan data
-        for (let i = 1; i <= season.totalEpisodes; i++) {
-          const matchEp = overlayEps.find(j => j.episodeNum === i);
-          
-          let tmdbSeason = matchEp?.seasonNumber || null;
-          let tmdbEpisode = matchEp?.episodeNumber || null;
-
-          if (!tmdbSeason || !tmdbEpisode) {
-            const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
-            tmdbSeason = mapped.seasonNumber;
-            tmdbEpisode = mapped.episodeNumber;
-          }
-
-          const tmdbEp = tmdbEpisodes.get(`${tmdbSeason}-${tmdbEpisode}`)
-            || tmdbEpisodes.get(`${tmdbSeason}-rel-${tmdbEpisode}`);
-          
-          seasonEps.push({
-            episodeId: matchEp?.episodeId || `${season.id}-${i}`,
-            episodeNum: i,
-            title: tmdbEp?.title || matchEp?.title || `Episode ${i}`,
-            thumbnail: tmdbEp?.thumbnail || matchEp?.thumbnail || null,
-            malUrl: matchEp?.malUrl || null,
-            isFiller: matchEp?.isFiller || false,
-            releasedDate: matchEp?.releasedDate || null,
-            description: tmdbEp?.description || matchEp?.description || null,
-            vote_average: tmdbEp?.vote_average,
-            runtime: tmdbEp?.runtime,
+        // If TMDB returned no data, fall back to overlay episodes
+        if (tmdbEpisodes.size === 0 && overlayEps.length > 0) {
+          console.warn(`[Episodes API] TMDB returned no episodes, falling back to overlay data`);
+          seasonEps = overlayEps.map((ep) => ({
+            episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
+            episodeNum: ep.episodeNum,
+            title: ep.title || `Episode ${ep.episodeNum}`,
+            thumbnail: ep.thumbnail || null,
+            malUrl: ep.malUrl || null,
+            isFiller: ep.isFiller || false,
+            releasedDate: ep.releasedDate || null,
+            description: ep.description || null,
             seasonNum: seasonNumFromList,
             seasonId: season.id,
             seasonName: season.name,
             seasonMalId: season.idMal || null,
-          });
+          }));
         }
 
-        // Fetch TMDB season overview
-        try {
-          const tmdbSeasonData = await tmdbFetch(`/tv/${tmdbId}/season/${tmdbSeasonNum}`) as { overview?: string };
-          if (tmdbSeasonData) seasonOverview = tmdbSeasonData.overview || null;
-        } catch { /* no overview */ }
+        // Build episodes from TMDB, overlay AniZip/Jikan data (only if TMDB data was available)
+        if (tmdbEpisodes.size > 0) {
+          for (let i = 1; i <= safeTotalEpisodes; i++) {
+            const matchEp = overlayEps.find(j => j.episodeNum === i);
+            
+            let tmdbSeason = matchEp?.seasonNumber || null;
+            let tmdbEpisode = matchEp?.episodeNumber || null;
+
+            if (!tmdbSeason || !tmdbEpisode) {
+              const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
+              tmdbSeason = mapped.seasonNumber;
+              tmdbEpisode = mapped.episodeNumber;
+            }
+
+            const tmdbEp = tmdbEpisodes.get(`${tmdbSeason}-${tmdbEpisode}`)
+              || tmdbEpisodes.get(`${tmdbSeason}-rel-${tmdbEpisode}`);
+            
+            seasonEps.push({
+              episodeId: matchEp?.episodeId || `${season.id}-${i}`,
+              episodeNum: i,
+              title: tmdbEp?.title || matchEp?.title || `Episode ${i}`,
+              thumbnail: tmdbEp?.thumbnail || matchEp?.thumbnail || null,
+              malUrl: matchEp?.malUrl || null,
+              isFiller: matchEp?.isFiller || false,
+              releasedDate: matchEp?.releasedDate || null,
+              description: tmdbEp?.description || matchEp?.description || null,
+              vote_average: tmdbEp?.vote_average,
+              runtime: tmdbEp?.runtime,
+              seasonNum: seasonNumFromList,
+              seasonId: season.id,
+              seasonName: season.name,
+              seasonMalId: season.idMal || null,
+            });
+          }
+        }
+
+        // Fetch TMDB season overview (only if we have TMDB data to show)
+        if (tmdbEpisodes.size > 0) {
+          try {
+            const tmdbSeasonData = await tmdbFetch(`/tv/${tmdbId}/season/${tmdbSeasonNum}`) as { overview?: string };
+            if (tmdbSeasonData) seasonOverview = tmdbSeasonData.overview || null;
+          } catch { /* no overview */ }
+        }
       } else {
         // ── No TMDB: use enriched episodes ────────────────────────────────────
-        const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
+        const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
         seasonEps = enrichedEps.map((ep) => ({
           ...ep,
           episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
@@ -243,7 +313,7 @@ export async function GET(
 
         const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
         const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel.startsWith(t));
-        const count = isSpecialFormat ? 1 : season.totalEpisodes;
+        const count = isSpecialFormat ? 1 : safeTotalEpisodes;
         for (let i = 1; i <= count; i++) {
           if (!covered.has(i)) {
             seasonEps.push({
@@ -263,6 +333,8 @@ export async function GET(
 
       seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
 
+      console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId}`);
+
       const resPayload = {
         success: true,
         data: {
@@ -271,7 +343,14 @@ export async function GET(
           seasonOverview,
         },
       };
-      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+
+      // Don't cache empty results — allow retries to re-fetch
+      if (seasonEps.length > 0) {
+        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+      } else {
+        console.warn(`[Episodes API] Not caching empty episode result for seasonId=${seasonId}`);
+      }
+
       return Response.json(resPayload);
     }
 
@@ -285,6 +364,7 @@ export async function GET(
       let seasonEps: any[] = [];
 
       if (season) {
+        const safeTotalEpisodes = Math.max(season.totalEpisodes || 12, 1);
         const tmdbId = (season as any).tmdbId;
         const tmdbSeasonNum = season.tmdbSeasonNumber;
         const episodeOffset = (season as any).episodeOffset || 0;
@@ -302,14 +382,14 @@ export async function GET(
           } catch { /* ignore */ }
 
           // Get overlay data using our enriched helper
-          const overlayEps = await getEnrichedEpisodesList(String(season.id), season.name, season.totalEpisodes, season.idMal || null);
+          const overlayEps = await getEnrichedEpisodesList(String(season.id), season.name, safeTotalEpisodes, season.idMal || null);
 
           const neededSeasons = new Set<number>();
           overlayEps.forEach(ep => {
             if (ep.seasonNumber) neededSeasons.add(ep.seasonNumber);
           });
           const startSeason = tmdbSeasonNum || 1;
-          for (let i = 1; i <= season.totalEpisodes; i++) {
+          for (let i = 1; i <= safeTotalEpisodes; i++) {
             const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
             neededSeasons.add(mapped.seasonNumber);
           }
@@ -319,7 +399,7 @@ export async function GET(
             ? await fetchTmdbEpisodeData(tmdbId, seasonNumbers)
             : new Map<string, any>();
 
-          for (let i = 1; i <= season.totalEpisodes; i++) {
+          for (let i = 1; i <= safeTotalEpisodes; i++) {
             const matchEp = overlayEps.find(j => j.episodeNum === i);
             
             let tmdbSeason = matchEp?.seasonNumber || null;
@@ -353,7 +433,7 @@ export async function GET(
           }
         } else {
           // Use our enriched helper directly
-          const enrichedEps = await getEnrichedEpisodesList(String(season.id), season.name, season.totalEpisodes, season.idMal || null);
+          const enrichedEps = await getEnrichedEpisodesList(String(season.id), season.name, safeTotalEpisodes, season.idMal || null);
           seasonEps = enrichedEps.map((ep) => ({
             ...ep,
             episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
@@ -365,7 +445,7 @@ export async function GET(
 
           const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
           const isSpecial = ["Movie", "OVA", "Special"].some(t => season.seasonLabel.startsWith(t));
-          const count = isSpecial ? 1 : season.totalEpisodes;
+          const count = isSpecial ? 1 : safeTotalEpisodes;
           for (let i = 1; i <= count; i++) {
             if (!covered.has(i)) {
               seasonEps.push({
@@ -385,13 +465,15 @@ export async function GET(
         success: true,
         data: { episodes: seasonEps, totalEpisodes: meta.totalEpisodes },
       };
-      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+      if (seasonEps.length > 0) {
+        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+      }
       return Response.json(resPayload);
     }
 
     // ── Default: fetch ALL seasons' episodes ───────────────────────────────
-    const meta = await getAnimeDetails(id, 100, true);
-    if (!meta) throw new Error("Anime not found");
+      let meta = await getAnimeDetails(id, 100, true);
+      if (!meta) throw new Error("Anime not found");
 
     let episodes: any[] = [];
     
@@ -402,6 +484,7 @@ export async function GET(
       const episodeOffset = (season as any).episodeOffset || 0;
       const isTMDBReady = tmdbId && tmdbSeasonNum !== undefined && tmdbSeasonNum !== null;
       const seasonIdx = meta.seasons.indexOf(season) + 1;
+      const safeTotalEpisodes = Math.max(season.totalEpisodes || 12, 1);
 
       if (isTMDBReady) {
         let tmdbSeasonsList: TmdbSeasonMin[] = [];
@@ -415,14 +498,14 @@ export async function GET(
         } catch { /* ignore */ }
 
         // Get overlay data using our enriched helper
-        const overlayEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
+        const overlayEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
 
         const neededSeasons = new Set<number>();
         overlayEps.forEach(ep => {
           if (ep.seasonNumber) neededSeasons.add(ep.seasonNumber);
         });
         const startSeason = tmdbSeasonNum || 1;
-        for (let i = 1; i <= season.totalEpisodes; i++) {
+        for (let i = 1; i <= safeTotalEpisodes; i++) {
           const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
           neededSeasons.add(mapped.seasonNumber);
         }
@@ -432,7 +515,8 @@ export async function GET(
           ? await fetchTmdbEpisodeData(tmdbId, seasonNumbers)
           : new Map<string, any>();
 
-        for (let i = 1; i <= season.totalEpisodes; i++) {
+        for (let i = 1; i <= safeTotalEpisodes; i++) {
+          // Build episodes from TMDB, overlay AniZip/Jikan data
           const matchEp = overlayEps.find(j => j.episodeNum === i);
           
           let tmdbSeason = matchEp?.seasonNumber || null;
@@ -465,7 +549,7 @@ export async function GET(
         }
       } else {
         // Use our enriched helper directly
-        const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, season.totalEpisodes, season.idMal || null);
+        const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
         let seasonEps: any[] = enrichedEps.map((ep) => ({
           ...ep,
           episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
@@ -500,7 +584,9 @@ export async function GET(
       success: true,
       data: { episodes, totalEpisodes: episodes.length },
     };
-    episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+    if (episodes.length > 0) {
+      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+    }
     return Response.json(resPayload);
   } catch (error) {
     console.error("[Anime Episodes Error]:", error);

@@ -64,21 +64,24 @@ const PROVIDER_GRADIENTS: Record<string, string> = {
 };
 
 async function fetchProviderItems(
-  providerId: number,
+  providerIdStr: string,
   region: string,
   type: "movie" | "tv",
   sortBy: SortKey,
   page: number,
-  minVote?: string
+  minVote?: string,
+  monetizationTypes?: string
 ): Promise<{ results: MediaItem[]; total_pages: number }> {
   const endpoint = type === "movie" ? "movies" : "tv";
   const params = new URLSearchParams({
-    withProviders: String(providerId),
+    withProviders: providerIdStr,
     watchRegion: region,
     sortBy,
     page: String(page),
   });
   if (minVote) params.set("minVote", minVote);
+  // Pass per-provider monetization types; API defaults to "flatrate" if omitted
+  if (monetizationTypes) params.set("monetizationTypes", monetizationTypes);
   const data = await fetchJson<{ results: MediaItem[]; total_pages?: number }>(
     `/api/tmdb/discover/${endpoint}?${params.toString()}`,
     { cacheTtlMs: 180000 }
@@ -120,6 +123,11 @@ export default function ProviderPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Build provider ID string — combine primary + additionalIds with pipe (OR logic)
+  const providerIdStr = provider
+    ? [provider.id, ...(provider.additionalIds || [])].join("|")
+    : "";
+
   // ── fetch data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async (page: number, reset: boolean) => {
     if (!provider) return;
@@ -133,9 +141,10 @@ export default function ProviderPage() {
     setError(null);
     try {
       const minVote = sortBy === "vote_average.desc" ? "6" : undefined;
+      const monetizationTypes = provider.monetizationTypes; // undefined → API defaults to "flatrate"
       const [movieData, tvData] = await Promise.all([
-        fetchProviderItems(provider.id, provider.region, "movie", sortBy, page, minVote),
-        fetchProviderItems(provider.id, provider.region, "tv", sortBy, page, minVote),
+        fetchProviderItems(providerIdStr, provider.region, "movie", sortBy, page, minVote, monetizationTypes),
+        fetchProviderItems(providerIdStr, provider.region, "tv", sortBy, page, minVote, monetizationTypes),
       ]);
 
       let finalMovies = movieData.results;
@@ -151,14 +160,14 @@ export default function ProviderPage() {
         const promises: Promise<any>[] = [];
         if (movieRandPage > 1) {
           promises.push(
-            fetchProviderItems(provider.id, provider.region, "movie", sortBy, movieRandPage, minVote)
+            fetchProviderItems(providerIdStr, provider.region, "movie", sortBy, movieRandPage, minVote, monetizationTypes)
               .then(res => { finalMovies = [...finalMovies, ...res.results]; })
               .catch(e => console.error("Failed to fetch random provider movies page", e))
           );
         }
         if (tvRandPage > 1) {
           promises.push(
-            fetchProviderItems(provider.id, provider.region, "tv", sortBy, tvRandPage, minVote)
+            fetchProviderItems(providerIdStr, provider.region, "tv", sortBy, tvRandPage, minVote, monetizationTypes)
               .then(res => { finalTv = [...finalTv, ...res.results]; })
               .catch(e => console.error("Failed to fetch random provider tv page", e))
           );
@@ -205,7 +214,7 @@ export default function ProviderPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [provider, sortBy]);
+  }, [provider, sortBy, providerIdStr]);
 
   // Initial load + re-load on filter/sort change
   useEffect(() => {
@@ -644,6 +653,29 @@ export default function ProviderPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Empty state — loaded but no content returned */}
+            {!isLoading && !error && movies.length === 0 && tvShows.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 border border-white/10"
+                  style={{ background: `linear-gradient(135deg, ${provider.color}30, ${provider.color}10)` }}
+                >
+                  <LayoutGrid className="w-7 h-7" style={{ color: provider.color }} />
+                </div>
+                <h3 className="text-lg font-black text-white mb-2">No content found</h3>
+                <p className="text-sm text-white/40 mb-6 max-w-xs">
+                  We couldn&apos;t find any titles for {provider.name} right now. This may be a temporary issue.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => loadData(1, true)}
+                  className="text-xs font-bold px-5 py-2.5 rounded-xl border border-white/10 text-white/60 hover:text-white hover:border-white/20 bg-white/[0.04] hover:bg-white/[0.08] transition-all"
+                >
+                  Try again
+                </button>
               </div>
             )}
           </div>
