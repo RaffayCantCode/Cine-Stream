@@ -6,6 +6,10 @@ import * as schema from "./schema";
 let dbInstance: NeonHttpDatabase<typeof schema> | null = null;
 let isBuildTime = false;
 
+export function isDbBuildTime(): boolean {
+  return isBuildTime;
+}
+
 export function getDb(): NeonHttpDatabase<typeof schema> {
   if (dbInstance) return dbInstance;
 
