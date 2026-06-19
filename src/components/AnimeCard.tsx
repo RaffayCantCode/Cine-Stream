@@ -72,24 +72,24 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
           </h3>
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-3.5">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-4 pb-10">
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
             <div className="w-12 h-12 rounded-full bg-[#4B5694]/90 backdrop-blur-xl flex items-center justify-center shadow-2xl shadow-[#4B5694]/50 translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
               <Play className="w-5 h-5 fill-white text-white ml-0.5" />
             </div>
           </div>
 
-          <div className="relative z-10">
+          <div className="relative z-10 space-y-2">
             {/* Show Year and Rating on hover instead of Title */}
-            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap text-[9px] font-bold text-white/90">
+            <div className="flex items-center gap-1.5 flex-wrap font-bold">
               {item.seasonYear && (
-                <span className="bg-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm uppercase">
+                <span className="bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm uppercase text-[10px] text-white/90">
                   {item.season ? `${item.season} ` : ""}{item.seasonYear}
                 </span>
               )}
               {item.rating && (
-                <span className="flex items-center gap-0.5 text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded backdrop-blur-sm">
-                  <Star className="w-2.5 h-2.5 fill-current" />
+                <span className="flex items-center gap-0.5 text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded backdrop-blur-sm text-[10px]">
+                  <Star className="w-3 h-3 fill-current" />
                   {item.rating}
                 </span>
               )}
@@ -97,19 +97,19 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
 
             {/* Show Genres on hover */}
             {item.genres && item.genres.length > 0 && (
-              <p className="text-[10px] font-bold text-[#7288AE] line-clamp-1 mb-1.5 uppercase tracking-wide leading-none">
+              <p className="text-xs font-bold text-[#7288AE] line-clamp-1 uppercase tracking-wide leading-snug">
                 {item.genres.slice(0, 2).join(" · ")}
               </p>
             )}
 
             <div className="flex items-center gap-2 flex-wrap">
               {item.type && (
-                <span className="text-white/40 text-[9px] font-bold uppercase tracking-wider">
+                <span className="text-white/50 text-[10px] font-bold uppercase tracking-wider">
                   {item.type}
                 </span>
               )}
               {subCount !== null && (
-                <span className="flex items-center gap-0.5 text-white/40 text-[9px] font-semibold">
+                <span className="flex items-center gap-0.5 text-white/50 text-[10px] font-semibold">
                   {subCount} eps
                 </span>
               )}

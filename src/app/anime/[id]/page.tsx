@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimePlayer } from "@/components/AnimePlayer";
+import { AnimeRow } from "@/components/AnimeRow";
 import { fetchJson, cn } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List } from "lucide-react";
@@ -70,6 +71,8 @@ export default function AnimeDetailPage() {
 
   const tmdbIdRef = useRef<number | null>(null);
   const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [recsLoading, setRecsLoading] = useState(false);
 
   interface FranchiseNode {
     id: number;
@@ -174,6 +177,24 @@ export default function AnimeDetailPage() {
     loadMeta();
     return () => { cancelled = true; };
   }, [id, loadSeasonEpisodes]);
+
+  // ── Fetch You May Like recommendations ─────────────────────────────────
+  useEffect(() => {
+    if (!anime || !id) return;
+    setRecsLoading(true);
+    const genres = anime.genres?.length ? anime.genres.join(",") : "";
+    const franchiseIds = franchiseNodes.map(n => n.id).filter(Boolean).join(",");
+    const excludeIds = [id, franchiseIds].filter(Boolean).join(",");
+    fetch(`/api/anime/recommendations/${id}?genres=${encodeURIComponent(genres)}&minItems=12&excludeIds=${encodeURIComponent(excludeIds)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.items?.length) {
+          setRecommendations(data.items);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setRecsLoading(false));
+  }, [anime?.id, id, franchiseNodes]);
 
   // ── Autoplay via URL params ─────────────────────────────────────────────
   useEffect(() => {
@@ -318,6 +339,13 @@ export default function AnimeDetailPage() {
   const currentEpisodeOffset = useMemo(() => {
     return currentSeason?.episodeOffset || 0;
   }, [currentSeason]);
+
+  const franchiseAbsoluteEp = useMemo(() => {
+    const currentIdx = seasons.findIndex(s => s.id === currentSeasonId);
+    if (currentIdx < 0) return 0;
+    const prevTotal = seasons.slice(0, currentIdx).reduce((sum, s) => sum + (s.totalEpisodes || 0), 0);
+    return prevTotal + (selectedEp?.episodeNum || 0);
+  }, [seasons, currentSeasonId, selectedEp?.episodeNum]);
 
   // ── Prev / Next episode ─────────────────────────────────────────────────
   const handlePrev = useCallback(() => {
@@ -539,6 +567,8 @@ export default function AnimeDetailPage() {
                             rootAnimeId={rootSeason?.id || anime?.id}
                             rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
                             episodeOffset={currentEpisodeOffset}
+                            tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
+                            tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
                             onAutoNext={handleAutoNext}
                           />
                         </motion.div>
@@ -1025,6 +1055,17 @@ export default function AnimeDetailPage() {
                   );
                 })()}
               </section>
+
+              {recommendations.length > 0 && (
+                <div className="-mx-5 md:-mx-0">
+                  <AnimeRow title="You May Like" items={recommendations} />
+                </div>
+              )}
+              {recsLoading && !recommendations.length && (
+                <div className="-mx-5 md:-mx-0">
+                  <AnimeRow title="You May Like" isLoading items={[]} />
+                </div>
+              )}
             </div>
           </>
         ) : null}

@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MediaRow } from "@/components/MediaRow";
-import { ContinueWatching } from "@/components/ContinueWatching";
 import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles } from "lucide-react";
-import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent, isTmdbAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { AnimeRow } from "@/components/AnimeRow";
+import { AnimatePresence } from "framer-motion";
 import type { AnimeItem } from "@/components/AnimeCard";
-import { motion } from "framer-motion";
+
+const ContinueWatching = dynamic(
+  () => import("@/components/ContinueWatching").then((m) => m.ContinueWatching),
+  { ssr: false }
+);
 
 interface MediaItem {
   id: number;
@@ -53,7 +58,8 @@ function mulberry32(seed: number) {
   };
 }
 
-function sessionShuffle<T>(array: T[], salt: string = ""): T[] {
+function sessionShuffle<T>(array: T[] | null | undefined, salt: string = ""): T[] {
+  if (!Array.isArray(array)) return [];
   const seed = getSessionSeed() ^ salt.split("").reduce((a, c) => a ^ c.charCodeAt(0), 0);
   const rng = mulberry32(seed);
   const arr = [...array];
@@ -66,12 +72,17 @@ function sessionShuffle<T>(array: T[], salt: string = ""): T[] {
 
 // Preload first N poster images so they render without a flash
 function preloadImages(items: MediaItem[], count = 8) {
+  const fragment = document.createDocumentFragment();
   items.slice(0, count).forEach((item) => {
     if (!item.poster_path) return;
     const url = `https://image.tmdb.org/t/p/w342${item.poster_path}`;
-    const img = new Image();
-    img.src = url;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = url;
+    fragment.appendChild(link);
   });
+  document.head.appendChild(fragment);
 }
 
 // ─── Section entrance animation ───────────────────────────────────────────────
@@ -83,14 +94,12 @@ function Section({
   delay?: number;
 }) {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1], delay }}
+    <section
+      className="animate-fade-in-up opacity-0"
+      style={{ animationDelay: `${delay}s`, animationFillMode: "forwards" }}
     >
       {children}
-    </motion.section>
+    </section>
   );
 }
 
@@ -148,6 +157,8 @@ export default function Home() {
   const [animeList, setAnimeList] = useState<AnimeItem[]>([]);
   const [animeLoading, setAnimeLoading] = useState(true);
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [timerReset, setTimerReset] = useState(0);
+  const heroPoolLengthRef = useRef(0);
 
   // Touch swipe gesture states for mobile Hero banner
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -168,9 +179,9 @@ export default function Home() {
     const isLeftSwipe = distance > 50;
     const isRightSwipe = distance < -50;
     if (isLeftSwipe && heroPool.length > 1) {
-      setHeroIndex((prev) => (prev + 1) % heroPool.length);
+      navigateHero(1);
     } else if (isRightSwipe && heroPool.length > 1) {
-      setHeroIndex((prev) => (prev - 1 + heroPool.length) % heroPool.length);
+      navigateHero(-1);
     }
   };
 
@@ -182,80 +193,89 @@ export default function Home() {
       setLoadError(null);
 
       try {
-        const data = await fetchJson<{
+        // 1) Fire hero + anime + full rows in PARALLEL
+        const heroPromise = fetchJson<{
+          trending: { results: MediaItem[] };
+          popular: { results: MediaItem[] };
+        }>("/api/tmdb/home-hero", { cacheTtlMs: 180000 });
+
+        const rowsPromise = fetchJson<{
           trending: { results: MediaItem[] };
           popular: { results: MediaItem[] };
           topRated: { results: MediaItem[] };
           nowPlaying: { results: MediaItem[] };
-          upcoming: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home", { cacheTtlMs: 120000 }); // 2 min cache — fresher data
+        }>("/api/tmdb/home", { cacheTtlMs: 180000 });
 
+        const animePromise = fetchJson<{ success: boolean; data: { items: AnimeItem[] } } | null>(
+          "/api/anime?category=trending&page=1",
+          { cacheTtlMs: 300000 }
+        ).catch(() => null);
+
+        // ── Hero data arrives FAST (only 2 TMDB calls) ─────────────────
+        const heroData = await heroPromise;
         if (cancelled) return;
 
-        // Filter each pool
-        const trendingSafe = filterReleasedSafeContent(data.trending?.results || []);
-        const popularSafe = filterReleasedSafeContent(data.popular?.results || []).map(
+        const trendingSafe = filterReleasedSafeContent(heroData.trending?.results || []);
+        const popularSafe = filterReleasedSafeContent(heroData.popular?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         );
-        const topSafe = filterReleasedSafeContent(data.topRated?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const })
-        );
-        const recentSafe = filterReleasedSafeContent(data.nowPlaying?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        );
-        const upcomingSafe = filterReleasedSafeContent(data.upcoming?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        );
-
-        // Session-seeded shuffles — different every browser session, stable within
         const shuffledTrending = sessionShuffle(trendingSafe, "trending");
         const shuffledPopular = sessionShuffle(popularSafe, "popular");
-        const shuffledTopRated = sessionShuffle(topSafe, "toprated");
-        const shuffledRecent = sessionShuffle(
-          [...recentSafe, ...upcomingSafe],
-          "recent"
-        );
 
-        // Recommended: weighted random sample from all pools
-        const recPool = [...popularSafe, ...topSafe, ...trendingSafe];
-        // Weight by vote_average so higher-quality titles appear more often
-        const weightedPool = recPool.filter((i) => (i.vote_average ?? 0) >= 7.0);
-        const shuffledRec = sessionShuffle(
-          weightedPool.length >= 20 ? weightedPool : recPool,
-          "recommended"
-        );
+        // Early hero backdrop preload
+        const heroCandidate = [...trendingSafe, ...popularSafe].find((i) => i.backdrop_path);
+        if (heroCandidate?.backdrop_path) {
+          const preloadLink = document.createElement("link");
+          preloadLink.rel = "preload";
+          preloadLink.as = "image";
+          preloadLink.href = `https://image.tmdb.org/t/p/original${heroCandidate.backdrop_path}`;
+          preloadLink.fetchPriority = "high";
+          document.head.appendChild(preloadLink);
+        }
 
         setTrending(shuffledTrending);
         setPopular(shuffledPopular);
-        setTopRated(shuffledTopRated);
-        setRecent(shuffledRecent);
-        setRecommended(shuffledRec);
-        setGenres((data.genres?.genres || []).slice(0, 18));
-
-        // Preload first 8 poster images while the hero is loading
-        preloadImages(shuffledTrending);
+        preloadImages(shuffledTrending, 6);
         preloadImages(shuffledPopular, 4);
+        if (!cancelled) setIsLoading(false);
 
-        // Fetch anime
-        setAnimeLoading(true);
-        try {
-          const animeData = await fetchJson<{ success: boolean; data: AnimeItem[] }>(
-            "/api/anime?category=trending&page=1",
-            { cacheTtlMs: 300000 }
-          );
-          if (animeData.success && animeData.data) {
-            setAnimeList(sessionShuffle(animeData.data, "anime").slice(0, 15));
-          }
-        } catch { /* silent fallback */ }
-        finally { setAnimeLoading(false); }
+        // ── Full rows data arrives (more TMDB pages) ────────────────────
+        const [rowsData, animeResponse] = await Promise.all([rowsPromise, animePromise]);
+        if (cancelled) return;
+
+        const fullTrending = filterReleasedSafeContent(rowsData.trending?.results || []);
+        const fullPopular = filterReleasedSafeContent(rowsData.popular?.results || []).map(
+          (i) => ({ ...i, media_type: "movie" as const })
+        );
+        const topSafe = filterReleasedSafeContent(rowsData.topRated?.results || []).map(
+          (i) => ({ ...i, media_type: "tv" as const })
+        );
+        const recentSafe = filterReleasedSafeContent(rowsData.nowPlaying?.results || []).map(
+          (i) => ({ ...i, media_type: "movie" as const })
+        );
+
+        setTrending(sessionShuffle(fullTrending, "trending"));
+        setPopular(sessionShuffle(fullPopular, "popular"));
+        setTopRated(sessionShuffle(topSafe, "toprated"));
+        setRecent(sessionShuffle(recentSafe, "recent"));
+
+        const recPool = [...fullPopular, ...topSafe, ...fullTrending];
+        const daySalt = Math.floor(Date.now() / 86400000).toString();
+        setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+        setGenres((rowsData.genres?.genres || []).slice(0, 18));
+
+        if (animeResponse?.success && animeResponse.data?.items) {
+          setAnimeList(sessionShuffle(animeResponse.data.items, "anime").slice(0, 15));
+        }
+        setAnimeLoading(false);
 
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Failed to load content");
+          if (!cancelled) setIsLoading(false);
+          setAnimeLoading(false);
         }
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
     };
 
@@ -265,31 +285,93 @@ export default function Home() {
 
   // ─── Hero pool ─────────────────────────────────────────────────────────────
   const heroPool = useMemo(() => {
-    const pool = [...trending.slice(0, 8), ...popular.slice(0, 5)];
-    const unique: MediaItem[] = [];
-    const seen = new Set<number>();
-    for (const item of pool) {
-      // Only use items with a backdrop for the hero
-      if (!seen.has(item.id) && item.backdrop_path) {
-        seen.add(item.id);
-        unique.push(item);
+    const candidates = [...trending, ...popular];
+    let movie: MediaItem | null = null;
+    let show: MediaItem | null = null;
+    let anime: MediaItem | null = null;
+
+    for (const item of candidates) {
+      if (!item.backdrop_path) continue;
+      const isMovie = item.media_type === "movie" || !!item.title;
+      const isAnimeItem = isTmdbAnime(item);
+
+      if (isAnimeItem && !anime) {
+        anime = item;
+      } else if (isMovie && !isAnimeItem && !movie) {
+        movie = item;
+      } else if (!isMovie && !isAnimeItem && !show) {
+        show = item;
+      }
+      if (movie && show && anime) break;
+    }
+
+    const result: MediaItem[] = [];
+    if (movie) result.push(movie);
+    if (show) result.push(show);
+    if (anime) result.push(anime);
+
+    // If fewer than 3, fill with more unique items
+    if (result.length < 3) {
+      const seen = new Set(result.map((r) => r.id));
+      for (const item of candidates) {
+        if (!seen.has(item.id) && item.backdrop_path) {
+          seen.add(item.id);
+          result.push(item);
+          if (result.length >= 3) break;
+        }
       }
     }
-    return unique.slice(0, 7);
+
+    return result;
   }, [trending, popular]);
 
-  const hero = heroPool[heroIndex];
+  const hero = heroPool[heroIndex] || heroPool[0] || null;
 
+  // Keep the ref in sync for use inside callbacks (avoids stale closure)
+  useEffect(() => { heroPoolLengthRef.current = heroPool.length; }, [heroPool]);
+
+  // ── Manual navigation helpers (reset the auto-rotation timer) ──────────────
+  const goToHero = useCallback((index: number) => {
+    setHeroIndex(index);
+    setTimerReset((c) => c + 1);
+  }, []);
+
+  const navigateHero = useCallback((dir: 1 | -1) => {
+    setHeroIndex((prev) => (prev + dir + heroPoolLengthRef.current) % heroPoolLengthRef.current);
+    setTimerReset((c) => c + 1);
+  }, []);
+
+  // ── Clamp heroIndex when heroPool shrinks (safety net) ──────────────────
+  useEffect(() => {
+    if (heroPool.length > 0 && heroIndex >= heroPool.length) {
+      setHeroIndex(0);
+    }
+  }, [heroPool.length, heroIndex]);
+
+  // ── Preload all hero backdrop images for instant transitions ────────────
+  useEffect(() => {
+    heroPool.forEach((item) => {
+      if (!item.backdrop_path) return;
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = `https://image.tmdb.org/t/p/original${item.backdrop_path}`;
+      link.fetchPriority = "high";
+      document.head.appendChild(link);
+    });
+  }, [heroPool]);
+
+  // ── Auto-rotation timer (resets on manual nav) ─────────────────────────
   useEffect(() => {
     if (heroPool.length <= 1) return;
     if (heroTimerRef.current) clearInterval(heroTimerRef.current);
     heroTimerRef.current = setInterval(() => {
-      setHeroIndex((prev) => (prev + 1) % heroPool.length);
+      setHeroIndex((prev) => (prev + 1) % heroPoolLengthRef.current);
     }, 9000);
     return () => {
       if (heroTimerRef.current) clearInterval(heroTimerRef.current);
     };
-  }, [heroPool]);
+  }, [heroPool, timerReset]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -299,7 +381,7 @@ export default function Home() {
         {/* ─── INFO LINK ─── */}
         <Link
           href="/landing"
-          className="fixed top-4 right-4 z-50 w-9 h-9 rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all"
+          className="fixed z-50 w-9 h-9 rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all md:top-4 md:right-4 max-md:top-1/2 max-md:right-3 max-md:-translate-y-1/2"
           title="About this site"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -315,7 +397,9 @@ export default function Home() {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <HeroBanner key={hero.id} item={hero} />
+            <AnimatePresence mode="wait">
+              <HeroBanner key={hero?.id || "empty"} item={hero} />
+            </AnimatePresence>
             {/* Hero dot indicators — sit just above the bottom edge of the hero */}
             {heroPool.length > 1 && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
@@ -323,7 +407,7 @@ export default function Home() {
                   <button
                     key={i}
                     type="button"
-                    onClick={() => setHeroIndex(i)}
+                    onClick={() => goToHero(i)}
                     className={`transition-all duration-300 rounded-full ${
                       i === heroIndex
                         ? "w-6 h-1.5 bg-white shadow-md"
@@ -334,31 +418,51 @@ export default function Home() {
                 ))}
               </div>
             )}
-            {/* Hero Left/Right navigation buttons — hidden on mobile (swipe handles it) */}
+            {/* Hero Left/Right navigation buttons — hidden on mobile (swipe handles it), always visible on md, hover-only on lg+ */}
             {heroPool.length > 1 && (
               <>
                 <button
                   type="button"
-                  onClick={() => setHeroIndex((prev) => (prev - 1 + heroPool.length) % heroPool.length)}
-                  className="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 opacity-0 group-hover/hero:opacity-100"
+                  onClick={() => navigateHero(-1)}
+                  className="hidden md:flex absolute left-4 lg:left-8 top-1/2 -translate-y-1/2 z-30 w-10 lg:w-12 h-10 lg:h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 opacity-70 lg:opacity-0 lg:group-hover/hero:opacity-100"
                   aria-label="Previous slide"
                 >
-                  <ChevronLeft className="w-6 h-6 group-hover:-translate-x-0.5 transition-transform text-white" />
+                  <ChevronLeft className="w-5 lg:w-6 h-5 lg:h-6 group-hover:-translate-x-0.5 transition-transform text-white" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setHeroIndex((prev) => (prev + 1) % heroPool.length)}
-                  className="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 opacity-0 group-hover/hero:opacity-100"
+                  onClick={() => navigateHero(1)}
+                  className="hidden md:flex absolute right-4 lg:right-8 top-1/2 -translate-y-1/2 z-30 w-10 lg:w-12 h-10 lg:h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 items-center justify-center text-white transition-all active:scale-90 group focus:outline-none backdrop-blur-md shadow-lg duration-300 opacity-70 lg:opacity-0 lg:group-hover/hero:opacity-100"
                   aria-label="Next slide"
                 >
-                  <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform text-white" />
+                  <ChevronRight className="w-5 lg:w-6 h-5 lg:h-6 group-hover:translate-x-0.5 transition-transform text-white" />
                 </button>
               </>
             )}
           </div>
         ) : (
           !loadError && (
-            <div className="h-[50vh] bg-[#111844]/30 animate-pulse" />
+            <div className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end overflow-hidden bg-[#0d1233]">
+              <div className="absolute inset-0 skeleton-pulse" />
+              <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
+              <div className="relative z-10 w-full px-4 sm:px-6 md:px-12 pb-12 sm:pb-12 md:pb-14 max-w-screen-2xl mx-auto">
+                <div className="max-w-full sm:max-w-lg md:max-w-2xl">
+                  <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                    <div className="h-5 w-20 rounded-md skeleton-pulse" />
+                    <div className="h-5 w-16 rounded-md skeleton-pulse" />
+                    <div className="h-5 w-14 rounded-md skeleton-pulse" />
+                  </div>
+                  <div className="h-10 sm:h-12 md:h-14 w-3/4 rounded-lg skeleton-pulse mb-3" />
+                  <div className="h-4 w-full rounded skeleton-pulse mb-1.5" />
+                  <div className="h-4 w-2/3 rounded skeleton-pulse mb-5 sm:mb-6" />
+                  <div className="flex gap-2.5 sm:gap-4">
+                    <div className="h-12 sm:h-14 w-32 sm:w-36 rounded-xl skeleton-pulse" />
+                    <div className="h-12 sm:h-14 w-32 sm:w-36 rounded-xl skeleton-pulse" />
+                  </div>
+                </div>
+              </div>
+            </div>
           )
         )}
 

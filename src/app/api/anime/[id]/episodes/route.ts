@@ -103,6 +103,26 @@ async function getEnrichedEpisodesList(
     } catch { /* ignore */ }
   }
 
+  // Retry once after delay if all sources returned empty (transient API failure)
+  if (seasonEps.length === 0 && totalEpisodes > 0) {
+    console.log(`[EnrichedEps] Empty after first pass, retrying seasonId=${seasonId}`);
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const aniZipEps = await fetchEpisodesFromAniZip(seasonId, totalEpisodes);
+      if (aniZipEps && aniZipEps.length > 0) {
+        seasonEps = aniZipEps;
+      }
+    } catch { /* ignore */ }
+    if (seasonEps.length === 0 && idMal) {
+      try {
+        const jikanEps = await fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes);
+        if (jikanEps && jikanEps.length > 0) {
+          seasonEps = jikanEps;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
   return seasonEps;
 }
 

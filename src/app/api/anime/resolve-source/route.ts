@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
   const episodeOffset = parseInt(searchParams.get("episodeOffset") || "0", 10);
   const absoluteEpisode = episodeOffset + episode;
 
+  // TMDB-specific params for sources that need them (ezvidapi)
+  const tmdbId = searchParams.get("tmdbId");
+  const tmdbSeason = searchParams.get("tmdbSeason");
+
   // Resolve IDs (with robust fallback to cross-reference AniList -> MAL via AniZip)
   let malIdResolved = currentMalId || mainMalId;
   let anilistIdResolved = currentAnilistId || mainAnilistId;
@@ -62,16 +66,23 @@ export async function GET(request: NextRequest) {
         ? `https://vidnest.fun/anime/${providerAniId}/${epToUse}/sub`
         : `https://vidnest.fun/anime/${providerMalId || ""}/${epToUse}/sub`;
       break;
-    case "animepahe":
-      defaultUrl = `https://vidnest.fun/animepahe/${providerMalId || providerAniId || ""}/${epToUse}/sub`;
-      break;
     case "animeplay":
       defaultUrl = providerMalId
         ? `https://animeplay.cfd/stream/mal/${providerMalId}/${epToUse}/sub`
         : `https://animeplay.cfd/stream/ani/${providerAniId || ""}/${epToUse}/sub`;
       break;
     case "vidlink":
-      defaultUrl = `https://vidlink.pro/anime/${providerMalId || providerAniId || ""}/${epToUse}/sub?fallback=true`;
+      // vidlink uses TMDB IDs with /tv/{tmdbId}/{season}/{ep} — NOT /anime/{malId}
+      defaultUrl = tmdbId
+        ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || "1"}/${absoluteEpisode}`
+        : `https://vidlink.pro/anime/${providerMalId || providerAniId || ""}/${epToUse}/sub?fallback=true`;
+      break;
+    case "ezvidapi":
+      // ezvidapi uses TMDB IDs — use absoluteEpisode to handle shared TMDB seasons
+      // (e.g. AOT S3P1+S3P2 are both TMDB S3, so offset 12 gives correct episode)
+      defaultUrl = tmdbId
+        ? `https://ezvidapi.com/embed/tv/${tmdbId}/${tmdbSeason || "1"}/${absoluteEpisode}`
+        : `https://ezvidapi.com/embed/tv/${providerMalId || providerAniId || ""}/1/${epToUse}`;
       break;
   }
   return NextResponse.json({ success: true, url: defaultUrl, checked: false });

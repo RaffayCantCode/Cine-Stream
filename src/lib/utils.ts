@@ -87,7 +87,8 @@ export function clearFetchJsonCache(match?: string) {
   }
 }
 
-export function shuffleArray<T>(items: T[]): T[] {
+export function shuffleArray<T>(items: T[] | null | undefined): T[] {
+  if (!Array.isArray(items)) return [];
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

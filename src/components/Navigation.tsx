@@ -12,6 +12,7 @@ export function Navigation() {
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
   const user = session?.user;
@@ -22,7 +23,7 @@ export function Navigation() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  useEffect(() => setMobileOpen(false), [pathname]);
+  useEffect(() => { setMobileOpen(false); setProfileOpen(false); }, [pathname]);
 
   const links = [
     { href: "/", label: "Home", accent: null },
@@ -108,27 +109,47 @@ export function Navigation() {
 
             {status !== "loading" && (
               isAuthenticated && user ? (
-                <button
-                  onClick={() => signOut()}
-                  className="hidden md:flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.07] transition-all duration-200 group"
-                  title="Log out"
-                >
-                  {user.image ? (
-                    <img
-                      src={user.image}
-                      alt={user.name ?? "User"}
-                      className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20"
-                    />
-                  ) : (
-                    <div className="w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center">
-                      <User className="w-4 h-4 text-primary" />
-                    </div>
+                <div className="hidden md:relative md:flex">
+                  <button
+                    onClick={() => setProfileOpen(v => !v)}
+                    className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.07] transition-all duration-200 group"
+                  >
+                    {user.image ? (
+                      <img
+                        src={user.image}
+                        alt={user.name ?? "User"}
+                        className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20"
+                      />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center">
+                        <User className="w-4 h-4 text-primary" />
+                      </div>
+                    )}
+                    <span className="text-xs font-semibold text-white/70 group-hover:text-white transition-colors max-w-[80px] truncate">
+                      {user.name ?? "Account"}
+                    </span>
+                  </button>
+                  {profileOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                      <div className="absolute top-full right-0 mt-2 z-50 w-48 py-1.5 rounded-xl bg-[#0d1233] border border-[#7288AE]/20 shadow-2xl shadow-black/40 overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-white/[0.06]">
+                          <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                          {user.email && (
+                            <p className="text-[11px] text-white/40 truncate mt-0.5">{user.email}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => { signOut(); setProfileOpen(false); }}
+                          className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Log out
+                        </button>
+                      </div>
+                    </>
                   )}
-                  <span className="text-xs font-semibold text-white/70 group-hover:text-white transition-colors max-w-[80px] truncate">
-                    {user.name ?? "Account"}
-                  </span>
-                  <LogOut className="w-3.5 h-3.5 text-white/30 group-hover:text-white/70 transition-colors" />
-                </button>
+                </div>
               ) : (
                 <button
                   onClick={() => signIn()}

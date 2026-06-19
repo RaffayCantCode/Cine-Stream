@@ -26,6 +26,7 @@ interface Movie {
   genres?: { id: number; name: string }[];
   credits?: { cast: { id: number; name: string; character: string; profile_path?: string }[] };
   similar?: { results: any[] };
+  recommendations?: { results: any[] };
 }
 
 export default function MovieDetailPage() {
@@ -310,11 +311,32 @@ export default function MovieDetailPage() {
           </motion.section>
         )}
 
-        {movie.similar?.results && movie.similar.results.length > 0 && (
-          <div className="-mx-5 md:-mx-10">
-            <MediaRow title="More Like This" items={shuffleArray(movie.similar.results)} />
-          </div>
-        )}
+        {(() => {
+          const recs = movie.recommendations?.results || [];
+          const similar = movie.similar?.results || [];
+          const seen = new Set<number>();
+          const merged: any[] = [];
+          for (const item of recs) {
+            if (seen.has(item.id)) continue;
+            seen.add(item.id);
+            merged.push(item);
+          }
+          for (const item of similar) {
+            if (seen.has(item.id)) continue;
+            seen.add(item.id);
+            merged.push(item);
+            if (merged.length >= 20) break;
+          }
+          const filtered = merged.filter(item => item.poster_path || item.backdrop_path);
+          if (filtered.length >= 6) {
+            return (
+              <div className="-mx-5 md:-mx-10">
+                <MediaRow title="You May Like" items={shuffleArray(filtered)} />
+              </div>
+            );
+          }
+          return null;
+        })()}
         </div>
       </main>
     </div>

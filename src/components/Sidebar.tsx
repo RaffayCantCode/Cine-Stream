@@ -11,8 +11,11 @@ import {
   Search,
   User,
   LogIn,
-  Menu
+  LogOut,
+  Menu,
+  X
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
@@ -30,6 +33,9 @@ export function Sidebar() {
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
   const user = session?.user;
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => setProfileOpen(false), [pathname]);
 
   return (
     <>
@@ -57,23 +63,41 @@ export function Sidebar() {
 
           {status !== "loading" && (
             isAuthenticated && user ? (
-              <button
-                onClick={() => signOut()}
-                className="flex items-center p-1.5 hover:bg-white/[0.06] rounded-full transition-all touch-manipulation"
-                title="Log out"
-              >
-                {user.image ? (
-                  <img
-                    src={user.image}
-                    alt={user.name ?? "User"}
-                    className="w-8 h-8 rounded-full object-cover ring-1 ring-white/20"
-                  />
-                ) : (
-                  <div className="p-2 rounded-xl bg-white/[0.06] text-white/60">
-                    <User className="w-5 h-5" />
-                  </div>
+              <div className="relative">
+                <button
+                  onClick={() => setProfileOpen(v => !v)}
+                  className="flex items-center p-1.5 hover:bg-white/[0.06] rounded-full transition-all touch-manipulation"
+                >
+                  {user.image ? (
+                    <img
+                      src={user.image}
+                      alt={user.name ?? "User"}
+                      className="w-8 h-8 rounded-full object-cover ring-1 ring-white/20"
+                    />
+                  ) : (
+                    <div className="p-2 rounded-xl bg-white/[0.06] text-white/60">
+                      <User className="w-5 h-5" />
+                    </div>
+                  )}
+                </button>
+                {profileOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                    <div className="absolute top-full right-0 mt-2 z-50 w-44 py-1.5 rounded-xl bg-[#0d1233] border border-[#7288AE]/20 shadow-2xl shadow-black/40 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-white/[0.06]">
+                        <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                      </div>
+                      <button
+                        onClick={() => { signOut(); setProfileOpen(false); }}
+                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Log out
+                      </button>
+                    </div>
+                  </>
                 )}
-              </button>
+              </div>
             ) : (
               <button
                 onClick={() => signIn()}
@@ -187,26 +211,48 @@ export function Sidebar() {
         </div>
 
         {/* User section */}
-        <div className="p-3 border-t border-white/[0.06]">
+        <div className="relative p-3 border-t border-white/[0.06]">
           {status !== "loading" && (
             isAuthenticated && user ? (
-              <button
-                onClick={() => signOut()}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"
-              >
-                {user.image ? (
-                  <img
-                    src={user.image}
-                    alt={user.name ?? "User"}
-                    className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20"
-                  />
-                ) : (
-                  <User className="w-5 h-5" />
+              <>
+                <button
+                  onClick={() => setProfileOpen(v => !v)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"
+                >
+                  {user.image ? (
+                    <img
+                      src={user.image}
+                      alt={user.name ?? "User"}
+                      className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20"
+                    />
+                  ) : (
+                    <User className="w-5 h-5" />
+                  )}
+                  <span className="text-sm font-medium truncate max-w-[120px]">
+                    {user.name}
+                  </span>
+                </button>
+                {profileOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                    <div className="absolute bottom-full left-0 mb-2 z-50 w-full py-1.5 rounded-xl bg-[#0d1233] border border-[#7288AE]/20 shadow-2xl shadow-black/40 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-white/[0.06]">
+                        <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                        {user.email && (
+                          <p className="text-[11px] text-white/40 truncate mt-0.5">{user.email}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => { signOut(); setProfileOpen(false); }}
+                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Log out
+                      </button>
+                    </div>
+                  </>
                 )}
-                <span className="text-sm font-medium truncate max-w-[120px]">
-                  {user.name}
-                </span>
-              </button>
+              </>
             ) : (
               <button
                 onClick={() => signIn()}

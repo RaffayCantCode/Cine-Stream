@@ -28,7 +28,9 @@ export const PROVIDERS: Provider[] = [
   { id: 15,   name: "Hulu",        slug: "hulu",           color: "#1CE783", textColor: "#04141A", region: "US", short: "h",  monetizationTypes: "flatrate|ads" },
   // Max (formerly HBO Max) — rebranded provider ID is 1899
   { id: 1899, name: "Max",         slug: "hbo-max",        color: "#7B2CBF", textColor: "#FFFFFF", region: "US", short: "MAX" },
-  { id: 531,  name: "Paramount+",  slug: "paramount-plus", color: "#0064FF", textColor: "#FFFFFF", region: "US", short: "P+", monetizationTypes: "flatrate|ads" },
+  // Paramount+ has tiered offerings: Premium (2303) + Essential (2616) — combine both
+  { id: 2303, name: "Paramount+",  slug: "paramount-plus", color: "#0064FF", textColor: "#FFFFFF", region: "US", short: "P+",
+    monetizationTypes: "flatrate|ads", additionalIds: [2616] },
   // Peacock has both free (386) and premium (387) tiers — combine both IDs
   { id: 386,  name: "Peacock",     slug: "peacock",        color: "#F25C00", textColor: "#FFFFFF", region: "US", short: "P",  monetizationTypes: "flatrate|ads|free", additionalIds: [387] },
 ];

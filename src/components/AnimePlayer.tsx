@@ -6,7 +6,7 @@ import { Server, Maximize2, RotateCcw, SkipForward } from "lucide-react";
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animepahe" | "animeplay" | "vidlink";
+  provider: "vidnest" | "animeplay" | "vidlink" | "ezvidapi";
   color: string;
 }
 
@@ -18,14 +18,16 @@ interface AnimePlayerProps {
   rootAnimeId?: string | null;
   rootMalId?: string | null;
   episodeOffset?: number;
+  tmdbId?: number | null;
+  tmdbSeason?: number | null;
   onAutoNext?: () => void;
 }
 
 const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
   { name: "Source 2", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
-  { name: "Source 3", provider: "animepahe", color: "from-[#111844]/30 to-[#4B5694]/20" },
-  { name: "Source 4", provider: "vidlink", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
+  { name: "Source 3", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
+  { name: "Source 4", provider: "ezvidapi", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
 ];
 
 export function AnimePlayer({
@@ -36,6 +38,8 @@ export function AnimePlayer({
   rootAnimeId,
   rootMalId,
   episodeOffset,
+  tmdbId,
+  tmdbSeason,
   onAutoNext
 }: AnimePlayerProps) {
   const [sourceIndex, setSourceIndex] = useState(0);
@@ -63,7 +67,7 @@ export function AnimePlayer({
   useEffect(() => {
     console.log(`[AnimePlayer] Parameters updated: animeId=${animeId}, malId=${malId}, episode=${episode}, rootAnimeId=${rootAnimeId}, rootMalId=${rootMalId}, episodeOffset=${episodeOffset}`);
     setSourceIndex(0);
-  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset]);
+  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason]);
 
   useEffect(() => {
     if (playerRef.current) {
@@ -87,7 +91,9 @@ export function AnimePlayer({
         mainAnilistId: rootAnimeId || animeId || "",
         mainMalId: rootMalId || malId || "",
         episode: String(episode),
-        episodeOffset: String(episodeOffset || 0)
+        episodeOffset: String(episodeOffset || 0),
+        tmdbId: tmdbId != null ? String(tmdbId) : "",
+        tmdbSeason: tmdbSeason != null ? String(tmdbSeason) : "",
       });
 
       try {
@@ -125,18 +131,21 @@ export function AnimePlayer({
               ? `https://vidnest.fun/anime/${idToUseAni}/${epToUse}/sub`
               : `https://vidnest.fun/anime/${idToUseMal || ""}/${epToUse}/sub`;
             break;
-          case "animepahe":
-            fallbackUrl = `https://vidnest.fun/animepahe/${idToUseMal || idToUseAni || ""}/${epToUse}/sub`;
-            break;
           case "animeplay":
             fallbackUrl = idToUseMal
               ? `https://animeplay.cfd/stream/mal/${idToUseMal}/${epToUse}/sub`
               : `https://animeplay.cfd/stream/ani/${idToUseAni || ""}/${epToUse}/sub`;
             break;
           case "vidlink":
-            fallbackUrl = `https://vidlink.pro/anime/${idToUseMal || idToUseAni || ""}/${epToUse}/sub?fallback=true`;
+            fallbackUrl = tmdbId
+              ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${(episodeOffset || 0) + episode}`
+              : `https://vidlink.pro/anime/${idToUseMal || idToUseAni || ""}/${episode}/sub?fallback=true`;
             break;
-
+          case "ezvidapi":
+            fallbackUrl = tmdbId
+              ? `https://ezvidapi.com/embed/tv/${tmdbId}/${tmdbSeason || 1}/${(episodeOffset || 0) + episode}`
+              : `https://ezvidapi.com/embed/tv/${idToUseMal || idToUseAni || ""}/1/${episode}`;
+            break;
         }
         setCurrentUrl(fallbackUrl);
       } finally {
@@ -150,7 +159,7 @@ export function AnimePlayer({
     return () => {
       cancelled = true;
     };
-  }, [sourceIndex, animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, currentSource]);
+  }, [sourceIndex, animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, currentSource, tmdbId, tmdbSeason]);
 
   const switchSource = useCallback(() => {
     const next = (sourceIndex + 1) % PROVIDERS.length;
