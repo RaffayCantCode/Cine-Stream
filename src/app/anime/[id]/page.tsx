@@ -829,6 +829,14 @@ export default function AnimeDetailPage() {
                   )}
                 </div>
 
+                {/* ── Source disclaimer ── */}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300/90 text-xs leading-relaxed mb-4">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+                  </svg>
+                  <span>If an episode doesn&apos;t load, try switching to a different source &mdash; some sources may not have every title.</span>
+                </div>
+
                 {/* ── Episode Display (TMDB-enriched data from server) ── */}
                 {(() => {
                   // Episodes are already TMDB-enriched from the server endpoint

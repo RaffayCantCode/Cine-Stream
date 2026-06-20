@@ -71,6 +71,14 @@ export default function TvDetailPage() {
           setShow(null);
           return;
         }
+        // Preload backdrop immediately
+        if (data.backdrop_path) {
+          const link = document.createElement("link");
+          link.rel = "preload"; link.as = "image";
+          link.href = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
+          link.fetchPriority = "high";
+          document.head.appendChild(link);
+        }
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(firstSeason);
@@ -193,6 +201,8 @@ export default function TvDetailPage() {
               src={backdropUrl}
               alt={show.name}
               className="w-full h-full object-cover object-top scale-[1.03]"
+              loading="eager"
+              fetchPriority="high"
               initial={{ opacity: 0, scale: 1.07 }}
               animate={{ opacity: 1, scale: 1.03 }}
               transition={{ duration: 1.4, ease: "easeOut" }}
@@ -211,6 +221,9 @@ export default function TvDetailPage() {
               src={posterUrl}
               alt={show.name}
               className="hidden md:block w-48 lg:w-60 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10"
+              fetchPriority="high"
+              width={240}
+              height={360}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}

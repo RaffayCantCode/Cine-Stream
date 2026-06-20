@@ -18,17 +18,16 @@ async function fetchMultiplePages(endpoint: string, pages: number[]) {
 }
 
 export async function GET(_request: NextRequest) {
+  // Random starting page on every request so you see different content each time
+  const start = Math.floor(Math.random() * 15) + 1;
+  const pages = [start, start + 1, start + 2];
+
   try {
     const [trending, popular, topRated, nowPlaying, genres] = await Promise.all([
-      // Trending — 2 pages (~40 items)
-      fetchMultiplePages("/trending/all/week", [1, 2]),
-      // Popular movies — 2 pages (~40 items)
-      fetchMultiplePages("/movie/popular", [1, 2]),
-      // Top-rated TV — 2 pages (~40 items)
-      fetchMultiplePages("/tv/top_rated", [1, 2]),
-      // Now playing movies — 2 pages (~40 items)
-      fetchMultiplePages("/movie/now_playing", [1, 2]),
-      // Genres list (single page, no pagination)
+      fetchMultiplePages("/trending/all/week", pages),
+      fetchMultiplePages("/movie/popular", pages),
+      fetchMultiplePages("/tv/top_rated", pages),
+      fetchMultiplePages("/movie/now_playing", pages),
       tmdbFetch("/genre/movie/list"),
     ]);
 

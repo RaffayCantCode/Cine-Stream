@@ -49,6 +49,14 @@ export default function MovieDetailPage() {
           setMovie(null);
           return;
         }
+        // Preload backdrop immediately — starts download before React renders
+        if (data.backdrop_path) {
+          const link = document.createElement("link");
+          link.rel = "preload"; link.as = "image";
+          link.href = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
+          link.fetchPriority = "high";
+          document.head.appendChild(link);
+        }
         setMovie(data);
       } catch (error) {
         setMovie(null);
@@ -149,6 +157,8 @@ export default function MovieDetailPage() {
               src={backdropUrl}
               alt={movie.title}
               className="w-full h-full object-cover object-top scale-[1.03]"
+              loading="eager"
+              fetchPriority="high"
               initial={{ opacity: 0, scale: 1.07 }}
               animate={{ opacity: 1, scale: 1.03 }}
               transition={{ duration: 1.4, ease: "easeOut" }}
@@ -173,6 +183,9 @@ export default function MovieDetailPage() {
                 src={posterUrl}
                 alt={movie.title}
                 className="w-48 lg:w-60 rounded-2xl shadow-2xl ring-1 ring-white/10"
+                fetchPriority="high"
+                width={240}
+                height={360}
               />
             </motion.div>
           )}

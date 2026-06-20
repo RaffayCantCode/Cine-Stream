@@ -6,7 +6,7 @@ import { Server, Maximize2, RotateCcw, SkipForward } from "lucide-react";
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animeplay" | "vidlink" | "ezvidapi";
+  provider: "vidnest" | "animeplay" | "vidlink" | "embedsu";
   color: string;
 }
 
@@ -27,7 +27,7 @@ const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
   { name: "Source 2", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
   { name: "Source 3", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
-  { name: "Source 4", provider: "ezvidapi", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
+  { name: "Source 4", provider: "embedsu", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
 ];
 
 export function AnimePlayer({
@@ -141,10 +141,10 @@ export function AnimePlayer({
               ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${(episodeOffset || 0) + episode}`
               : `https://vidlink.pro/anime/${idToUseMal || idToUseAni || ""}/${episode}/sub?fallback=true`;
             break;
-          case "ezvidapi":
+          case "embedsu":
             fallbackUrl = tmdbId
-              ? `https://ezvidapi.com/embed/tv/${tmdbId}/${tmdbSeason || 1}/${(episodeOffset || 0) + episode}`
-              : `https://ezvidapi.com/embed/tv/${idToUseMal || idToUseAni || ""}/1/${episode}`;
+              ? `https://embed.su/embed/tv/${tmdbId}/${tmdbSeason || 1}/${(episodeOffset || 0) + episode}`
+              : `https://embed.su/embed/tv/${idToUseMal || idToUseAni || ""}`;
             break;
         }
         setCurrentUrl(fallbackUrl);

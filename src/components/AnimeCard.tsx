@@ -44,8 +44,9 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
             src={item.poster}
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            loading="lazy"
-            decoding="async"
+            loading={index < 6 ? "eager" : "lazy"}
+            decoding={index < 6 ? "sync" : "async"}
+            fetchPriority={index < 6 ? "high" : "low"}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
-import { fetchJson, shuffleArray } from "@/lib/utils";
+import { fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
 
 interface BrowseGridPageProps {
   title: string;
@@ -77,7 +77,8 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           merged = shuffleArray(results);
         }
 
-        const mapped = merged.map((item) =>
+        const filtered = filterReleasedSafeContent(merged);
+        const mapped = filtered.map((item) =>
           mediaType ? { ...item, media_type: mediaType } : item
         );
 

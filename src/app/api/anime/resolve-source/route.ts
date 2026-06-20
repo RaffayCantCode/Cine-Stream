@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const episodeOffset = parseInt(searchParams.get("episodeOffset") || "0", 10);
   const absoluteEpisode = episodeOffset + episode;
 
-  // TMDB-specific params for sources that need them (ezvidapi)
+  // TMDB-specific params for sources that need them
   const tmdbId = searchParams.get("tmdbId");
   const tmdbSeason = searchParams.get("tmdbSeason");
 
@@ -77,12 +77,12 @@ export async function GET(request: NextRequest) {
         ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || "1"}/${absoluteEpisode}`
         : `https://vidlink.pro/anime/${providerMalId || providerAniId || ""}/${epToUse}/sub?fallback=true`;
       break;
-    case "ezvidapi":
-      // ezvidapi uses TMDB IDs — use absoluteEpisode to handle shared TMDB seasons
-      // (e.g. AOT S3P1+S3P2 are both TMDB S3, so offset 12 gives correct episode)
+    case "embedsu":
+      // embed.su uses TMDB IDs with /tv/{tmdbId}/{season}/{ep} — like vidlink but
+      // a different backend with its own catalog, good for catching titles vidlink misses
       defaultUrl = tmdbId
-        ? `https://ezvidapi.com/embed/tv/${tmdbId}/${tmdbSeason || "1"}/${absoluteEpisode}`
-        : `https://ezvidapi.com/embed/tv/${providerMalId || providerAniId || ""}/1/${epToUse}`;
+        ? `https://embed.su/embed/tv/${tmdbId}/${tmdbSeason || "1"}/${absoluteEpisode}`
+        : `https://embed.su/embed/tv/${providerMalId || providerAniId || ""}`;
       break;
   }
   return NextResponse.json({ success: true, url: defaultUrl, checked: false });

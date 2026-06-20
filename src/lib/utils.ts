@@ -121,7 +121,21 @@ const ADULT_KEYWORDS = [
   "swingers", "erotique", "erotico", "erotism", "strip", "pleasure",
   "affair", "mistress", "adultery", "intercourse", "fetishism", "hentai",
   "eroticism", "eroticas", "camshow", "sensuality", "erotisme", "orgasm",
-  "kamasutra", "voyeur", "seduce", "seduced", "seduction"
+  "kamasutra", "voyeur", "seduce", "seduced", "seduction",
+  "sexual", "erotikus", "erotyk", "erotiek", "erotik",
+  "sexo", "sexu", "sexe", "sexy",
+  "desnuda", "desnudo", "spogliarello",
+  "strip club", "strip tease",
+  "lingerie",
+  "gay", "lesbian", "homosexual", "bisexual", "lgbt", "lgbtq",
+  "transgender", "tranny",
+  "shemale", "crossdress",
+  "bondage", "dominatrix", "domination", "submission",
+  "intimate", "forbidden", "temptation", "desire",
+  "naked", "topless", "bottomless",
+  "sesso", "pornografia", "erotismo",
+  "adulto", "adulta", "sexually",
+  "18禁",
 ];
 
 export function isTmdbAnime(item: { original_language?: string; genre_ids?: number[] }): boolean {

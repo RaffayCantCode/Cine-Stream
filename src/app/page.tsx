@@ -19,6 +19,9 @@ const ContinueWatching = dynamic(
   { ssr: false }
 );
 
+// Languages to exclude from home page (Indian content — most don't have working sources)
+const EXCLUDED_LANGS = new Set(["hi", "te", "ta", "ml", "kn", "bn", "mr", "gu", "pa", "ur"]);
+
 interface MediaItem {
   id: number;
   title?: string;
@@ -197,6 +200,8 @@ export default function Home() {
         const heroPromise = fetchJson<{
           trending: { results: MediaItem[] };
           popular: { results: MediaItem[] };
+          topRated: { results: MediaItem[] };
+          nowPlaying: { results: MediaItem[] };
         }>("/api/tmdb/home-hero", { cacheTtlMs: 180000 });
 
         const rowsPromise = fetchJson<{
@@ -216,10 +221,17 @@ export default function Home() {
         const heroData = await heroPromise;
         if (cancelled) return;
 
-        const trendingSafe = filterReleasedSafeContent(heroData.trending?.results || []);
+        const trendingSafe = filterReleasedSafeContent(heroData.trending?.results || [])
+          .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const popularSafe = filterReleasedSafeContent(heroData.popular?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
-        );
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const heroTopSafe = filterReleasedSafeContent(heroData.topRated?.results || []).map(
+          (i) => ({ ...i, media_type: "tv" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const heroRecentSafe = filterReleasedSafeContent(heroData.nowPlaying?.results || []).map(
+          (i) => ({ ...i, media_type: "movie" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const shuffledTrending = sessionShuffle(trendingSafe, "trending");
         const shuffledPopular = sessionShuffle(popularSafe, "popular");
 
@@ -236,6 +248,8 @@ export default function Home() {
 
         setTrending(shuffledTrending);
         setPopular(shuffledPopular);
+        setTopRated(sessionShuffle(heroTopSafe, "toprated"));
+        setRecent(sessionShuffle(heroRecentSafe, "recent"));
         preloadImages(shuffledTrending, 6);
         preloadImages(shuffledPopular, 4);
         if (!cancelled) setIsLoading(false);
@@ -244,23 +258,35 @@ export default function Home() {
         const [rowsData, animeResponse] = await Promise.all([rowsPromise, animePromise]);
         if (cancelled) return;
 
-        const fullTrending = filterReleasedSafeContent(rowsData.trending?.results || []);
+        const fullTrending = filterReleasedSafeContent(rowsData.trending?.results || [])
+          .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const fullPopular = filterReleasedSafeContent(rowsData.popular?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
-        );
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const topSafe = filterReleasedSafeContent(rowsData.topRated?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
-        );
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const recentSafe = filterReleasedSafeContent(rowsData.nowPlaying?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
-        );
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+
+        // Eagerly preload hero backdrops from the expanded pool BEFORE state update
+        const heroCandidates = [...fullTrending, ...fullPopular, ...topSafe, ...recentSafe];
+        const heroBackdrops = heroCandidates.filter((i) => i.backdrop_path).slice(0, 6);
+        for (const item of heroBackdrops) {
+          const link = document.createElement("link");
+          link.rel = "preload"; link.as = "image";
+          link.href = `https://image.tmdb.org/t/p/original${item.backdrop_path}`;
+          link.fetchPriority = "high";
+          document.head.appendChild(link);
+        }
 
         setTrending(sessionShuffle(fullTrending, "trending"));
         setPopular(sessionShuffle(fullPopular, "popular"));
         setTopRated(sessionShuffle(topSafe, "toprated"));
         setRecent(sessionShuffle(recentSafe, "recent"));
 
-        const recPool = [...fullPopular, ...topSafe, ...fullTrending];
+        const recPool = [...fullPopular, ...topSafe, ...fullTrending, ...recentSafe];
         const daySalt = Math.floor(Date.now() / 86400000).toString();
         setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
         setGenres((rowsData.genres?.genres || []).slice(0, 18));
@@ -283,38 +309,31 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
+  function pickRandom<T>(arr: T[]): T | null {
+    return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
+  }
+
   // ─── Hero pool ─────────────────────────────────────────────────────────────
   const heroPool = useMemo(() => {
-    const candidates = [...trending, ...popular];
-    let movie: MediaItem | null = null;
-    let show: MediaItem | null = null;
-    let anime: MediaItem | null = null;
-
-    for (const item of candidates) {
-      if (!item.backdrop_path) continue;
-      const isMovie = item.media_type === "movie" || !!item.title;
-      const isAnimeItem = isTmdbAnime(item);
-
-      if (isAnimeItem && !anime) {
-        anime = item;
-      } else if (isMovie && !isAnimeItem && !movie) {
-        movie = item;
-      } else if (!isMovie && !isAnimeItem && !show) {
-        show = item;
-      }
-      if (movie && show && anime) break;
-    }
+    const eligible = [...trending, ...popular, ...topRated, ...recent].filter((i) => i.backdrop_path);
+    const movies = eligible.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
+    const shows = eligible.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
+    const animeItems = eligible.filter((i) => isTmdbAnime(i));
 
     const result: MediaItem[] = [];
-    if (movie) result.push(movie);
-    if (show) result.push(show);
-    if (anime) result.push(anime);
+    const m = pickRandom(movies);
+    if (m) result.push(m);
+    const s = pickRandom(shows);
+    if (s) result.push(s);
+    const a = pickRandom(animeItems);
+    if (a) result.push(a);
 
-    // If fewer than 3, fill with more unique items
+    // Fill up to 3 with random unique items
     if (result.length < 3) {
       const seen = new Set(result.map((r) => r.id));
-      for (const item of candidates) {
-        if (!seen.has(item.id) && item.backdrop_path) {
+      const shuffled = [...eligible].sort(() => Math.random() - 0.5);
+      for (const item of shuffled) {
+        if (!seen.has(item.id)) {
           seen.add(item.id);
           result.push(item);
           if (result.length >= 3) break;
@@ -323,7 +342,7 @@ export default function Home() {
     }
 
     return result;
-  }, [trending, popular]);
+  }, [trending, popular, topRated, recent]);
 
   const hero = heroPool[heroIndex] || heroPool[0] || null;
 

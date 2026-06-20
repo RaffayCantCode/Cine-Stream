@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
-import { fetchJson } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, Film, Tv, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
@@ -53,7 +53,7 @@ export default function FranchisePage() {
           { cacheTtlMs: 300000 }
         );
 
-        setItems(data.results || []);
+        setItems(filterReleasedSafeContent(data.results || []));
         setDescription(data.description || null);
         setIsCurated(data.curated ?? false);
       } catch (e) {

@@ -1,15 +1,25 @@
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
 const ADULT_KEYWORDS = [
-  "porn",
-  "hardcore",
-  "xxx",
-  "onlyfans",
-  "camgirl",
-  "webcam",
-  "masturbation",
-  "orgy",
-  "adults only",
+  "porn", "adult", "erotic", "sex", "nude", "nudity", "explicit",
+  "hardcore", "softcore", "xxx", "nsfw",
+  "onlyfans", "camgirl", "webcam", "striptease", "burlesque", "erotica",
+  "masturbation", "orgy", "bdsm", "fetish", "provocative", "seduction",
+  "taboo", "playboy", "18+", "r18", "adults only", "mature audience",
+  "sensual", "lust", "passion", "naked", "escort", "gigolo", "swinger",
+  "swingers", "erotique", "erotico", "erotism", "strip", "pleasure",
+  "affair", "mistress", "adultery", "intercourse", "fetishism", "hentai",
+  "eroticism", "eroticas", "camshow", "sensuality", "erotisme", "orgasm",
+  "kamasutra", "voyeur", "seduce", "seduced", "seduction",
+  "sexual",
+  "gay", "lesbian", "homosexual", "bisexual", "lgbt", "lgbtq",
+  "transgender", "tranny",
+  "shemale", "crossdress",
+  "bondage", "dominatrix", "domination", "submission",
+  "intimate", "forbidden", "temptation", "desire",
+  "topless", "bottomless",
+  "pornografia", "erotismo",
+  "adulto", "adulta", "sexually",
 ];
 
 function getAuthHeader(): string {
