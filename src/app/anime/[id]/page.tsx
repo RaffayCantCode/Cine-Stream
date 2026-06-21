@@ -31,6 +31,7 @@ interface AnimeDetail {
   format?: string | null;
   openedSeasonId?: string | null;
   tmdbId?: number | null;
+  duration?: number | null;
 }
 
 interface Episode {
@@ -219,10 +220,10 @@ export default function AnimeDetailPage() {
   // ── Scroll to player on play ────────────────────────────────────────────
   useEffect(() => {
     if (!selectedEp || !isPlaying || episodesLoading) return;
-    const animId = requestAnimationFrame(() => {
+    const timer = setTimeout(() => {
       playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    return () => cancelAnimationFrame(animId);
+    }, 100);
+    return () => clearTimeout(timer);
   }, [selectedEp?.episodeId, isPlaying, episodesLoading]);
 
   // ── Season overview text from TMDB (included in episodes response) ────
@@ -645,6 +646,12 @@ export default function AnimeDetailPage() {
                               >
                                 <span className="text-sm font-black w-10 shrink-0">E{ep.episodeNum}</span>
                                 <span className="text-xs truncate flex-1 line-clamp-1">{displayTitle}</span>
+                                {ep.runtime && ep.runtime > 0 && (
+                                  <span className="text-[10px] text-white/40 font-medium shrink-0">{ep.runtime}m</span>
+                                )}
+                                {ep.isFiller && (
+                                  <span className="text-[9px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded shrink-0">Filler</span>
+                                )}
                               </button>
                             );
                           })}

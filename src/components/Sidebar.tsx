@@ -112,7 +112,7 @@ export function Sidebar() {
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 premium-glass z-40 flex items-center justify-around pb-safe px-2">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 premium-glass z-40 flex items-center justify-around pb-[env(safe-area-inset-bottom)] px-2">
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
           

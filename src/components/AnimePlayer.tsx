@@ -30,6 +30,50 @@ const PROVIDERS: ProviderSource[] = [
   { name: "Source 4", provider: "embedsu", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
 ];
 
+// Build a provider embed URL entirely client-side — no server round-trip needed
+function buildProviderUrl(
+  provider: string,
+  animeId: string,
+  malId: string | null | undefined,
+  rootAnimeId: string | null | undefined,
+  rootMalId: string | null | undefined,
+  episode: number,
+  episodeOffset: number,
+  tmdbId: number | null | undefined,
+  tmdbSeason: number | null | undefined
+): string {
+  const clean = (id: string | null | undefined) => id?.replace(/\D/g, "") || null;
+  const curAni = clean(animeId);
+  const curMal = clean(malId);
+  const mainAni = clean(rootAnimeId) || curAni;
+  const isSequel = Boolean(curAni && mainAni && curAni !== mainAni);
+  const absEp = episodeOffset + episode;
+  const ep = isSequel ? episode : episodeOffset > 0 ? absEp : episode;
+  const aniId = curAni || mainAni;
+  const malClean = clean(rootMalId) || curMal;
+  const hasOwnMal = Boolean(curMal && curMal !== malClean);
+  const malId_ = hasOwnMal ? (isSequel ? curMal : malClean) : null;
+
+  switch (provider) {
+    case "vidnest":
+      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
+    case "animeplay":
+      return malId_
+        ? `https://animeplay.cfd/stream/mal/${malId_}/${ep}/sub`
+        : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
+    case "vidlink":
+      return tmdbId
+        ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`
+        : `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?fallback=true`;
+    case "embedsu":
+      return tmdbId
+        ? `https://embed.su/embed/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`
+        : `https://embed.su/embed/tv/${malId_ || aniId || ""}`;
+    default:
+      return "";
+  }
+}
+
 export function AnimePlayer({
   animeId,
   malId,
@@ -44,14 +88,14 @@ export function AnimePlayer({
 }: AnimePlayerProps) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [currentUrl, setCurrentUrl] = useState("");
-  const [isResolving, setIsResolving] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [showSpinner, setShowSpinner] = useState(true);
+  const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
+  const [retryCount, setRetryCount] = useState(0);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
-
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
 
@@ -60,112 +104,72 @@ export function AnimePlayer({
     setShowSpinner(true);
     const timer = setTimeout(() => {
       setShowSpinner(false);
-    }, 3500);
+    }, 2500);
     return () => clearTimeout(timer);
   }, [currentUrl]);
 
+  // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
-    console.log(`[AnimePlayer] Parameters updated: animeId=${animeId}, malId=${malId}, episode=${episode}, rootAnimeId=${rootAnimeId}, rootMalId=${rootMalId}, episodeOffset=${episodeOffset}`);
+    const domains = [
+      "https://animeplay.cfd",
+      "https://vidnest.fun",
+      "https://vidlink.pro",
+      "https://embed.su"
+    ];
+    domains.forEach(href => {
+      if (!document.querySelector(`link[rel="preconnect"][href="${href}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "preconnect";
+        link.href = href;
+        document.head.appendChild(link);
+      }
+    });
+  }, []);
+
+  // Pre-resolve ALL provider URLs client-side — instant, no server round-trip
+  useEffect(() => {
+    const urls: Record<string, string> = {};
+    PROVIDERS.forEach(p => {
+      urls[p.provider] = buildProviderUrl(
+        p.provider, animeId, malId, rootAnimeId, rootMalId,
+        episode, episodeOffset || 0, tmdbId, tmdbSeason
+      );
+    });
+    setResolvedUrls(urls);
     setSourceIndex(0);
+    setRetryCount(0);
+    setIsLoading(true);
+    setHasError(false);
+    setCurrentUrl(urls[PROVIDERS[0].provider] || "");
   }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason]);
 
+  // When source index changes, pick the pre-resolved URL instantly
+  useEffect(() => {
+    const url = resolvedUrls[currentSource.provider];
+    if (url) {
+      setIsLoading(true);
+      setHasError(false);
+      setCurrentUrl(url);
+    }
+  }, [sourceIndex, resolvedUrls]);
+
+  // Scroll player into view on episode change
   useEffect(() => {
     if (playerRef.current) {
       playerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [episode]);
 
-  // Dynamic URL resolution effect
-  useEffect(() => {
-    let cancelled = false;
 
-    const resolveUrl = async () => {
-      setIsResolving(true);
-      setIsLoading(true);
-      setHasError(false);
-
-      const params = new URLSearchParams({
-        provider: currentSource.provider,
-        currentAnilistId: animeId || "",
-        currentMalId: malId || "",
-        mainAnilistId: rootAnimeId || animeId || "",
-        mainMalId: rootMalId || malId || "",
-        episode: String(episode),
-        episodeOffset: String(episodeOffset || 0),
-        tmdbId: tmdbId != null ? String(tmdbId) : "",
-        tmdbSeason: tmdbSeason != null ? String(tmdbSeason) : "",
-      });
-
-      try {
-        const res = await fetch(`/api/anime/resolve-source?${params.toString()}`);
-        if (cancelled) return;
-        const data = await res.json();
-        if (data.success && data.url) {
-          setCurrentUrl(data.url);
-        } else {
-          throw new Error("Resolution failed");
-        }
-      } catch (e) {
-        if (cancelled) return;
-        console.error("[AnimePlayer] URL resolution error:", e);
-
-        // Client-side fallback if server-side resolve API fails
-        const absoluteEpisode = (episodeOffset || 0) + episode;
-        const currentAnilistClean = animeId?.replace(/\D/g, "") || null;
-        const currentMalClean = malId?.replace(/\D/g, "") || null;
-        const mainAnilistClean = rootAnimeId?.replace(/\D/g, "") || currentAnilistClean;
-        const mainMalClean = rootMalId?.replace(/\D/g, "") || currentMalClean;
-
-        const isSequel = currentAnilistClean && mainAnilistClean && currentAnilistClean !== mainAnilistClean;
-        const epToUse = isSequel ? episode : (episodeOffset || 0) > 0 ? absoluteEpisode : episode;
-        const idToUseAni = isSequel ? currentAnilistClean : mainAnilistClean;
-        // If current and root MAL ID are the same, the season lacks its own MAL ID — don't use it
-        const hasOwnMalId = currentMalClean && currentMalClean !== mainMalClean;
-        const idToUseMal = hasOwnMalId ? (isSequel ? currentMalClean : mainMalClean) : null;
-
-        let fallbackUrl = "";
-
-        switch (currentSource.provider) {
-          case "vidnest":
-            fallbackUrl = idToUseAni
-              ? `https://vidnest.fun/anime/${idToUseAni}/${epToUse}/sub`
-              : `https://vidnest.fun/anime/${idToUseMal || ""}/${epToUse}/sub`;
-            break;
-          case "animeplay":
-            fallbackUrl = idToUseMal
-              ? `https://animeplay.cfd/stream/mal/${idToUseMal}/${epToUse}/sub`
-              : `https://animeplay.cfd/stream/ani/${idToUseAni || ""}/${epToUse}/sub`;
-            break;
-          case "vidlink":
-            fallbackUrl = tmdbId
-              ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${(episodeOffset || 0) + episode}`
-              : `https://vidlink.pro/anime/${idToUseMal || idToUseAni || ""}/${episode}/sub?fallback=true`;
-            break;
-          case "embedsu":
-            fallbackUrl = tmdbId
-              ? `https://embed.su/embed/tv/${tmdbId}/${tmdbSeason || 1}/${(episodeOffset || 0) + episode}`
-              : `https://embed.su/embed/tv/${idToUseMal || idToUseAni || ""}`;
-            break;
-        }
-        setCurrentUrl(fallbackUrl);
-      } finally {
-        if (!cancelled) {
-          setIsResolving(false);
-        }
-      }
-    };
-
-    resolveUrl();
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceIndex, animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, currentSource, tmdbId, tmdbSeason]);
 
   const switchSource = useCallback(() => {
-    const next = (sourceIndex + 1) % PROVIDERS.length;
-    console.log(`[AnimePlayer] Switching to ${PROVIDERS[next]?.name}`);
-    setSourceIndex(next);
-  }, [sourceIndex]);
+    setSourceIndex(prev => (prev + 1) % PROVIDERS.length);
+    setRetryCount(0);
+  }, []);
+
+  const retrySource = useCallback(() => {
+    setRetryCount(prev => prev + 1);
+  }, []);
 
   const toggleFullscreen = async () => {
     try {
@@ -203,7 +207,7 @@ export function AnimePlayer({
             <SkipForward className="w-4 h-4" />
             Next Source
           </button>
-          <button onClick={switchSource} className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all" title="Next source">
+          <button onClick={retrySource} className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all" title="Retry current source">
             <RotateCcw className="w-4 h-4" />
           </button>
           <button onClick={toggleFullscreen} className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all" title="Fullscreen">
@@ -214,7 +218,7 @@ export function AnimePlayer({
 
       <motion.div
         ref={playerRef}
-        key={`${episode}-${sourceIndex}`}
+        key={`${episode}-${sourceIndex}-${retryCount}`}
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.2 }}

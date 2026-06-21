@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   try {
     // Skip all caches for provider-filtered requests — ensures fresh results after any config change
     const data = await tmdbFetch("/discover/movie", params, { noCache: !!withProviders });
-    return Response.json(data);
+    return Response.json(data, { headers: cacheHeaders(600) });
   } catch (error) {
     return Response.json({ error: "Failed to discover movies" }, { status: 500 });
   }

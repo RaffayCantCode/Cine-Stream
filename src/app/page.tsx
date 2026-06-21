@@ -153,6 +153,7 @@ export default function Home() {
   const [popular, setPopular] = useState<MediaItem[]>([]);
   const [topRated, setTopRated] = useState<MediaItem[]>([]);
   const [recent, setRecent] = useState<MediaItem[]>([]);
+  const [heroFeed, setHeroFeed] = useState<MediaItem[]>([]);
   const [recommended, setRecommended] = useState<MediaItem[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -250,9 +251,9 @@ export default function Home() {
         setPopular(shuffledPopular);
         setTopRated(sessionShuffle(heroTopSafe, "toprated"));
         setRecent(sessionShuffle(heroRecentSafe, "recent"));
+        setHeroFeed([...shuffledTrending, ...shuffledPopular, ...heroTopSafe, ...heroRecentSafe]);
         preloadImages(shuffledTrending, 6);
         preloadImages(shuffledPopular, 4);
-        if (!cancelled) setIsLoading(false);
 
         // ── Full rows data arrives (more TMDB pages) ────────────────────
         const [rowsData, animeResponse] = await Promise.all([rowsPromise, animePromise]);
@@ -294,6 +295,7 @@ export default function Home() {
         if (animeResponse?.success && animeResponse.data?.items) {
           setAnimeList(sessionShuffle(animeResponse.data.items, "anime").slice(0, 15));
         }
+        setIsLoading(false);
         setAnimeLoading(false);
 
       } catch (e) {
@@ -315,7 +317,7 @@ export default function Home() {
 
   // ─── Hero pool ─────────────────────────────────────────────────────────────
   const heroPool = useMemo(() => {
-    const eligible = [...trending, ...popular, ...topRated, ...recent].filter((i) => i.backdrop_path);
+    const eligible = heroFeed.filter((i) => i.backdrop_path);
     const movies = eligible.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
     const shows = eligible.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
     const animeItems = eligible.filter((i) => isTmdbAnime(i));
@@ -342,7 +344,7 @@ export default function Home() {
     }
 
     return result;
-  }, [trending, popular, topRated, recent]);
+  }, [heroFeed]);
 
   const hero = heroPool[heroIndex] || heroPool[0] || null;
 

@@ -21,6 +21,7 @@ export interface AnimeItem {
   season?: string | null;
   seasonYear?: number | null;
   format?: string | null;
+  duration?: number | null;
 }
 
 export interface SeasonInfo {
@@ -50,6 +51,7 @@ export interface EpisodeDetail {
   seasonId?: string;
   seasonName?: string;
   seasonMalId?: number | null;
+  runtime?: number | null;
 }
 
 interface AniListMedia {
@@ -67,6 +69,7 @@ interface AniListMedia {
   format: string | null;
   season: string | null;
   seasonYear: number | null;
+  duration: number | null;
 }
 
 // A node in the franchise graph
@@ -78,6 +81,7 @@ interface FranchiseNode {
   season: string | null;
   seasonYear: number | null;
   format: string | null;
+  duration: number | null;
 }
 
 const ANILIST_API = "https://graphql.anilist.co";
@@ -125,6 +129,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     season: media.season || null,
     seasonYear: media.seasonYear || null,
     format: media.format || null,
+    duration: media.duration || null,
   };
 }
 
@@ -152,7 +157,7 @@ const TRENDING_QUERY = `query ($page: Int, $genre: String) {
       genre: $genre
     ) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-      episodes genres averageScore description status type format season seasonYear
+      episodes genres averageScore description status type format season seasonYear duration
     }
   }
 }`;
@@ -168,7 +173,7 @@ const AIRING_QUERY = `query ($page: Int, $genre: String, $season: MediaSeason, $
       seasonYear: $year
     ) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-      episodes genres averageScore description status type format season seasonYear
+      episodes genres averageScore description status type format season seasonYear duration
     }
   }
 }`;
@@ -178,13 +183,13 @@ const RELATIONS_QUERY = `query ($id: Int) {
   Media(id: $id, type: ANIME) {
     id idMal
     title { romaji english }
-    episodes season seasonYear format
+    episodes season seasonYear format duration
     relations {
       edges {
         node {
           id idMal
           title { romaji english }
-          type episodes season seasonYear format isAdult
+          type episodes season seasonYear format duration isAdult
         }
         relationType
       }
@@ -332,6 +337,7 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
           season: data.season || null,
           seasonYear: data.seasonYear || null,
           format: data.format || null,
+          duration: data.duration || null,
         });
       }
 
@@ -357,6 +363,7 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
             season: node.season || null,
             seasonYear: node.seasonYear || null,
             format: node.format || null,
+            duration: node.duration || null,
           });
           // Also queue it so we fetch its own relations (to continue the chain)
           if (visited.size < MAX_NODES) {
@@ -438,8 +445,15 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
   const knownBroadcastSeasons = new Set(["WINTER", "SPRING", "SUMMER", "FALL"]);
 
   return includable.map(node => {
-    const isMovie = node.format === "MOVIE";
-    const isSpecial = node.format === "SPECIAL";
+    // Reclassify single-episode movies with short duration (< 40 min) as Specials
+    // These are usually compilation/recap films, not actual feature-length movies.
+    const isShortMovie = node.format === "MOVIE"
+      && (node.episodes || 1) <= 1
+      && (node.duration || 0) > 0
+      && node.duration! < 40;
+
+    const isMovie = node.format === "MOVIE" && !isShortMovie;
+    const isSpecial = node.format === "SPECIAL" || isShortMovie;
     // Only treat as OVA if it's an actual OVA/ONA short collection (< 8 eps) or
     // an ONA without a known broadcast season. Otherwise it's a streaming TV series.
     const isActualOva = node.format === "OVA"
@@ -747,8 +761,8 @@ export async function getAnimeDetails(
     try {
       const q = `query ($id: Int) {
         Media(id: $id, type: ANIME, isAdult: false) {
-          id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-          episodes genres averageScore description status type format season seasonYear
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      episodes genres averageScore description status type format season seasonYear duration
         }
       }`;
       const data = await anilistQuery(q, { id: numId });
@@ -886,6 +900,7 @@ export async function getAnimeDetails(
       season: media.season || null,
       seasonYear: media.seasonYear || null,
       format: media.format || null,
+      duration: media.duration || null,
     });
   }
 
@@ -1178,6 +1193,8 @@ export async function fetchEpisodesFromAniZip(
       const description = ep.overview || ep.summary || null;
       const thumbnail = ep.image || null;
       const releasedDate = ep.airDate || ep.airdate || null;
+      // AniZip provides duration in seconds; convert to minutes
+      const runtime = typeof ep.duration === "number" ? Math.round(ep.duration / 60) : null;
 
       eps.push({
         episodeId: `${anilistId}-${epNum}`,
@@ -1189,6 +1206,7 @@ export async function fetchEpisodesFromAniZip(
         isFiller: false,
         isRecap: false,
         malUrl: ep.malId ? `https://myanimelist.net/anime/${ep.malId}/episode/${epNum}` : null,
+        runtime,
       });
     }
 

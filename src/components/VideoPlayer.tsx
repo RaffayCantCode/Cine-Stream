@@ -38,17 +38,17 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   const [showSpinner, setShowSpinner] = useState(true);
   const [showSources, setShowSources] = useState(false);
   const [healthChecked, setHealthChecked] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vixsrc;
 
-  // Auto-dismiss spinner after 3.5 seconds to prevent frozen overlay
+  // Auto-dismiss spinner after 2.5 seconds to prevent frozen overlay
   useEffect(() => {
     setShowSpinner(true);
     const timer = setTimeout(() => {
       setShowSpinner(false);
-    }, 3500);
+    }, 2500);
     return () => clearTimeout(timer);
   }, [currentSource?.url]);
 
@@ -72,6 +72,26 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     return () => { cancelled = true; };
   }, [allSources]);
 
+  // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
+  useEffect(() => {
+    const domains = [
+      "https://vixsrc.to",
+      "https://www.2embed.cc",
+      "https://vidlink.pro",
+      "https://vidsrc.to"
+    ];
+    domains.forEach(href => {
+      if (!document.querySelector(`link[rel="preconnect"][href="${href}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "preconnect";
+        link.href = href;
+        document.head.appendChild(link);
+      }
+    });
+  }, []);
+
+
+
   const sources = activeSources;
 
   // Manual fallback: switch to the next source in the list
@@ -87,12 +107,14 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     setCurrentSource(nextSource);
     setError(null);
     setIsLoading(true);
+    setRetryCount(0);
   }, [sources, currentSource]);
 
   useEffect(() => {
     setCurrentSource(sources[0]);
     setError(null);
     setIsLoading(true);
+    setRetryCount(0);
   }, [sources]);
 
   const handleSourceChange = (source: StreamingSource) => {
@@ -100,6 +122,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     setError(null);
     setIsLoading(true);
     setShowSources(false);
+    setRetryCount(0);
   };
 
   const handleIframeError = useCallback(() => {
@@ -169,9 +192,9 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
             <span className="hidden sm:inline">New Tab</span>
           </a>
           <button
-            onClick={() => { setError(null); setCurrentSource(sources[0]); setIsLoading(true); }}
+            onClick={() => { setError(null); setIsLoading(true); setRetryCount(c => c + 1); }}
             className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all"
-            title="Retry"
+            title="Retry current source"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -222,7 +245,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
       </AnimatePresence>
 
       <motion.div
-        key={currentSource.url}
+        key={`${currentSource.url}-${retryCount}`}
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         ref={playerContainerRef}

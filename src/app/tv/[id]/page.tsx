@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaRow } from "@/components/MediaRow";
 import { VideoPlayer } from "@/components/VideoPlayer";
-import { Play, Star, Calendar, ExternalLink, CheckCircle2, Loader2 } from "lucide-react";
+import { Play, Star, Calendar, CheckCircle2, Loader2 } from "lucide-react";
 import { cn, fetchJson, shuffleArray } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -60,6 +60,7 @@ export default function TvDetailPage() {
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchShow = async () => {
@@ -145,6 +146,15 @@ export default function TvDetailPage() {
 
     setIsPlaying(true);
   };
+
+  // ── Scroll to player on play ──
+  useEffect(() => {
+    if (!isPlaying) return;
+    const timer = setTimeout(() => {
+      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [isPlaying]);
 
   if (isLoading) {
     return (
@@ -309,7 +319,7 @@ export default function TvDetailPage() {
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
       {isPlaying && (
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+        <div ref={playerRef} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
           <div>
             <VideoPlayer
               type="tv"

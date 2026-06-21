@@ -1,5 +1,10 @@
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
+// Reusable cache headers helper for TMDB API responses
+export function cacheHeaders(ttlSeconds = 1800): HeadersInit {
+  return { "Cache-Control": `public, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}` };
+}
+
 const ADULT_KEYWORDS = [
   "porn", "adult", "erotic", "sex", "nude", "nudity", "explicit",
   "hardcore", "softcore", "xxx", "nsfw",
@@ -78,7 +83,7 @@ export async function tmdbFetch(
       : { next: { revalidate } }),
   };
 
-  const res = await fetch(url.toString(), fetchOptions);
+  const res = await fetch(url.toString(), { ...fetchOptions, signal: AbortSignal.timeout(10000) });
 
   if (!res.ok) {
     throw new Error(`TMDB fetch failed: ${res.status} ${res.statusText}`);

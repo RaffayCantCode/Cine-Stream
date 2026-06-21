@@ -245,12 +245,6 @@
   z-index: 10;
 }
 
-.row-item:hover ~ .row-item,
-.row-item:has(~ .row-item:hover) {
-  transform: scale(0.95);
-  opacity: 0.6;
-}
-
 .backdrop-blur-heavy {
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);

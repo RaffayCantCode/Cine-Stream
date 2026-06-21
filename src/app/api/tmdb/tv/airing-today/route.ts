@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const data = await tmdbFetch("/tv/airing_today", { page });
-    return Response.json(data);
+    return Response.json(data, { headers: cacheHeaders(1800) });
   } catch (error) {
     return Response.json({ error: "Failed to fetch airing today" }, { status: 500 });
   }

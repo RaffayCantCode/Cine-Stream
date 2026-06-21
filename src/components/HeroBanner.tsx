@@ -100,8 +100,8 @@ export function HeroBanner({ item }: HeroBannerProps) {
           {/* Spotlight label */}
           <div className="flex items-center gap-1.5 text-white/60 text-[10px] sm:text-xs font-semibold uppercase tracking-wider backdrop-blur-md bg-black/20 px-3 py-1.5 rounded-full border border-white/5">
             <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#7288AE] animate-pulse" />
-            <span className="hidden xs:inline">Spotlight Media</span>
-            <span className="xs:hidden">Spotlight</span>
+            <span className="hidden [min-width:360px]:inline">Spotlight Media</span>
+            <span className="inline [min-width:360px]:hidden">Spotlight</span>
           </div>
 
           {/* Brand Identity Pill */}

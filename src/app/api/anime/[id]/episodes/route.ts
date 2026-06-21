@@ -339,9 +339,12 @@ export async function GET(
             seasonEps.push({
               episodeId: `${season.id}-${i}`,
               episodeNum: i,
-              title: `Episode ${i}`,
-              thumbnail: null, malUrl: null, isFiller: false,
-              releasedDate: null, description: null,
+              title: isSpecialFormat ? season.name : `Episode ${i}`,
+              thumbnail: isSpecialFormat ? meta.anime.poster || null : null,
+              malUrl: null, isFiller: false,
+              releasedDate: null,
+              description: isSpecialFormat ? meta.anime.description || null : null,
+              runtime: isSpecialFormat ? meta.anime.duration || null : null,
               seasonNum: seasonNumFromList,
               seasonId: season.id,
               seasonName: season.name,
@@ -469,9 +472,13 @@ export async function GET(
           for (let i = 1; i <= count; i++) {
             if (!covered.has(i)) {
               seasonEps.push({
-                episodeId: `${season.id}-${i}`, episodeNum: i, title: `Episode ${i}`,
-                thumbnail: null, malUrl: null, isFiller: false, releasedDate: null,
-                description: null, seasonNum: seasonNumParam,
+                episodeId: `${season.id}-${i}`, episodeNum: i,
+                title: isSpecial ? season.name : `Episode ${i}`,
+                thumbnail: isSpecial ? meta.anime.poster || null : null,
+                malUrl: null, isFiller: false, releasedDate: null,
+                description: isSpecial ? meta.anime.description || null : null,
+                runtime: isSpecial ? meta.anime.duration || null : null,
+                seasonNum: seasonNumParam,
                 seasonId: String(season.id), seasonName: season.name,
                 seasonMalId: season.idMal || null,
               });
@@ -584,12 +591,13 @@ export async function GET(
           seasonEps = metaEpsForSeason.map((ep: any) => ({
             episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
             episodeNum: Number(ep.episodeNum || 1),
-            title: ep.title || `Episode ${ep.episodeNum || 1}`,
-            thumbnail: ep.thumbnail || null,
+            title: ep.title || (["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) ? season.name : `Episode ${ep.episodeNum || 1}`),
+            thumbnail: ep.thumbnail || (["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) ? meta.anime.poster || null : null),
             malUrl: ep.malUrl || null,
             isFiller: ep.isFiller || false,
             releasedDate: ep.releasedDate || null,
             description: ep.description || null,
+            runtime: ep.runtime || (["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) ? meta.anime.duration || null : null),
             seasonNum: seasonIdx,
             seasonId: season.id,
             seasonName: season.name,
