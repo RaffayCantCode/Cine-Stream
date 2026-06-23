@@ -29,9 +29,8 @@ const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
 const DEFAULT_TIMEOUT = 12000;
 
 export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerProps) {
-  const allSources = useMemo(() => getStreamingSources(type, id, season, episode), [type, id, season, episode]);
-  const [sourceList] = useState<StreamingSource[]>(allSources);
-  const [currentSource, setCurrentSource] = useState<StreamingSource>(allSources[0]);
+  const sources = useMemo(() => getStreamingSources(type, id, season, episode), [type, id, season, episode]);
+  const [currentSource, setCurrentSource] = useState<StreamingSource>(sources[0]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSpinner, setShowSpinner] = useState(true);
@@ -75,10 +74,6 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
       links.forEach(link => link.remove());
     };
   }, []);
-
-
-
-  const sources = sourceList;
 
   // Manual fallback: switch to the next source in the list
   const switchToNext = useCallback(() => {

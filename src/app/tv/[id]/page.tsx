@@ -62,6 +62,8 @@ export default function TvDetailPage() {
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<HTMLDivElement>(null);
+  const queueRef = useRef<HTMLDivElement>(null);
+  const selectedEpRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const fetchShow = async () => {
@@ -83,7 +85,8 @@ export default function TvDetailPage() {
         }
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
-        setSelectedSeason(firstSeason);
+        const urlSeason = Number(searchParams.get("season") || "");
+        setSelectedSeason(urlSeason > 0 ? urlSeason : firstSeason);
       } catch (error) {
         setShow(null);
         setError(error instanceof Error ? error.message : "Failed to fetch show");
@@ -156,6 +159,12 @@ export default function TvDetailPage() {
     }, 100);
     return () => clearTimeout(timer);
   }, [isPlaying]);
+
+  // ── Scroll queue to selected episode ──
+  useEffect(() => {
+    if (!isPlaying || !selectedEpRef.current) return;
+    selectedEpRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedEpisode, isPlaying]);
 
   if (isLoading) {
     return (
@@ -339,25 +348,29 @@ export default function TvDetailPage() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
-              {seasonData?.episodes?.map((episode) => {
-                const isSelected = selectedEpisode === episode.episode_number;
-                return (
+              {seasonLoading ? (
+                <div className="flex items-center justify-center py-8 text-white/30 text-xs">Loading episodes...</div>
+              ) : !seasonData?.episodes?.length ? (
+                <div className="flex items-center justify-center py-8 text-white/30 text-xs">No episodes found</div>
+              ) : (
+                seasonData.episodes.map((episode) => (
                   <button
                     key={`queue-${episode.id}`}
+                    ref={selectedEpisode === episode.episode_number ? selectedEpRef : undefined}
                     onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
                     className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
-                      isSelected
+                      selectedEpisode === episode.episode_number
                         ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
                     }`}
                   >
-                    <span className={`text-sm font-black w-10 shrink-0 ${isSelected ? "text-white" : ""}`}>
+                    <span className={`text-sm font-black w-10 shrink-0 ${selectedEpisode === episode.episode_number ? "text-white" : ""}`}>
                       E{episode.episode_number}
                     </span>
                     <span className="text-xs truncate flex-1 line-clamp-1">{episode.name}</span>
                   </button>
-                );
-              })}
+                ))
+              )}
             </div>
           </aside>
         </div>

@@ -133,23 +133,19 @@ export default function TrendingPage() {
     return () => { cancelled = true; };
   }, [loadKey]);
 
-  // Intersection observer for infinite scroll
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting) return;
-        if (isLoadingRef.current || !hasMoreRef.current) return;
+        if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
         setLoadKey((k) => k + 1);
       },
       { rootMargin: "0px 0px 3000px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading]);
-
-  const showSentinel = !isLoading && !error && items.length > 0;
+  }, [isLoading, hasMore, items.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -196,24 +192,22 @@ export default function TrendingPage() {
             ))}
           </div>
 
-          {showSentinel && (
-            <div
-              ref={sentinelRef}
-              style={{ overflowAnchor: "none" }}
-              className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
-            >
-              {isLoadingMore ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
-                  <span className="text-sm font-medium text-white/50">Loading more...</span>
-                </div>
-              ) : hasMore ? (
-                <span className="text-xs">Scroll down for more</span>
-              ) : (
-                <span className="text-xs text-white/20">No more results</span>
-              )}
-            </div>
-          )}
+          <div
+            ref={sentinelRef}
+            style={{ overflowAnchor: "none" }}
+            className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
+          >
+            {isLoading && items.length > 0 ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
+                <span className="text-sm font-medium text-white/50">Loading more...</span>
+              </div>
+            ) : items.length > 0 && hasMore ? (
+              <span className="text-xs">Scroll down for more</span>
+            ) : items.length > 0 && !hasMore ? (
+              <span className="text-xs text-white/20">No more results</span>
+            ) : null}
+          </div>
         </div>
       </main>
     </div>

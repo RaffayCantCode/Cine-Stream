@@ -116,15 +116,14 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting) return;
-        if (isLoadingRef.current || !hasMoreRef.current) return;
+        if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
         setPage((p) => p + 3);
       },
       { rootMargin: "0px 0px 3000px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading]);
+  }, [isLoading, hasMore, items.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
