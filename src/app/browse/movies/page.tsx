@@ -47,6 +47,7 @@ export default function BrowseMoviesPage() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const isLoadingRef = useRef(false);
   const hasMoreRef = useRef(true);
+  const triggerLoadRef = useRef<(() => void) | null>(null);
 
   isLoadingRef.current = isLoading;
   hasMoreRef.current = hasMore;
@@ -170,19 +171,29 @@ export default function BrowseMoviesPage() {
     fetchMovies();
   }, [page, loadKey]);
 
+  // ── Scroll-to-load-more: window scroll listener (works on Netlify with overflow-x:hidden body) ──
   useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
-        setPage((p) => (p !== null ? p + 1 : null));
-      },
-      { rootMargin: "0px 0px 3000px 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [isLoading, hasMore, movies.length]);
+    const check = () => {
+      if (isLoadingRef.current || !hasMoreRef.current) return;
+      const sentinel = sentinelRef.current;
+      if (!sentinel) return;
+      const rect = sentinel.getBoundingClientRect();
+      if (rect.top <= window.innerHeight * 2) {
+        setLoadKey((k) => k + 1);
+      }
+    };
+    // Store so we can call after items update
+    triggerLoadRef.current = check;
+    window.addEventListener('scroll', check, { passive: true });
+    // Immediate check in case page is short or sentinel already visible
+    check();
+    return () => window.removeEventListener('scroll', check);
+  }, []);  // stable — reads live values from refs
+
+  // Re-check after items change (new items might still leave sentinel visible)
+  useEffect(() => {
+    triggerLoadRef.current?.();
+  }, [movies.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">

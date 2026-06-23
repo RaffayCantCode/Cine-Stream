@@ -28,9 +28,20 @@ const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
 
 const DEFAULT_TIMEOUT = 12000;
 
+const SOURCE_PREF_KEY = "sv_video_source";
+
 export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerProps) {
   const sources = useMemo(() => getStreamingSources(type, id, season, episode), [type, id, season, episode]);
-  const [currentSource, setCurrentSource] = useState<StreamingSource>(sources[0]);
+
+  // Restore preferred source from localStorage (survives episode changes via key-based remount)
+  const [currentSource, setCurrentSource] = useState<StreamingSource>(() => {
+    try {
+      const saved = localStorage.getItem(SOURCE_PREF_KEY);
+      if (saved) { const found = sources.find(s => s.name === saved); if (found) return found; }
+    } catch {}
+    return sources[0];
+  });
+
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSpinner, setShowSpinner] = useState(true);
@@ -89,6 +100,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     setError(null);
     setIsLoading(true);
     setRetryCount(0);
+    try { localStorage.setItem(SOURCE_PREF_KEY, nextSource.name); } catch {}
   }, [sources, currentSource]);
 
   useEffect(() => {
@@ -104,6 +116,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     setIsLoading(true);
     setShowSources(false);
     setRetryCount(0);
+    try { localStorage.setItem(SOURCE_PREF_KEY, source.name); } catch {}
   };
 
   const handleIframeError = useCallback(() => {

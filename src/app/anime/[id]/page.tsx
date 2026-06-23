@@ -549,22 +549,19 @@ export default function AnimeDetailPage() {
                   <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
                     <div ref={playerRef} className="w-full min-w-0">
                       {!episodesLoading && (
-                        <div
+                        <AnimePlayer
                           key={selectedEp.episodeId}
-                        >
-                          <AnimePlayer
-                            animeId={streamingAnimeId}
-                            malId={streamingMalId}
-                            animeTitle={selectedEp.seasonName || anime.name}
-                            episode={selectedEp.episodeNum}
-                            rootAnimeId={rootSeason?.id || anime?.id}
-                            rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
-                            episodeOffset={currentEpisodeOffset}
-                            tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
-                            tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
-                            onAutoNext={handleAutoNext}
-                          />
-                        </div>
+                          animeId={streamingAnimeId}
+                          malId={streamingMalId}
+                          animeTitle={selectedEp.seasonName || anime.name}
+                          episode={selectedEp.episodeNum}
+                          rootAnimeId={rootSeason?.id || anime?.id}
+                          rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
+                          episodeOffset={currentEpisodeOffset}
+                          tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
+                          tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
+                          onAutoNext={handleAutoNext}
+                        />
                       )}
 
                       {episodesLoading && (
@@ -628,7 +625,10 @@ export default function AnimeDetailPage() {
                             return (
                               <button
                                 key={ep.episodeId}
-                                onClick={() => ep.isReleased !== false && handleWatchEpisode(ep)}
+                                onClick={() => {
+                                  if (ep.isReleased === false) return;
+                                  handleWatchEpisode(ep);
+                                }}
                                 disabled={ep.isReleased === false}
                                 className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-3 ${
                                   isSelected

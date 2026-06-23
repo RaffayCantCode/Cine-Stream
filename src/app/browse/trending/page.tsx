@@ -35,8 +35,9 @@ export default function TrendingPage() {
   const isLoadingRef = useRef(false);
   const hasMoreRef = useRef(true);
   const nextBatchRef = useRef(1);
+  const triggerLoadRef = useRef<(() => void) | null>(null);
 
-  isLoadingRef.current = isLoading;
+  isLoadingRef.current = isLoading || isLoadingMore;
   hasMoreRef.current = hasMore;
 
   const title = useMemo(() => {
@@ -133,19 +134,27 @@ export default function TrendingPage() {
     return () => { cancelled = true; };
   }, [loadKey]);
 
+  // ── Scroll-to-load-more: window scroll listener (works on Netlify with overflow-x:hidden body) ──
   useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
+    const check = () => {
+      if (isLoadingRef.current || !hasMoreRef.current) return;
+      const sentinel = sentinelRef.current;
+      if (!sentinel) return;
+      const rect = sentinel.getBoundingClientRect();
+      if (rect.top <= window.innerHeight * 2) {
         setLoadKey((k) => k + 1);
-      },
-      { rootMargin: "0px 0px 3000px 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [isLoading, hasMore, items.length]);
+      }
+    };
+    triggerLoadRef.current = check;
+    window.addEventListener('scroll', check, { passive: true });
+    check(); // immediate check
+    return () => window.removeEventListener('scroll', check);
+  }, []);
+
+  // Re-check after items change
+  useEffect(() => {
+    triggerLoadRef.current?.();
+  }, [items.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">

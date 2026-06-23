@@ -86,7 +86,17 @@ export function AnimePlayer({
   tmdbSeason,
   onAutoNext
 }: AnimePlayerProps) {
-  const [sourceIndex, setSourceIndex] = useState(0);
+  const [sourceIndex, setSourceIndex] = useState(() => {
+    try {
+      const saved = localStorage.getItem("sv_anime_source");
+      if (saved !== null) {
+        const idx = parseInt(saved, 10);
+        if (!isNaN(idx) && idx >= 0 && idx < PROVIDERS.length) return idx;
+      }
+    } catch {}
+    return 0;
+  });
+
   const [currentUrl, setCurrentUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -163,9 +173,14 @@ export function AnimePlayer({
 
 
   const switchSource = useCallback(() => {
-    setSourceIndex(prev => (prev + 1) % PROVIDERS.length);
+    setSourceIndex(prev => {
+      const next = (prev + 1) % PROVIDERS.length;
+      try { localStorage.setItem("sv_anime_source", String(next)); } catch {}
+      return next;
+    });
     setRetryCount(0);
   }, []);
+
 
   const retrySource = useCallback(() => {
     setRetryCount(prev => prev + 1);
@@ -291,6 +306,7 @@ export function AnimePlayer({
                 key={source.name}
                 onClick={() => {
                   setSourceIndex(index);
+                  try { localStorage.setItem("sv_anime_source", String(index)); } catch {}
                 }}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all text-xs font-medium ${
                   isActive

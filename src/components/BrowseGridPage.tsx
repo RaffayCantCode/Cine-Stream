@@ -22,6 +22,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const isLoadingRef = useRef(true);
   const hasMoreRef = useRef(true);
+  const triggerLoadRef = useRef<(() => void) | null>(null);
   isLoadingRef.current = isLoading;
   hasMoreRef.current = hasMore;
 
@@ -111,19 +112,27 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
     load();
   }, [endpoint, page, mediaType]);
 
+  // ── Scroll-to-load-more: window scroll listener (works on Netlify with overflow-x:hidden body) ──
   useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
+    const check = () => {
+      if (isLoadingRef.current || !hasMoreRef.current) return;
+      const sentinel = sentinelRef.current;
+      if (!sentinel) return;
+      const rect = sentinel.getBoundingClientRect();
+      if (rect.top <= window.innerHeight * 2) {
         setPage((p) => p + 3);
-      },
-      { rootMargin: "0px 0px 3000px 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [isLoading, hasMore, items.length]);
+      }
+    };
+    triggerLoadRef.current = check;
+    window.addEventListener('scroll', check, { passive: true });
+    check(); // immediate check
+    return () => window.removeEventListener('scroll', check);
+  }, []);
+
+  // Re-check after items change
+  useEffect(() => {
+    triggerLoadRef.current?.();
+  }, [items.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -143,7 +152,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           )}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-            {items.slice(0, 60).map((item, idx) => (
+            {items.map((item, idx) => (
               <div key={`${item.media_type ?? "item"}-${item.id}`} className="w-full h-full flex justify-center">
                 <MediaCard item={item} index={idx} />
               </div>

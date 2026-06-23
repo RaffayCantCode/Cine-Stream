@@ -50,6 +50,7 @@ export default function AnimeBrowsePage() {
   const isLoadingRef = useRef(false);
   const hasMoreRef = useRef(true);
   const lastFetchedUrlRef = useRef("");
+  const triggerLoadRef = useRef<(() => void) | null>(null);
 
   isLoadingRef.current = isLoading;
   hasMoreRef.current = hasMore;
@@ -180,20 +181,27 @@ export default function AnimeBrowsePage() {
     setLoadKey(k => k + 1);
   }, [sortBy, selectedGenre, debouncedQuery]);
 
-  // Scroll sentinel
+  // ── Scroll-to-load-more: window scroll listener (works on Netlify with overflow-x:hidden body) ──
   useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      entries => {
-        if (!entries[0].isIntersecting || isLoadingRef.current || !hasMoreRef.current) return;
+    const check = () => {
+      if (isLoadingRef.current || !hasMoreRef.current) return;
+      const sentinel = sentinelRef.current;
+      if (!sentinel) return;
+      const rect = sentinel.getBoundingClientRect();
+      if (rect.top <= window.innerHeight * 2) {
         setPage(p => (p !== null ? p + 1 : null));
-      },
-      { rootMargin: "0px 0px 3000px 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [isLoading, hasMore, items.length]);
+      }
+    };
+    triggerLoadRef.current = check;
+    window.addEventListener('scroll', check, { passive: true });
+    check(); // immediate check
+    return () => window.removeEventListener('scroll', check);
+  }, []);
+
+  // Re-check after items change
+  useEffect(() => {
+    triggerLoadRef.current?.();
+  }, [items.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">

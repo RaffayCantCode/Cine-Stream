@@ -318,6 +318,7 @@ export default function TvDetailPage() {
         <div ref={playerRef} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
           <div>
             <VideoPlayer
+              key={`${id}-s${selectedSeason}-e${selectedEpisode}`}
               type="tv"
               id={id}
               season={selectedSeason}
