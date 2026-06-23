@@ -8,6 +8,30 @@ export function cn(...inputs: ClassValue[]) {
 const requestCache = new Map<string, { expires: number; data: unknown }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
 
+const CACHE_MAX_ENTRIES = 200;
+
+function pruneCache(): void {
+  if (requestCache.size <= CACHE_MAX_ENTRIES) return;
+  const now = Date.now();
+  let deleted = 0;
+  for (const [key, entry] of requestCache) {
+    if (entry.expires <= now) {
+      requestCache.delete(key);
+      deleted++;
+      if (requestCache.size <= CACHE_MAX_ENTRIES) break;
+    }
+  }
+  if (requestCache.size > CACHE_MAX_ENTRIES) {
+    const toDelete = requestCache.size - CACHE_MAX_ENTRIES;
+    const iter = requestCache.keys();
+    for (let i = 0; i < toDelete; i++) {
+      const k = iter.next();
+      if (k.done) break;
+      requestCache.delete(k.value);
+    }
+  }
+}
+
 interface FetchJsonOptions extends RequestInit {
   cacheTtlMs?: number;
   skipCache?: boolean;
@@ -61,6 +85,7 @@ export async function fetchJson<T = unknown>(
 
     if (shouldUseCache) {
       requestCache.set(cacheKey, { data, expires: Date.now() + cacheTtlMs });
+      pruneCache();
     }
 
     return data as T;
@@ -77,12 +102,18 @@ export async function fetchJson<T = unknown>(
 export function clearFetchJsonCache(match?: string) {
   if (!match) {
     requestCache.clear();
+    pendingRequests.clear();
     return;
   }
 
   for (const key of requestCache.keys()) {
     if (key.includes(match)) {
       requestCache.delete(key);
+    }
+  }
+  for (const key of pendingRequests.keys()) {
+    if (key.includes(match)) {
+      pendingRequests.delete(key);
     }
   }
 }

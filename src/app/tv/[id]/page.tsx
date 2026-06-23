@@ -3,12 +3,13 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Sidebar } from "@/components/Sidebar";
 import { MediaRow } from "@/components/MediaRow";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { Play, Star, Calendar, CheckCircle2, Loader2 } from "lucide-react";
+
+const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { cn, fetchJson, shuffleArray } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 
 interface Episode {
@@ -76,7 +77,7 @@ export default function TvDetailPage() {
         if (data.backdrop_path) {
           const link = document.createElement("link");
           link.rel = "preload"; link.as = "image";
-          link.href = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
+          link.href = `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`;
           link.fetchPriority = "high";
           document.head.appendChild(link);
         }
@@ -186,10 +187,10 @@ export default function TvDetailPage() {
   }
 
   const backdropUrl = show.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${show.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/w1280${show.backdrop_path}`
     : null;
   const posterUrl = show.poster_path
-    ? `https://image.tmdb.org/t/p/w342${show.poster_path}`
+    ? `https://image.tmdb.org/t/p/w185${show.poster_path}`
     : null;
 
   const seasons = show.seasons?.filter((s) => s.season_number > 0) ?? [];
@@ -207,15 +208,13 @@ export default function TvDetailPage() {
       <div className="relative w-full h-[62vh] md:h-[72vh] overflow-hidden flex items-end">
         <div className="absolute inset-0 z-0">
           {backdropUrl ? (
-            <motion.img
+            <img
               src={backdropUrl}
               alt={show.name}
-              className="w-full h-full object-cover object-top scale-[1.03]"
+              className="w-full h-full object-cover object-center md:object-top scale-[1.03]"
               loading="eager"
               fetchPriority="high"
-              initial={{ opacity: 0, scale: 1.07 }}
-              animate={{ opacity: 1, scale: 1.03 }}
-              transition={{ duration: 1.4, ease: "easeOut" }}
+              decoding="async"
             />
           ) : (
             <div className="w-full h-full bg-card" />
@@ -227,25 +226,19 @@ export default function TvDetailPage() {
 
         <div className="relative z-10 pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
           {posterUrl && (
-            <motion.img
+            <img
               src={posterUrl}
               alt={show.name}
               className="hidden md:block w-48 lg:w-60 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10"
               fetchPriority="high"
+              decoding="async"
               width={240}
               height={360}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
             />
           )}
 
           <div className="flex-1 space-y-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.6 }}
-            >
+            <div>
               <h1 className="font-bold text-5xl md:text-7xl text-white leading-none tracking-wide mb-2">
                 {show.name}
               </h1>
@@ -254,12 +247,9 @@ export default function TvDetailPage() {
                   {show.tagline}
                 </p>
               )}
-            </motion.div>
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.45, duration: 0.5 }}
+            <div
               className="flex flex-wrap items-center gap-3 text-sm"
             >
               {score > 0 && (
@@ -290,18 +280,15 @@ export default function TvDetailPage() {
                   </span>
                 ))}
               </div>
-            </motion.div>
+            </div>
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.55 }}
+            <p
               className="text-white/65 text-base leading-relaxed max-w-2xl"
             >
               {show.overview}
-            </motion.p>
+            </p>
 
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}>
+            <div>
               <button
                 onClick={() => {
                   const ep = seasonData?.episodes?.find(e => e.episode_number === selectedEpisode) || seasonData?.episodes?.[0];
@@ -312,7 +299,7 @@ export default function TvDetailPage() {
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch S{selectedSeason} E{selectedEpisode}
               </button>
-            </motion.div>
+            </div>
           </div>
         </div>
       </div>
@@ -405,14 +392,9 @@ export default function TvDetailPage() {
             )}
           </div>
 
-          <AnimatePresence mode="wait">
             {!seasonLoading && seasonData && (
-              <motion.div
+              <div
                 key={selectedSeason}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.25 }}
               >
                 {seasonData.overview && (
                   <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic">
@@ -422,11 +404,8 @@ export default function TvDetailPage() {
 
                 <div className="space-y-3">
                   {seasonData.episodes?.map((episode, i) => (
-                    <motion.div
+                    <div
                       key={episode.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.025, duration: 0.3 }}
                       onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
                       className="group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
                     >
@@ -437,10 +416,11 @@ export default function TvDetailPage() {
                       <div className="w-36 md:w-48 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
                         {episode.still_path ? (
                           <img
-                            src={`https://image.tmdb.org/t/p/w300${episode.still_path}`}
+                            src={`https://image.tmdb.org/t/p/w185${episode.still_path}`}
                             alt={episode.name}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                             loading="lazy"
+                            decoding="async"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center bg-card">
@@ -472,32 +452,24 @@ export default function TvDetailPage() {
                         )}
                         {episode.runtime && <p className="text-white/30 text-xs mt-1.5">{episode.runtime} min</p>}
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
                 </div>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
         </section>
 
         {show.credits?.cast && show.credits.cast.length > 0 && (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.6 }}
-          >
+          <section>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-1 h-5 bg-primary rounded-full" />
               <h2 className="text-base font-bold text-white tracking-wide">Cast</h2>
             </div>
             <div className="flex overflow-x-auto gap-4 pb-4 hide-scrollbar">
               {show.credits.cast.slice(0, 16).map((person, i) => (
-                <motion.div
+                <div
                   key={person.id}
                   className="w-[100px] shrink-0 text-center"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03, duration: 0.35 }}
                 >
                   <div className="aspect-[2/3] rounded-xl bg-card overflow-hidden mb-2.5 ring-1 ring-white/[0.06]">
                     {person.profile_path ? (
@@ -506,6 +478,7 @@ export default function TvDetailPage() {
                         alt={person.name}
                         className="w-full h-full object-cover"
                         loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-muted">
@@ -515,10 +488,10 @@ export default function TvDetailPage() {
                   </div>
                   <h4 className="font-semibold text-xs text-white line-clamp-1 leading-tight">{person.name}</h4>
                   <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{person.character}</p>
-                </motion.div>
+                </div>
               ))}
             </div>
-          </motion.section>
+          </section>
         )}
 
         {(() => {

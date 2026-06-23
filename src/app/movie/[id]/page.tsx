@@ -4,11 +4,12 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Sidebar } from "@/components/Sidebar";
 import { MediaRow } from "@/components/MediaRow";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { Play, Star, Clock, Calendar } from "lucide-react";
-import { motion } from "framer-motion";
+
+const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { format } from "date-fns";
 import { fetchJson, shuffleArray } from "@/lib/utils";
 
@@ -54,7 +55,7 @@ export default function MovieDetailPage() {
         if (data.backdrop_path) {
           const link = document.createElement("link");
           link.rel = "preload"; link.as = "image";
-          link.href = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
+          link.href = `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`;
           link.fetchPriority = "high";
           document.head.appendChild(link);
         }
@@ -145,10 +146,10 @@ export default function MovieDetailPage() {
   }
 
   const backdropUrl = movie.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`
     : null;
   const posterUrl = movie.poster_path
-    ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`
+    ? `https://image.tmdb.org/t/p/w185${movie.poster_path}`
     : null;
 
   const score = movie.vote_average ?? 0;
@@ -163,15 +164,14 @@ export default function MovieDetailPage() {
         <div className="relative w-full h-[62vh] md:h-[72vh] overflow-hidden flex items-end">
         <div className="absolute inset-0 z-0">
           {backdropUrl ? (
-            <motion.img
+            <img
               src={backdropUrl}
               alt={movie.title}
-              className="w-full h-full object-cover object-top scale-[1.03]"
+              className="w-full h-full object-cover object-center md:object-top scale-[1.03] animate-fade-in-up"
               loading="eager"
               fetchPriority="high"
-              initial={{ opacity: 0, scale: 1.07 }}
-              animate={{ opacity: 1, scale: 1.03 }}
-              transition={{ duration: 1.4, ease: "easeOut" }}
+              decoding="async"
+              style={{ animationDuration: "1.4s" }}
             />
           ) : (
             <div className="w-full h-full bg-card" />
@@ -183,10 +183,7 @@ export default function MovieDetailPage() {
 
         <div className="relative z-10 pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
           {posterUrl && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
+            <div
               className="hidden md:block shrink-0"
             >
               <img
@@ -194,17 +191,15 @@ export default function MovieDetailPage() {
                 alt={movie.title}
                 className="w-48 lg:w-60 rounded-2xl shadow-2xl ring-1 ring-white/10"
                 fetchPriority="high"
+                decoding="async"
                 width={240}
                 height={360}
               />
-            </motion.div>
+            </div>
           )}
 
           <div className="flex-1 space-y-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.6 }}
+            <div
             >
               <h1 className="font-bold text-5xl md:text-7xl text-white leading-none tracking-wide mb-2">
                 {movie.title}
@@ -214,12 +209,9 @@ export default function MovieDetailPage() {
                   {movie.tagline}
                 </p>
               )}
-            </motion.div>
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.45, duration: 0.5 }}
+            <div
               className="flex flex-wrap items-center gap-3 text-sm"
             >
               {score > 0 && (
@@ -251,22 +243,15 @@ export default function MovieDetailPage() {
                   </span>
                 ))}
               </div>
-            </motion.div>
+            </div>
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.55, duration: 0.5 }}
+            <p
               className="text-white/65 text-base leading-relaxed max-w-2xl"
             >
               {movie.overview}
-            </motion.p>
+            </p>
 
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.65, duration: 0.5 }}
-            >
+            <div>
               <button
                 onClick={handleWatch}
                 className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
@@ -275,7 +260,7 @@ export default function MovieDetailPage() {
                 Watch Now
                 
               </button>
-            </motion.div>
+            </div>
           </div>
         </div>
       </div>
@@ -288,23 +273,16 @@ export default function MovieDetailPage() {
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 space-y-14">
         {movie.credits?.cast && movie.credits.cast.length > 0 && (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.6 }}
-          >
+          <section>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-1 h-5 bg-primary rounded-full" />
               <h2 className="text-base font-bold text-white tracking-wide">Cast</h2>
             </div>
             <div className="flex overflow-x-auto gap-4 pb-4 hide-scrollbar">
               {movie.credits.cast.slice(0, 16).map((person, i) => (
-                <motion.div
+                  <div
                   key={person.id}
                   className="w-[100px] shrink-0 text-center"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03, duration: 0.35 }}
                 >
                   <div className="aspect-[2/3] rounded-xl bg-card overflow-hidden mb-2.5 ring-1 ring-white/[0.06]">
                     {person.profile_path ? (
@@ -313,6 +291,7 @@ export default function MovieDetailPage() {
                         alt={person.name}
                         className="w-full h-full object-cover"
                         loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-muted">
@@ -328,10 +307,10 @@ export default function MovieDetailPage() {
                   <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                     {person.character}
                   </p>
-                </motion.div>
+                </div>
               ))}
             </div>
-          </motion.section>
+          </section>
         )}
 
         {(() => {

@@ -1,4 +1,4 @@
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(
   request: Request,
@@ -8,7 +8,7 @@ export async function GET(
 
   try {
     const data = await tmdbFetch(`/tv/${id}/season/${seasonNumber}`);
-    return Response.json(data);
+    return Response.json(data, { headers: cacheHeaders(86400) });
   } catch (error) {
     return Response.json({ error: "Failed to fetch season details" }, { status: 500 });
   }

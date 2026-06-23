@@ -4,13 +4,14 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { AnimeRow } from "@/components/AnimeRow";
 import { fetchJson, cn } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+
 
 interface AnimeDetail {
   id: string;
@@ -460,7 +461,7 @@ export default function AnimeDetailPage() {
                 <img
                   src={anime.poster}
                   alt={anime.name}
-                  className="w-full h-full object-cover object-top scale-105 blur-sm brightness-45"
+                  className="w-full h-full object-cover object-center md:object-top scale-105 blur-sm brightness-45"
                   onError={(e) => { e.currentTarget.src = ""; }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/20" />
@@ -469,19 +470,13 @@ export default function AnimeDetailPage() {
               </div>
 
               <div className="relative z-10 pb-6 md:pb-16 px-5 md:px-12 flex flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-10 max-w-screen-2xl mx-auto w-full">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.5 }}
+                <div
                   className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
                   <img src={anime.poster} alt={anime.name} className="w-full h-full object-cover" />
-                </motion.div>
+                </div>
 
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2, duration: 0.5 }}
+                <div
                   className="flex flex-col gap-2 md:gap-3 max-w-3xl"
                 >
                   <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
@@ -517,7 +512,7 @@ export default function AnimeDetailPage() {
                     </div>
                   )}
 
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}>
+                  <div>
                     {!episodesLoading && currentSeasonEps.length > 0 ? (
                       <button
                         onClick={() => {
@@ -537,8 +532,8 @@ export default function AnimeDetailPage() {
                         No Episodes Available
                       </button>
                     ) : null}
-                  </motion.div>
-                </motion.div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -554,11 +549,8 @@ export default function AnimeDetailPage() {
                   <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
                     <div ref={playerRef} className="w-full min-w-0">
                       {!episodesLoading && (
-                        <motion.div
+                        <div
                           key={selectedEp.episodeId}
-                          initial={{ opacity: 0, y: 16 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3 }}
                         >
                           <AnimePlayer
                             animeId={streamingAnimeId}
@@ -572,7 +564,7 @@ export default function AnimeDetailPage() {
                             tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
                             onAutoNext={handleAutoNext}
                           />
-                        </motion.div>
+                        </div>
                       )}
 
                       {episodesLoading && (
@@ -878,13 +870,8 @@ export default function AnimeDetailPage() {
                     const sliceEps = currentSeasonEps.slice(0, visibleCount);
                     const hasMore = visibleCount < currentSeasonEps.length;
                     return (
-                      <AnimatePresence mode="wait">
-                        <motion.div
+                        <div
                           key={`grid-${currentSeasonId}`}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.2 }}
                         >
                           <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-1.5">
                             {sliceEps.map((ep) => {
@@ -922,8 +909,7 @@ export default function AnimeDetailPage() {
                               </button>
                             </div>
                           )}
-                        </motion.div>
-                      </AnimatePresence>
+                        </div>
                     );
                   }
 
@@ -931,13 +917,8 @@ export default function AnimeDetailPage() {
                   const hasMore = visibleCount < currentSeasonEps.length;
 
                   return (
-                    <AnimatePresence mode="wait">
-                      <motion.div
+                      <div
                         key={currentSeasonId}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.25 }}
                       >
                         {/* Season description (TMDB overview from episodes response) */}
                         {seasonOverview && (
@@ -955,11 +936,8 @@ export default function AnimeDetailPage() {
                               || null;
                             const displayTitle = ep.title || (isSingleItem ? (anime?.name || "") : `Episode ${ep.episodeNum}`);
                             return (
-                              <motion.div
+                              <div
                                 key={`${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.025, duration: 0.3 }}
                                 onClick={() => {
                                   if (isUnreleased) return;
                                   handleWatchEpisode(ep);
@@ -1050,7 +1028,7 @@ export default function AnimeDetailPage() {
                                     </span>
                                   </div>
                                 )}
-                              </motion.div>
+                              </div>
                             );
                           })}
 
@@ -1065,8 +1043,7 @@ export default function AnimeDetailPage() {
                             </div>
                           )}
                         </div>
-                      </motion.div>
-                    </AnimatePresence>
+                      </div>
                   );
                 })()}
               </section>

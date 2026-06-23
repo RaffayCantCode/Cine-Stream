@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Search, Shuffle, Loader2 } from "lucide-react";
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { fetchJson, shuffleArray } from "@/lib/utils";
 

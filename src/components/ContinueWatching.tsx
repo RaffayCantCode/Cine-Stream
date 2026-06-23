@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Play, X, Tv, Film } from "lucide-react";
-import { motion } from "framer-motion";
 import useSWR, { mutate } from "swr";
 
 interface WatchHistoryItem {
@@ -33,18 +31,14 @@ export function ContinueWatching() {
   }
 
   const handleRemove = async (mediaId: number, mediaType: string, e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
-
     await fetch(`/api/watch-history/${mediaId}?mediaType=${mediaType}`, {
       method: "DELETE",
     });
-
     mutate("/api/watch-history");
   };
 
-  const handlePlay = (item: WatchHistoryItem, e: React.MouseEvent) => {
-    e.preventDefault();
+  const handlePlay = (item: WatchHistoryItem) => {
     if (item.mediaType === "movie") {
       router.push(`/movie/${item.mediaId}?autoplay=1`);
     } else if (item.mediaType === "anime") {
@@ -68,12 +62,6 @@ export function ContinueWatching() {
 
         <div className="flex gap-4 overflow-x-auto pb-3 hide-scrollbar">
           {data.items.map((item: WatchHistoryItem, i: number) => {
-            const detailHref =
-              item.mediaType === "movie"
-                ? `/movie/${item.mediaId}`
-                : item.mediaType === "anime"
-                ? `/anime/${item.mediaId}`
-                : `/tv/${item.mediaId}`;
             const posterUrl = item.posterPath
               ? item.mediaType === "anime"
                 ? item.posterPath
@@ -81,73 +69,71 @@ export function ContinueWatching() {
               : null;
 
             return (
-              <motion.div
+              <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05, duration: 0.35 }}
-                className="relative shrink-0 w-[130px] sm:w-[150px] group"
+                onClick={() => handlePlay(item)}
+                className="relative shrink-0 w-[130px] sm:w-[150px] group cursor-pointer animate-fade-in-up"
+                style={{ animationDelay: `${i * 50}ms` }}
               >
-                <Link href={detailHref}>
-                  <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card ring-1 ring-white/[0.06] mb-2.5 relative">
-                    {posterUrl ? (
-                      <img
-                        src={posterUrl}
-                        alt={item.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-muted">
-                        {item.mediaType === "tv" ? (
-                          <Tv className="w-8 h-8 text-white/20" />
-                        ) : (
-                          <Film className="w-8 h-8 text-white/20" />
-                        )}
-                      </div>
-                    )}
-
-                    {item.mediaType === "anime" && (
-                      <div className="absolute top-2 left-2 bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md backdrop-blur-sm tracking-wider uppercase">
-                        Anime
-                      </div>
-                    )}
-
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <button
-                        onClick={(e) => handlePlay(item, e)}
-                        className="w-11 h-11 rounded-full bg-primary/90 flex items-center justify-center shadow-xl hover:bg-primary transition-colors"
-                        aria-label="Play"
-                      >
-                        <Play className="w-5 h-5 fill-white text-white ml-0.5" />
-                      </button>
+                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card ring-1 ring-white/[0.06] mb-2.5 relative">
+                  {posterUrl ? (
+                    <img
+                      src={posterUrl}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-muted">
+                      {item.mediaType === "tv" ? (
+                        <Tv className="w-8 h-8 text-white/20" />
+                      ) : (
+                        <Film className="w-8 h-8 text-white/20" />
+                      )}
                     </div>
+                  )}
 
-                    {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-                      <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white/80">
-                        S{item.season} E{item.episode}
-                      </div>
-                    )}
-
-                    <button
-                      onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-100 transition-opacity hover:bg-red-600/80 z-10"
-                      aria-label="Remove"
-                    >
-                      <X className="w-3.5 h-3.5 text-white" />
-                    </button>
+                  <div className={`absolute top-2 left-2 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md backdrop-blur-sm tracking-wider uppercase ${
+                    item.mediaType === "movie"
+                      ? "bg-gradient-to-r from-blue-600/90 to-indigo-600/90"
+                      : item.mediaType === "tv"
+                      ? "bg-gradient-to-r from-emerald-600/90 to-teal-600/90"
+                      : "bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90"
+                  }`}>
+                    {item.mediaType === "movie" ? "Movie" : item.mediaType === "tv" ? "TV" : "JP Sub Anime"}
                   </div>
 
-                  <h4 className="text-xs font-semibold text-white/80 line-clamp-1 leading-tight">
-                    {item.title}
-                  </h4>
-                  {(item.mediaType === "tv" || item.mediaType === "anime") && item.episodeName && (
-                    <p className="text-[10px] text-white/40 mt-0.5 line-clamp-1">
-                      {item.episodeName}
-                    </p>
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="w-11 h-11 rounded-full bg-primary/90 flex items-center justify-center shadow-xl">
+                      <Play className="w-5 h-5 fill-white text-white ml-0.5" />
+                    </div>
+                  </div>
+
+                  {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
+                    <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white/80">
+                      S{item.season} E{item.episode}
+                    </div>
                   )}
-                </Link>
-              </motion.div>
+
+                  <button
+                    onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
+                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-100 transition-opacity hover:bg-red-600/80 z-10"
+                    aria-label="Remove"
+                  >
+                    <X className="w-3.5 h-3.5 text-white" />
+                  </button>
+                </div>
+
+                <h4 className="text-xs font-semibold text-white/80 line-clamp-1 leading-tight">
+                  {item.title}
+                </h4>
+                {(item.mediaType === "tv" || item.mediaType === "anime") && item.episodeName && (
+                  <p className="text-[10px] text-white/40 mt-0.5 line-clamp-1">
+                    {item.episodeName}
+                  </p>
+                )}
+              </div>
             );
           })}
         </div>

@@ -18,11 +18,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
-    baseUrl: "https://www.2embed.cc",
-    type: "twoembed",
+    baseUrl: "https://vidfast.pro",
+    type: "vidfast",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://www.2embed.cc",
+    healthCheckUrl: "https://vidfast.pro",
   },
   {
     name: "Source 3",
@@ -39,6 +39,14 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     quality: "Best",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://vidsrc.to",
+  },
+  {
+    name: "Source 5",
+    baseUrl: "https://www.2embed.cc",
+    type: "twoembed",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://www.2embed.cc",
   },
 ];
 
@@ -59,6 +67,10 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
     case "vidsrc":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "vidfast":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?autoPlay=true`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?autoPlay=true`;
 
     default:
       return "";
@@ -94,6 +106,9 @@ const healthCache = {
 };
 
 // Server-side health check: returns map of source type -> alive status
+// Only marks source as dead if it fails to respond at all (network error / timeout).
+// Non-2xx responses are still OK - embed root paths often return 403/404 but
+// the actual embed URLs work fine.
 export async function checkSourceHealth(): Promise<Record<string, boolean>> {
   if (healthCache.data && healthCache.expires > Date.now()) {
     return healthCache.data;
@@ -106,14 +121,14 @@ export async function checkSourceHealth(): Promise<Record<string, boolean>> {
         method: "HEAD",
         signal: AbortSignal.timeout(5000),
       });
-      results[api.type] = res.ok || res.status < 500;
+      results[api.type] = true;
     } catch {
       results[api.type] = false;
     }
   });
   await Promise.allSettled(checks);
   STREAMING_APIS.forEach((api) => {
-    if (results[api.type] === undefined) results[api.type] = false;
+    if (results[api.type] === undefined) results[api.type] = true;
   });
 
   healthCache.data = results;

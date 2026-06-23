@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
 import { cn, fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";

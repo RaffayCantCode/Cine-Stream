@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Star, Play } from "lucide-react";
-import { motion } from "framer-motion";
+import { memo } from "react";
 
 export interface AnimeItem {
   id: string;
@@ -24,15 +24,17 @@ interface AnimeCardProps {
   index?: number;
 }
 
-export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
+const CARD_WRAPPER_STYLE: React.CSSProperties = {
+  animation: "fade-in-up 0.35s ease-out both",
+};
+
+export const AnimeCard = memo(function AnimeCard({ item, index = 0 }: AnimeCardProps) {
   const subCount = item.episodes?.sub ?? null;
   const dubCount = item.episodes?.dub ?? null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+    <div
+      style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${index * 0.04}s` }}
     >
       <Link
         href={`/anime/${item.id}`}
@@ -45,7 +47,7 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             loading={index < 6 ? "eager" : "lazy"}
-            decoding={index < 6 ? "sync" : "async"}
+            decoding="async"
             fetchPriority={index < 6 ? "high" : "low"}
           />
         ) : (
@@ -55,11 +57,11 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
         )}
 
         <div className="absolute top-2 left-2 z-20 flex items-center gap-1">
-          <span className="bg-[#4B5694]/90 backdrop-blur-xl text-white text-[9px] font-extrabold tracking-widest px-1.5 py-0.5 rounded-md uppercase leading-none shadow-lg">
+          <span className="bg-[#4B5694]/90 backdrop-blur-xl text-white text-[9px] font-extrabold tracking-widest px-1.5 py-0.5 rounded-md uppercase leading-none">
             JP SUB
           </span>
           {dubCount !== null && dubCount > 0 && (
-            <span className="bg-amber-500/90 backdrop-blur-xl text-white text-[9px] font-extrabold tracking-widest px-1.5 py-0.5 rounded-md uppercase leading-none shadow-lg">
+            <span className="bg-amber-500/90 backdrop-blur-xl text-white text-[9px] font-extrabold tracking-widest px-1.5 py-0.5 rounded-md uppercase leading-none">
               DUB
             </span>
           )}
@@ -75,13 +77,12 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-4 pb-10">
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-            <div className="w-12 h-12 rounded-full bg-[#4B5694]/90 backdrop-blur-xl flex items-center justify-center shadow-2xl shadow-[#4B5694]/50 translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
+            <div className="w-12 h-12 rounded-full bg-[#4B5694]/90 backdrop-blur-xl flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
               <Play className="w-5 h-5 fill-white text-white ml-0.5" />
             </div>
           </div>
 
           <div className="relative z-10 space-y-2">
-            {/* Show Year and Rating on hover instead of Title */}
             <div className="flex items-center gap-1.5 flex-wrap font-bold">
               {item.seasonYear && (
                 <span className="bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm uppercase text-[10px] text-white/90">
@@ -96,7 +97,6 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
               )}
             </div>
 
-            {/* Show Genres on hover */}
             {item.genres && item.genres.length > 0 && (
               <p className="text-xs font-bold text-[#7288AE] line-clamp-1 uppercase tracking-wide leading-snug">
                 {item.genres.slice(0, 2).join(" · ")}
@@ -121,6 +121,6 @@ export function AnimeCard({ item, index = 0 }: AnimeCardProps) {
         <div className="absolute inset-0 rounded-2xl ring-1 ring-white/0 group-hover:ring-[#7288AE]/40 transition-all duration-500 pointer-events-none" />
         <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: "inset 0 0 30px rgba(213,82,163,0.15)" }} />
       </Link>
-    </motion.div>
+    </div>
   );
-}
+});

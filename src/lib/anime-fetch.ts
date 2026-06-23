@@ -621,12 +621,19 @@ async function buildSeasonsFromTmdb(
 // ─────────────────────────────────────────────────────────────────────────────
 
 const animeDetailCache = new Map<string, { data: any; expires: number }>();
+const ANIME_CACHE_MAX = 100;
+
 function getCachedDetail(key: string) {
   const cached = animeDetailCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.data;
+  animeDetailCache.delete(key);
   return null;
 }
 function setCachedDetail(key: string, data: any) {
+  if (animeDetailCache.size >= ANIME_CACHE_MAX) {
+    const oldest = animeDetailCache.keys().next();
+    if (!oldest.done) animeDetailCache.delete(oldest.value);
+  }
   animeDetailCache.set(key, { data, expires: Date.now() + 1800000 }); // 30 min TTL
 }
 
@@ -1340,8 +1347,9 @@ export async function fetchEpisodesFromJikanPage(
 // THUMBNAIL FETCHING
 // ─────────────────────────────────────────────────────────────────────────────
 
-// In-memory thumbnail cache (keyed by MAL episode URL)
+// In-memory thumbnail cache (keyed by MAL episode URL) - limited to prevent memory leak
 const thumbnailCache = new Map<string, string>();
+const THUMBNAIL_CACHE_MAX = 200;
 
 // Scrape a single MAL episode page for an episode screenshot
 async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
@@ -1375,7 +1383,13 @@ async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
 export async function fetchEpisodeThumbnail(malUrl: string): Promise<string | null> {
   if (thumbnailCache.has(malUrl)) return thumbnailCache.get(malUrl)!;
   const thumb = await scrapeEpisodeThumbnail(malUrl);
-  if (thumb) thumbnailCache.set(malUrl, thumb);
+  if (thumb) {
+    if (thumbnailCache.size >= THUMBNAIL_CACHE_MAX) {
+      const oldest = thumbnailCache.keys().next();
+      if (!oldest.done) thumbnailCache.delete(oldest.value);
+    }
+    thumbnailCache.set(malUrl, thumb);
+  }
   return thumb;
 }
 
@@ -1385,6 +1399,26 @@ export async function fetchEpisodeThumbnail(malUrl: string): Promise<string | nu
 
 const detailCache = new Map<string, { data: any; expires: number }>();
 const listCache = new Map<string, { data: any; expires: number }>();
+const API_CACHE_MAX = 150;
+
+function pruneApiCache(cache: Map<string, { data: any; expires: number }>, max: number) {
+  if (cache.size <= max) return;
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (entry.expires <= now) {
+      cache.delete(key);
+      if (cache.size <= max) break;
+    }
+  }
+  if (cache.size > max) {
+    const iter = cache.keys();
+    for (let i = 0; i < cache.size - max; i++) {
+      const k = iter.next();
+      if (k.done) break;
+      cache.delete(k.value);
+    }
+  }
+}
 
 export async function fetchAnimeApi(
   endpoint: string,
@@ -1421,6 +1455,7 @@ export async function fetchAnimeApi(
         },
       };
       detailCache.set(cacheKeyDetail, { data: response, expires: Date.now() + 300000 });
+      pruneApiCache(detailCache, API_CACHE_MAX);
       return response;
     }
     throw new Error("Anime not found");
@@ -1468,6 +1503,7 @@ export async function fetchAnimeApi(
 
   if (!isSearch) {
     listCache.set(cacheKey, { data: result, expires: Date.now() + 300000 }); // Cache for 5 minutes
+    pruneApiCache(listCache, API_CACHE_MAX);
   }
 
   return result;

@@ -106,7 +106,7 @@ export async function GET(
       return true;
     });
 
-    return NextResponse.json({ success: true, items: items.slice(0, Math.max(minItems, 20)) });
+    return NextResponse.json({ success: true, items: items.slice(0, Math.max(minItems, 20)) }, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=172800" } });
   } catch {
     return NextResponse.json({ success: false, items: [] });
   }

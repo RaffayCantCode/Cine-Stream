@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { MediaCard } from "@/components/MediaCard";
 import { MediaRow } from "@/components/MediaRow";
 import { fetchJson, filterReleasedSafeContent, shuffleArray } from "@/lib/utils";
@@ -324,7 +325,7 @@ export default function ProviderPage() {
   }
 
   const heroUrl = heroItem?.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${heroItem.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/w1280${heroItem.backdrop_path}`
     : null;
   const heroTitle = heroItem?.title || heroItem?.name || "";
   const heroIsMovie = heroItem?.media_type === "movie";
@@ -376,9 +377,9 @@ export default function ProviderPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-transparent" />
 
           {/* Content */}
-          <div className="relative z-10 h-full flex flex-col justify-between px-6 md:px-12 pt-6 pb-10 max-w-screen-2xl mx-auto">
-            {/* Top bar: back + provider badge */}
-            <div className="flex items-center justify-between">
+          <div className="relative z-10 h-full flex flex-col justify-end px-6 md:px-12 pb-12 md:pb-16 max-w-screen-2xl mx-auto">
+            {/* Top bar: back + provider badge (absolute, doesn't consume flex space) */}
+            <div className="absolute top-6 left-6 md:left-12 right-6 md:right-12 flex items-center justify-between">
               <Link
                 href="/"
                 className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors group"

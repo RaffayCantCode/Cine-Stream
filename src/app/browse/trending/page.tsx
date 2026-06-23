@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { MediaCard } from "@/components/MediaCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { Loader2 } from "lucide-react";
@@ -20,144 +21,135 @@ interface MediaItem {
   vote_average?: number;
 }
 
-interface TrendState {
-  items: MediaItem[];
-  page: number;
-  hasMore: boolean;
-  isLoading: boolean;
-  error: string | null;
-}
-
-const initialState: TrendState = {
-  items: [],
-  page: 1,
-  hasMore: true,
-  isLoading: false,
-  error: null,
-};
-
 export default function TrendingPage() {
   const [activeTab, setActiveTab] = useState<TrendType>("movie");
   const [timeWindow, setTimeWindow] = useState<"day" | "week">("week");
-  const [state, setState] = useState<Record<TrendType, TrendState>>({ movie: initialState, tv: initialState, anime: initialState });
+  const [items, setItems] = useState<MediaItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadKey, setLoadKey] = useState(0);
+
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const isLoadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const nextBatchRef = useRef(1);
 
-  // Refs per tab: next batch start page, loading flag, hasMore flag
-  const nextBatchRef = useRef<Record<TrendType, number>>({ movie: 4, tv: 4, anime: 4 });
-  const loadingRef = useRef<Record<TrendType, boolean>>({ movie: false, tv: false, anime: false });
-  const hasMoreRef = useRef<Record<TrendType, boolean>>({ movie: true, tv: true, anime: true });
-
-  const current = state[activeTab];
-  loadingRef.current[activeTab] = current.isLoading;
-  hasMoreRef.current[activeTab] = current.hasMore;
-
-  const loadPage = async (tab: TrendType, startPage: number, append: boolean) => {
-    setState((prev) => ({
-      ...prev,
-      [tab]: { ...prev[tab], isLoading: true, error: null },
-    }));
-
-    try {
-      const pages = append
-        ? [nextBatchRef.current[tab], nextBatchRef.current[tab] + 1, nextBatchRef.current[tab] + 2]
-        : [startPage, startPage + 1, startPage + 2];
-
-      const allResults = await Promise.all(
-        pages.map(async (p) => {
-          if (tab === "anime") {
-            const res = await fetchJson<{ success: boolean; data: { items: any[] }; hasMore?: boolean }>(
-              `/api/anime?category=trending&page=${p}`,
-              { cacheTtlMs: 120000 }
-            );
-            return {
-              results: res.data?.items || [],
-              page: p,
-              total_pages: res.hasMore !== false ? p + 1 : p,
-            };
-          } else {
-            return fetchJson<{ results: MediaItem[]; page: number; total_pages: number }>(
-              `/api/tmdb/trending?type=${tab}&timeWindow=${timeWindow}&page=${p}`,
-              { cacheTtlMs: 120000 }
-            );
-          }
-        })
-      );
-
-      const merged = tab === "anime"
-        ? allResults.flatMap((r) => r.results || [])
-        : filterReleasedSafeContent(allResults.flatMap((r) => r.results || []));
-
-      const last = allResults[allResults.length - 1];
-      const more = last ? last.page < last.total_pages : false;
-
-      setState((prev) => {
-        const combined = append ? [...prev[tab].items, ...merged] : merged;
-        const seenIds = new Set();
-        const deduplicated = combined.filter((item) => {
-          if (!item || !item.id) return false;
-          const key = `${item.media_type || tab}-${item.id}`;
-          if (seenIds.has(key)) return false;
-          seenIds.add(key);
-          return true;
-        });
-        return {
-          ...prev,
-          [tab]: {
-            ...prev[tab],
-            isLoading: false,
-            items: deduplicated,
-            page: startPage,
-            hasMore: more,
-          },
-        };
-      });
-
-      if (append) {
-        nextBatchRef.current[tab] += 3;
-      } else {
-        nextBatchRef.current[tab] = startPage + 3;
-      }
-    } catch (e) {
-      setState((prev) => ({
-        ...prev,
-        [tab]: {
-          ...prev[tab],
-          isLoading: false,
-          error: e instanceof Error ? e.message : "Failed to load trending content",
-          hasMore: false,
-        },
-      }));
-    }
-  };
-
-  useEffect(() => {
-    loadPage(activeTab, 1, false);
-  }, [activeTab, timeWindow]);
-
-  useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting) return;
-        const tab = activeTab;
-        if (loadingRef.current[tab] || !hasMoreRef.current[tab]) return;
-        loadPage(tab, 1, true);
-      },
-      { rootMargin: "0px 0px 3000px 0px" }
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, timeWindow, current.isLoading, current.hasMore, current.items.length]);
+  isLoadingRef.current = isLoading;
+  hasMoreRef.current = hasMore;
 
   const title = useMemo(() => {
     if (activeTab === "movie") return "Trending Movies";
     if (activeTab === "tv") return "Trending TV Shows";
     return "Trending Anime Series";
   }, [activeTab]);
+
+  // Reset when tab or timeWindow changes
+  useEffect(() => {
+    setItems([]);
+    setHasMore(true);
+    setIsLoading(true);
+    setError(null);
+    nextBatchRef.current = 1;
+    setLoadKey((k) => k + 1);
+  }, [activeTab, timeWindow]);
+
+  // Fetch data (initial + load more)
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchData = async () => {
+      setIsLoadingMore(nextBatchRef.current > 1);
+      setIsLoading(nextBatchRef.current === 1);
+      setError(null);
+      isLoadingRef.current = true;
+
+      try {
+        const pagesToFetch =
+          nextBatchRef.current === 1
+            ? [1, 2, 3]
+            : [nextBatchRef.current, nextBatchRef.current + 1, nextBatchRef.current + 2];
+
+        const rawResults = await Promise.all(
+          pagesToFetch.map((p) => {
+            if (activeTab === "anime") {
+              return fetchJson<{ success: boolean; data: { items: any[] }; hasMore?: boolean }>(
+                `/api/anime?category=trending&page=${p}`,
+                { cacheTtlMs: 120000 }
+              );
+            }
+            return fetchJson<{ results: MediaItem[]; page: number; total_pages: number }>(
+              `/api/tmdb/trending?type=${activeTab}&timeWindow=${timeWindow}&page=${p}`,
+              { cacheTtlMs: 120000 }
+            );
+          })
+        );
+
+        if (cancelled) return;
+
+        const results = rawResults.map((r) => r as any);
+        const merged =
+          activeTab === "anime"
+            ? results.flatMap((r: any) => r.data?.items || r.results || [])
+            : filterReleasedSafeContent(results.flatMap((r: any) => r.results || []));
+
+        const last = results[results.length - 1] as any;
+        const totalPages =
+          activeTab === "anime" ? (last?.hasMore ? 999 : pagesToFetch[pagesToFetch.length - 1]) : last?.total_pages ?? 1;
+        const apiHasMore = pagesToFetch[pagesToFetch.length - 1] < totalPages;
+        const more = apiHasMore && (merged.length > 0 || nextBatchRef.current === 1);
+
+        setItems((prev) => {
+          const combined = nextBatchRef.current === 1 ? merged : [...prev, ...merged];
+          const seenIds = new Set();
+          const deduplicated = combined.filter((item) => {
+            if (!item || !item.id) return false;
+            const key = `${item.media_type || activeTab}-${item.id}`;
+            if (seenIds.has(key)) return false;
+            seenIds.add(key);
+            return true;
+          });
+          return deduplicated;
+        });
+
+        setHasMore(more);
+        if (merged.length > 0) nextBatchRef.current += 3;
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load trending content");
+          setHasMore(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsLoadingMore(false);
+          isLoadingRef.current = false;
+        }
+      }
+    };
+
+    fetchData();
+    return () => { cancelled = true; };
+  }, [loadKey]);
+
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        if (isLoadingRef.current || !hasMoreRef.current) return;
+        setLoadKey((k) => k + 1);
+      },
+      { rootMargin: "0px 0px 3000px 0px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isLoading, hasMore, items.length]);
+
+  const showSentinel = !isLoading && !error && items.length > 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -187,11 +179,11 @@ export default function TrendingPage() {
             </div>
           </div>
 
-          {current.error && <div className="mb-6 text-sm text-red-300">{current.error}</div>}
+          {error && <div className="mb-6 text-sm text-red-300">{error}</div>}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-            {current.items.map((item, idx) => (
-              <div key={`${activeTab}-${item.id}-${idx}`} className="w-full h-full flex justify-center">
+            {items.map((item, idx) => (
+              <div key={`${activeTab}-${item.id}`} className="w-full h-full flex justify-center">
                 {activeTab === "anime" ? (
                   <AnimeCard item={item as any} index={idx} />
                 ) : (
@@ -199,27 +191,29 @@ export default function TrendingPage() {
                 )}
               </div>
             ))}
-            {current.isLoading && current.items.length === 0 && Array.from({ length: 12 }).map((_, i) => (
+            {isLoading && items.length === 0 && Array.from({ length: 12 }).map((_, i) => (
               <div key={`skeleton-${i}`} className="aspect-[2/3] rounded-lg bg-muted/50 animate-pulse" />
             ))}
           </div>
 
-          <div
-            ref={sentinelRef}
-            style={{ overflowAnchor: "none" }}
-            className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
-          >
-            {current.isLoading && current.items.length > 0 ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
-                <span className="text-sm font-medium text-white/50">Loading more...</span>
-              </div>
-            ) : current.hasMore ? (
-              <span className="text-xs">Scroll down for more</span>
-            ) : (
-              <span className="text-xs text-white/20">No more results</span>
-            )}
-          </div>
+          {showSentinel && (
+            <div
+              ref={sentinelRef}
+              style={{ overflowAnchor: "none" }}
+              className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
+            >
+              {isLoadingMore ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
+                  <span className="text-sm font-medium text-white/50">Loading more...</span>
+                </div>
+              ) : hasMore ? (
+                <span className="text-xs">Scroll down for more</span>
+              ) : (
+                <span className="text-xs text-white/20">No more results</span>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>

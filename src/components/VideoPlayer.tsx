@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward, ExternalLink } from "lucide-react";
 import { StreamingSource, getStreamingSources } from "@/lib/streaming-fetch";
-import { fetchJson } from "@/lib/utils";
 
 interface VideoPlayerProps {
   type: "movie" | "tv";
@@ -19,6 +17,7 @@ const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   twoembed: { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
   vidlink: { bg: "bg-violet-600", badge: "bg-violet-500/20 text-violet-300" },
   vidsrc: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
+  vidfast: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -31,13 +30,12 @@ const DEFAULT_TIMEOUT = 12000;
 
 export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerProps) {
   const allSources = useMemo(() => getStreamingSources(type, id, season, episode), [type, id, season, episode]);
-  const [activeSources, setActiveSources] = useState<StreamingSource[]>(allSources);
+  const [sourceList] = useState<StreamingSource[]>(allSources);
   const [currentSource, setCurrentSource] = useState<StreamingSource>(allSources[0]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSpinner, setShowSpinner] = useState(true);
   const [showSources, setShowSources] = useState(false);
-  const [healthChecked, setHealthChecked] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -52,47 +50,35 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
     return () => clearTimeout(timer);
   }, [currentSource?.url]);
 
-  // Check source health on mount
-  useEffect(() => {
-    let cancelled = false;
-    const checkHealth = async () => {
-      try {
-        const res = await fetchJson<{ success: boolean; data: Record<string, boolean> }>("/api/stream/health");
-        if (cancelled || !res.success) return;
-        const health = res.data;
-        const alive = allSources.filter((s) => health[s.type] !== false);
-        if (alive.length > 0) {
-          setActiveSources(alive);
-          setCurrentSource(alive[0]);
-        }
-      } catch { /* use all sources as fallback */ }
-      if (!cancelled) setHealthChecked(true);
-    };
-    checkHealth();
-    return () => { cancelled = true; };
-  }, [allSources]);
+  // Sources are all shown always — if an embed fails the user sees the error and can pick another
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
       "https://vixsrc.to",
-      "https://www.2embed.cc",
+      "https://vidfast.pro",
       "https://vidlink.pro",
-      "https://vidsrc.to"
+      "https://vidsrc.to",
+      "https://www.2embed.cc"
     ];
+    const links: HTMLLinkElement[] = [];
     domains.forEach(href => {
       if (!document.querySelector(`link[rel="preconnect"][href="${href}"]`)) {
         const link = document.createElement("link");
         link.rel = "preconnect";
         link.href = href;
         document.head.appendChild(link);
+        links.push(link);
       }
     });
+    return () => {
+      links.forEach(link => link.remove());
+    };
   }, []);
 
 
 
-  const sources = activeSources;
+  const sources = sourceList;
 
   // Manual fallback: switch to the next source in the list
   const switchToNext = useCallback(() => {
@@ -208,14 +194,10 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
         </div>
       </div>
 
-      <AnimatePresence>
         {showSources && (
-          <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.98 }}
-            transition={{ duration: 0.2 }}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl"
+          <div
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl animate-fade-in-up"
+            style={{ animationDuration: "0.2s" }}
           >
             {sources.map((source) => {
               const isActive = currentSource?.name === source.name;
@@ -240,14 +222,10 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
                 </button>
               );
             })}
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+          )}
 
-      <motion.div
-        key={`${currentSource.url}-${retryCount}`}
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
+      <div
         ref={playerContainerRef}
         className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black ring-1 ring-white/10 relative"
       >
@@ -303,7 +281,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
             />
           </>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }

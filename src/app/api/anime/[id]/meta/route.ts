@@ -31,7 +31,7 @@ export async function GET(
         franchiseNodes,
         tmdbSeasonMap,
       },
-    });
+    }, { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200" } });
   } catch (error) {
     console.error("[Anime Meta Error]:", error);
     return Response.json(

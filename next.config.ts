@@ -4,7 +4,12 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   compress: true,
+  reactStrictMode: true,
   images: {
+    minimumCacheTTL: 86400,
+    formats: ["image/webp", "image/avif"],
+    deviceSizes: [320, 420, 640, 768, 1024, 1280, 1536],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [
       {
         protocol: "https",
@@ -54,8 +59,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   experimental: {
-    // Optimize for serverless
     serverMinification: true,
+    optimizeServerReact: true,
+    scrollRestoration: true,
   },
   // Security headers
   async headers() {

@@ -3,21 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Sidebar } from "@/components/Sidebar";
-import { HeroBanner } from "@/components/HeroBanner";
-import { MediaRow } from "@/components/MediaRow";
 import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent, isTmdbAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
-import { ProviderIcon } from "@/components/ProviderIcon";
-import { AnimeRow } from "@/components/AnimeRow";
-import { AnimatePresence } from "framer-motion";
 import type { AnimeItem } from "@/components/AnimeCard";
 
+const HeroBanner = dynamic(() => import("@/components/HeroBanner").then((m) => m.HeroBanner), { ssr: false });
+const MediaRow = dynamic(() => import("@/components/MediaRow").then((m) => m.MediaRow), { ssr: false });
+const AnimeRow = dynamic(() => import("@/components/AnimeRow").then((m) => m.AnimeRow), { ssr: false });
+const ProviderIcon = dynamic(() => import("@/components/ProviderIcon").then((m) => m.ProviderIcon), { ssr: false });
 const ContinueWatching = dynamic(
   () => import("@/components/ContinueWatching").then((m) => m.ContinueWatching),
   { ssr: false }
 );
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 
 // Languages to exclude from home page (Indian content — most don't have working sources)
 const EXCLUDED_LANGS = new Set(["hi", "te", "ta", "ml", "kn", "bn", "mr", "gu", "pa", "ur"]);
@@ -73,36 +72,15 @@ function sessionShuffle<T>(array: T[] | null | undefined, salt: string = ""): T[
   return arr;
 }
 
-// Preload first N poster images so they render without a flash
-function preloadImages(items: MediaItem[], count = 8) {
-  const fragment = document.createDocumentFragment();
-  items.slice(0, count).forEach((item) => {
-    if (!item.poster_path) return;
-    const url = `https://image.tmdb.org/t/p/w342${item.poster_path}`;
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = url;
-    fragment.appendChild(link);
-  });
-  document.head.appendChild(fragment);
-}
-
-// ─── Section entrance animation ───────────────────────────────────────────────
-function Section({
-  children,
-  delay = 0,
-}: {
-  children: React.ReactNode;
-  delay?: number;
-}) {
-  return (
-    <section
-      className="animate-fade-in-up opacity-0"
-      style={{ animationDelay: `${delay}s`, animationFillMode: "forwards" }}
-    >
+function LazySection({ children, show, placeholderHeight = 0 }: { children: React.ReactNode; show: boolean; placeholderHeight?: number }) {
+  return show ? (
+    <section className="animate-fade-in-up opacity-0" style={{ animationFillMode: "forwards" }}>
       {children}
     </section>
+  ) : (
+    <div className="relative" style={{ height: placeholderHeight || undefined }}>
+      {placeholderHeight > 0 && <div className="absolute inset-0 skeleton-pulse rounded-xl" />}
+    </div>
   );
 }
 
@@ -160,6 +138,13 @@ export default function Home() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [animeList, setAnimeList] = useState<AnimeItem[]>([]);
   const [animeLoading, setAnimeLoading] = useState(true);
+  const [revealedSections, setRevealedSections] = useState(0);
+  useEffect(() => {
+    if (isLoading) return;
+    if (revealedSections >= 8) return;
+    const t = setTimeout(() => setRevealedSections((r) => Math.min(r + 1, 8)), revealedSections === 0 ? 0 : 200);
+    return () => clearTimeout(t);
+  }, [isLoading, revealedSections]);
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
   const heroPoolLengthRef = useRef(0);
@@ -189,8 +174,12 @@ export default function Home() {
     }
   };
 
+  const heroPreloadLinksRef = useRef<HTMLLinkElement[]>([]);
+
   useEffect(() => {
     let cancelled = false;
+    heroPreloadLinksRef.current.forEach(link => link.remove());
+    heroPreloadLinksRef.current = [];
 
     const load = async () => {
       setIsLoading(true);
@@ -200,9 +189,14 @@ export default function Home() {
         // 1) Fire hero + anime + full rows in PARALLEL
         const heroPromise = fetchJson<{
           trending: { results: MediaItem[] };
-          popular: { results: MediaItem[] };
-          topRated: { results: MediaItem[] };
+          popularMovies: { results: MediaItem[] };
+          topRatedMovies: { results: MediaItem[] };
           nowPlaying: { results: MediaItem[] };
+          popularTv: { results: MediaItem[] };
+          topRatedTv: { results: MediaItem[] };
+          onTheAir: { results: MediaItem[] };
+          animeMovies: { results: MediaItem[] };
+          animeTv: { results: MediaItem[] };
         }>("/api/tmdb/home-hero", { cacheTtlMs: 180000 });
 
         const rowsPromise = fetchJson<{
@@ -224,36 +218,50 @@ export default function Home() {
 
         const trendingSafe = filterReleasedSafeContent(heroData.trending?.results || [])
           .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const popularSafe = filterReleasedSafeContent(heroData.popular?.results || []).map(
+        const popularSafe = filterReleasedSafeContent(heroData.popularMovies?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const heroTopSafe = filterReleasedSafeContent(heroData.topRated?.results || []).map(
+        const heroTopSafe = filterReleasedSafeContent(heroData.topRatedTv?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const heroRecentSafe = filterReleasedSafeContent(heroData.nowPlaying?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+
+        const topRatedMovieSafe = filterReleasedSafeContent(heroData.topRatedMovies?.results || []).map(
+          (i) => ({ ...i, media_type: "movie" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const popularTvSafe = filterReleasedSafeContent(heroData.popularTv?.results || []).map(
+          (i) => ({ ...i, media_type: "tv" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const onTheAirSafe = filterReleasedSafeContent(heroData.onTheAir?.results || []).map(
+          (i) => ({ ...i, media_type: "tv" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const animeMovieSafe = filterReleasedSafeContent(heroData.animeMovies?.results || []).map(
+          (i) => ({ ...i, media_type: "movie" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const animeTvSafe = filterReleasedSafeContent(heroData.animeTv?.results || []).map(
+          (i) => ({ ...i, media_type: "tv" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+
         const shuffledTrending = sessionShuffle(trendingSafe, "trending");
         const shuffledPopular = sessionShuffle(popularSafe, "popular");
-
-        // Early hero backdrop preload
-        const heroCandidate = [...trendingSafe, ...popularSafe].find((i) => i.backdrop_path);
-        if (heroCandidate?.backdrop_path) {
-          const preloadLink = document.createElement("link");
-          preloadLink.rel = "preload";
-          preloadLink.as = "image";
-          preloadLink.href = `https://image.tmdb.org/t/p/original${heroCandidate.backdrop_path}`;
-          preloadLink.fetchPriority = "high";
-          document.head.appendChild(preloadLink);
-        }
 
         setTrending(shuffledTrending);
         setPopular(shuffledPopular);
         setTopRated(sessionShuffle(heroTopSafe, "toprated"));
         setRecent(sessionShuffle(heroRecentSafe, "recent"));
-        setHeroFeed([...shuffledTrending, ...shuffledPopular, ...heroTopSafe, ...heroRecentSafe]);
-        preloadImages(shuffledTrending, 6);
-        preloadImages(shuffledPopular, 4);
+        setHeroFeed([
+          ...shuffledTrending,
+          ...shuffledPopular,
+          ...heroTopSafe,
+          ...heroRecentSafe,
+          ...topRatedMovieSafe,
+          ...popularTvSafe,
+          ...onTheAirSafe,
+          ...animeMovieSafe,
+          ...animeTvSafe,
+        ]);
 
         // ── Full rows data arrives (more TMDB pages) ────────────────────
         const [rowsData, animeResponse] = await Promise.all([rowsPromise, animePromise]);
@@ -277,9 +285,10 @@ export default function Home() {
         for (const item of heroBackdrops) {
           const link = document.createElement("link");
           link.rel = "preload"; link.as = "image";
-          link.href = `https://image.tmdb.org/t/p/original${item.backdrop_path}`;
+          link.href = `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`;
           link.fetchPriority = "high";
           document.head.appendChild(link);
+          heroPreloadLinksRef.current.push(link);
         }
 
         setTrending(sessionShuffle(fullTrending, "trending"));
@@ -308,42 +317,27 @@ export default function Home() {
     };
 
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      heroPreloadLinksRef.current.forEach(link => link.remove());
+    };
   }, []);
 
   function pickRandom<T>(arr: T[]): T | null {
     return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
   }
 
-  // ─── Hero pool ─────────────────────────────────────────────────────────────
+  // ─── Hero pool: exactly 1 movie, 1 TV show, 1 anime ──────────────────────
   const heroPool = useMemo(() => {
     const eligible = heroFeed.filter((i) => i.backdrop_path);
     const movies = eligible.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
     const shows = eligible.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
     const animeItems = eligible.filter((i) => isTmdbAnime(i));
 
-    const result: MediaItem[] = [];
     const m = pickRandom(movies);
-    if (m) result.push(m);
     const s = pickRandom(shows);
-    if (s) result.push(s);
     const a = pickRandom(animeItems);
-    if (a) result.push(a);
-
-    // Fill up to 3 with random unique items
-    if (result.length < 3) {
-      const seen = new Set(result.map((r) => r.id));
-      const shuffled = [...eligible].sort(() => Math.random() - 0.5);
-      for (const item of shuffled) {
-        if (!seen.has(item.id)) {
-          seen.add(item.id);
-          result.push(item);
-          if (result.length >= 3) break;
-        }
-      }
-    }
-
-    return result;
+    return [m, s, a].filter(Boolean) as MediaItem[];
   }, [heroFeed]);
 
   const hero = heroPool[heroIndex] || heroPool[0] || null;
@@ -371,15 +365,18 @@ export default function Home() {
 
   // ── Preload all hero backdrop images for instant transitions ────────────
   useEffect(() => {
+    const links: HTMLLinkElement[] = [];
     heroPool.forEach((item) => {
       if (!item.backdrop_path) return;
       const link = document.createElement("link");
       link.rel = "preload";
       link.as = "image";
-      link.href = `https://image.tmdb.org/t/p/original${item.backdrop_path}`;
+      link.href = `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`;
       link.fetchPriority = "high";
       document.head.appendChild(link);
+      links.push(link);
     });
+    return () => links.forEach(l => l.remove());
   }, [heroPool]);
 
   // ── Auto-rotation timer (resets on manual nav) ─────────────────────────
@@ -418,9 +415,7 @@ export default function Home() {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <AnimatePresence mode="wait">
               <HeroBanner key={hero?.id || "empty"} item={hero} />
-            </AnimatePresence>
             {/* Hero dot indicators — sit just above the bottom edge of the hero */}
             {heroPool.length > 1 && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
@@ -501,7 +496,7 @@ export default function Home() {
         <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto py-8 space-y-10">
 
           {/* ─── 1. TRENDING NOW ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 1} placeholderHeight={360}>
             <MediaRow
               title="Trending Now"
               items={trending}
@@ -509,10 +504,10 @@ export default function Home() {
               seeAllHref="/browse/trending"
               accentIcon={<TrendingUp className="w-4 h-4 text-[#7288AE]" />}
             />
-          </Section>
+          </LazySection>
 
           {/* ─── 2. POPULAR NOW ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 2} placeholderHeight={360}>
             <MediaRow
               title="Popular Movies"
               items={popular}
@@ -520,10 +515,10 @@ export default function Home() {
               seeAllHref="/browse/movies/popular"
               accentIcon={<Flame className="w-4 h-4 text-orange-400" />}
             />
-          </Section>
+          </LazySection>
 
           {/* ─── 3. TOP RATED ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 3} placeholderHeight={360}>
             <MediaRow
               title="Top Rated TV"
               items={topRated}
@@ -531,10 +526,10 @@ export default function Home() {
               seeAllHref="/browse/tv/top-rated"
               accentIcon={<Star className="w-4 h-4 text-amber-400" />}
             />
-          </Section>
+          </LazySection>
 
           {/* ─── STREAMING SERVICES ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 4} placeholderHeight={280}>
             <SectionHeading
               title="Streaming Services"
               subtitle="Browse by platform"
@@ -550,19 +545,16 @@ export default function Home() {
                     boxShadow: `0 0 0 1px ${p.color}18, 0 8px 32px ${p.color}10`,
                   }}
                 >
-                  {/* Animated background glow blob */}
                   <div
                     className="absolute -inset-4 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-2xl"
                     style={{ background: `radial-gradient(circle at 60% 40%, ${p.color}30, transparent 70%)` }}
                   />
-                  {/* Top accent stripe */}
                   <div
                     className="absolute top-0 inset-x-0 h-[2px] rounded-t-2xl opacity-60 group-hover:opacity-100 transition-opacity"
                     style={{ background: `linear-gradient(to right, transparent, ${p.color}, transparent)` }}
                   />
 
                   <div className="relative p-5 flex flex-col gap-4 h-full min-h-[110px]">
-                    {/* Logo + glow */}
                     <div className="flex items-start justify-between">
                       <div
                         className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-white/10 shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
@@ -579,7 +571,6 @@ export default function Home() {
                       />
                     </div>
 
-                    {/* Name + tagline */}
                     <div>
                       <span className="block text-base font-black text-white tracking-tight group-hover:text-white transition-colors">
                         {p.name}
@@ -595,10 +586,10 @@ export default function Home() {
                 </Link>
               ))}
             </div>
-          </Section>
+          </LazySection>
 
           {/* ─── GENRE UNIVERSE ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 5} placeholderHeight={260}>
             <SectionHeading
               title="Genre Universe"
               subtitle="Browse by category"
@@ -623,22 +614,20 @@ export default function Home() {
                 <ChevronRight className="w-3 h-3 text-[#7288AE]" />
               </Link>
             </div>
-          </Section>
-
-
+          </LazySection>
 
           {/* ─── ANIME SPOTLIGHT ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 6} placeholderHeight={350}>
             <AnimeRow
               title="Trending Anime"
               items={animeList}
               isLoading={animeLoading}
               seeAllHref="/anime"
             />
-          </Section>
+          </LazySection>
 
           {/* ─── RECENTLY ADDED ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 7} placeholderHeight={360}>
             <MediaRow
               title="Recently Added"
               items={recent}
@@ -646,17 +635,17 @@ export default function Home() {
               seeAllHref="/browse/movies"
               accentIcon={<Clock className="w-4 h-4 text-[#7288AE]" />}
             />
-          </Section>
+          </LazySection>
 
           {/* ─── RECOMMENDED FOR YOU ─── */}
-          <Section>
+          <LazySection show={revealedSections >= 8} placeholderHeight={360}>
             <MediaRow
               title="Recommended For You"
               items={recommended}
               isLoading={isLoading}
               accentIcon={<Sparkles className="w-4 h-4 text-violet-400" />}
             />
-          </Section>
+          </LazySection>
 
           {/* ─── FOOTER TAG ─── */}
           <footer className="border-t border-[#7288AE]/10 pt-8 pb-4 text-center">

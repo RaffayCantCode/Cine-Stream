@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Star, Play, Languages } from "lucide-react";
-import { motion } from "framer-motion";
-import { memo } from "react";
+import { Star, Play } from "lucide-react";
 import { isTmdbAnime } from "@/lib/utils";
 
 interface MediaItem {
@@ -24,29 +22,30 @@ interface MediaCardProps {
   index?: number;
 }
 
-export const MediaCard = memo(function MediaCard({ item, index = 0 }: MediaCardProps) {
+const CARD_WRAPPER_STYLE: React.CSSProperties = {
+  animation: "fade-in-up 0.35s ease-out both",
+};
+
+export function MediaCard({ item, index = 0 }: MediaCardProps) {
   const isMovie = item.media_type === "movie" || !!item.title;
   const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
   const title = item.title || item.name || "";
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.poster_path
-    ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+    ? `https://image.tmdb.org/t/p/w185${item.poster_path}`
     : null;
 
   const isPriority = index < 6;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.03, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+    <div
       className="row-item"
-      layout
+      style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${index * 0.03}s` }}
     >
       <Link
         href={link}
-        className="group relative block aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 overflow-hidden rounded-2xl bg-muted/50 transition-all duration-500 hover:scale-[1.08] hover:z-10 focus:outline-none will-change-transform"
+        className="group relative block aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 overflow-hidden rounded-2xl bg-muted/50 transition-all duration-500 hover:scale-[1.08] hover:z-10 focus:outline-none"
         style={{ transformOrigin: "center bottom" }}
       >
         {posterUrl ? (
@@ -55,7 +54,7 @@ export const MediaCard = memo(function MediaCard({ item, index = 0 }: MediaCardP
             alt={title}
             className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
             loading={isPriority ? "eager" : "lazy"}
-            decoding={isPriority ? "sync" : "async"}
+            decoding="async"
             fetchPriority={isPriority ? "high" : "low"}
             width={210}
             height={315}
@@ -72,7 +71,7 @@ export const MediaCard = memo(function MediaCard({ item, index = 0 }: MediaCardP
         <div className="absolute inset-0 flex flex-col justify-between p-3.5 opacity-0 group-hover:opacity-100 transition-all duration-500">
           {item.vote_average ? (
             <div className="flex justify-end">
-              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10 shadow-lg">
+              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">
                 <Star className="w-3 h-3 fill-current" />
                 {item.vote_average.toFixed(1)}
               </div>
@@ -82,7 +81,7 @@ export const MediaCard = memo(function MediaCard({ item, index = 0 }: MediaCardP
           )}
 
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#111844] to-[#4B5694] flex items-center justify-center shadow-2xl shadow-[#4B5694]/50 translate-y-4 group-hover:translate-y-0 transition-all duration-500 group-hover:scale-110">
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#111844] to-[#4B5694] flex items-center justify-center translate-y-4 group-hover:translate-y-0 transition-all duration-500 group-hover:scale-110">
               <Play className="w-6 h-6 fill-white text-white ml-0.5" />
             </div>
           </div>
@@ -113,13 +112,13 @@ export const MediaCard = memo(function MediaCard({ item, index = 0 }: MediaCardP
 
         {isTmdbAnime(item) && (
           <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-md backdrop-blur-sm tracking-wider uppercase group-hover:opacity-0 transition-opacity duration-300">
-            <Languages className="w-2.5 h-2.5" /> Eng Dub
+            Eng Dub
           </div>
         )}
 
         <div className="absolute inset-0 rounded-2xl ring-1 ring-white/0 group-hover:ring-[#7288AE]/40 transition-all duration-500 pointer-events-none" />
         <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: "inset 0 0 30px rgba(213,82,163,0.15)" }} />
       </Link>
-    </motion.div>
+    </div>
   );
-});
+}

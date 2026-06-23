@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: { items },
       hasMore: items.length > 0,
-    });
+    }, { headers: { "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1200" } });
   } catch (error) {
     console.error("[Anime API Route Error]:", error);
     return Response.json(

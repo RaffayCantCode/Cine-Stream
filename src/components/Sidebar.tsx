@@ -15,7 +15,7 @@ import {
   Menu,
   X
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
@@ -28,7 +28,7 @@ const navItems: { href: string; icon: any; label: string; subtitle?: string }[] 
   { href: "/anime", icon: Sparkles, label: "Anime", subtitle: "JP Dub + Eng Sub" },
 ];
 
-export function Sidebar() {
+export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
@@ -267,4 +267,4 @@ export function Sidebar() {
       </aside>
     </>
   );
-}
+});

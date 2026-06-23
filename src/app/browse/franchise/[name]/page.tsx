@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { MediaCard } from "@/components/MediaCard";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import Link from "next/link";

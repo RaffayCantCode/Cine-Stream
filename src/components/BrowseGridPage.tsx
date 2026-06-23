@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from "next/dynamic";
+const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { MediaCard } from "@/components/MediaCard";
 import { fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
 
@@ -141,13 +142,13 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           )}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-            {items.map((item, idx) => (
-              <div key={`${item.media_type ?? "item"}-${item.id}-${idx}`} className="w-full h-full flex justify-center">
+            {items.slice(0, 60).map((item, idx) => (
+              <div key={`${item.media_type ?? "item"}-${item.id}`} className="w-full h-full flex justify-center">
                 <MediaCard item={item} index={idx} />
               </div>
             ))}
             {isLoading && items.length === 0 && Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="aspect-[2/3] w-full rounded-xl premium-glass skeleton-pulse" />
+              <div key={i} className="aspect-[2/3] w-full rounded-xl bg-muted/50 skeleton-pulse" />
             ))}
           </div>
 

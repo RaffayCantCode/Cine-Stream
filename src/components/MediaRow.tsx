@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { MediaCard } from "./MediaCard";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { motion } from "framer-motion";
 
 interface MediaItem {
   id: number;
@@ -21,7 +20,6 @@ interface MediaRowProps {
   items?: MediaItem[];
   isLoading?: boolean;
   seeAllHref?: string;
-  /** Optional icon node displayed before the title */
   accentIcon?: React.ReactNode;
 }
 
@@ -34,7 +32,7 @@ function SkeletonCard({ index }: { index: number }) {
   );
 }
 
-export function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: MediaRowProps) {
+export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: MediaRowProps) {
   if (!isLoading && (!items || items.length === 0)) return null;
 
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +43,10 @@ export function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: Me
     const el = scrollerRef.current;
     if (!el) return;
 
+    let rafId: number | null = null;
+
     const update = () => {
+      rafId = null;
       const target = scrollerRef.current;
       if (!target) return;
       const maxScrollLeft = target.scrollWidth - target.clientWidth;
@@ -53,13 +54,20 @@ export function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: Me
       setCanScrollRight(target.scrollLeft < maxScrollLeft - 2);
     };
 
+    const throttledUpdate = () => {
+      if (rafId === null) {
+        rafId = requestAnimationFrame(update);
+      }
+    };
+
     update();
-    el.addEventListener("scroll", update, { passive: true });
+    el.addEventListener("scroll", throttledUpdate, { passive: true });
     window.addEventListener("resize", update);
 
     return () => {
-      el.removeEventListener("scroll", update);
+      el.removeEventListener("scroll", throttledUpdate);
       window.removeEventListener("resize", update);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [items?.length, isLoading]);
 
@@ -71,15 +79,13 @@ export function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: Me
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="py-6 md:py-8 space-y-5"
+    <div
+      className="py-6 md:py-8 space-y-5 animate-fade-in-up"
+      style={{ animationDuration: "0.5s" }}
     >
       <div className="flex items-center justify-between px-5 md:px-14">
         <div className="flex items-center gap-3">
-          <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg shadow-[#7288AE]/20" />
+          <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
           <div className="flex items-center gap-2">
             {accentIcon}
             <h2 className="text-lg md:text-2xl font-black text-white tracking-tight">{title}</h2>
@@ -134,6 +140,6 @@ export function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: Me
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
-}
+});
