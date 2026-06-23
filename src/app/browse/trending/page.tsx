@@ -147,7 +147,7 @@ export default function TrendingPage() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading, hasMore, items.length]);
+  }, [isLoading]);
 
   const showSentinel = !isLoading && !error && items.length > 0;
 

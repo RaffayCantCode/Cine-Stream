@@ -20,6 +20,10 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const isLoadingRef = useRef(true);
+  const hasMoreRef = useRef(true);
+  isLoadingRef.current = isLoading;
+  hasMoreRef.current = hasMore;
 
   useEffect(() => {
     setItems([]);
@@ -110,19 +114,17 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries[0].isIntersecting) return;
-        if (isLoading || !hasMore) return;
+        if (isLoadingRef.current || !hasMoreRef.current) return;
         setPage((p) => p + 3);
       },
       { rootMargin: "0px 0px 3000px 0px" }
     );
-
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading, hasMore, items.length]);
+  }, [isLoading]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">

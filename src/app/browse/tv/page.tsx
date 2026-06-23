@@ -182,7 +182,7 @@ export default function BrowseTvPage() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading, hasMore, shows.length]);
+  }, [isLoading]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">

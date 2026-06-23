@@ -183,7 +183,7 @@ export default function BrowseMoviesPage() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLoading, hasMore, movies.length]);
+  }, [isLoading]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
