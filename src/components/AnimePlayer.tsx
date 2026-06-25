@@ -20,6 +20,7 @@ interface AnimePlayerProps {
   episodeOffset?: number;
   tmdbId?: number | null;
   tmdbSeason?: number | null;
+  startProgress?: number;
   onAutoNext?: () => void;
 }
 
@@ -40,7 +41,8 @@ function buildProviderUrl(
   episode: number,
   episodeOffset: number,
   tmdbId: number | null | undefined,
-  tmdbSeason: number | null | undefined
+  tmdbSeason: number | null | undefined,
+  startProgress?: number
 ): string {
   const clean = (id: string | null | undefined) => id?.replace(/\D/g, "") || null;
   const curAni = clean(animeId);
@@ -62,9 +64,10 @@ function buildProviderUrl(
         ? `https://animeplay.cfd/stream/mal/${malId_}/${ep}/sub`
         : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
     case "vidlink":
+      const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
       return tmdbId
-        ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`
-        : `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?fallback=true`;
+        ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=false${timeParam}`
+        : `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?primaryColor=4b5694&autoplay=false&fallback=true${timeParam}`;
     case "embedsu":
       return tmdbId
         ? `https://embed.su/embed/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`
@@ -84,6 +87,7 @@ export function AnimePlayer({
   episodeOffset,
   tmdbId,
   tmdbSeason,
+  startProgress,
   onAutoNext
 }: AnimePlayerProps) {
   const [sourceIndex, setSourceIndex] = useState(() => {
@@ -142,7 +146,7 @@ export function AnimePlayer({
     PROVIDERS.forEach(p => {
       urls[p.provider] = buildProviderUrl(
         p.provider, animeId, malId, rootAnimeId, rootMalId,
-        episode, episodeOffset || 0, tmdbId, tmdbSeason
+        episode, episodeOffset || 0, tmdbId, tmdbSeason, startProgress
       );
     });
     setResolvedUrls(urls);
@@ -169,6 +173,44 @@ export function AnimePlayer({
       playerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [episode]);
+
+  const lastSaveTimeRef = useRef<number>(0);
+
+  // Listen to postMessage for progress updates (e.g., from VidLink)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data) return;
+      
+      if (event.data.type === 'video.progress' && event.data.data) {
+        const { time, duration } = event.data.data;
+        if (typeof time === 'number') {
+          const now = Date.now();
+          if (now - lastSaveTimeRef.current > 10000) {
+            lastSaveTimeRef.current = now;
+            const cleanId = animeId?.replace(/\D/g, "");
+            const numericId = parseInt(cleanId || "", 10);
+            if (!Number.isNaN(numericId)) {
+              fetch('/api/watch-history/progress', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mediaId: numericId,
+                  mediaType: "anime",
+                  season: tmdbSeason || 1,
+                  episode: episode || 1,
+                  progress: Math.floor(time),
+                  duration: Math.floor(duration || 0)
+                })
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [animeId, episode, tmdbSeason]);
 
 
 

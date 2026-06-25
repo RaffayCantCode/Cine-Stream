@@ -10,6 +10,7 @@ interface VideoPlayerProps {
   season?: number;
   episode?: number;
   title?: string;
+  startProgress?: number;
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
@@ -30,8 +31,8 @@ const DEFAULT_TIMEOUT = 12000;
 
 const SOURCE_PREF_KEY = "sv_video_source";
 
-export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerProps) {
-  const sources = useMemo(() => getStreamingSources(type, id, season, episode), [type, id, season, episode]);
+export function VideoPlayer({ type, id, season, episode, title, startProgress }: VideoPlayerProps) {
+  const sources = useMemo(() => getStreamingSources(type, id, season, episode, startProgress), [type, id, season, episode, startProgress]);
 
   // Restore preferred source from localStorage (survives episode changes via key-based remount)
   const [currentSource, setCurrentSource] = useState<StreamingSource>(() => {
@@ -50,6 +51,7 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vixsrc;
+  const lastSaveTimeRef = useRef<number>(0);
 
   // Auto-dismiss spinner after 2.5 seconds to prevent frozen overlay
   useEffect(() => {
@@ -85,6 +87,40 @@ export function VideoPlayer({ type, id, season, episode, title }: VideoPlayerPro
       links.forEach(link => link.remove());
     };
   }, []);
+
+  // Listen to postMessage for progress updates (e.g., from VidLink)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data) return;
+      
+      // VidLink emits 'video.progress'
+      if (event.data.type === 'video.progress' && event.data.data) {
+        const { time, duration } = event.data.data;
+        if (typeof time === 'number') {
+          const now = Date.now();
+          // Save every 10 seconds
+          if (now - lastSaveTimeRef.current > 10000) {
+            lastSaveTimeRef.current = now;
+            fetch('/api/watch-history/progress', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                mediaId: id,
+                mediaType: type,
+                season: season || 0,
+                episode: episode || 0,
+                progress: Math.floor(time),
+                duration: Math.floor(duration || 0)
+              })
+            }).catch(() => {});
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [id, type, season, episode]);
 
   // Manual fallback: switch to the next source in the list
   const switchToNext = useCallback(() => {

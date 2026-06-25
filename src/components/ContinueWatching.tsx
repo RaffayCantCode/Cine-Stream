@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Play, X, Tv, Film } from "lucide-react";
 import useSWR, { mutate } from "swr";
+import useEmblaCarousel from "embla-carousel-react";
 
 interface WatchHistoryItem {
   id: number;
@@ -11,9 +12,10 @@ interface WatchHistoryItem {
   mediaType: "movie" | "tv" | "anime";
   title: string;
   posterPath: string | null;
-  season?: number;
   episode?: number;
   episodeName?: string;
+  progress?: number;
+  duration?: number;
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -25,6 +27,11 @@ export function ContinueWatching() {
     status === "authenticated" ? "/api/watch-history" : null,
     fetcher
   );
+
+  const [emblaRef] = useEmblaCarousel({
+    dragFree: true,
+    containScroll: "trimSnaps",
+  });
 
   if (status !== "authenticated" || isLoading || !data?.items?.length) {
     return null;
@@ -39,16 +46,17 @@ export function ContinueWatching() {
   };
 
   const handlePlay = (item: WatchHistoryItem) => {
+    const timeParam = item.progress && item.progress > 0 ? `&t=${item.progress}` : "";
     if (item.mediaType === "movie") {
-      router.push(`/movie/${item.mediaId}?autoplay=1`);
+      router.push(`/movie/${item.mediaId}?autoplay=1${timeParam}`);
     } else if (item.mediaType === "anime") {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
-      router.push(`/anime/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
+      router.push(`/anime/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}${timeParam}`);
     } else {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
-      router.push(`/tv/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
+      router.push(`/tv/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}${timeParam}`);
     }
   };
 
@@ -60,8 +68,9 @@ export function ContinueWatching() {
           <h2 className="text-base font-bold text-white tracking-wide">Continue Watching</h2>
         </div>
 
-        <div className="flex gap-4 overflow-x-auto pb-3 hide-scrollbar">
-          {data.items.map((item: WatchHistoryItem, i: number) => {
+        <div className="overflow-hidden pb-3" ref={emblaRef}>
+          <div className="flex gap-4">
+            {data.items.map((item: WatchHistoryItem, i: number) => {
             const posterUrl = item.posterPath
               ? item.mediaType === "anime"
                 ? item.posterPath
@@ -72,7 +81,7 @@ export function ContinueWatching() {
               <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 onClick={() => handlePlay(item)}
-                className="relative shrink-0 w-[130px] sm:w-[150px] group cursor-pointer animate-fade-in-up"
+                className="flex-[0_0_auto] w-[130px] sm:w-[150px] relative group cursor-pointer animate-fade-in-up"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
                 <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card ring-1 ring-white/[0.06] mb-2.5 relative">
@@ -135,7 +144,8 @@ export function ContinueWatching() {
                 )}
               </div>
             );
-          })}
+            })}
+          </div>
         </div>
       </div>
     </section>

@@ -85,8 +85,11 @@ export default function TvDetailPage() {
         }
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
-        const urlSeason = Number(searchParams.get("season") || "");
-        setSelectedSeason(urlSeason > 0 ? urlSeason : firstSeason);
+        setSelectedSeason(prev => {
+          if (prev > 1) return prev;
+          const urlSeason = Number(searchParams.get("season") || "");
+          return urlSeason > 0 ? urlSeason : firstSeason;
+        });
       } catch (error) {
         setShow(null);
         setError(error instanceof Error ? error.message : "Failed to fetch show");
@@ -324,6 +327,7 @@ export default function TvDetailPage() {
               season={selectedSeason}
               episode={selectedEpisode}
               title={`${show.name} - S${selectedSeason}E${selectedEpisode}`}
+              startProgress={Number(searchParams.get("t") || 0)}
             />
             <div className="mt-3 text-sm text-white/60">
               <span className="font-bold text-white">Now Playing: </span>

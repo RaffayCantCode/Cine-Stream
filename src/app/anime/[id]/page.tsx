@@ -152,10 +152,18 @@ export default function AnimeDetailPage() {
           tmdbIdRef.current = a.tmdbId || null;
 
           // Determine which season should be pre-selected:
-          // 1) The openedSeasonId returned by the server (the URL ID resolves to its canonical season)
-          // 2) Fallback: the first season in the list
+          // 1) Explicit season via URL (mapped from TMDB seasonNum to AniList ID)
+          // 2) The openedSeasonId returned by the server
+          // 3) Fallback: the first season in the list
           const seasons = a.seasons || [];
-          const openedId = a.openedSeasonId || id;
+          let urlSeasonId = null;
+          const urlSeasonNum = Number(searchParams.get("season") || "");
+          if (urlSeasonNum > 0 && data.data.tmdbSeasonMap) {
+            const entry = Object.entries(data.data.tmdbSeasonMap).find(([_, num]) => num === urlSeasonNum);
+            if (entry) urlSeasonId = entry[0];
+          }
+
+          const openedId = urlSeasonId || a.openedSeasonId || id;
 
           // Find it in the season list
           const matchingSeason = seasons.find(s => s.id === openedId);
@@ -560,6 +568,7 @@ export default function AnimeDetailPage() {
                           episodeOffset={currentEpisodeOffset}
                           tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
                           tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
+                          startProgress={Number(searchParams.get("t") || 0)}
                           onAutoNext={handleAutoNext}
                         />
                       )}

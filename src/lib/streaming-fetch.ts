@@ -50,7 +50,7 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
 ];
 
-function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number): string {
+function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): string {
   switch (api.type) {
     case "vixsrc":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
@@ -61,8 +61,9 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     case "vidlink":
-      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=4b5694`;
-      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=4b5694`;
+      const timeParam = progress && progress > 0 ? `&t=${progress}` : "";
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=4b5694&autoplay=false${timeParam}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=4b5694&autoplay=false${timeParam}`;
 
     case "vidsrc":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
@@ -85,9 +86,9 @@ export interface StreamingSource {
   supportsNativeFullscreen?: boolean;
 }
 
-export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number): StreamingSource[] {
+export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource[] {
   return STREAMING_APIS.map((api) => ({
-    url: buildEmbedUrl(api, type, id, season, episode),
+    url: buildEmbedUrl(api, type, id, season, episode, progress),
     name: api.name,
     type: api.type,
     quality: api.quality,
@@ -95,8 +96,8 @@ export function getStreamingSources(type: "movie" | "tv", id: number, season?: n
   }));
 }
 
-export function getPrimarySource(type: "movie" | "tv", id: number, season?: number, episode?: number): StreamingSource {
-  const sources = getStreamingSources(type, id, season, episode);
+export function getPrimarySource(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource {
+  const sources = getStreamingSources(type, id, season, episode, progress);
   return sources[0];
 }
 
