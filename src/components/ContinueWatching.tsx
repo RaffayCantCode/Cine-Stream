@@ -12,6 +12,7 @@ interface WatchHistoryItem {
   mediaType: "movie" | "tv" | "anime";
   title: string;
   posterPath: string | null;
+  season?: number;
   episode?: number;
   episodeName?: string;
   progress?: number;
