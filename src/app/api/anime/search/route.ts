@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     return Response.json({
       success: true,
       data: { animes },
-    }, { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } });
+    });
   } catch (error) {
     console.error("[Anime Search Error]:", error);
     return Response.json({ error: "Failed to search anime", success: false }, { status: 500 });

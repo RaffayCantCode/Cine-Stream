@@ -5,7 +5,7 @@ import { tmdbFetch } from "@/lib/tmdb";
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const genreId = searchParams.get("genreId");
-  const sortBy = searchParams.get("sortBy") || "popularity.desc";
+  let sortBy = searchParams.get("sortBy") || "popularity.desc";
   const page = searchParams.get("page") || "1";
   const withProviders = searchParams.get("withProviders");
   const watchRegion = searchParams.get("watchRegion");
@@ -13,6 +13,10 @@ export async function GET(request: NextRequest) {
   const year = searchParams.get("year");
   // Per-provider monetization override (defaults to "flatrate")
   const monetizationTypes = searchParams.get("monetizationTypes") || "flatrate";
+
+  // Map generic "release_date" sort to TMDB's tv-specific "first_air_date"
+  if (sortBy === "release_date.desc") sortBy = "first_air_date.desc";
+  if (sortBy === "release_date.asc") sortBy = "first_air_date.asc";
 
   const params: Record<string, string> = { sort_by: sortBy, page };
   if (genreId) params.with_genres = genreId;
