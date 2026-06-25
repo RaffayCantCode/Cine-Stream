@@ -184,7 +184,7 @@ export default function BrowseTvPage() {
           check();
         }
       },
-      { rootMargin: "1500px" } // Trigger well before the bottom
+      { rootMargin: "400px" } // Fixed dead zone: match threshold closely
     );
 
     if (sentinelRef.current) {
@@ -198,7 +198,7 @@ export default function BrowseTvPage() {
   useEffect(() => {
     if (!sentinelRef.current) return;
     const rect = sentinelRef.current.getBoundingClientRect();
-    if (rect.top <= window.innerHeight * 2) {
+    if (rect.top <= window.innerHeight + 800) {
       triggerLoadRef.current?.();
     }
   }, [shows.length]);
@@ -213,7 +213,7 @@ export default function BrowseTvPage() {
           <div>
             <h1 className="text-4xl font-bold text-white">TV Shows</h1>
             <p className="text-sm text-white/40 mt-2">
-              Explore series by genre and sort order, then keep scrolling for more.
+              Discover the latest episodes, timeless classics, and hidden gems.
             </p>
           </div>
           {!debouncedSearch.trim() && (
@@ -276,7 +276,7 @@ export default function BrowseTvPage() {
                   : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
               )}
             >
-              All Shows
+              All TV Shows
             </button>
             {genres.map((genre) => (
               <button
@@ -328,7 +328,7 @@ export default function BrowseTvPage() {
               <span className="text-sm font-medium text-white/50">Loading more...</span>
             </div>
           ) : shows.length > 0 && hasMore ? (
-            <span className="text-xs">Scroll down for more</span>
+            <button onClick={() => triggerLoadRef.current?.()} className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer">Load More</button>
           ) : shows.length > 0 && !hasMore ? (
             <span className="text-xs text-white/20">No more results</span>
           ) : null}

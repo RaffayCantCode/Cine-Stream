@@ -185,7 +185,7 @@ export default function BrowseMoviesPage() {
           check();
         }
       },
-      { rootMargin: "1500px" } // Trigger well before the bottom
+      { rootMargin: "400px" } // Fixed dead zone: match threshold closely
     );
 
     if (sentinelRef.current) {
@@ -193,13 +193,13 @@ export default function BrowseMoviesPage() {
     }
 
     return () => observer.disconnect();
-  }, []);  // stable — reads live values from refs
+  }, []);
 
-  // Re-check after items change (new items might still leave sentinel visible)
+  // Re-check after items change
   useEffect(() => {
     if (!sentinelRef.current) return;
     const rect = sentinelRef.current.getBoundingClientRect();
-    if (rect.top <= window.innerHeight * 2) {
+    if (rect.top <= window.innerHeight + 800) {
       triggerLoadRef.current?.();
     }
   }, [movies.length]);
@@ -330,7 +330,7 @@ export default function BrowseMoviesPage() {
               <span className="text-sm font-medium text-white/50">Loading more...</span>
             </div>
           ) : movies.length > 0 && hasMore ? (
-            <span className="text-xs">Scroll down for more</span>
+            <button onClick={() => triggerLoadRef.current?.()} className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer">Load More</button>
           ) : movies.length > 0 && !hasMore ? (
             <span className="text-xs text-white/20">No more results</span>
           ) : null}

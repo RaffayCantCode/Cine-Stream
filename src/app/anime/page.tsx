@@ -195,7 +195,7 @@ export default function AnimeBrowsePage() {
           check();
         }
       },
-      { rootMargin: "1500px" } // Trigger well before the bottom
+      { rootMargin: "400px" } // Fixed dead zone: match threshold closely
     );
 
     if (sentinelRef.current) {
@@ -209,7 +209,7 @@ export default function AnimeBrowsePage() {
   useEffect(() => {
     if (!sentinelRef.current) return;
     const rect = sentinelRef.current.getBoundingClientRect();
-    if (rect.top <= window.innerHeight * 2) {
+    if (rect.top <= window.innerHeight + 800) {
       triggerLoadRef.current?.();
     }
   }, [items.length]);
@@ -310,7 +310,6 @@ export default function AnimeBrowsePage() {
 
           <div
             ref={sentinelRef}
-            style={{ overflowAnchor: "none" }}
             className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
           >
             {isLoading && items.length > 0 ? (
@@ -319,7 +318,7 @@ export default function AnimeBrowsePage() {
                 <span className="text-sm font-medium text-white/50">Loading more...</span>
               </div>
             ) : items.length > 0 && hasMore ? (
-              <span className="text-xs">Scroll down for more</span>
+              <button onClick={() => triggerLoadRef.current?.()} className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer">Load More</button>
             ) : items.length > 0 && !hasMore ? (
               <span className="text-xs text-white/20">No more results</span>
             ) : null}
