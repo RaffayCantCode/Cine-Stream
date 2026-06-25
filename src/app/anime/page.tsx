@@ -181,26 +181,37 @@ export default function AnimeBrowsePage() {
     setLoadKey(k => k + 1);
   }, [sortBy, selectedGenre, debouncedQuery]);
 
-  // ── Scroll-to-load-more: window scroll listener (works on Netlify with overflow-x:hidden body) ──
+  // ── Scroll-to-load-more: Intersection Observer ──
   useEffect(() => {
     const check = () => {
       if (isLoadingRef.current || !hasMoreRef.current) return;
-      const sentinel = sentinelRef.current;
-      if (!sentinel) return;
-      const rect = sentinel.getBoundingClientRect();
-      if (rect.top <= window.innerHeight * 2) {
-        setPage(p => (p !== null ? p + 1 : null));
-      }
+      setPage(p => (p !== null ? p + 1 : null));
     };
     triggerLoadRef.current = check;
-    window.addEventListener('scroll', check, { passive: true });
-    check(); // immediate check
-    return () => window.removeEventListener('scroll', check);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          check();
+        }
+      },
+      { rootMargin: "1500px" } // Trigger well before the bottom
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => observer.disconnect();
   }, []);
 
   // Re-check after items change
   useEffect(() => {
-    triggerLoadRef.current?.();
+    if (!sentinelRef.current) return;
+    const rect = sentinelRef.current.getBoundingClientRect();
+    if (rect.top <= window.innerHeight * 2) {
+      triggerLoadRef.current?.();
+    }
   }, [items.length]);
 
   return (
