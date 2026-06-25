@@ -1,4 +1,4 @@
-import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
+import { tmdbFetch } from "@/lib/tmdb";
 
 export async function GET(
   request: Request,
@@ -39,7 +39,7 @@ export async function GET(
       }
     }
 
-    return Response.json(result, { headers: cacheHeaders(3600) });
+    return Response.json(result);
   } catch (error) {
     return Response.json({ error: "Failed to fetch movie details" }, { status: 500 });
   }
