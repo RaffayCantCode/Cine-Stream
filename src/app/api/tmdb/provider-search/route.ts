@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
+import { tmdbFetch } from "@/lib/tmdb";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -17,16 +16,12 @@ export async function GET(request: Request) {
 
   try {
     // 1. Search Multi
-    const searchRes = await fetch(
-      `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(
-        query
-      )}&page=${page}&include_adult=false`
-    );
+    const searchData = await tmdbFetch(`/search/multi`, {
+      query,
+      page,
+      include_adult: "false",
+    }) as any;
     
-    if (!searchRes.ok) {
-      throw new Error("Failed to fetch search results");
-    }
-    const searchData = await searchRes.json();
     const rawResults = searchData.results || [];
     
     // Only movie and tv
@@ -37,12 +32,7 @@ export async function GET(request: Request) {
     
     const providerChecks = mediaResults.map(async (item: any) => {
       try {
-        const wpRes = await fetch(
-          `https://api.themoviedb.org/3/${item.media_type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`
-        );
-        if (!wpRes.ok) return null;
-        
-        const wpData = await wpRes.json();
+        const wpData = await tmdbFetch(`/${item.media_type}/${item.id}/watch/providers`) as any;
         const countryData = wpData.results?.[region];
         if (!countryData) return null;
 

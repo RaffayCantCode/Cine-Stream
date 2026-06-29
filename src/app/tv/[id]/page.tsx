@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { tmdbFetch } from "@/lib/tmdb";
 import TvClient from "./TvClient";
 
 export async function generateMetadata(
@@ -7,9 +8,7 @@ export async function generateMetadata(
   const params = await props.params;
   const id = params.id;
   try {
-    const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${process.env.TMDB_API_KEY}`);
-    if (!res.ok) throw new Error("Failed to fetch");
-    const show = await res.json();
+    const show = await tmdbFetch(`/tv/${id}`) as any;
     return {
       title: `${show.name} - CineStream`,
       description: show.overview,
