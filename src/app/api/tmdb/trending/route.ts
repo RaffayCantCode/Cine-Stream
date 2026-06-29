@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     const data = await tmdbFetch(`/trending/${type}/${timeWindow}`, {
       page,
+      include_adult: "true",
     });
     return Response.json(data);
   } catch (error) {

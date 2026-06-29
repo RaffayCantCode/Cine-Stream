@@ -33,7 +33,7 @@ export function MediaCard({ item, index = 0 }: MediaCardProps) {
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.poster_path
-    ? `https://image.tmdb.org/t/p/w185${item.poster_path}`
+    ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
     : null;
 
   const isPriority = index < 6;
@@ -45,8 +45,8 @@ export function MediaCard({ item, index = 0 }: MediaCardProps) {
     >
       <Link
         href={link}
-        className="group relative block aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 overflow-hidden rounded-2xl bg-muted/50 transition-all duration-500 hover:scale-[1.08] hover:z-10 focus:outline-none"
-        style={{ transformOrigin: "center bottom" }}
+        className="group relative block w-[150px] sm:w-[180px] md:w-[200px] shrink-0 overflow-hidden rounded-2xl bg-muted/50 transition-all duration-300 hover:scale-[1.05] hover:z-10 focus:outline-none hover:shadow-2xl hover:shadow-primary/40 hover:ring-2 hover:ring-primary/50"
+        style={{ transformOrigin: "center bottom", aspectRatio: "2/3" }}
       >
         {posterUrl ? (
           <img
@@ -115,9 +115,6 @@ export function MediaCard({ item, index = 0 }: MediaCardProps) {
             Eng Dub
           </div>
         )}
-
-        <div className="absolute inset-0 rounded-2xl ring-1 ring-white/0 group-hover:ring-[#7288AE]/40 transition-all duration-500 pointer-events-none" />
-        <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: "inset 0 0 30px rgba(213,82,163,0.15)" }} />
       </Link>
     </div>
   );

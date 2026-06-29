@@ -9,6 +9,8 @@ const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sideb
 import { Play, Star, Calendar, CheckCircle2, Loader2 } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
+import { CinematicHero } from "@/components/CinematicHero";
+import { GridMediaCard } from "@/components/GridMediaCard";
 import { cn, fetchJson, shuffleArray } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -28,6 +30,7 @@ interface Season {
   name: string;
   overview?: string;
   episodes?: Episode[];
+  videos?: { results: any[] };
 }
 
 interface TvShow {
@@ -46,6 +49,7 @@ interface TvShow {
   credits?: { cast: { id: number; name: string; character: string; profile_path?: string }[] };
   similar?: { results: any[] };
   recommendations?: { results: any[] };
+  videos?: { results: any[] };
 }
 
 export default function TvDetailPage() {
@@ -56,8 +60,34 @@ export default function TvDetailPage() {
   const [show, setShow] = useState<TvShow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  const [selectedEpisode, setSelectedEpisode] = useState<number>(1);
+  const [selectedSeason, setSelectedSeason] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const urlSeason = Number(searchParams.get("season"));
+      if (urlSeason > 0) return urlSeason;
+      try {
+        const saved = localStorage.getItem(`sv_tv_state_${id}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.season) return parsed.season;
+        }
+      } catch {}
+    }
+    return 1;
+  });
+  const [selectedEpisode, setSelectedEpisode] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const urlEp = Number(searchParams.get("episode"));
+      if (urlEp > 0) return urlEp;
+      try {
+        const saved = localStorage.getItem(`sv_tv_state_${id}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.episode) return parsed.episode;
+        }
+      } catch {}
+    }
+    return 1;
+  });
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,11 +100,6 @@ export default function TvDetailPage() {
       setError(null);
       try {
         const data = await fetchJson<TvShow>(`/api/tmdb/tv/${id}`);
-        if (data.adult) {
-          setError("This content is not available.");
-          setShow(null);
-          return;
-        }
         // Preload backdrop immediately
         if (data.backdrop_path) {
           const link = document.createElement("link");
@@ -86,9 +111,10 @@ export default function TvDetailPage() {
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(prev => {
-          if (prev > 1) return prev;
-          const urlSeason = Number(searchParams.get("season") || "");
-          return urlSeason > 0 ? urlSeason : firstSeason;
+          if (prev === 1 && firstSeason > 1 && !searchParams.get("season") && !localStorage.getItem(`sv_tv_state_${id}`)) {
+            return firstSeason;
+          }
+          return prev;
         });
       } catch (error) {
         setShow(null);
@@ -103,13 +129,22 @@ export default function TvDetailPage() {
 
   useEffect(() => {
     const autoPlay = searchParams.get("autoplay") === "1";
-    const season = Number(searchParams.get("season") || "");
-    const episode = Number(searchParams.get("episode") || "");
+    const season = Number(searchParams.get("season"));
+    const episode = Number(searchParams.get("episode"));
 
     if (season > 0) setSelectedSeason(season);
     if (episode > 0) setSelectedEpisode(episode);
     if (autoPlay) setIsPlaying(true);
   }, [searchParams]);
+
+  // Persist state
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`sv_tv_state_${id}`, JSON.stringify({ season: selectedSeason, episode: selectedEpisode }));
+      } catch {}
+    }
+  }, [id, selectedSeason, selectedEpisode]);
 
   useEffect(() => {
     if (!selectedSeason) return;
@@ -202,7 +237,7 @@ export default function TvDetailPage() {
     ? `https://image.tmdb.org/t/p/w1280${show.backdrop_path}`
     : null;
   const posterUrl = show.poster_path
-    ? `https://image.tmdb.org/t/p/w185${show.poster_path}`
+    ? `https://image.tmdb.org/t/p/w342${show.poster_path}`
     : null;
 
   const seasons = show.seasons?.filter((s) => s.season_number > 0) ?? [];
@@ -212,31 +247,21 @@ export default function TvDetailPage() {
   const currentEpisode = seasonData?.episodes?.find((ep) => ep.episode_number === selectedEpisode);
   const nextEpisode = seasonData?.episodes?.find((ep) => ep.episode_number === selectedEpisode + 1);
 
+  const seasonTrailerId = seasonData?.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
+  const mainTrailerId = show.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
+  const trailerId = seasonTrailerId || mainTrailerId;
+
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64 bleed-header">
-      <div className="relative w-full h-[62vh] md:h-[72vh] overflow-hidden flex items-end">
-        <div className="absolute inset-0 z-0">
-          {backdropUrl ? (
-            <img
-              src={backdropUrl}
-              alt={show.name}
-              className="w-full h-full object-cover object-center md:object-top scale-[1.03]"
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-            />
-          ) : (
-            <div className="w-full h-full bg-card" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-black/20" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/30 to-transparent" />
-          <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/50 to-transparent" />
-        </div>
-
-        <div className="relative z-10 pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
+      <CinematicHero
+        backdropPath={show.backdrop_path}
+        trailerId={trailerId}
+        title={show.name}
+      >
+        <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
           {posterUrl && (
             <img
               src={posterUrl}
@@ -314,7 +339,7 @@ export default function TvDetailPage() {
             </div>
           </div>
         </div>
-      </div>
+      </CinematicHero>
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
       {isPlaying && (
@@ -531,9 +556,17 @@ export default function TvDetailPage() {
           const filtered = merged.filter(item => item.poster_path || item.backdrop_path);
           if (filtered.length >= 6) {
             return (
-              <div className="-mx-5 md:-mx-10">
-                <MediaRow title="You May Like" items={shuffleArray(filtered)} />
-              </div>
+              <section className="pt-4">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="w-1 h-5 bg-primary rounded-full" />
+                  <h2 className="text-base font-bold text-white tracking-wide">You May Like</h2>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
+                  {filtered.slice(0, 18).map((item: any, i: number) => (
+                    <GridMediaCard key={item.id} item={item} index={i} />
+                  ))}
+                </div>
+              </section>
             );
           }
           return null;

@@ -4,7 +4,7 @@ import { tmdbFetch } from "@/lib/tmdb";
 // Fetch multiple pages and merge results for a much larger pool to randomize from
 async function fetchMultiplePages(endpoint: string, pages: number[]) {
   const results = await Promise.allSettled(
-    pages.map((page) => tmdbFetch(endpoint, { page: String(page) }))
+    pages.map((page) => tmdbFetch(endpoint, { page: String(page), include_adult: "true" }))
   );
 
   const allItems: unknown[] = [];
@@ -18,9 +18,10 @@ async function fetchMultiplePages(endpoint: string, pages: number[]) {
 }
 
 export async function GET(_request: NextRequest) {
-  // Random starting page on every request so you see different content each time
-  const start = Math.floor(Math.random() * 15) + 1;
-  const pages = [start, start + 1, start + 2];
+  // Deterministic fetching allows perfect edge caching.
+  // We fetch pages 1 and 2 to get a pool of 40 items per category, 
+  // and the client shuffles them visually.
+  const pages = [1, 2];
 
   try {
     const [trending, popular, topRated, nowPlaying, genres] = await Promise.all([

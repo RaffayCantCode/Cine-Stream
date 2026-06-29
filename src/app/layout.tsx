@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 
 export const metadata: Metadata = {
   title: "CineStream",
@@ -27,7 +27,9 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://api.anipub.xyz" />
         <link rel="dns-prefetch" href="https://api.tatakai.me" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${outfit.variable} font-sans antialiased bg-background text-foreground`}>
+        {/* Global Background Glow */}
+        <div className="fixed inset-0 z-[-1] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#1f285c]/30 via-background to-background pointer-events-none" />
         <Providers>{children}</Providers>
       </body>
     </html>

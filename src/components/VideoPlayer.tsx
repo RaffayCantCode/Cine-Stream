@@ -29,15 +29,18 @@ const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
 
 const DEFAULT_TIMEOUT = 12000;
 
-const SOURCE_PREF_KEY = "sv_video_source";
+// Per-media source key: each movie/show remembers its own preferred source independently
+const getSourcePrefKey = (type: string, id: number) => `sv_src_${type}_${id}`;
 
 export function VideoPlayer({ type, id, season, episode, title, startProgress }: VideoPlayerProps) {
   const sources = useMemo(() => getStreamingSources(type, id, season, episode, startProgress), [type, id, season, episode, startProgress]);
+  const sourcePrefKey = getSourcePrefKey(type, id);
 
-  // Restore preferred source from localStorage (survives episode changes via key-based remount)
+  // Restore preferred source from localStorage — scoped per media item so each show/movie
+  // independently remembers its preferred source (survives episode changes via key-based remount)
   const [currentSource, setCurrentSource] = useState<StreamingSource>(() => {
     try {
-      const saved = localStorage.getItem(SOURCE_PREF_KEY);
+      const saved = localStorage.getItem(sourcePrefKey);
       if (saved) { const found = sources.find(s => s.name === saved); if (found) return found; }
     } catch {}
     return sources[0];
@@ -136,15 +139,22 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
     setError(null);
     setIsLoading(true);
     setRetryCount(0);
-    try { localStorage.setItem(SOURCE_PREF_KEY, nextSource.name); } catch {}
-  }, [sources, currentSource]);
+    try { localStorage.setItem(sourcePrefKey, nextSource.name); } catch {}
+  }, [sources, currentSource, sourcePrefKey]);
 
   useEffect(() => {
-    setCurrentSource(sources[0]);
+    setCurrentSource(prev => {
+      let targetName = prev?.name;
+      try {
+        const saved = localStorage.getItem(sourcePrefKey);
+        if (saved) targetName = saved;
+      } catch {}
+      return sources.find(s => s.name === targetName) || sources[0];
+    });
     setError(null);
     setIsLoading(true);
     setRetryCount(0);
-  }, [sources]);
+  }, [sources, sourcePrefKey]);
 
   const handleSourceChange = (source: StreamingSource) => {
     setCurrentSource(source);
@@ -152,7 +162,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
     setIsLoading(true);
     setShowSources(false);
     setRetryCount(0);
-    try { localStorage.setItem(SOURCE_PREF_KEY, source.name); } catch {}
+    try { localStorage.setItem(sourcePrefKey, source.name); } catch {}
   };
 
   const handleIframeError = useCallback(() => {

@@ -7,7 +7,7 @@ export async function GET(
   const { id, seasonNumber } = await params;
 
   try {
-    const data = await tmdbFetch(`/tv/${id}/season/${seasonNumber}`);
+    const data = await tmdbFetch(`/tv/${id}/season/${seasonNumber}`, { append_to_response: "videos" });
     return Response.json(data);
   } catch (error) {
     return Response.json({ error: "Failed to fetch season details" }, { status: 500 });

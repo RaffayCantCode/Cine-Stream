@@ -64,7 +64,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
         <div className="absolute inset-0 bg-card" />
       )}
 
-      <div className="relative z-10 w-full px-5 md:px-12 pb-8 sm:pb-10 md:pb-14 max-w-screen-2xl mx-auto">
+      <div className="relative z-10 w-full px-5 md:px-16 lg:px-20 xl:px-24 pb-8 sm:pb-10 md:pb-14 max-w-screen-2xl mx-auto">
         <div className="max-w-full sm:max-w-lg md:max-w-2xl" style={SECTION_STYLE}>
           {/* Tags row */}
           <div className="flex flex-wrap items-center gap-2 mb-2">

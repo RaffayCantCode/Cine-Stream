@@ -90,10 +90,15 @@ export function AnimePlayer({
   startProgress,
   onAutoNext
 }: AnimePlayerProps) {
+  const sourcePrefKey = `sv_src_anime_${animeId}`;
+
   const [sourceIndex, setSourceIndex] = useState(() => {
     try {
-      const saved = localStorage.getItem("sv_anime_source");
+      const saved = localStorage.getItem(sourcePrefKey);
       if (saved !== null) {
+        // Support both name-based (new) and index-based (legacy) saved values
+        const byName = PROVIDERS.findIndex(p => p.name === saved);
+        if (byName >= 0) return byName;
         const idx = parseInt(saved, 10);
         if (!isNaN(idx) && idx >= 0 && idx < PROVIDERS.length) return idx;
       }
@@ -130,14 +135,19 @@ export function AnimePlayer({
       "https://vidlink.pro",
       "https://embed.su"
     ];
+    const links: HTMLLinkElement[] = [];
     domains.forEach(href => {
       if (!document.querySelector(`link[rel="preconnect"][href="${href}"]`)) {
         const link = document.createElement("link");
         link.rel = "preconnect";
         link.href = href;
         document.head.appendChild(link);
+        links.push(link);
       }
     });
+    return () => {
+      links.forEach(link => link.remove());
+    };
   }, []);
 
   // Pre-resolve ALL provider URLs client-side — instant, no server round-trip
@@ -150,12 +160,10 @@ export function AnimePlayer({
       );
     });
     setResolvedUrls(urls);
-    setSourceIndex(0);
     setRetryCount(0);
     setIsLoading(true);
     setHasError(false);
-    setCurrentUrl(urls[PROVIDERS[0].provider] || "");
-  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason]);
+  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, startProgress]);
 
   // When source index changes, pick the pre-resolved URL instantly
   useEffect(() => {
@@ -217,11 +225,11 @@ export function AnimePlayer({
   const switchSource = useCallback(() => {
     setSourceIndex(prev => {
       const next = (prev + 1) % PROVIDERS.length;
-      try { localStorage.setItem("sv_anime_source", String(next)); } catch {}
+      try { localStorage.setItem(sourcePrefKey, PROVIDERS[next].name); } catch {}
       return next;
     });
     setRetryCount(0);
-  }, []);
+  }, [sourcePrefKey]);
 
 
   const retrySource = useCallback(() => {
@@ -348,7 +356,7 @@ export function AnimePlayer({
                 key={source.name}
                 onClick={() => {
                   setSourceIndex(index);
-                  try { localStorage.setItem("sv_anime_source", String(index)); } catch {}
+                  try { localStorage.setItem(sourcePrefKey, source.name); } catch {}
                 }}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all text-xs font-medium ${
                   isActive

@@ -158,9 +158,20 @@ export default function AnimeDetailPage() {
           const seasons = a.seasons || [];
           let urlSeasonId = null;
           const urlSeasonNum = Number(searchParams.get("season") || "");
+          
+          let savedState: any = null;
+          try {
+            const saved = localStorage.getItem(`sv_anime_state_${id}`);
+            if (saved) savedState = JSON.parse(saved);
+          } catch {}
+
           if (urlSeasonNum > 0 && data.data.tmdbSeasonMap) {
             const entry = Object.entries(data.data.tmdbSeasonMap).find(([_, num]) => num === urlSeasonNum);
             if (entry) urlSeasonId = entry[0];
+          } else if (searchParams.get("seasonId")) {
+            urlSeasonId = searchParams.get("seasonId");
+          } else if (savedState?.seasonId) {
+            urlSeasonId = savedState.seasonId;
           }
 
           const openedId = urlSeasonId || a.openedSeasonId || id;
@@ -206,25 +217,55 @@ export default function AnimeDetailPage() {
       .finally(() => setRecsLoading(false));
   }, [anime?.id, id, franchiseNodes]);
 
-  // ── Autoplay via URL params ─────────────────────────────────────────────
+  // ── Autoplay via URL params & LocalStorage ────────────────────────────
   useEffect(() => {
+    if (episodes.length === 0) return;
+
     const autoPlay = searchParams.get("autoplay") === "1";
     const episodeParam = Number(searchParams.get("episode") || "");
     const seasonIdParam = searchParams.get("seasonId") || "";
     const legacySeasonParam = Number(searchParams.get("season") || "");
 
-    if (autoPlay && episodes.length > 0) {
-      const target = episodes.find(ep => {
+    let target: Episode | undefined;
+
+    if (episodeParam > 0) {
+      target = episodes.find(ep => {
         const matchesSeasonId = seasonIdParam ? ep.seasonId === seasonIdParam : true;
         const matchesLegacySeason = legacySeasonParam ? ep.seasonNum === legacySeasonParam : true;
-        return matchesSeasonId && matchesLegacySeason && ep.episodeNum === (episodeParam || 1);
+        return matchesSeasonId && matchesLegacySeason && ep.episodeNum === episodeParam;
       });
-      if (target) {
-        setSelectedEp(target);
-        setIsPlaying(true);
-      }
     }
-  }, [searchParams, episodes]);
+
+    // Fallback to localStorage if no URL params specify an episode
+    if (!target && !episodeParam) {
+      try {
+        const saved = localStorage.getItem(`sv_anime_state_${id}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.episodeId) {
+            target = episodes.find(ep => ep.episodeId === parsed.episodeId);
+          }
+        }
+      } catch {}
+    }
+
+    if (target && !selectedEp) {
+      setSelectedEp(target);
+      if (autoPlay) setIsPlaying(true);
+    }
+  }, [searchParams, episodes, id, selectedEp]);
+
+  // Persist State
+  useEffect(() => {
+    if (typeof window !== "undefined" && currentSeasonId) {
+      try {
+        localStorage.setItem(`sv_anime_state_${id}`, JSON.stringify({
+          seasonId: currentSeasonId,
+          episodeId: selectedEp?.episodeId || null
+        }));
+      } catch {}
+    }
+  }, [id, currentSeasonId, selectedEp]);
 
   // ── Scroll to player on play ────────────────────────────────────────────
   useEffect(() => {

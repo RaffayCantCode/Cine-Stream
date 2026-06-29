@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 const requestCache = new Map<string, { expires: number; data: unknown }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
 
-const CACHE_MAX_ENTRIES = 200;
+const CACHE_MAX_ENTRIES = 50;
 
 function pruneCache(): void {
   if (requestCache.size <= CACHE_MAX_ENTRIES) return;

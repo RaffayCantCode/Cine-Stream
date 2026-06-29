@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const data = await tmdbFetch(`/search/${type}`, { query, page, include_adult: "false" });
+    const data = await tmdbFetch(`/search/${type}`, { query, page, include_adult: "true" });
     return Response.json(data);
   } catch (error) {
     return Response.json({ error: "Failed to search" }, { status: 500 });

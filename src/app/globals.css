@@ -79,22 +79,28 @@
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(232 60% 8%);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(231 30% 32%);
-  border-radius: 4px;
+  background: hsl(231 30% 32% / 0.5);
+  border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(218 27% 50%);
+  background: hsl(218 27% 50% / 0.8);
 }
+
+.premium-glass {
+  @apply bg-black/40 backdrop-blur-xl border-white/5;
+  border-bottom-width: 1px;
+}
+
 
 @keyframes shimmer {
   0% { background-position: -200% 0; }
@@ -155,8 +161,10 @@ textarea,
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Optimized click feedback - only transform on interactive elements */
+/* Optimized click feedback - squish effect */
 button:active,
-a:active {
+a:active,
+[role="button"]:active {
+  transform: scale(0.97);
   transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }

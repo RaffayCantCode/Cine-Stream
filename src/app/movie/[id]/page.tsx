@@ -10,6 +10,8 @@ const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sideb
 import { Play, Star, Clock, Calendar } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
+import { CinematicHero } from "@/components/CinematicHero";
+import { GridMediaCard } from "@/components/GridMediaCard";
 import { format } from "date-fns";
 import { fetchJson, shuffleArray } from "@/lib/utils";
 
@@ -28,6 +30,7 @@ interface Movie {
   credits?: { cast: { id: number; name: string; character: string; profile_path?: string }[] };
   similar?: { results: any[] };
   recommendations?: { results: any[] };
+  videos?: { results: any[] };
 }
 
 export default function MovieDetailPage() {
@@ -46,11 +49,6 @@ export default function MovieDetailPage() {
       setError(null);
       try {
         const data = await fetchJson<Movie>(`/api/tmdb/movie/${id}`);
-        if (data.adult) {
-          setError("This content is not available.");
-          setMovie(null);
-          return;
-        }
         // Preload backdrop immediately — starts download before React renders
         if (data.backdrop_path) {
           const link = document.createElement("link");
@@ -149,39 +147,26 @@ export default function MovieDetailPage() {
     ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`
     : null;
   const posterUrl = movie.poster_path
-    ? `https://image.tmdb.org/t/p/w185${movie.poster_path}`
+    ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`
     : null;
 
   const score = movie.vote_average ?? 0;
   const scoreColor =
     score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
 
+  const trailerId = movie.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
+
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64 bleed-header">
-        <div className="relative w-full h-[62vh] md:h-[72vh] overflow-hidden flex items-end">
-        <div className="absolute inset-0 z-0">
-          {backdropUrl ? (
-            <img
-              src={backdropUrl}
-              alt={movie.title}
-              className="w-full h-full object-cover object-center md:object-top scale-[1.03] animate-fade-in-up"
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-              style={{ animationDuration: "1.4s" }}
-            />
-          ) : (
-            <div className="w-full h-full bg-card" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-black/20" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/30 to-transparent" />
-          <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/50 to-transparent" />
-        </div>
-
-        <div className="relative z-10 pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
+        <CinematicHero
+          backdropPath={movie.backdrop_path}
+          trailerId={trailerId}
+          title={movie.title}
+        >
+          <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
           {posterUrl && (
             <div
               className="hidden md:block shrink-0"
@@ -261,8 +246,8 @@ export default function MovieDetailPage() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
+          </div>
+        </CinematicHero>
 
       {isPlaying && (
         <div ref={playerRef} className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 mb-4">
@@ -331,9 +316,17 @@ export default function MovieDetailPage() {
           const filtered = merged.filter(item => item.poster_path || item.backdrop_path);
           if (filtered.length >= 6) {
             return (
-              <div className="-mx-5 md:-mx-10">
-                <MediaRow title="You May Like" items={shuffleArray(filtered)} />
-              </div>
+              <section className="pt-4">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="w-1 h-5 bg-primary rounded-full" />
+                  <h2 className="text-base font-bold text-white tracking-wide">You May Like</h2>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
+                  {filtered.slice(0, 18).map((item: any, i: number) => (
+                    <GridMediaCard key={item.id} item={item} index={i} />
+                  ))}
+                </div>
+              </section>
             );
           }
           return null;

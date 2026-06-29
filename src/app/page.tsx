@@ -462,7 +462,7 @@ export default function Home() {
               <div className="absolute inset-0 skeleton-pulse" />
               <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
-              <div className="relative z-10 w-full px-4 sm:px-6 md:px-12 pb-12 sm:pb-12 md:pb-14 max-w-screen-2xl mx-auto">
+              <div className="relative z-10 w-full px-5 md:px-16 lg:px-20 xl:px-24 pb-12 sm:pb-12 md:pb-14 max-w-screen-2xl mx-auto">
                 <div className="max-w-full sm:max-w-lg md:max-w-2xl">
                   <div className="flex items-center gap-2 mb-3 sm:mb-4">
                     <div className="h-5 w-20 rounded-md skeleton-pulse" />

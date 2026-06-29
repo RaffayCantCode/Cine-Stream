@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
 
   try {
     // Skip all caches for provider-filtered requests — ensures fresh results after any config change
-    const data = await tmdbFetch("/discover/movie", params, { noCache: !!withProviders });
+    const data = await tmdbFetch("/discover/movie", {
+      ...params,
+      include_adult: "true",
+    }, { noCache: !!withProviders });
     return Response.json(data);
   } catch (error) {
     return Response.json({ error: "Failed to discover movies" }, { status: 500 });
