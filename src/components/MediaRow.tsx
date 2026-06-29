@@ -21,6 +21,7 @@ interface MediaRowProps {
   isLoading?: boolean;
   seeAllHref?: string;
   accentIcon?: React.ReactNode;
+  isTop10?: boolean;
 }
 
 function SkeletonCard({ index }: { index: number }) {
@@ -32,7 +33,7 @@ function SkeletonCard({ index }: { index: number }) {
   );
 }
 
-export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAllHref, accentIcon }: MediaRowProps) {
+export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAllHref, accentIcon, isTop10 }: MediaRowProps) {
   if (!isLoading && (!items || items.length === 0)) return null;
 
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -129,13 +130,13 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
         <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
 
         <div ref={scrollerRef} className="w-full overflow-x-auto pb-6 pt-2 hide-scrollbar">
-          <div className="flex gap-4 md:gap-5 px-5 md:px-14 w-max">
+          <div className={`flex gap-4 md:gap-5 px-5 md:px-14 w-max ${isTop10 ? "pl-8 md:pl-16" : ""}`}>
             {isLoading
-              ? Array.from({ length: 8 }).map((_, i) => (
+              ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (
                   <SkeletonCard key={i} index={i} />
                 ))
-              : items?.map((item, i) => (
-                  <MediaCard key={item.id} item={item} index={i} />
+              : (isTop10 ? items?.slice(0, 10) : items)?.map((item, i) => (
+                  <MediaCard key={item.id} item={item} index={i} rank={isTop10 ? i + 1 : undefined} />
                 ))}
           </div>
         </div>

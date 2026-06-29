@@ -1,14 +1,53 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 
+export const viewport: Viewport = {
+  themeColor: "#020817",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: "CineStream",
+  metadataBase: new URL("https://cinestream-hd.netlify.app"),
+  title: {
+    template: "%s | CineStream",
+    default: "CineStream - Movies, TV & Anime",
+  },
   description: "Movies. TV. Anime. All in one place. Stream everything you love — premium, curated, and always fresh.",
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "/favicon.svg", apple: "/favicon.svg" },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "CineStream",
+  },
+  openGraph: {
+    title: "CineStream - Movies, TV & Anime",
+    description: "Stream premium curated Movies, TV Shows, and Anime.",
+    url: "https://cinestream-hd.netlify.app",
+    siteName: "CineStream",
+    images: [
+      {
+        url: "/icon.png",
+        width: 512,
+        height: 512,
+        alt: "CineStream Logo",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CineStream",
+    description: "Stream premium curated Movies, TV Shows, and Anime.",
+    images: ["/icon.png"],
+  },
 };
 
 export default function RootLayout({

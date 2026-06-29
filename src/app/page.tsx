@@ -131,6 +131,8 @@ export default function Home() {
   const [popular, setPopular] = useState<MediaItem[]>([]);
   const [topRated, setTopRated] = useState<MediaItem[]>([]);
   const [recent, setRecent] = useState<MediaItem[]>([]);
+  const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>([]);
+  const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>([]);
   const [heroFeed, setHeroFeed] = useState<MediaItem[]>([]);
   const [recommended, setRecommended] = useState<MediaItem[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -197,6 +199,8 @@ export default function Home() {
           onTheAir: { results: MediaItem[] };
           animeMovies: { results: MediaItem[] };
           animeTv: { results: MediaItem[] };
+          trendingMoviesToday: { results: MediaItem[] };
+          trendingTvToday: { results: MediaItem[] };
         }>("/api/tmdb/home-hero", { cacheTtlMs: 180000 });
 
         const rowsPromise = fetchJson<{
@@ -243,6 +247,12 @@ export default function Home() {
         const animeTvSafe = filterReleasedSafeContent(heroData.animeTv?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const trendingMoviesTodaySafe = filterReleasedSafeContent(heroData.trendingMoviesToday?.results || []).map(
+          (i) => ({ ...i, media_type: "movie" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        const trendingTvTodaySafe = filterReleasedSafeContent(heroData.trendingTvToday?.results || []).map(
+          (i) => ({ ...i, media_type: "tv" as const })
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
 
         const shuffledTrending = sessionShuffle(trendingSafe, "trending");
         const shuffledPopular = sessionShuffle(popularSafe, "popular");
@@ -251,6 +261,8 @@ export default function Home() {
         setPopular(shuffledPopular);
         setTopRated(sessionShuffle(heroTopSafe, "toprated"));
         setRecent(sessionShuffle(heroRecentSafe, "recent"));
+        setTrendingMoviesToday(trendingMoviesTodaySafe);
+        setTrendingTvToday(trendingTvTodaySafe);
         setHeroFeed([
           ...shuffledTrending,
           ...shuffledPopular,
@@ -495,6 +507,38 @@ export default function Home() {
 
         <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto py-8 space-y-10">
 
+          {/* ─── TOP 10 MOVIES TODAY ─── */}
+          <LazySection show={revealedSections >= 1} placeholderHeight={380}>
+            <MediaRow
+              title="Top 10 Movies Today"
+              items={trendingMoviesToday}
+              isLoading={isLoading}
+              isTop10={true}
+              accentIcon={<TrendingUp className="w-5 h-5 text-red-500" />}
+            />
+          </LazySection>
+
+          {/* ─── TOP 10 SHOWS TODAY ─── */}
+          <LazySection show={revealedSections >= 1} placeholderHeight={380}>
+            <MediaRow
+              title="Top 10 Shows Today"
+              items={trendingTvToday}
+              isLoading={isLoading}
+              isTop10={true}
+              accentIcon={<TrendingUp className="w-5 h-5 text-red-500" />}
+            />
+          </LazySection>
+
+          {/* ─── TOP 10 ANIME TODAY ─── */}
+          <LazySection show={revealedSections >= 1} placeholderHeight={380}>
+            <AnimeRow
+              title="Top 10 Anime Today"
+              items={animeList}
+              isLoading={animeLoading}
+              isTop10={true}
+            />
+          </LazySection>
+
           {/* ─── 1. TRENDING NOW ─── */}
           <LazySection show={revealedSections >= 1} placeholderHeight={360}>
             <MediaRow
@@ -506,14 +550,14 @@ export default function Home() {
             />
           </LazySection>
 
-          {/* ─── 2. POPULAR NOW ─── */}
+          {/* ─── 2. TOP RATED MOVIES ─── */}
           <LazySection show={revealedSections >= 2} placeholderHeight={360}>
             <MediaRow
-              title="Popular Movies"
+              title="Top Rated Movies"
               items={popular}
               isLoading={isLoading}
-              seeAllHref="/browse/movies/popular"
-              accentIcon={<Flame className="w-4 h-4 text-orange-400" />}
+              seeAllHref="/browse/movies/top-rated"
+              accentIcon={<Star className="w-4 h-4 text-amber-400" />}
             />
           </LazySection>
 
@@ -616,15 +660,6 @@ export default function Home() {
             </div>
           </LazySection>
 
-          {/* ─── ANIME SPOTLIGHT ─── */}
-          <LazySection show={revealedSections >= 6} placeholderHeight={350}>
-            <AnimeRow
-              title="Trending Anime"
-              items={animeList}
-              isLoading={animeLoading}
-              seeAllHref="/anime"
-            />
-          </LazySection>
 
           {/* ─── RECENTLY ADDED ─── */}
           <LazySection show={revealedSections >= 7} placeholderHeight={360}>

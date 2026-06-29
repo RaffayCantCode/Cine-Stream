@@ -5,6 +5,15 @@ export function cacheHeaders(ttlSeconds = 1800): HeadersInit {
   return { "Cache-Control": `public, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}` };
 }
 
+// Hardcoded blocklist for IDs that TMDB fails to flag as adult
+const BLOCKED_TMDB_IDS = [
+  95897, // Overflow (Hentai)
+  112239, // Redo of Healer
+  35688, // Yosuga no Sora
+  39599, // High School DxD
+  98116, // Interspecies Reviewers
+];
+
 const ADULT_KEYWORDS = [
   "porn", "adult", "erotic", "sex", "nude", "nudity", "explicit",
   "hardcore", "softcore", "xxx", "nsfw",
@@ -25,9 +34,7 @@ const ADULT_KEYWORDS = [
   "topless", "bottomless",
   "pornografia", "erotismo",
   "adulto", "adulta", "sexually",
-];
-
-function getAuthHeader(): string {
+];function getAuthHeader(): string {
   const token = process.env.TMDB_API_KEY;
   if (!token || token === "") {
     throw new Error("TMDB_API_KEY is not set");
@@ -42,8 +49,9 @@ export async function tmdbFetch(
   params?: Record<string, string>,
   options?: { noCache?: boolean }
 ): Promise<unknown> {
+  const isSearch = path.includes("/search/");
   const url = new URL(`${TMDB_BASE}${path}`);
-  url.searchParams.set("include_adult", "false");
+  url.searchParams.set("include_adult", isSearch ? "true" : "false");
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== "") {
@@ -90,7 +98,7 @@ export async function tmdbFetch(
   }
 
   const data = await res.json();
-  const filtered = filterTmdbResponse(data);
+  const filtered = filterTmdbResponse(data, isSearch);
 
   // Only store in in-memory cache when caching is enabled
   if (!options?.noCache) {
@@ -350,7 +358,7 @@ export async function fetchTmdbSeason(
   }
 }
 
-function filterTmdbResponse(data: unknown): unknown {
+export function filterTmdbResponse(data: unknown, isSearch: boolean = false): unknown {
   if (!data || typeof data !== "object" || !("results" in data)) {
     return data;
   }
@@ -368,6 +376,7 @@ function filterTmdbResponse(data: unknown): unknown {
     results: response.results.filter((item) => {
       if (!item || typeof item !== "object") return false;
       const media = item as {
+        id?: number;
         adult?: boolean;
         title?: string;
         name?: string;
@@ -378,11 +387,22 @@ function filterTmdbResponse(data: unknown): unknown {
         first_air_date?: string;
       };
 
-      if (media.adult === true) return false;
       if (!media.poster_path && !media.backdrop_path) return false;
 
+      // Bypass content filters if this is a search request
+      if (isSearch) return true;
+
+      if (media.adult === true) return false;
+      if (media.id && BLOCKED_TMDB_IDS.includes(media.id)) return false;
+
       const searchable = `${media.title || ""} ${media.name || ""} ${media.overview || ""}`.toLowerCase();
-      if (ADULT_KEYWORDS.some((keyword) => searchable.includes(keyword))) return false;
+      
+      // Whitelist "Obsession" (2026) to prevent false positives (its overview contains the word "desire")
+      const isObsession2026 = media.title === "Obsession" && (media.release_date || "").startsWith("2026");
+      
+      if (!isObsession2026) {
+        if (ADULT_KEYWORDS.some((keyword) => searchable.includes(keyword))) return false;
+      }
 
       const releaseStr = media.release_date || media.first_air_date;
       if (releaseStr) {

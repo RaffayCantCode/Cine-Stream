@@ -26,7 +26,7 @@ export async function GET(_request: NextRequest) {
   try {
     const [trending, popular, topRated, nowPlaying, genres] = await Promise.all([
       fetchMultiplePages("/trending/all/week", pages),
-      fetchMultiplePages("/movie/popular", pages),
+      fetchMultiplePages("/discover/movie?sort_by=vote_average.desc&vote_count.gte=5000", pages),
       fetchMultiplePages("/tv/top_rated", pages),
       fetchMultiplePages("/movie/now_playing", pages),
       tmdbFetch("/genre/movie/list"),

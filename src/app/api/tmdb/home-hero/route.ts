@@ -19,9 +19,11 @@ export async function GET(_request: NextRequest) {
     fetchPage("/tv/on_the_air", 1),
     fetchPage("/discover/movie?with_original_language=ja", 1),
     fetchPage("/discover/tv?with_original_language=ja&with_genres=16", 1),
+    fetchPage("/trending/movie/day", 1),
+    fetchPage("/trending/tv/day", 1),
   ]);
 
-  const [trending, popularMovies, topRatedMovies, nowPlaying, popularTv, topRatedTv, onTheAir, animeMovies, animeTv] = results.map(r =>
+  const [trending, popularMovies, topRatedMovies, nowPlaying, popularTv, topRatedTv, onTheAir, animeMovies, animeTv, trendingMoviesToday, trendingTvToday] = results.map(r =>
     r.status === "fulfilled" ? r.value : []
   );
 
@@ -35,5 +37,7 @@ export async function GET(_request: NextRequest) {
     onTheAir: { results: onTheAir },
     animeMovies: { results: animeMovies },
     animeTv: { results: animeTv },
+    trendingMoviesToday: { results: trendingMoviesToday },
+    trendingTvToday: { results: trendingTvToday },
   });
 }

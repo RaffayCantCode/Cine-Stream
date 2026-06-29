@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Play,
   Info,
+  Search,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -98,6 +99,10 @@ export default function ProviderPage() {
   // ── state ──────────────────────────────────────────────────────────────────
   const [movies, setMovies] = useState<MediaItem[]>([]);
   const [tvShows, setTvShows] = useState<MediaItem[]>([]);
+  const [trendingMoviesRow, setTrendingMoviesRow] = useState<MediaItem[]>([]);
+  const [topRatedMoviesRow, setTopRatedMoviesRow] = useState<MediaItem[]>([]);
+  const [trendingTvRow, setTrendingTvRow] = useState<MediaItem[]>([]);
+  const [topRatedTvRow, setTopRatedTvRow] = useState<MediaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMorePage, setLoadMorePage] = useState(1);
   const [hasMoreMovies, setHasMoreMovies] = useState(true);
@@ -108,10 +113,14 @@ export default function ProviderPage() {
   const [sortBy, setSortBy] = useState<SortKey>("popularity.desc");
   const [viewMode, setViewMode] = useState<ViewMode>("rows");
   const [sortOpen, setSortOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  
   const sortRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const isLoadingRef = useRef(false);
-  isLoadingRef.current = isLoading;
+  isLoadingRef.current = isLoading || isSearching;
 
   // ── close sort dropdown on outside click ──────────────────────────────────
   useEffect(() => {
@@ -129,6 +138,33 @@ export default function ProviderPage() {
     ? [provider.id, ...(provider.additionalIds || [])].join("|")
     : "";
 
+  // ── search data ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!searchQuery.trim() || !provider) {
+      setSearchResults([]);
+      return;
+    }
+    const delay = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetchJson<{ success: boolean; results: MediaItem[] }>(
+          `/api/tmdb/provider-search?query=${encodeURIComponent(searchQuery)}&providerIds=${providerIdStr}&region=${provider.region}`
+        );
+        if (res.success && res.results) {
+          setSearchResults(filterReleasedSafeContent(res.results));
+        } else {
+          setSearchResults([]);
+        }
+      } catch (e) {
+        console.error("Search failed:", e);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+    return () => clearTimeout(delay);
+  }, [searchQuery, providerIdStr, provider]);
+
   // ── fetch data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async (page: number, reset: boolean) => {
     if (!provider) return;
@@ -143,50 +179,41 @@ export default function ProviderPage() {
     try {
       const minVote = sortBy === "vote_average.desc" ? "6" : undefined;
       const monetizationTypes = provider.monetizationTypes; // undefined → API defaults to "flatrate"
-      const [movieData, tvData] = await Promise.all([
+      
+      const promises: Promise<any>[] = [
         fetchProviderItems(providerIdStr, provider.region, "movie", sortBy, page, minVote, monetizationTypes),
         fetchProviderItems(providerIdStr, provider.region, "tv", sortBy, page, minVote, monetizationTypes),
-      ]);
+      ];
+
+      if (reset) {
+        promises.push(
+          fetchProviderItems(providerIdStr, provider.region, "movie", "popularity.desc", 1, undefined, monetizationTypes),
+          fetchProviderItems(providerIdStr, provider.region, "movie", "vote_average.desc", 1, "6", monetizationTypes),
+          fetchProviderItems(providerIdStr, provider.region, "tv", "popularity.desc", 1, undefined, monetizationTypes),
+          fetchProviderItems(providerIdStr, provider.region, "tv", "vote_average.desc", 1, "6", monetizationTypes)
+        );
+      }
+
+      const results = await Promise.all(promises);
+      const movieData = results[0];
+      const tvData = results[1];
+
+      if (reset) {
+        setTrendingMoviesRow(filterReleasedSafeContent(results[2].results.map((i: any) => ({ ...i, media_type: "movie" as const }))));
+        setTopRatedMoviesRow(filterReleasedSafeContent(results[3].results.map((i: any) => ({ ...i, media_type: "movie" as const }))));
+        setTrendingTvRow(filterReleasedSafeContent(results[4].results.map((i: any) => ({ ...i, media_type: "tv" as const }))));
+        setTopRatedTvRow(filterReleasedSafeContent(results[5].results.map((i: any) => ({ ...i, media_type: "tv" as const }))));
+      }
 
       let finalMovies = movieData.results;
       let finalTv = tvData.results;
 
-      if (reset) {
-        const movieMax = Math.min(movieData.total_pages, 10);
-        const tvMax = Math.min(tvData.total_pages, 10);
-
-        const movieRandPage = movieMax > 1 ? Math.floor(Math.random() * movieMax) + 1 : 1;
-        const tvRandPage = tvMax > 1 ? Math.floor(Math.random() * tvMax) + 1 : 1;
-
-        const promises: Promise<any>[] = [];
-        if (movieRandPage > 1) {
-          promises.push(
-            fetchProviderItems(providerIdStr, provider.region, "movie", sortBy, movieRandPage, minVote, monetizationTypes)
-              .then(res => { finalMovies = [...finalMovies, ...res.results]; })
-              .catch(e => console.error("Failed to fetch random provider movies page", e))
-          );
-        }
-        if (tvRandPage > 1) {
-          promises.push(
-            fetchProviderItems(providerIdStr, provider.region, "tv", sortBy, tvRandPage, minVote, monetizationTypes)
-              .then(res => { finalTv = [...finalTv, ...res.results]; })
-              .catch(e => console.error("Failed to fetch random provider tv page", e))
-          );
-        }
-        if (promises.length > 0) {
-          await Promise.all(promises);
-        }
-
-        finalMovies = shuffleArray(finalMovies);
-        finalTv = shuffleArray(finalTv);
-      }
-
       const cleanMovies = filterReleasedSafeContent(
-        finalMovies.map((i) => ({ ...i, media_type: "movie" as const }))
-      );
+        finalMovies.map((i: any) => ({ ...i, media_type: "movie" as const }))
+      ) as MediaItem[];
       const cleanTv = filterReleasedSafeContent(
-        finalTv.map((i) => ({ ...i, media_type: "tv" as const }))
-      );
+        finalTv.map((i: any) => ({ ...i, media_type: "tv" as const }))
+      ) as MediaItem[];
 
       setMovies((prev) => {
         const base = reset ? cleanMovies : [...prev, ...cleanMovies];
@@ -274,24 +301,12 @@ export default function ProviderPage() {
   const displayMovies = filterType === "tv" ? [] : movies;
   const displayTv = filterType === "movie" ? [] : tvShows;
 
-  // Row-mode categories
-  const trendingMovies = useMemo(
-    () => movies.filter((m) => m.vote_average && m.vote_average >= 7).slice(0, 20),
-    [movies]
-  );
-  const topRatedMovies = useMemo(
-    () => [...movies].sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0)).slice(0, 20),
-    [movies]
-  );
+  // Row-mode categories (fetched explicitly now)
+  const trendingMovies = trendingMoviesRow;
+  const topRatedMovies = topRatedMoviesRow;
+  const trendingTv = trendingTvRow;
+  const topRatedTv = topRatedTvRow;
   const allMovies = displayMovies.slice(0, 40);
-  const trendingTv = useMemo(
-    () => tvShows.filter((t) => t.vote_average && t.vote_average >= 7).slice(0, 20),
-    [tvShows]
-  );
-  const topRatedTv = useMemo(
-    () => [...tvShows].sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0)).slice(0, 20),
-    [tvShows]
-  );
   const allTv = displayTv.slice(0, 40);
 
   // ── unknown provider fallback ─────────────────────────────────────────────
@@ -476,6 +491,20 @@ export default function ProviderPage() {
         <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-white/[0.06] px-6 md:px-12">
           <div className="max-w-screen-2xl mx-auto py-3 flex items-center justify-between gap-4 flex-wrap">
 
+            {/* Search Input */}
+            <div className="flex-1 max-w-sm">
+              <div className="relative flex items-center">
+                <Search className="absolute left-3 w-4 h-4 text-white/40" />
+                <input
+                  type="text"
+                  placeholder={`Search ${provider.name}...`}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white/[0.03] hover:bg-white/[0.06] focus:bg-white/[0.06] border border-white/[0.06] focus:border-white/20 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder-white/40 transition-all outline-none"
+                />
+              </div>
+            </div>
+
             {/* Filter pills */}
             <div className="flex items-center gap-2">
               {(["all", "movie", "tv"] as FilterType[]).map((f) => (
@@ -578,7 +607,51 @@ export default function ProviderPage() {
           </div>
         )}
 
-        {viewMode === "rows" ? (
+        {searchQuery.trim() ? (
+          /* ─── SEARCH MODE ─── */
+          <div className="px-6 md:px-12 max-w-screen-2xl mx-auto py-8">
+            <div className="flex items-center gap-3 mb-8">
+              <Search className="w-5 h-5 text-primary" />
+              <h2 className="text-xl font-black text-white tracking-tight">
+                Search Results for "{searchQuery}"
+              </h2>
+              <span className="text-sm text-white/40 font-medium ml-2">
+                {isSearching ? "Searching..." : `${searchResults.length} found on ${provider.name}`}
+              </span>
+            </div>
+            
+            {isSearching ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="aspect-[2/3] rounded-2xl shimmer" style={{ animationDelay: `${i * 40}ms` }} />
+                ))}
+              </div>
+            ) : searchResults.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                {searchResults.map((item, idx) => (
+                  <motion.div
+                    key={`search-${item.id}`}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: Math.min(idx * 0.02, 0.4), duration: 0.2 }}
+                  >
+                    <MediaCard item={item} index={idx} />
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 bg-white/5 border border-white/10">
+                  <Search className="w-6 h-6 text-white/40" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">No matches found</h3>
+                <p className="text-sm text-white/40 max-w-xs">
+                  We couldn't find "{searchQuery}" on {provider.name}.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : viewMode === "rows" ? (
           /* ─── ROW MODE: Netflix-style sections ─── */
           <div className="py-6 space-y-2">
             {/* Movies section */}
@@ -586,9 +659,10 @@ export default function ProviderPage() {
               <>
                 {trendingMovies.length > 0 && (
                   <MediaRow
-                    title={`Trending on ${provider.name}`}
+                    title={`Top 10 Movies on ${provider.name} Today`}
                     items={trendingMovies}
                     isLoading={isLoading && movies.length === 0}
+                    isTop10={true}
                     accentIcon={<TrendingUp className="w-4 h-4 text-[#7288AE]" />}
                   />
                 )}
@@ -616,9 +690,10 @@ export default function ProviderPage() {
               <>
                 {trendingTv.length > 0 && (
                   <MediaRow
-                    title={filterType === "tv" ? `Trending on ${provider.name}` : "Popular Series"}
+                    title={filterType === "tv" ? `Top 10 Shows on ${provider.name} Today` : `Top 10 Shows on ${provider.name} Today`}
                     items={trendingTv}
                     isLoading={isLoading && tvShows.length === 0}
+                    isTop10={true}
                     accentIcon={<Flame className="w-4 h-4 text-orange-400" />}
                   />
                 )}
@@ -743,7 +818,7 @@ export default function ProviderPage() {
         )}
 
         {/* Infinite scroll sentinel */}
-        {viewMode === "grid" && (
+        {!searchQuery.trim() && viewMode === "grid" && (
           <div
             ref={sentinelRef}
             style={{ overflowAnchor: "none" }}

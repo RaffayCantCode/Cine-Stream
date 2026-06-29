@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { Server, Maximize2, RotateCcw, SkipForward } from "lucide-react";
 
@@ -90,21 +91,29 @@ export function AnimePlayer({
   startProgress,
   onAutoNext
 }: AnimePlayerProps) {
-  const sourcePrefKey = `sv_src_anime_${animeId}`;
+  const { data: session, status } = useSession();
+  const userId = session?.user?.id || "guest";
+  const sourcePrefKey = `sv_src_anime_${userId}_${animeId}`;
 
-  const [sourceIndex, setSourceIndex] = useState(() => {
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [isSourceLoaded, setIsSourceLoaded] = useState(false);
+
+  useEffect(() => {
+    if (status === "loading" || isSourceLoaded) return;
     try {
       const saved = localStorage.getItem(sourcePrefKey);
       if (saved !== null) {
         // Support both name-based (new) and index-based (legacy) saved values
         const byName = PROVIDERS.findIndex(p => p.name === saved);
-        if (byName >= 0) return byName;
-        const idx = parseInt(saved, 10);
-        if (!isNaN(idx) && idx >= 0 && idx < PROVIDERS.length) return idx;
+        if (byName >= 0) setSourceIndex(byName);
+        else {
+          const idx = parseInt(saved, 10);
+          if (!isNaN(idx) && idx >= 0 && idx < PROVIDERS.length) setSourceIndex(idx);
+        }
       }
     } catch {}
-    return 0;
-  });
+    setIsSourceLoaded(true);
+  }, [status, sourcePrefKey, isSourceLoaded]);
 
   const [currentUrl, setCurrentUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);

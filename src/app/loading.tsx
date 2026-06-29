@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 
 export default function Loading() {
   return (
-    <div className="fixed inset-0 bg-[#07091e] z-[9999] flex flex-col items-center justify-center p-6 select-none">
+    <div className="h-[100dvh] w-full bg-[#07091e] z-[9999] flex flex-col items-center justify-center p-6 select-none relative">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(75,86,148,0.15)_0%,transparent_60%)]" />
       
       <div className="relative flex flex-col items-center gap-6">

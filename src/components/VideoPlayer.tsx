@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward, ExternalLink } from "lucide-react";
 import { StreamingSource, getStreamingSources } from "@/lib/streaming-fetch";
 
@@ -29,22 +30,29 @@ const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
 
 const DEFAULT_TIMEOUT = 12000;
 
-// Per-media source key: each movie/show remembers its own preferred source independently
-const getSourcePrefKey = (type: string, id: number) => `sv_src_${type}_${id}`;
+// Per-media source key: each movie/show remembers its own preferred source independently per user
+const getSourcePrefKey = (type: string, id: number, userId: string) => `sv_src_${userId}_${type}_${id}`;
 
 export function VideoPlayer({ type, id, season, episode, title, startProgress }: VideoPlayerProps) {
+  const { data: session, status } = useSession();
+  const userId = session?.user?.id || "guest";
   const sources = useMemo(() => getStreamingSources(type, id, season, episode, startProgress), [type, id, season, episode, startProgress]);
-  const sourcePrefKey = getSourcePrefKey(type, id);
+  const sourcePrefKey = getSourcePrefKey(type, id, userId);
 
-  // Restore preferred source from localStorage — scoped per media item so each show/movie
-  // independently remembers its preferred source (survives episode changes via key-based remount)
-  const [currentSource, setCurrentSource] = useState<StreamingSource>(() => {
+  const [currentSource, setCurrentSource] = useState<StreamingSource>(sources[0]);
+  const [isSourceLoaded, setIsSourceLoaded] = useState(false);
+
+  useEffect(() => {
+    if (status === "loading" || isSourceLoaded) return;
     try {
       const saved = localStorage.getItem(sourcePrefKey);
-      if (saved) { const found = sources.find(s => s.name === saved); if (found) return found; }
+      if (saved) {
+        const found = sources.find(s => s.name === saved);
+        if (found) setCurrentSource(found);
+      }
     } catch {}
-    return sources[0];
-  });
+    setIsSourceLoaded(true);
+  }, [status, sourcePrefKey, sources, isSourceLoaded]);
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);

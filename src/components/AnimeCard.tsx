@@ -22,13 +22,14 @@ export interface AnimeItem {
 interface AnimeCardProps {
   item: AnimeItem;
   index?: number;
+  rank?: number;
 }
 
 const CARD_WRAPPER_STYLE: React.CSSProperties = {
   animation: "fade-in-up 0.35s ease-out both",
 };
 
-export const AnimeCard = memo(function AnimeCard({ item, index = 0 }: AnimeCardProps) {
+export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: AnimeCardProps) {
   const subCount = item.episodes?.sub ?? null;
   const dubCount = item.episodes?.dub ?? null;
 
@@ -38,9 +39,29 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0 }: AnimeCardP
     >
       <Link
         href={`/anime/${item.id}`}
-        className="group relative block aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 overflow-hidden rounded-2xl bg-muted transition-all duration-500 hover:scale-[1.06] hover:z-10 focus:outline-none"
+        className={`group relative block shrink-0 transition-all duration-500 hover:scale-[1.06] hover:z-10 focus:outline-none ${
+          rank ? "w-[200px] sm:w-[240px] md:w-[280px]" : "w-[150px] sm:w-[180px] md:w-[210px]"
+        }`}
         style={{ transformOrigin: "center bottom" }}
       >
+        {rank && (
+          <div 
+            className="absolute -left-6 bottom-[-20px] text-[140px] sm:text-[180px] md:text-[220px] font-black leading-none z-0 select-none pointer-events-none drop-shadow-2xl"
+            style={{ 
+              WebkitTextStroke: "2px rgba(255,255,255,0.8)", 
+              WebkitTextFillColor: "transparent",
+              textShadow: "4px 4px 10px rgba(0,0,0,0.8)"
+            }}
+          >
+            {rank}
+          </div>
+        )}
+        <div 
+          className={`relative z-10 w-full h-full overflow-hidden rounded-2xl bg-muted hover:shadow-2xl hover:shadow-primary/40 hover:ring-2 hover:ring-primary/50 ${
+            rank ? "ml-12 w-[calc(100%-3rem)]" : "w-full"
+          }`}
+          style={{ aspectRatio: "2/3" }}
+        >
         {item.poster ? (
           <img
             src={item.poster}
@@ -120,6 +141,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0 }: AnimeCardP
 
         <div className="absolute inset-0 rounded-2xl ring-1 ring-white/0 group-hover:ring-[#7288AE]/40 transition-all duration-500 pointer-events-none" />
         <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: "inset 0 0 30px rgba(213,82,163,0.15)" }} />
+        </div>
       </Link>
     </div>
   );

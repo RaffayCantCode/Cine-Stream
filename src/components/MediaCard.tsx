@@ -20,13 +20,14 @@ interface MediaItem {
 interface MediaCardProps {
   item: MediaItem;
   index?: number;
+  rank?: number;
 }
 
 const CARD_WRAPPER_STYLE: React.CSSProperties = {
   animation: "fade-in-up 0.35s ease-out both",
 };
 
-export function MediaCard({ item, index = 0 }: MediaCardProps) {
+export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
   const isMovie = item.media_type === "movie" || !!item.title;
   const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
   const title = item.title || item.name || "";
@@ -45,9 +46,29 @@ export function MediaCard({ item, index = 0 }: MediaCardProps) {
     >
       <Link
         href={link}
-        className="group relative block w-[150px] sm:w-[180px] md:w-[200px] shrink-0 overflow-hidden rounded-2xl bg-muted/50 transition-all duration-300 hover:scale-[1.05] hover:z-10 focus:outline-none hover:shadow-2xl hover:shadow-primary/40 hover:ring-2 hover:ring-primary/50"
-        style={{ transformOrigin: "center bottom", aspectRatio: "2/3" }}
+        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.05] hover:z-10 focus:outline-none ${
+          rank ? "w-[200px] sm:w-[240px] md:w-[280px]" : "w-[150px] sm:w-[180px] md:w-[200px]"
+        }`}
+        style={{ transformOrigin: "center bottom" }}
       >
+        {rank && (
+          <div 
+            className="absolute -left-6 bottom-[-20px] text-[140px] sm:text-[180px] md:text-[220px] font-black leading-none z-0 select-none pointer-events-none drop-shadow-2xl"
+            style={{ 
+              WebkitTextStroke: "2px rgba(255,255,255,0.8)", 
+              WebkitTextFillColor: "transparent",
+              textShadow: "4px 4px 10px rgba(0,0,0,0.8)"
+            }}
+          >
+            {rank}
+          </div>
+        )}
+        <div 
+          className={`relative z-10 w-full h-full overflow-hidden rounded-2xl bg-muted/50 hover:shadow-2xl hover:shadow-primary/40 hover:ring-2 hover:ring-primary/50 ${
+            rank ? "ml-12 w-[calc(100%-3rem)]" : "w-full"
+          }`}
+          style={{ aspectRatio: "2/3" }}
+        >
         {posterUrl ? (
           <img
             src={posterUrl}
@@ -115,6 +136,7 @@ export function MediaCard({ item, index = 0 }: MediaCardProps) {
             Eng Dub
           </div>
         )}
+        </div>
       </Link>
     </div>
   );
