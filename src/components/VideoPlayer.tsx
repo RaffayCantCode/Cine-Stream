@@ -229,29 +229,13 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
           )}
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href={currentSource?.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-white/50 hover:text-white text-xs font-bold transition-all"
-            title="Open in New Tab (External Player)"
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span className="hidden sm:inline">New Tab</span>
-          </a>
           <button
             onClick={() => { setError(null); setIsLoading(true); setRetryCount(c => c + 1); }}
-            className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all"
-            title="Retry current source"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white text-xs font-bold transition-all"
+            title="Reload Source"
           >
             <RotateCcw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={requestFullscreen}
-            className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all"
-            title="Fullscreen"
-          >
-            <Maximize2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Reload Source</span>
           </button>
         </div>
       </div>
@@ -331,6 +315,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
               </div>
             )}
             <iframe
+              key={`${currentSource.name}-${retryCount}`}
               ref={iframeRef}
               src={currentSource.url}
               className="w-full h-full"
