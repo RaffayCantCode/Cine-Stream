@@ -20,7 +20,7 @@ interface GridMediaCardProps {
 }
 
 export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
-  const isMovie = item.media_type === "movie" || !!item.title;
+  const isMovie = item.media_type ? item.media_type === "movie" : !!item.title;
   const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
   const title = item.title || item.name || "";
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);

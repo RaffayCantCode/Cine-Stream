@@ -10,6 +10,7 @@ import { Search as SearchIcon, MonitorPlay } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { useContentMode } from "@/context/ContentModeContext";
 
 interface MediaItem {
   id: number;
@@ -32,7 +33,8 @@ export default function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [animeLoading, setAnimeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"all" | "movies" | "tv" | "anime">("all");
+  const { mode, setMode } = useContentMode();
+  const activeTab = mode;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -52,14 +54,18 @@ export default function SearchPage() {
       setAnimeLoading(true);
       setError(null);
 
-      // Run both searches in parallel
+      // Determine which APIs to call based on mode
+      const fetchTmdb = mode === "all" || mode === "movies" || mode === "tv";
+      const fetchAnime = mode === "all" || mode === "anime";
+
+      // Run searches in parallel only if needed
       const [tmdbResult, animeResult] = await Promise.allSettled([
-        fetchJson<{ results: MediaItem[] }>(
-          `/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`
-        ),
-        fetchJson<{ success: boolean; data: { animes: AnimeItem[] } }>(
-          `/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`
-        ),
+        fetchTmdb
+          ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`)
+          : Promise.resolve({ results: [] }),
+        fetchAnime
+          ? fetchJson<{ success: boolean; data: { animes: AnimeItem[] } }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`)
+          : Promise.resolve({ success: true, data: { animes: [] } }),
       ]);
 
       // Handle TMDB results
@@ -90,7 +96,7 @@ export default function SearchPage() {
     };
 
     search();
-  }, [debouncedQuery]);
+  }, [debouncedQuery, mode]);
 
   // Build unified results ordered: movies → TV shows → anime
   const filteredResults = activeTab === "movies"
@@ -138,7 +144,7 @@ export default function SearchPage() {
             {(["all", "movies", "tv", "anime"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => setMode(tab)}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 capitalize touch-manipulation ${
                   activeTab === tab
                     ? tab === "anime"

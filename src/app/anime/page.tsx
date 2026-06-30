@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Search, Shuffle, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { fetchJson, shuffleArray } from "@/lib/utils";
 
@@ -218,6 +219,7 @@ export default function AnimeBrowsePage() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
+        <ContinueWatching filterType="anime" />
         <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
             <div>

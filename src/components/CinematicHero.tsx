@@ -343,14 +343,8 @@ export function CinematicHero({
       )}
 
       {/* ── Content Wrapper ────── */}
-      <div 
-        className={`relative z-20 w-full flex items-end ${
-          isAtTop ? "transition-all duration-1000 ease-out" : ""
-        } ${
-          trailerVisible ? "pt-[85svh]" : "min-h-[85svh] pt-[20svh]"
-        }`}
-      >
-        <div className="w-full">
+      <div className="relative z-20 w-full min-h-[85svh] flex items-end pt-[20svh]">
+        <div className={`w-full transition-opacity duration-1000 ${trailerVisible && isAtTop ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
           {children}
         </div>
       </div>

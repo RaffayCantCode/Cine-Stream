@@ -139,6 +139,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [animeList, setAnimeList] = useState<AnimeItem[]>([]);
+  const [collections, setCollections] = useState<any[]>([]);
   const [animeLoading, setAnimeLoading] = useState(true);
   const [revealedSections, setRevealedSections] = useState(0);
   useEffect(() => {
@@ -216,6 +217,8 @@ export default function Home() {
           { cacheTtlMs: 300000 }
         ).catch(() => null);
 
+        const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 3600000 }).catch(() => ({ collections: [] }));
+
         // ── Hero data arrives FAST (only 2 TMDB calls) ─────────────────
         const heroData = await heroPromise;
         if (cancelled) return;
@@ -276,7 +279,7 @@ export default function Home() {
         ]);
 
         // ── Full rows data arrives (more TMDB pages) ────────────────────
-        const [rowsData, animeResponse] = await Promise.all([rowsPromise, animePromise]);
+        const [rowsData, animeResponse, collectionsData] = await Promise.all([rowsPromise, animePromise, collectionsPromise]);
         if (cancelled) return;
 
         const fullTrending = filterReleasedSafeContent(rowsData.trending?.results || [])
@@ -312,6 +315,9 @@ export default function Home() {
         const daySalt = Math.floor(Date.now() / 86400000).toString();
         setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
         setGenres((rowsData.genres?.genres || []).slice(0, 18));
+        if (collectionsData?.collections) {
+          setCollections(collectionsData.collections);
+        }
 
         if (animeResponse?.success && animeResponse.data?.items) {
           setAnimeList(sessionShuffle(animeResponse.data.items, "anime").slice(0, 15));
@@ -598,39 +604,90 @@ export default function Home() {
                     style={{ background: `linear-gradient(to right, transparent, ${p.color}, transparent)` }}
                   />
 
-                  <div className="relative p-5 flex flex-col gap-4 h-full min-h-[110px]">
-                    <div className="flex items-start justify-between">
-                      <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-white/10 shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
-                        style={{
-                          background: p.color,
-                          color: p.textColor,
-                          boxShadow: `0 4px 16px ${p.color}50`,
-                        }}
-                      >
-                        <ProviderIcon slug={p.slug} className="w-6 h-6" />
-                      </div>
-                      <ChevronRight
-                        className="w-4 h-4 text-white/20 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all mt-1"
-                      />
-                    </div>
-
-                    <div>
-                      <span className="block text-base font-black text-white tracking-tight group-hover:text-white transition-colors">
-                        {p.name}
-                      </span>
-                      <span
-                        className="block text-[10px] font-bold tracking-[0.18em] uppercase mt-0.5 transition-colors"
-                        style={{ color: `${p.color}99` }}
-                      >
-                        Browse library
-                      </span>
+                  <div className="relative p-6 flex items-center justify-center h-full min-h-[120px]">
+                    <div className="transition-transform duration-500 group-hover:scale-110 flex items-center justify-center w-full h-full">
+                      {p.slug === "netflix" && (
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg" alt="Netflix" className="h-8" />
+                      )}
+                      {p.slug === "disney-plus" && (
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg" alt="Disney+" className="h-12" style={{ filter: "brightness(0) invert(1)" }} />
+                      )}
+                      {p.slug === "prime-video" && (
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png" alt="Prime Video" className="h-16 w-32 object-contain" />
+                      )}
+                      {p.slug === "apple-tv-plus" && (
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg" alt="Apple TV+" className="h-8" style={{ filter: "brightness(0) invert(1)" }} />
+                      )}
+                      {p.slug === "hulu" && (
+                        <img src="/hulu-logo.svg" alt="Hulu" className="h-20 w-auto object-contain scale-110" />
+                      )}
+                      {p.slug === "hbo-max" && (
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg" alt="Max" className="h-7" style={{ filter: "brightness(0) invert(1)" }} />
+                      )}
+                      {p.slug === "paramount-plus" && (
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg" alt="Paramount+" className="h-20 w-auto object-contain scale-110" style={{ filter: "brightness(0) invert(1)" }} />
+                      )}
+                      {p.slug === "peacock" && (
+                        <div className="flex items-center gap-2">
+                          <ProviderIcon slug="peacock" className="w-9 h-9" />
+                          <span className="text-white font-black text-3xl tracking-tighter" style={{ fontFamily: "Arial, sans-serif" }}>peacock</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Link>
               ))}
             </div>
           </LazySection>
+
+          {/* ─── EPIC FRANCHISES ─── */}
+          {collections.length > 0 && (
+            <LazySection show={revealedSections >= 4} placeholderHeight={260}>
+              <SectionHeading
+                title="Epic Franchises"
+                subtitle="Binge your favorite universes"
+              />
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {collections.map((col) => {
+                  const posterUrl = col.poster_path ? `https://image.tmdb.org/t/p/w342${col.poster_path}` : null;
+                  return (
+                    <Link
+                      key={col.id}
+                      href={`/browse/franchise/${col.id}`}
+                      className="group relative overflow-hidden rounded-2xl border border-white/[0.05] bg-[#4B5694]/5 aspect-[2/3] hover:border-white/20 hover:scale-[1.03] hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      {posterUrl ? (
+                        <>
+                          <img
+                            src={posterUrl}
+                            alt={col.name}
+                            className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-muted">
+                          <span className="text-center font-bold text-white text-sm">{col.name}</span>
+                        </div>
+                      )}
+                      
+                      {posterUrl && (
+                        <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-2 group-hover:translate-y-0 transition-transform">
+                          <h4 className="text-white font-bold text-sm tracking-wide line-clamp-2 drop-shadow-md">
+                            {col.name}
+                          </h4>
+                          <span className="text-[10px] uppercase tracking-wider text-white/60 font-semibold drop-shadow-md">
+                            Collection
+                          </span>
+                        </div>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            </LazySection>
+          )}
 
           {/* ─── GENRE UNIVERSE ─── */}
           <LazySection show={revealedSections >= 5} placeholderHeight={260}>
@@ -683,16 +740,21 @@ export default function Home() {
           </LazySection>
 
           {/* ─── FOOTER TAG ─── */}
-          <footer className="border-t border-[#7288AE]/10 pt-8 pb-4 text-center">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <img src="/logo-icon.svg" alt="CineStream" className="w-6 h-6 opacity-50" />
-              <span className="text-sm font-bold tracking-wider text-[#7288AE]/40">
-                CINE<span className="text-[#EAE0CF]/40">STREAM</span>
+          <footer className="border-t border-[#7288AE]/20 pt-10 pb-8 flex flex-col items-center justify-center gap-4">
+            <div className="flex items-center gap-2">
+              <img src="/logo-icon.svg" alt="CineStream" className="w-7 h-7 opacity-90" />
+              <span className="text-base font-black tracking-widest text-white/90">
+                CINE<span className="text-primary">STREAM</span>
               </span>
             </div>
-            <p className="text-[10px] text-[#7288AE]/30 font-medium tracking-wider">
-              Movies. TV. Anime. All in one place.
-            </p>
+            <div className="flex flex-col items-center text-center gap-2">
+              <p className="text-xs sm:text-sm text-white/70 font-semibold tracking-wide">
+                Movies. TV. Anime. All in one place.
+              </p>
+              <p className="text-[10px] sm:text-xs text-[#7288AE]/80 max-w-md px-4 font-medium leading-relaxed">
+                CineStream does not host any media, it only provides media from open sources!
+              </p>
+            </div>
           </footer>
 
         </div>

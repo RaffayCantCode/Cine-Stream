@@ -149,17 +149,22 @@ export default function LandingPage() {
       </section>
 
       {/* ─── FOOTER ─── */}
-      <footer className="relative border-t border-[#7288AE]/10 py-10">
-        <div className="max-w-screen-2xl mx-auto px-6 md:px-12 flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="relative border-t border-[#7288AE]/20 py-10">
+        <div className="max-w-screen-2xl mx-auto px-6 md:px-12 flex flex-col items-center justify-center gap-4">
           <div className="flex items-center gap-2">
-            <img src="/logo-icon.svg" alt="CineStream" className="w-6 h-6 opacity-40" />
-            <span className="text-sm font-bold tracking-wider text-[#7288AE]/40">
-              CINE<span className="text-[#EAE0CF]/40">STREAM</span>
+            <img src="/logo-icon.svg" alt="CineStream" className="w-7 h-7 opacity-90" />
+            <span className="text-base font-black tracking-widest text-white/90">
+              CINE<span className="text-primary">STREAM</span>
             </span>
           </div>
-          <p className="text-[10px] text-[#7288AE]/30 font-medium tracking-wider">
-            Movies. TV. Anime. All in one place.
-          </p>
+          <div className="flex flex-col items-center text-center gap-2">
+            <p className="text-xs sm:text-sm text-white/70 font-semibold tracking-wide">
+              Movies. TV. Anime. All in one place.
+            </p>
+            <p className="text-[10px] sm:text-xs text-[#7288AE]/80 max-w-md px-4 font-medium leading-relaxed">
+              CineStream does not host any media, it only provides media from open sources!
+            </p>
+          </div>
         </div>
       </footer>
     </div>

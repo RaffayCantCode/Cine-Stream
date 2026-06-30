@@ -264,11 +264,12 @@ export default function MovieClient() {
             </div>
             <div className="flex overflow-x-auto gap-4 pb-4 hide-scrollbar">
               {movie.credits.cast.slice(0, 16).map((person, i) => (
-                  <div
+                  <Link
+                  href={`/person/${person.id}`}
                   key={person.id}
-                  className="w-[100px] shrink-0 text-center"
+                  className="w-[100px] shrink-0 text-center group cursor-pointer"
                 >
-                  <div className="aspect-[2/3] rounded-xl bg-card overflow-hidden mb-2.5 ring-1 ring-white/[0.06]">
+                  <div className="aspect-[2/3] rounded-xl bg-card overflow-hidden mb-2.5 ring-1 ring-white/[0.06] transition-transform duration-300 group-hover:scale-105 group-hover:ring-primary/50">
                     {person.profile_path ? (
                       <img
                         src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
@@ -288,10 +289,10 @@ export default function MovieClient() {
                   <h4 className="font-semibold text-xs text-white line-clamp-1 leading-tight">
                     {person.name}
                   </h4>
-                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5 group-hover:text-muted-foreground/80 transition-colors">
                     {person.character}
                   </p>
-                </div>
+                </Link>
               ))}
             </div>
           </section>

@@ -47,6 +47,30 @@
     --input: 232 25% 20%;
     --ring: 218 27% 56%;
   }
+
+  /* Movie Mode: Deeper cinematic blues/slates and ruby accents */
+  .mode-movies.dark {
+    --background: 220 50% 8%;
+    --card: 220 45% 12%;
+    --primary: 350 70% 45%;
+    --ring: 350 70% 45%;
+  }
+
+  /* TV Mode: Cleaner teal/emerald accents for episodic content */
+  .mode-tv.dark {
+    --background: 210 40% 10%;
+    --card: 210 35% 14%;
+    --primary: 160 60% 35%;
+    --ring: 160 60% 35%;
+  }
+
+  /* Anime Mode: Vibrant dark purples and vivid pinks */
+  .mode-anime.dark {
+    --background: 260 50% 10%;
+    --card: 260 45% 15%;
+    --primary: 280 65% 50%;
+    --ring: 280 65% 50%;
+  }
 }
 
 @layer base {
@@ -58,7 +82,7 @@
     scroll-padding-top: 32px;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-700 ease-in-out;
     margin: 0;
     padding: 0;
     min-height: 100vh;

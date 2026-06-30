@@ -21,7 +21,11 @@ interface WatchHistoryItem {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export function ContinueWatching() {
+interface ContinueWatchingProps {
+  filterType?: "movie" | "tv" | "anime" | "all";
+}
+
+export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps = {}) {
   const { status } = useSession();
   const router = useRouter();
   const { data, isLoading } = useSWR(
@@ -38,11 +42,38 @@ export function ContinueWatching() {
     return null;
   }
 
+  const filteredItems = data.items.filter((item: WatchHistoryItem) => {
+    if (filterType === "movie") return item.mediaType === "movie";
+    if (filterType === "tv") return item.mediaType === "tv";
+    if (filterType === "anime") return item.mediaType === "anime";
+    return true;
+  });
+
+  if (filteredItems.length === 0) return null;
+
   const handleRemove = async (mediaId: number, mediaType: string, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    // Optimistically update the UI so the item disappears instantly
+    mutate(
+      "/api/watch-history",
+      (currentData: any) => {
+        if (!currentData || !currentData.items) return currentData;
+        return {
+          ...currentData,
+          items: currentData.items.filter(
+            (item: WatchHistoryItem) =>
+              !(item.mediaId === mediaId && item.mediaType === mediaType)
+          ),
+        };
+      },
+      false
+    );
+
     await fetch(`/api/watch-history/${mediaId}?mediaType=${mediaType}`, {
       method: "DELETE",
     });
+
     mutate("/api/watch-history");
   };
 
@@ -71,7 +102,7 @@ export function ContinueWatching() {
 
         <div className="overflow-hidden pb-3" ref={emblaRef}>
           <div className="flex gap-4">
-            {data.items.map((item: WatchHistoryItem, i: number) => {
+            {filteredItems.map((item: WatchHistoryItem, i: number) => {
             const posterUrl = item.posterPath
               ? item.mediaType === "anime"
                 ? item.posterPath
@@ -128,10 +159,10 @@ export function ContinueWatching() {
 
                   <button
                     onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-100 transition-opacity hover:bg-red-600/80 z-10"
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-red-500 hover:text-white hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.6)] z-20 md:opacity-0 md:group-hover:opacity-100"
                     aria-label="Remove"
                   >
-                    <X className="w-3.5 h-3.5 text-white" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 

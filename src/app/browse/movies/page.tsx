@@ -6,6 +6,7 @@ const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sideb
 import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
 import { cn, fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
+const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
 interface Genre {
   id: number;
@@ -209,9 +210,10 @@ export default function BrowseMoviesPage() {
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
-      <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-          <div>
+        <ContinueWatching filterType="movie" />
+        <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
+            <div>
             <h1 className="text-4xl font-bold text-white">Movies</h1>
             <p className="text-sm text-white/40 mt-2">
               Browse by genre, sort, and keep scrolling until you find something worth watching.
