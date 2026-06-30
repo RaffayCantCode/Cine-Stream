@@ -62,7 +62,8 @@ export default function TvClient() {
   const [isPlaying, setIsPlaying] = useState(false);
   
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  const [selectedEpisode, setSelectedEpisode] = useState<number>(1);
+  const [playingSeason, setPlayingSeason] = useState<number>(1);
+  const [playingEpisode, setPlayingEpisode] = useState<number>(1);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
 
   useEffect(() => {
@@ -88,7 +89,8 @@ export default function TvClient() {
       }
     }
     setSelectedSeason(initSeason);
-    setSelectedEpisode(initEp);
+    setPlayingSeason(initSeason);
+    setPlayingEpisode(initEp);
     setIsStateLoaded(true);
   }, [id, status, session, searchParams, isStateLoaded]);
 
@@ -136,8 +138,8 @@ export default function TvClient() {
     const season = Number(searchParams.get("season"));
     const episode = Number(searchParams.get("episode"));
 
-    if (season > 0) setSelectedSeason(season);
-    if (episode > 0) setSelectedEpisode(episode);
+    if (season > 0) { setSelectedSeason(season); setPlayingSeason(season); }
+    if (episode > 0) setPlayingEpisode(episode);
     if (autoPlay) setIsPlaying(true);
   }, [searchParams]);
 
@@ -146,10 +148,10 @@ export default function TvClient() {
     if (typeof window !== "undefined" && status !== "loading") {
       try {
         const userId = session?.user?.id || "guest";
-        localStorage.setItem(`sv_tv_state_${userId}_${id}`, JSON.stringify({ season: selectedSeason, episode: selectedEpisode }));
+        localStorage.setItem(`sv_tv_state_${userId}_${id}`, JSON.stringify({ season: playingSeason, episode: playingEpisode }));
       } catch {}
     }
-  }, [id, selectedSeason, selectedEpisode, status, session]);
+  }, [id, playingSeason, playingEpisode, status, session]);
 
   useEffect(() => {
     if (!selectedSeason) return;
@@ -172,7 +174,8 @@ export default function TvClient() {
 
   const handleWatchEpisode = async (season: number, episodeNumber: number, episodeName?: string) => {
     setSelectedSeason(season);
-    setSelectedEpisode(episodeNumber);
+    setPlayingSeason(season);
+    setPlayingEpisode(episodeNumber);
 
     if (status === "authenticated" && show) {
       await fetch("/api/watch-history", {
@@ -205,9 +208,9 @@ export default function TvClient() {
 
   // ── Scroll queue to selected episode ──
   useEffect(() => {
-    if (!isPlaying || !selectedEpRef.current) return;
+    if (!isPlaying || !selectedEpRef.current || playingSeason !== selectedSeason) return;
     selectedEpRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [selectedEpisode, isPlaying]);
+  }, [playingEpisode, playingSeason, selectedSeason, isPlaying]);
 
   if (isLoading) {
     return (
@@ -249,8 +252,9 @@ export default function TvClient() {
   const score = show.vote_average ?? 0;
   const scoreColor =
     score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
-  const currentEpisode = seasonData?.episodes?.find((ep) => ep.episode_number === selectedEpisode);
-  const nextEpisode = seasonData?.episodes?.find((ep) => ep.episode_number === selectedEpisode + 1);
+  const isPlayingSeasonLoaded = playingSeason === selectedSeason;
+  const currentEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode) : null;
+  const nextEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode + 1) : null;
 
   const seasonTrailerId = seasonData?.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
   const mainTrailerId = show.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
@@ -333,13 +337,15 @@ export default function TvClient() {
             <div>
               <button
                 onClick={() => {
-                  const ep = seasonData?.episodes?.find(e => e.episode_number === selectedEpisode) || seasonData?.episodes?.[0];
-                  handleWatchEpisode(selectedSeason, ep?.episode_number ?? 1, ep?.name);
+                  const ep = playingSeason === selectedSeason 
+                    ? (seasonData?.episodes?.find(e => e.episode_number === playingEpisode) || seasonData?.episodes?.[0])
+                    : null;
+                  handleWatchEpisode(playingSeason, playingEpisode, ep?.name);
                 }}
                 className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
               >
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
-                Watch S{selectedSeason} E{selectedEpisode}
+                Watch S{playingSeason} E{playingEpisode}
               </button>
             </div>
           </div>
@@ -351,22 +357,21 @@ export default function TvClient() {
         <div ref={playerRef} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
           <div>
             <VideoPlayer
-              key={`${id}-s${selectedSeason}-e${selectedEpisode}`}
               type="tv"
               id={id}
-              season={selectedSeason}
-              episode={selectedEpisode}
-              title={`${show.name} - S${selectedSeason}E${selectedEpisode}`}
+              season={playingSeason}
+              episode={playingEpisode}
+              title={`${show.name} - S${playingSeason}E${playingEpisode}`}
               startProgress={Number(searchParams.get("t") || 0)}
             />
             <div className="mt-3 text-sm text-white/60">
               <span className="font-bold text-white">Now Playing: </span>
-              S{selectedSeason}E{selectedEpisode}
+              S{playingSeason}E{playingEpisode}
               {currentEpisode?.name ? ` - ${currentEpisode.name}` : ""}
             </div>
             {nextEpisode && (
               <button
-                onClick={() => handleWatchEpisode(selectedSeason, nextEpisode.episode_number, nextEpisode.name)}
+                onClick={() => handleWatchEpisode(playingSeason, nextEpisode.episode_number, nextEpisode.name)}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -391,15 +396,15 @@ export default function TvClient() {
                 seasonData.episodes.map((episode) => (
                   <button
                     key={`queue-${episode.id}`}
-                    ref={selectedEpisode === episode.episode_number ? selectedEpRef : undefined}
+                    ref={playingSeason === selectedSeason && playingEpisode === episode.episode_number ? selectedEpRef : undefined}
                     onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
                     className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
-                      selectedEpisode === episode.episode_number
+                      playingSeason === selectedSeason && playingEpisode === episode.episode_number
                         ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
                     }`}
                   >
-                    <span className={`text-sm font-black w-10 shrink-0 ${selectedEpisode === episode.episode_number ? "text-white" : ""}`}>
+                    <span className={`text-sm font-black w-10 shrink-0 ${playingSeason === selectedSeason && playingEpisode === episode.episode_number ? "text-white" : ""}`}>
                       E{episode.episode_number}
                     </span>
                     <span className="text-xs truncate flex-1 line-clamp-1">{episode.name}</span>

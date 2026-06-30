@@ -104,7 +104,7 @@ export function ContinueWatching() {
                     </div>
                   )}
 
-                  <div className={`absolute top-2 left-2 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md backdrop-blur-sm tracking-wider uppercase ${
+                  <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-1 rounded-md backdrop-blur-sm tracking-widest uppercase shadow-lg ${
                     item.mediaType === "movie"
                       ? "bg-gradient-to-r from-blue-600/90 to-indigo-600/90"
                       : item.mediaType === "tv"
@@ -121,7 +121,7 @@ export function ContinueWatching() {
                   </div>
 
                   {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-                    <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white/80">
+                    <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-sm rounded-md px-2 py-1 text-[11px] sm:text-xs font-black text-white shadow-lg">
                       S{item.season} E{item.episode}
                     </div>
                   )}
@@ -139,7 +139,7 @@ export function ContinueWatching() {
                   {item.title}
                 </h4>
                 {(item.mediaType === "tv" || item.mediaType === "anime") && item.episodeName && (
-                  <p className="text-[10px] text-white/40 mt-0.5 line-clamp-1">
+                  <p className="text-[11px] text-[#7288AE] font-medium mt-0.5 line-clamp-1">
                     {item.episodeName}
                   </p>
                 )}

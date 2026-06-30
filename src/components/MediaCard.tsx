@@ -132,7 +132,7 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
         ) : null}
 
         {isTmdbAnime(item) && (
-          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-md backdrop-blur-sm tracking-wider uppercase group-hover:opacity-0 transition-opacity duration-300">
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90 text-white text-[10px] sm:text-[11px] font-black px-2 py-1 rounded-md backdrop-blur-sm tracking-widest uppercase group-hover:opacity-0 transition-opacity duration-300 shadow-lg">
             Eng Dub
           </div>
         )}

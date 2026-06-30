@@ -77,12 +77,12 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           </div>
         )}
 
-        <div className="absolute top-2 left-2 z-20 flex items-center gap-1">
-          <span className="bg-[#4B5694]/90 backdrop-blur-xl text-white text-[9px] font-extrabold tracking-widest px-1.5 py-0.5 rounded-md uppercase leading-none">
+        <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5">
+          <span className="bg-[#4B5694]/90 backdrop-blur-xl text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-1 rounded-md uppercase leading-none shadow-lg">
             JP SUB
           </span>
           {dubCount !== null && dubCount > 0 && (
-            <span className="bg-amber-500/90 backdrop-blur-xl text-white text-[9px] font-extrabold tracking-widest px-1.5 py-0.5 rounded-md uppercase leading-none">
+            <span className="bg-amber-500/90 backdrop-blur-xl text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-1 rounded-md uppercase leading-none shadow-lg">
               DUB
             </span>
           )}
