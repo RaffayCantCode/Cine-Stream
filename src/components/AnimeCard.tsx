@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Star, Play } from "lucide-react";
 import { memo } from "react";
 
@@ -63,13 +64,13 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           style={{ aspectRatio: "2/3" }}
         >
         {item.poster ? (
-          <img
+          <Image
             src={item.poster}
             alt={item.name}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            loading={index < 6 ? "eager" : "lazy"}
-            decoding="async"
-            fetchPriority={index < 6 ? "high" : "low"}
+            fill
+            sizes="(max-width: 640px) 150px, (max-width: 768px) 180px, 210px"
+            className="object-cover transition-transform duration-700 group-hover:scale-105"
+            priority={index < 6}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
@@ -90,8 +91,8 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
 
         <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-black/85 to-transparent pointer-events-none" />
 
-        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 pointer-events-none">
-          <h3 className="text-white font-bold text-[11px] leading-tight line-clamp-2 drop-shadow-xl">
+        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 sm:p-3 pointer-events-none">
+          <h3 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2 drop-shadow-xl">
             {item.name}
           </h3>
         </div>

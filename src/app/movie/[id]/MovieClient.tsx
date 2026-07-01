@@ -23,6 +23,7 @@ interface Movie {
   backdrop_path?: string;
   poster_path?: string;
   vote_average?: number;
+  vote_count?: number;
   release_date?: string;
   runtime?: number;
   adult?: boolean;
@@ -199,7 +200,7 @@ export default function MovieClient() {
             <div
               className="flex flex-wrap items-center gap-3 text-sm"
             >
-              {score > 0 && (
+              {score > 0 && movie.vote_count && movie.vote_count > 20 && (
                 <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
                   <Star className="w-4 h-4 fill-current" />
                   <span className="text-base">{score.toFixed(1)}</span>

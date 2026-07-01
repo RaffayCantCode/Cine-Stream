@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     const data = await tmdbFetch(`/trending/${type}/${timeWindow}`, {
       page,
       include_adult: "true",
-    });
+    }) as { results?: unknown[] };
+
+
+
     return Response.json(data);
   } catch (error) {
     return Response.json({ error: "Failed to fetch trending" }, { status: 500 });

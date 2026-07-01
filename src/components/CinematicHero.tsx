@@ -36,7 +36,7 @@ export function CinematicHero({
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const backdropUrl = backdropPath
-    ? `https://image.tmdb.org/t/p/w1280${backdropPath}`
+    ? (backdropPath.startsWith('http') ? backdropPath : `https://image.tmdb.org/t/p/w1280${backdropPath}`)
     : null;
 
   // Build a youtube-nocookie embed URL that autoplays muted on loop
@@ -286,8 +286,8 @@ export function CinematicHero({
         )}
 
         {/* Gradient overlays — kept mostly opaque so text remains readable and blending works! */}
-        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible ? "opacity-60" : "opacity-100"} bg-gradient-to-t from-background via-background/80 to-black/10 z-10`} />
-        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible ? "opacity-70" : "opacity-100"} bg-gradient-to-r from-background/90 via-background/40 to-transparent z-10`} />
+        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible ? "opacity-0" : "opacity-100"} bg-gradient-to-t from-background via-background/80 to-black/10 z-10`} />
+        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible ? "opacity-0" : "opacity-100"} bg-gradient-to-r from-background/90 via-background/40 to-transparent z-10`} />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background to-transparent z-10" />
         <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-background/60 to-transparent z-10" />
       </div>

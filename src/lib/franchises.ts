@@ -3,13 +3,19 @@ export interface FranchiseItem {
   media_type: "movie" | "tv";
 }
 
+export interface FranchiseGroup {
+  name: string;
+  items: FranchiseItem[];
+}
+
 export interface FranchiseDefinition {
   id: string;
   name: string;
   overview: string;
   backdrop_path: string;
   poster_path: string;
-  items: FranchiseItem[];
+  items?: FranchiseItem[];
+  groups?: FranchiseGroup[];
 }
 
 export const FRANCHISES: FranchiseDefinition[] = [
@@ -167,5 +173,78 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 33880, media_type: "tv" }, // The Legend of Korra
       { id: 82452, media_type: "tv" }, // Netflix Live Action
     ],
+  },
+  {
+    id: "naruto",
+    name: "Naruto (Japanese Dub)",
+    overview: "The complete journey of Naruto Uzumaki, from a mischievous ninja student to the Seventh Hokage.",
+    backdrop_path: "/5F0HVEgkgP99fEWDjPyikGt9jQi.jpg",
+    poster_path: "/xppeysfvDKVx775MFuH8Z9BlpMk.jpg",
+    items: [
+      { id: 46260, media_type: "tv" }, // Naruto
+      { id: 31910, media_type: "tv" }, // Naruto Shippuden
+      { id: 70881, media_type: "tv" }, // Boruto
+    ],
+  },
+  {
+    id: "mission-impossible",
+    name: "Mission: Impossible Franchise",
+    overview: "Ethan Hunt and the IMF team embark on their most dangerous missions yet, saving the world from catastrophic threats.",
+    backdrop_path: "/5jnoAA74Qwb5w6B9FMvnc20n6Ie.jpg",
+    poster_path: "/AkJQpZp9WoNdj7pLYSj1L0RcMMN.jpg",
+    items: [
+      { id: 954, media_type: "movie" }, // Mission: Impossible
+      { id: 955, media_type: "movie" }, // Mission: Impossible II
+      { id: 956, media_type: "movie" }, // Mission: Impossible III
+      { id: 56292, media_type: "movie" }, // Mission: Impossible - Ghost Protocol
+      { id: 177677, media_type: "movie" }, // Mission: Impossible - Rogue Nation
+      { id: 353081, media_type: "movie" }, // Mission: Impossible - Fallout
+      { id: 575264, media_type: "movie" }, // Mission: Impossible - Dead Reckoning Part One
+      { id: 575265, media_type: "movie" }, // Mission: Impossible - The Final Reckoning
+    ],
+  },
+  {
+    id: "james-bond",
+    name: "James Bond Collection",
+    overview: "The legendary spy film series based on Ian Fleming’s novels, following MI6 agent 007, James Bond.",
+    backdrop_path: "/dOSECZImeyZldoq0ObieBE0lwie.jpg",
+    poster_path: "/ofwSiqOFShhunAIYYdSMHMJQSx2.jpg",
+    groups: [
+      {
+        name: "Daniel Craig Era",
+        items: [
+          { id: 36557, media_type: "movie" }, // Casino Royale
+          { id: 10764, media_type: "movie" }, // Quantum of Solace
+          { id: 37724, media_type: "movie" }, // Skyfall
+          { id: 206647, media_type: "movie" }, // Spectre
+          { id: 370172, media_type: "movie" }, // No Time to Die
+        ]
+      },
+      {
+        name: "Previous Bond Films",
+        items: [
+          { id: 646, media_type: "movie" }, // Dr. No
+          { id: 657, media_type: "movie" }, // From Russia with Love
+          { id: 658, media_type: "movie" }, // Goldfinger
+          { id: 660, media_type: "movie" }, // Thunderball
+          { id: 667, media_type: "movie" }, // You Only Live Twice
+          { id: 668, media_type: "movie" }, // On Her Majesty's Secret Service
+          { id: 681, media_type: "movie" }, // Diamonds Are Forever
+          { id: 253, media_type: "movie" }, // Live and Let Die
+          { id: 682, media_type: "movie" }, // The Man with the Golden Gun
+          { id: 691, media_type: "movie" }, // The Spy Who Loved Me
+          { id: 698, media_type: "movie" }, // Moonraker
+          { id: 699, media_type: "movie" }, // For Your Eyes Only
+          { id: 700, media_type: "movie" }, // Octopussy
+          { id: 707, media_type: "movie" }, // A View to a Kill
+          { id: 708, media_type: "movie" }, // The Living Daylights
+          { id: 709, media_type: "movie" }, // Licence to Kill
+          { id: 710, media_type: "movie" }, // GoldenEye
+          { id: 714, media_type: "movie" }, // Tomorrow Never Dies
+          { id: 36643, media_type: "movie" }, // The World Is Not Enough
+          { id: 36669, media_type: "movie" }, // Die Another Day
+        ]
+      }
+    ]
   }
 ];

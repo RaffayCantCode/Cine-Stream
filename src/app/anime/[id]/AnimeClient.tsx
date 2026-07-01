@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { AnimeRow } from "@/components/AnimeRow";
+import { CinematicHero } from "@/components/CinematicHero";
 import { fetchJson, cn } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List } from "lucide-react";
@@ -33,6 +34,7 @@ interface AnimeDetail {
   openedSeasonId?: string | null;
   tmdbId?: number | null;
   duration?: number | null;
+  trailerId?: string | null;
 }
 
 interface Episode {
@@ -46,6 +48,7 @@ interface Episode {
   isReleased?: boolean;
   description?: string;
   vote_average?: number;
+  vote_count?: number;
   runtime?: number;
   seasonNum?: number;
   seasonId?: string;
@@ -507,19 +510,11 @@ export default function AnimeClient() {
         ) : anime ? (
           <>
             {/* ── Hero Banner ── */}
-            <div className="relative w-full h-[55vh] md:h-[65vh] flex items-end overflow-hidden">
-              <div className="absolute inset-0">
-                <img
-                  src={anime.poster}
-                  alt={anime.name}
-                  className="w-full h-full object-cover object-center md:object-top scale-105 blur-sm brightness-45"
-                  onError={(e) => { e.currentTarget.src = ""; }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/20" />
-                <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/30 to-transparent" />
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(139,92,246,0.15)_0%,transparent_60%)]" />
-              </div>
-
+            <CinematicHero
+              backdropPath={anime.poster}
+              trailerId={anime.trailerId}
+              title={anime.name}
+            >
               <div className="relative z-10 pb-6 md:pb-16 px-5 md:px-12 flex flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-10 max-w-screen-2xl mx-auto w-full">
                 <div
                   className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
@@ -586,7 +581,7 @@ export default function AnimeClient() {
                   </div>
                 </div>
               </div>
-            </div>
+            </CinematicHero>
 
             {/* ── Main Content ── */}
             <div className="px-5 md:px-12 max-w-screen-2xl mx-auto mt-6 space-y-6">
@@ -1049,12 +1044,12 @@ export default function AnimeClient() {
                                       {displayTitle}
                                     </h4>
                                     <div className="flex items-center gap-1.5 shrink-0">
-                                      {ep.vote_average && ep.vote_average > 0 && (
+                                      {ep.vote_average && ep.vote_average > 0 && ep.vote_count && ep.vote_count > 5 ? (
                                         <div className="flex items-center gap-0.5 text-amber-400">
                                           <Star className="w-3 h-3 fill-current" />
                                           <span className="font-bold text-xs">{ep.vote_average.toFixed(1)}</span>
                                         </div>
-                                      )}
+                                      ) : null}
                                     </div>
                                   </div>
                                   {ep.releasedDate && (

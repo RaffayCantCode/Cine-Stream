@@ -14,6 +14,7 @@ interface Collection {
   poster_path: string | null;
   backdrop_path: string | null;
   parts: any[];
+  groups?: { name: string; parts: any[] }[];
 }
 
 export default function FranchisePage({ params }: { params: Promise<{ id: string }> }) {
@@ -80,17 +81,37 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
           </div>
         )}
 
-        <div className={`max-w-screen-2xl mx-auto px-5 md:px-10 ${collection.backdrop_path ? "pt-8" : "pt-24"}`}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-5 bg-primary rounded-full" />
-            <h2 className="text-xl font-bold tracking-tight text-white">Chronological Order</h2>
-          </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
-            {collection.parts.map((item, index) => (
-              <GridMediaCard key={item.id} item={item} index={index} />
-            ))}
-          </div>
+        <div className={`max-w-screen-2xl mx-auto px-5 md:px-10 pb-10 ${collection.backdrop_path ? "pt-8" : "pt-24"}`}>
+          {collection.groups && collection.groups.length > 0 ? (
+            <div className="flex flex-col gap-12">
+              {collection.groups.map((group, gIdx) => (
+                <div key={gIdx}>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-1 h-5 bg-primary rounded-full" />
+                    <h2 className="text-xl font-bold tracking-tight text-white">{group.name}</h2>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
+                    {group.parts.map((item, index) => (
+                      <GridMediaCard key={item.id} item={item} index={index} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-1 h-5 bg-primary rounded-full" />
+                <h2 className="text-xl font-bold tracking-tight text-white">Chronological Order</h2>
+              </div>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
+                {collection.parts.map((item, index) => (
+                  <GridMediaCard key={item.id} item={item} index={index} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </main>
     </div>

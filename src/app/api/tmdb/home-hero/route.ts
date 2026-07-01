@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
 
+export const revalidate = 3600;
+
 async function fetchPage(endpoint: string, page: number) {
   const data = await tmdbFetch(endpoint, { page: String(page), include_adult: "true" }) as { results?: unknown[] };
   return data?.results ?? [];
@@ -26,6 +28,8 @@ export async function GET(_request: NextRequest) {
   const [trending, popularMovies, topRatedMovies, nowPlaying, popularTv, topRatedTv, onTheAir, animeMovies, animeTv, trendingMoviesToday, trendingTvToday] = results.map(r =>
     r.status === "fulfilled" ? r.value : []
   );
+
+
 
   return Response.json({
     trending: { results: trending },

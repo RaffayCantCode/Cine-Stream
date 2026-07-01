@@ -22,6 +22,7 @@ interface Episode {
   overview?: string;
   still_path?: string;
   vote_average?: number;
+  vote_count?: number;
   runtime?: number;
 }
 
@@ -43,6 +44,7 @@ interface TvShow {
   backdrop_path?: string;
   poster_path?: string;
   vote_average?: number;
+  vote_count?: number;
   first_air_date?: string;
   number_of_seasons?: number;
   adult?: boolean;
@@ -305,7 +307,7 @@ export default function TvClient() {
             <div
               className="flex flex-wrap items-center gap-3 text-sm"
             >
-              {score > 0 && (
+              {score > 0 && show.vote_count && show.vote_count > 20 && (
                 <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
                   <Star className="w-4 h-4 fill-current" />
                   <span className="text-base">{score.toFixed(1)}</span>
@@ -500,12 +502,12 @@ export default function TvClient() {
                             <span className="sm:hidden text-white/40 mr-1.5">E{episode.episode_number}.</span>
                             {episode.name}
                           </h4>
-                          {episode.vote_average && episode.vote_average > 0 && (
+                          {episode.vote_average && episode.vote_average > 0 && episode.vote_count && episode.vote_count > 5 ? (
                             <div className="flex items-center gap-1 text-amber-400 shrink-0">
                               <Star className="w-3 h-3 fill-current" />
                               <span className="font-bold text-xs">{episode.vote_average.toFixed(1)}</span>
                             </div>
-                          )}
+                          ) : null}
                         </div>
                         {episode.overview && (
                           <p className="text-white/40 text-xs leading-relaxed line-clamp-2">{episode.overview}</p>

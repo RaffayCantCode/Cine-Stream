@@ -22,6 +22,7 @@ export interface AnimeItem {
   seasonYear?: number | null;
   format?: string | null;
   duration?: number | null;
+  trailerId?: string | null;
 }
 
 export interface SeasonInfo {
@@ -70,6 +71,7 @@ interface AniListMedia {
   season: string | null;
   seasonYear: number | null;
   duration: number | null;
+  trailer?: { id: string; site: string } | null;
 }
 
 // A node in the franchise graph
@@ -130,6 +132,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     seasonYear: media.seasonYear || null,
     format: media.format || null,
     duration: media.duration || null,
+    trailerId: media.trailer?.site === "youtube" ? media.trailer.id : null,
   };
 }
 
@@ -143,7 +146,7 @@ const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
       search: $q
     ) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-      episodes genres averageScore description status type format season seasonYear
+      episodes genres averageScore description status type format season seasonYear trailer { id site }
     }
   }
 }`;
@@ -769,7 +772,7 @@ export async function getAnimeDetails(
       const q = `query ($id: Int) {
         Media(id: $id, type: ANIME, isAdult: false) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-      episodes genres averageScore description status type format season seasonYear duration
+      episodes genres averageScore description status type format season seasonYear duration trailer { id site }
         }
       }`;
       const data = await anilistQuery(q, { id: numId });

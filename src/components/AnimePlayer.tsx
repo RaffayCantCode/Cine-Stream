@@ -3,11 +3,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Server, Maximize2, RotateCcw, SkipForward } from "lucide-react";
+import { Server, Maximize2, RotateCcw, SkipForward, ChevronRight, Check, Loader2 } from "lucide-react";
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animeplay" | "vidlink" | "embedsu";
+  provider: "vidnest" | "animeplay" | "vidlink" | "123embed" | "vidlink-alt" | "anyembed";
   color: string;
 }
 
@@ -29,7 +29,9 @@ const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
   { name: "Source 2", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
   { name: "Source 3", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
-  { name: "Source 4", provider: "embedsu", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
+  { name: "Source 4", provider: "123embed", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
+  { name: "Source 5", provider: "vidlink-alt", color: "from-[#8a2be2]/30 to-[#da70d6]/20" },
+  { name: "Source 6", provider: "anyembed", color: "from-[#ff8c00]/30 to-[#ffa500]/20" },
 ];
 
 // Build a provider embed URL entirely client-side — no server round-trip needed
@@ -69,10 +71,20 @@ function buildProviderUrl(
       return tmdbId
         ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=false${timeParam}`
         : `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?primaryColor=4b5694&autoplay=false&fallback=true${timeParam}`;
-    case "embedsu":
+    case "123embed":
       return tmdbId
-        ? `https://embed.su/embed/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`
-        : `https://embed.su/embed/tv/${malId_ || aniId || ""}`;
+        ? `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`
+        : malId_
+          ? `https://animeplay.cfd/stream/mal/${malId_}/${ep}/sub`
+          : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
+    case "vidlink-alt":
+      return malId_ || aniId
+        ? `https://vidlink.pro/anime/${malId_ || aniId}/${ep}/sub?primaryColor=4b5694&autoplay=false`
+        : `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
+    case "anyembed":
+      return tmdbId
+        ? `https://anyembed.xyz/embed/tmdb-tv-${tmdbId}-${tmdbSeason || 1}-${absEp}`
+        : `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
     default:
       return "";
   }
@@ -97,6 +109,7 @@ export function AnimePlayer({
 
   const [sourceIndex, setSourceIndex] = useState(0);
   const [isSourceLoaded, setIsSourceLoaded] = useState(false);
+  const [showSources, setShowSources] = useState(false);
 
   useEffect(() => {
     if (status === "loading" || isSourceLoaded) return;
@@ -114,6 +127,15 @@ export function AnimePlayer({
     } catch {}
     setIsSourceLoaded(true);
   }, [status, sourcePrefKey, isSourceLoaded]);
+
+  const handleSourceChange = (index: number, name: string) => {
+    setSourceIndex(index);
+    setHasError(false);
+    setIsLoading(true);
+    setShowSources(false);
+    setRetryCount(0);
+    try { localStorage.setItem(sourcePrefKey, name); } catch {}
+  };
 
   const [currentUrl, setCurrentUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -142,7 +164,8 @@ export function AnimePlayer({
       "https://animeplay.cfd",
       "https://vidnest.fun",
       "https://vidlink.pro",
-      "https://embed.su"
+      "https://player.autoembed.co",
+      "https://multiembed.mov"
     ];
     const links: HTMLLinkElement[] = [];
     domains.forEach(href => {
@@ -260,35 +283,65 @@ export function AnimePlayer({
   };
 
   return (
-    <div className="w-full space-y-3">
+    <div className="w-full space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/10">
-            <span className="text-xs font-bold text-white/85">{currentSource.name}</span>
-          </div>
-          {hasError && (
-            <span className="text-[10px] text-red-400 bg-red-400/10 border border-red-400/20 px-2 py-0.5 rounded-lg font-bold">
-              Failed
-            </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-white/40 font-medium uppercase tracking-wider hidden sm:inline">Source:</span>
+          <button
+            onClick={() => setShowSources(!showSources)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r ${currentSource.color} border border-[#7288AE]/30 text-white text-xs font-bold transition-all hover:opacity-90 shadow-lg`}
+          >
+            <Server className="w-4 h-4" />
+            {currentSource.name}
+            <ChevronRight className={`w-4 h-4 transition-transform ${showSources ? "rotate-90" : ""}`} />
+          </button>
+          {PROVIDERS.length > 1 && (
+            <button
+              onClick={switchSource}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-[#4B5694] border border-white/10 hover:border-[#7288AE]/40 text-white/80 hover:text-white text-xs font-bold transition-all"
+            >
+              <SkipForward className="w-4 h-4" />
+              Next Source
+            </button>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={switchSource}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-[#4B5694] border border-white/10 hover:border-[#7288AE]/40 text-white/80 hover:text-white text-xs font-bold transition-all"
-            title={`Next source: ${nextSourceName}`}
+            onClick={retrySource}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/20 text-white/70 hover:text-white rounded-xl text-xs font-bold transition-all shadow-lg"
+            title="Reload source"
           >
-            <SkipForward className="w-4 h-4" />
-            Next Source
-          </button>
-          <button onClick={retrySource} className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all" title="Retry current source">
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <button onClick={toggleFullscreen} className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white transition-all" title="Fullscreen">
-            <Maximize2 className="w-4 h-4" />
+            <RotateCcw className="w-4 h-4" /> Reload
           </button>
         </div>
       </div>
+
+      {showSources && (
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl animate-fade-in-up"
+          style={{ animationDuration: "0.2s" }}
+        >
+          {PROVIDERS.map((source, index) => {
+            const isActive = sourceIndex === index;
+            return (
+              <button
+                key={source.name}
+                onClick={() => handleSourceChange(index, source.name)}
+                className={`flex items-center gap-2.5 px-3 py-3 rounded-xl text-xs font-bold transition-all ${
+                  isActive
+                    ? `bg-gradient-to-r ${source.color} border border-white/10 text-white shadow-lg`
+                    : "bg-white/[0.06] text-white/60 hover:bg-white/[0.1] hover:text-white"
+                }`}
+              >
+                <Server className={`w-4 h-4 shrink-0 ${isActive ? "" : "text-white/30"}`} />
+                <span className="flex-1 text-left">{source.name}</span>
+                {isActive && !isLoading && !hasError && <Check className="w-3.5 h-3.5 text-emerald-300" />}
+                {isActive && isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <motion.div
         ref={playerRef}
@@ -346,49 +399,6 @@ export function AnimePlayer({
         )}
       </motion.div>
 
-      {/* SOURCES SELECTOR */}
-      <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Server className="w-4 h-4 text-[#7288AE]" />
-            <span className="text-xs font-semibold text-white/90">Select Streaming Server</span>
-          </div>
-          <span className="text-[10px] text-white/45 font-medium">
-            If stream fails, click another server below
-          </span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {PROVIDERS.map((source, index) => {
-            const isActive = sourceIndex === index;
-            return (
-              <button
-                key={source.name}
-                onClick={() => {
-                  setSourceIndex(index);
-                  try { localStorage.setItem(sourcePrefKey, source.name); } catch {}
-                }}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all text-xs font-medium ${
-                  isActive
-                    ? `bg-gradient-to-r ${source.color} border-[#7288AE]/30 text-white shadow-lg shadow-[#7288AE]/5`
-                    : "bg-white/[0.04] hover:bg-white/[0.08] border-white/5 hover:border-white/10 text-white/70 hover:text-white"
-                }`}
-              >
-                <span className="truncate">{source.name}</span>
-                {isActive && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#7288AE] animate-pulse shrink-0 ml-1.5" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 text-[10px] text-white/20">
-        <span>Select a source above if the stream takes too long to load</span>
-        <button onClick={switchSource} className="text-white/30 hover:text-[#7288AE] transition-colors">
-          Next Source ({nextSourceName})
-        </button>
-      </div>
     </div>
   );
 }

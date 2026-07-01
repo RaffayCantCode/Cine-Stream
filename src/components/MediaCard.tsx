@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Star, Play } from "lucide-react";
 import { isTmdbAnime } from "@/lib/utils";
 
@@ -13,6 +14,7 @@ interface MediaItem {
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
+  vote_count?: number;
   original_language?: string;
   genre_ids?: number[];
 }
@@ -29,8 +31,13 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
 
 export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
   const isMovie = item.media_type === "movie" || !!item.title;
-  const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const isAnime = isTmdbAnime(item);
   const title = item.title || item.name || "";
+  let link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+
+  if (isAnime) {
+    link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
+  }
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.poster_path
@@ -70,15 +77,13 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
           style={{ aspectRatio: "2/3" }}
         >
         {posterUrl ? (
-          <img
+          <Image
             src={posterUrl}
             alt={title}
-            className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
-            loading={isPriority ? "eager" : "lazy"}
-            decoding="async"
-            fetchPriority={isPriority ? "high" : "low"}
-            width={210}
-            height={315}
+            fill
+            sizes="(max-width: 640px) 150px, (max-width: 768px) 180px, 200px"
+            className="object-cover transition-all duration-700 group-hover:scale-110"
+            priority={isPriority}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
@@ -90,7 +95,7 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-transparent opacity-60 group-hover:opacity-0 transition-opacity duration-500" />
 
         <div className="absolute inset-0 flex flex-col justify-between p-3.5 opacity-0 group-hover:opacity-100 transition-all duration-500">
-          {item.vote_average ? (
+          {item.vote_average && item.vote_count && item.vote_count > 20 ? (
             <div className="flex justify-end">
               <div className="flex items-center gap-1 bg-black/70 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">
                 <Star className="w-3 h-3 fill-current" />
@@ -131,9 +136,9 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
           </div>
         ) : null}
 
-        {isTmdbAnime(item) && (
+        {isAnime && (
           <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90 text-white text-[10px] sm:text-[11px] font-black px-2 py-1 rounded-md backdrop-blur-sm tracking-widest uppercase group-hover:opacity-0 transition-opacity duration-300 shadow-lg">
-            Eng Dub
+            JP Sub
           </div>
         )}
         </div>

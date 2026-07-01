@@ -188,6 +188,9 @@ export function filterReleasedSafeContent<T extends {
   today.setHours(0, 0, 0, 0);
 
   return items.filter((item) => {
+    // Explicit override for Obsession 2026
+    if ((item as any).id === 1339713) return true;
+
     if (item.adult === true) return false;
 
     const textToCheck = `${item.title || ""} ${item.name || ""} ${item.overview || ""}`.toLowerCase();

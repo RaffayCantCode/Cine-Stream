@@ -16,13 +16,12 @@ export async function GET(
       return NextResponse.json({ error: "Franchise not found" }, { status: 404 });
     }
 
-    // Fetch details for all items in parallel
-    const itemPromises = franchise.items.map(async (item) => {
+    // Helper function to fetch item details
+    const fetchItem = async (item: { id: number; media_type: string }) => {
       try {
         const endpoint = item.media_type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
         const data = await tmdbFetch(`${endpoint}?language=en-US`) as any;
         
-        // Return the item formatted for our frontend
         return {
           id: data.id,
           media_type: item.media_type,
@@ -38,10 +37,27 @@ export async function GET(
         console.error(`Failed to fetch ${item.media_type} ${item.id}`, err);
         return null;
       }
-    });
+    };
 
-    const results = await Promise.all(itemPromises);
-    const validItems = results.filter(Boolean);
+    let resolvedParts: any[] = [];
+    let resolvedGroups: { name: string; parts: any[] }[] = [];
+
+    if (franchise.items) {
+      const itemPromises = franchise.items.map(fetchItem);
+      const results = await Promise.all(itemPromises);
+      resolvedParts = results.filter(Boolean);
+    }
+
+    if (franchise.groups) {
+      for (const group of franchise.groups) {
+        const itemPromises = group.items.map(fetchItem);
+        const results = await Promise.all(itemPromises);
+        resolvedGroups.push({
+          name: group.name,
+          parts: results.filter(Boolean),
+        });
+      }
+    }
 
     // Format the response to match the TMDB Collection structure expected by the frontend
     const response = {
@@ -50,7 +66,8 @@ export async function GET(
       overview: franchise.overview,
       backdrop_path: franchise.backdrop_path,
       poster_path: franchise.poster_path,
-      parts: validItems, // Preserve the order from the definition
+      parts: resolvedParts,
+      groups: resolvedGroups.length > 0 ? resolvedGroups : undefined,
     };
 
     return NextResponse.json(response);

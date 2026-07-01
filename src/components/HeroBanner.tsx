@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Play, Info, Star, Calendar } from "lucide-react";
 import { isTmdbAnime } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ interface MediaItem {
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
+  vote_count?: number;
   overview?: string;
   original_language?: string;
   genre_ids?: number[];
@@ -32,8 +34,13 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   if (!item) return null;
 
   const isMovie = item.media_type === "movie" || !!item.title;
-  const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const isAnime = isTmdbAnime(item);
   const title = item.title || item.name || "";
+  let link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  
+  if (isAnime) {
+    link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
+  }
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const rating = item.vote_average ?? 0;
 
@@ -41,20 +48,20 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
     ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`
     : null;
 
-  // Determine if this is an anime for label display
-  const isAnime = isTmdbAnime(item);
+  // Determine if this is an anime for label display (already calculated above)
 
   return (
     <section className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end overflow-hidden bg-[#0d1233]">
       {backdropUrl ? (
         <>
-          <img
+          <Image
             src={backdropUrl}
             alt={title}
-            className="absolute inset-0 w-full h-full object-cover object-center md:object-top"
+            fill
+            sizes="100vw"
+            className="object-cover object-center md:object-top"
             style={{ transform: "scale(1.03)", animation: "fade-in-up 1.4s ease-out both" }}
-            fetchPriority="high"
-            decoding="async"
+            priority
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-black/20" />
           <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/30 to-transparent" />
@@ -65,10 +72,10 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
       )}
 
       <div className="relative z-10 w-full px-5 md:px-16 lg:px-20 xl:px-24 pb-8 sm:pb-10 md:pb-14 max-w-screen-2xl mx-auto">
-        <div className="max-w-full sm:max-w-lg md:max-w-2xl" style={SECTION_STYLE}>
+        <div className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0" style={SECTION_STYLE}>
           {/* Tags row */}
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            {rating > 0 && (
+          <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 mb-2">
+            {rating > 0 && item.vote_count && item.vote_count > 20 && (
               <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-amber-400 text-xs font-extrabold px-2 py-1 rounded-md border border-white/10">
                 <Star className="w-3 h-3 fill-current" />
                 {rating.toFixed(1)}
@@ -105,9 +112,9 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           )}
 
           {/* Action buttons */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap justify-center md:justify-start items-center gap-3">
             <Link
-              href={`${link}${isAnime ? "" : "?autoplay=1"}${isAnime ? "?autoplay=1" : ""}`}
+              href={`${link}${isAnime ? "&autoplay=1" : "?autoplay=1"}`}
               className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-6 py-3.5 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
             >
               <Play className="w-5 h-5 fill-current" />

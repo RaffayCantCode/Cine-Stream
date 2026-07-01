@@ -257,18 +257,15 @@ export default function Home() {
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
 
-        const shuffledTrending = sessionShuffle(trendingSafe, "trending");
-        const shuffledPopular = sessionShuffle(popularSafe, "popular");
-
-        setTrending(shuffledTrending);
-        setPopular(shuffledPopular);
-        setTopRated(sessionShuffle(heroTopSafe, "toprated"));
-        setRecent(sessionShuffle(heroRecentSafe, "recent"));
+        setTrending(trendingSafe);
+        setPopular(popularSafe);
+        setTopRated(heroTopSafe);
+        setRecent(heroRecentSafe);
         setTrendingMoviesToday(trendingMoviesTodaySafe);
         setTrendingTvToday(trendingTvTodaySafe);
-        setHeroFeed([
-          ...shuffledTrending,
-          ...shuffledPopular,
+        setHeroFeed(sessionShuffle([
+          ...trendingSafe,
+          ...popularSafe,
           ...heroTopSafe,
           ...heroRecentSafe,
           ...topRatedMovieSafe,
@@ -276,7 +273,7 @@ export default function Home() {
           ...onTheAirSafe,
           ...animeMovieSafe,
           ...animeTvSafe,
-        ]);
+        ], "hero"));
 
         // ── Full rows data arrives (more TMDB pages) ────────────────────
         const [rowsData, animeResponse, collectionsData] = await Promise.all([rowsPromise, animePromise, collectionsPromise]);
@@ -306,14 +303,31 @@ export default function Home() {
           heroPreloadLinksRef.current.push(link);
         }
 
-        setTrending(sessionShuffle(fullTrending, "trending"));
-        setPopular(sessionShuffle(fullPopular, "popular"));
-        setTopRated(sessionShuffle(topSafe, "toprated"));
-        setRecent(sessionShuffle(recentSafe, "recent"));
+        setTrending(fullTrending);
+        setPopular(fullPopular);
+        setTopRated(topSafe);
+        setRecent(recentSafe);
 
         const recPool = [...fullPopular, ...topSafe, ...fullTrending, ...recentSafe];
         const daySalt = Math.floor(Date.now() / 86400000).toString();
-        setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+        
+        try {
+          const historyRes = await fetchJson<{ history: any[] }>("/api/watch-history", { skipCache: true }).catch(() => null);
+          const historyItems = historyRes?.history || [];
+          if (historyItems.length > 0) {
+            const lastWatched = historyItems[0];
+            const recRes = await fetchJson<{ results: any[] }>(`/api/tmdb/recommendations?mediaId=${lastWatched.mediaId}&mediaType=${lastWatched.mediaType}`, { skipCache: true }).catch(() => null);
+            if (recRes?.results && recRes.results.length > 0) {
+              setRecommended(recRes.results);
+            } else {
+              setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+            }
+          } else {
+            setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+          }
+        } catch {
+          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+        }
         setGenres((rowsData.genres?.genres || []).slice(0, 18));
         if (collectionsData?.collections) {
           setCollections(collectionsData.collections);

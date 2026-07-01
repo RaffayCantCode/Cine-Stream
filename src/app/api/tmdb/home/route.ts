@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
 
+export const revalidate = 3600;
+
 // Fetch multiple pages and merge results for a much larger pool to randomize from
 async function fetchMultiplePages(endpoint: string, pages: number[]) {
   const results = await Promise.allSettled(
@@ -31,6 +33,8 @@ export async function GET(_request: NextRequest) {
       fetchMultiplePages("/movie/now_playing", pages),
       tmdbFetch("/genre/movie/list"),
     ]);
+
+
 
     return Response.json({
       trending,

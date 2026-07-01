@@ -48,6 +48,18 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "api.tatakai.me",
       },
+      {
+        protocol: "https",
+        hostname: "s4.anilist.co",
+      },
+      {
+        protocol: "https",
+        hostname: "cdn.myanimelist.net",
+      },
+      {
+        protocol: "https",
+        hostname: "artworks.thetvdb.com",
+      }
     ],
   },
   // Vercel specific optimizations

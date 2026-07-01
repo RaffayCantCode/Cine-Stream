@@ -54,12 +54,22 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       return item.poster_path || item.backdrop_path;
     });
 
-    // Optionally filter by mode if they are in specific mode
-    if (mode === "movies") filtered = filtered.filter(i => i.media_type === "movie");
-    if (mode === "tv") filtered = filtered.filter(i => i.media_type === "tv");
-    
-    // Sort by popularity to show best stuff first
-    filtered.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+    // Sort by year (newest first)
+    filtered.sort((a, b) => {
+      const dateA = a.release_date || a.first_air_date || "";
+      const dateB = b.release_date || b.first_air_date || "";
+      
+      if (dateA && dateB) {
+        const timeA = new Date(dateA).getTime();
+        const timeB = new Date(dateB).getTime();
+        if (timeA !== timeB) return timeB - timeA;
+      }
+      if (dateA && !dateB) return -1; // Items with dates come first
+      if (!dateA && dateB) return 1;
+      
+      // Fallback to popularity if no dates or dates match
+      return (b.popularity || 0) - (a.popularity || 0);
+    });
     
     return filtered;
   }, [person, mode]);
@@ -142,7 +152,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         <div className="max-w-screen-2xl mx-auto px-5 md:px-10 pt-12">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-1 h-5 bg-primary rounded-full" />
-            <h2 className="text-xl font-bold tracking-tight text-white">Known For</h2>
+            <h2 className="text-xl font-bold tracking-tight text-white">Filmography</h2>
           </div>
           
           {sortedCredits.length > 0 ? (
