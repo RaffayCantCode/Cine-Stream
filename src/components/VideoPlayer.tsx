@@ -319,7 +319,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
               ref={iframeRef}
               src={currentSource.url}
               className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
               allowFullScreen={true}
               referrerPolicy="strict-origin-when-cross-origin"
               title={title || "Watch"}

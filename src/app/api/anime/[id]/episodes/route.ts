@@ -163,7 +163,7 @@ export async function GET(
     // ── Fetch a specific season's episodes by its AniList ID ───────────────
     if (seasonId) {
       console.log(`[Episodes API] Fetching seasonId=${seasonId} for anime id=${id}`);
-      let meta = await getAnimeDetails(id, 100, true);
+      let meta = await getAnimeDetails(id, 1500, true);
       if (!meta) {
         console.error(`[Episodes API] getAnimeDetails returned null for id=${id}`);
         throw new Error("Anime not found");
@@ -176,7 +176,7 @@ export async function GET(
         // Cache might be stale (AniList API transient failure on earlier fetch).
         // Force a fresh fetch with a different cache key.
         console.log(`[Episodes API] Season not found, forcing fresh fetch`);
-        const freshMeta = await getAnimeDetails(id, 99, true);
+        const freshMeta = await getAnimeDetails(id, 1500, true);
         if (freshMeta) {
           meta = freshMeta;
           season = meta.seasons.find(s => s.id === seasonId);

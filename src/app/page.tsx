@@ -356,7 +356,8 @@ export default function Home() {
   }, []);
 
   function pickRandom<T>(arr: T[]): T | null {
-    return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
+    if (arr.length === 0) return null;
+    return arr[Math.floor(Math.random() * arr.length)];
   }
 
   // ─── Hero pool: exactly 1 movie, 1 TV show, 1 anime ──────────────────────
@@ -369,6 +370,7 @@ export default function Home() {
     const m = pickRandom(movies);
     const s = pickRandom(shows);
     const a = pickRandom(animeItems);
+    
     return [m, s, a].filter(Boolean) as MediaItem[];
   }, [heroFeed]);
 
@@ -662,7 +664,7 @@ export default function Home() {
                 subtitle="Binge your favorite universes"
               />
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {collections.map((col) => {
+                {collections.slice(0, 7).map((col) => {
                   const posterUrl = col.poster_path ? `https://image.tmdb.org/t/p/w342${col.poster_path}` : null;
                   return (
                     <Link
@@ -700,6 +702,17 @@ export default function Home() {
                   );
                 })}
               </div>
+              {collections.length > 7 && (
+                <div className="mt-6 flex justify-center">
+                  <Link
+                    href="/browse/franchises"
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/30 text-sm font-semibold transition-all duration-300 group"
+                  >
+                    View More Franchises
+                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
+              )}
             </LazySection>
           )}
 

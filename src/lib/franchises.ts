@@ -1,6 +1,9 @@
 export interface FranchiseItem {
   id: number;
-  media_type: "movie" | "tv";
+  media_type: "movie" | "tv" | "anime";
+  anilist_id?: number;
+  title?: string;
+  release_date?: string;
 }
 
 export interface FranchiseGroup {
@@ -174,6 +177,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 82452, media_type: "tv" }, // Netflix Live Action
     ],
   },
+
   {
     id: "naruto",
     name: "Naruto (Japanese Dub)",
@@ -181,9 +185,9 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/5F0HVEgkgP99fEWDjPyikGt9jQi.jpg",
     poster_path: "/xppeysfvDKVx775MFuH8Z9BlpMk.jpg",
     items: [
-      { id: 46260, media_type: "tv" }, // Naruto
-      { id: 31910, media_type: "tv" }, // Naruto Shippuden
-      { id: 70881, media_type: "tv" }, // Boruto
+      { id: 46260, media_type: "anime", anilist_id: 20 }, // Naruto
+      { id: 31910, media_type: "anime", anilist_id: 1735 }, // Naruto Shippuden
+      { id: 70881, media_type: "anime", anilist_id: 97938 }, // Boruto
     ],
   },
   {
@@ -245,6 +249,440 @@ export const FRANCHISES: FranchiseDefinition[] = [
           { id: 36669, media_type: "movie" }, // Die Another Day
         ]
       }
+    ]
+  }
+,
+  {
+    id: "harry-potter",
+    name: "Harry Potter Collection",
+    overview: "The complete story of the Boy Who Lived and the Wizarding World, from Harry's years at Hogwarts to Newt Scamander's adventures.",
+    backdrop_path: "/kmEsQL2vOTA0jnM28fXS45Ky8kX.jpg",
+    poster_path: "/eVPs2Y0LyvTLZn6AP5Z6O2rtiGB.jpg",
+    groups: [
+      {
+        name: "The Original Series",
+        items: [
+          { id: 671, media_type: "movie" },
+          { id: 672, media_type: "movie" },
+          { id: 673, media_type: "movie" },
+          { id: 674, media_type: "movie" },
+          { id: 675, media_type: "movie" },
+          { id: 767, media_type: "movie" },
+          { id: 12444, media_type: "movie" },
+          { id: 12445, media_type: "movie" },
+        ]
+      },
+      {
+        name: "Fantastic Beasts",
+        items: [
+          { id: 259316, media_type: "movie" },
+          { id: 338952, media_type: "movie" },
+          { id: 338953, media_type: "movie" },
+        ]
+      }
+    ]
+  },
+  {
+    id: "incredibles",
+    name: "The Incredibles Collection",
+    overview: "The adventures of a family of former superheroes rediscovering their powers and saving the world.",
+    backdrop_path: "/6oi6V1O9MJRNnfV8E9JMntmFqBD.jpg",
+    poster_path: "/l7GqbzkJwowYRIXAtUz2iCPi64a.jpg",
+    items: [
+      { id: 9806, media_type: "movie" },
+      { id: 260513, media_type: "movie" },
+    ]
+  },
+  {
+    id: "batman",
+    name: "Batman Collection",
+    overview: "The complete cinematic journey of Gotham's Dark Knight across different eras and actors.",
+    backdrop_path: "/xyhrCEdB4XRkelfVsqXeUZ6rLHi.jpg",
+    poster_path: "/ogyw5LTmL53dVxsppcy8Dlm30Fu.jpg",
+    groups: [
+      {
+        name: "Classic Batman",
+        items: [
+          { id: 268, media_type: "movie" }, // Batman (1989)
+          { id: 364, media_type: "movie" }, // Batman Returns
+          { id: 414, media_type: "movie" }, // Batman Forever
+          { id: 415, media_type: "movie" }, // Batman & Robin
+        ]
+      },
+      {
+        name: "The Dark Knight Trilogy",
+        items: [
+          { id: 272, media_type: "movie" }, // Batman Begins
+          { id: 155, media_type: "movie" }, // The Dark Knight
+          { id: 49026, media_type: "movie" }, // The Dark Knight Rises
+        ]
+      },
+      {
+        name: "The Batman",
+        items: [
+          { id: 414906, media_type: "movie" }, // The Batman
+        ]
+      }
+    ]
+  },
+  {
+    id: "spiderman",
+    name: "Spider-Man Collection",
+    overview: "The spectacular cinematic adventures of the friendly neighborhood Spider-Man.",
+    backdrop_path: "/zQ8AxTPiCiS5nnwXpwTBPBHSaa5.jpg",
+    poster_path: "/kjdJntyBeEvqm9w97QGBdxPptzj.jpg",
+    groups: [
+      {
+        name: "Tobey Maguire",
+        items: [
+          { id: 557, media_type: "movie" }, // Spider-Man
+          { id: 558, media_type: "movie" }, // Spider-Man 2
+          { id: 559, media_type: "movie" }, // Spider-Man 3
+        ]
+      },
+      {
+        name: "The Amazing Spider-Man",
+        items: [
+          { id: 1930, media_type: "movie" }, // TASM
+          { id: 102382, media_type: "movie" }, // TASM 2
+        ]
+      },
+      {
+        name: "Tom Holland (MCU)",
+        items: [
+          { id: 315635, media_type: "movie" }, // Homecoming
+          { id: 429617, media_type: "movie" }, // Far From Home
+          { id: 634649, media_type: "movie" }, // No Way Home
+        ]
+      },
+      {
+        name: "Spider-Verse",
+        items: [
+          { id: 324857, media_type: "movie" }, // Into the Spider-Verse
+          { id: 569094, media_type: "movie" }, // Across the Spider-Verse
+        ]
+      }
+    ]
+  },
+  {
+    id: "jurassic-park",
+    name: "Jurassic Park Collection",
+    overview: "A thrilling saga where resurrected dinosaurs roam once again, bringing awe and terror to the modern world.",
+    backdrop_path: "/njFixYzIxX8jsn6KMSEtAzi4avi.jpg",
+    poster_path: "/qIm2nHXLpBBdMxi8dvfrnDkBUDh.jpg",
+    groups: [
+      {
+        name: "Original Trilogy",
+        items: [
+          { id: 329, media_type: "movie" },
+          { id: 330, media_type: "movie" },
+          { id: 331, media_type: "movie" },
+        ]
+      },
+      {
+        name: "Jurassic World",
+        items: [
+          { id: 135397, media_type: "movie" },
+          { id: 351286, media_type: "movie" },
+          { id: 507086, media_type: "movie" },
+          { id: 1234821, media_type: "movie" },
+        ]
+      }
+    ]
+  },
+  {
+    id: "pirates-of-the-caribbean",
+    name: "Pirates of the Caribbean Collection",
+    overview: "The swashbuckling adventures of Captain Jack Sparrow across the seven seas.",
+    backdrop_path: "/wxgD3fB5lQ2sGJLog0rvXW049Pf.jpg",
+    poster_path: "/zRBaZxS5YauLvRYjAdL4AUCwlht.jpg",
+    items: [
+      { id: 22, media_type: "movie" },
+      { id: 58, media_type: "movie" },
+      { id: 285, media_type: "movie" },
+      { id: 1865, media_type: "movie" },
+      { id: 166426, media_type: "movie" },
+    ]
+  },
+  {
+    id: "hunger-games",
+    name: "The Hunger Games Collection",
+    overview: "Katniss Everdeen's fight for survival and rebellion against the Capitol in the dystopian nation of Panem.",
+    backdrop_path: "/Ipp7cegtub4t0mu7xaKLQkYoGc.jpg",
+    poster_path: "/cEBNDEMGqvSvU0knEv9Wl3dk5kv.jpg",
+    items: [
+      { id: 70160, media_type: "movie" },
+      { id: 101299, media_type: "movie" },
+      { id: 131631, media_type: "movie" },
+      { id: 131634, media_type: "movie" },
+      { id: 695721, media_type: "movie" },
+    ]
+  },
+  {
+    id: "shrek",
+    name: "Shrek Collection",
+    overview: "The fairytale adventures of a grumpy ogre, his talking donkey, and a princess with a secret.",
+    backdrop_path: "/lhsd1zCsq5UquvcNalmhuddV3tI.jpg",
+    poster_path: "/qNHZMe92A7Pyl46qUH29hVOtbSK.jpg",
+    groups: [
+      {
+        name: "Main Films",
+        items: [
+          { id: 808, media_type: "movie" },
+          { id: 809, media_type: "movie" },
+          { id: 810, media_type: "movie" },
+          { id: 10192, media_type: "movie" },
+        ]
+      },
+      {
+        name: "Puss in Boots",
+        items: [
+          { id: 417859, media_type: "movie" },
+          { id: 315162, media_type: "movie" },
+        ]
+      }
+    ]
+  },
+  {
+    id: "cars",
+    name: "Cars Collection",
+    overview: "Lightning McQueen's high-speed adventures from arrogant rookie to veteran racer.",
+    backdrop_path: "/A8DqaTGwZ8iCEjWMNRsZumzfKLw.jpg",
+    poster_path: "/uq3N2SFj1Y06zA6LzCQPkmBdaaE.jpg",
+    items: [
+      { id: 920, media_type: "movie" },
+      { id: 49013, media_type: "movie" },
+      { id: 260514, media_type: "movie" },
+    ]
+  },
+  {
+    id: "john-wick",
+    name: "John Wick Collection",
+    overview: "The legendary hitman John Wick is pulled back into the criminal underworld, taking on the world's top assassins.",
+    backdrop_path: "/fSwYa5q2xRkBoOOjueLpkLf3N1m.jpg",
+    poster_path: "/sm7rZZivZm2NhJDucFf3gpfFdVt.jpg",
+    items: [
+      { id: 245891, media_type: "movie" },
+      { id: 324552, media_type: "movie" },
+      { id: 458156, media_type: "movie" },
+      { id: 603692, media_type: "movie" },
+    ]
+  },
+  {
+    id: "godzilla",
+    name: "Godzilla (MonsterVerse)",
+    overview: "The epic cinematic universe pitting humanity against the titans, focusing on Godzilla and Kong.",
+    backdrop_path: "/psZ5CETZoaq2VRnxk95HuxOnI5D.jpg",
+    poster_path: "/inNN466SKHNjbGmpfhfsaPQNleS.jpg",
+    items: [
+      { id: 124905, media_type: "movie" },
+      { id: 293167, media_type: "movie" },
+      { id: 373571, media_type: "movie" },
+      { id: 399566, media_type: "movie" },
+      { id: 823464, media_type: "movie" },
+    ]
+  },
+  {
+    id: "planet-of-the-apes",
+    name: "Planet of the Apes (Reboot) Collection",
+    overview: "The rise of genetically enhanced apes and their conflict with humanity for the future of Earth.",
+    backdrop_path: "/iMhm0g555HgQNIXAMvnlgOiW5Rz.jpg",
+    poster_path: "/afGkMC4HF0YtXYNkyfCgTDLFe6m.jpg",
+    items: [
+      { id: 61791, media_type: "movie" },
+      { id: 119450, media_type: "movie" },
+      { id: 281338, media_type: "movie" },
+      { id: 653346, media_type: "movie" },
+    ]
+  },
+  {
+    id: "attack-on-titan",
+    name: "Attack on Titan (Japanese Dub)",
+    overview: "After his hometown is destroyed and his mother is killed, young Eren Jaeger vows to cleanse the earth of the giant humanoid Titans that have brought humanity to the brink of extinction.",
+    backdrop_path: "/rqbCbjB19amtOtFQbb3K2lgm2zv.jpg",
+    poster_path: "/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg",
+    items: [
+      { id: 1429, media_type: "anime", anilist_id: 16498, title: "Attack on Titan (Season 1)", release_date: "2013-04-07" },
+      { id: 1429, media_type: "anime", anilist_id: 20958, title: "Attack on Titan (Season 2)", release_date: "2017-04-01" },
+      { id: 1429, media_type: "anime", anilist_id: 99147, title: "Attack on Titan (Season 3)", release_date: "2018-07-23" },
+      { id: 1429, media_type: "anime", anilist_id: 104578, title: "Attack on Titan (Season 3 Part 2)", release_date: "2019-04-29" },
+      { id: 1429, media_type: "anime", anilist_id: 110277, title: "Attack on Titan (Final Season)", release_date: "2020-12-07" },
+      { id: 1429, media_type: "anime", anilist_id: 131681, title: "Attack on Titan (Final Season Part 2)", release_date: "2022-01-10" },
+      { id: 1429, media_type: "anime", anilist_id: 146984, title: "Attack on Titan (The Final Chapters Special 1)", release_date: "2023-03-04" },
+      { id: 1429, media_type: "anime", anilist_id: 162314, title: "Attack on Titan (The Final Chapters Special 2)", release_date: "2023-11-05" },
+    ]
+  },
+  {
+    id: "game-of-thrones",
+    name: "Game of Thrones Universe",
+    overview: "The epic fantasy series based on George R.R. Martin's A Song of Ice and Fire.",
+    backdrop_path: "/2OMB0ynKlyIenMJWI2Dy9IWT4c.jpg",
+    poster_path: "/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg",
+    items: [
+      { id: 1399, media_type: "tv", title: "Game of Thrones" },
+      { id: 94997, media_type: "tv", title: "House of the Dragon" },
+      { id: 224372, media_type: "tv", title: "A Knight of the Seven Kingdoms" },
+    ]
+  },
+  {
+    id: "demon-slayer",
+    name: "Demon Slayer Collection",
+    overview: "Follow Tanjiro Kamado's journey to become a Demon Slayer and save his sister.",
+    backdrop_path: "/3GQKYh6Trm8pxd2AypovoYQf4Ay.jpg",
+    poster_path: "/xUfRZu2mi8jH6SzQEJGP6tjBuYj.jpg",
+    items: [
+      { id: 85937, media_type: "anime", anilist_id: 101922, title: "Demon Slayer: Season 1" },
+      { id: 635302, media_type: "anime", anilist_id: 112151, title: "Mugen Train (Movie)" },
+      { id: 85937, media_type: "anime", anilist_id: 129874, title: "Mugen Train Arc" },
+      { id: 85937, media_type: "anime", anilist_id: 142329, title: "Entertainment District Arc" },
+      { id: 85937, media_type: "anime", anilist_id: 145117, title: "Swordsmith Village Arc" },
+      { id: 85937, media_type: "anime", anilist_id: 166240, title: "Hashira Training Arc" },
+    ]
+  },
+  {
+    id: "jujutsu-kaisen",
+    name: "Jujutsu Kaisen Collection",
+    overview: "Yuji Itadori joins a secret organization of Jujutsu Sorcerers to eliminate a powerful Curse.",
+    backdrop_path: "/lthkKBLe1rX6iThgVFg22O02sJw.jpg",
+    poster_path: "/fHpKWq9ayzSk8nSwqRuaAUemRKh.jpg",
+    items: [
+      { id: 95479, media_type: "anime", anilist_id: 113415, title: "Jujutsu Kaisen Season 1" },
+      { id: 810693, media_type: "anime", anilist_id: 131573, title: "Jujutsu Kaisen 0 (Movie)" },
+      { id: 95479, media_type: "anime", anilist_id: 145064, title: "Jujutsu Kaisen Season 2" },
+      { id: 95479, media_type: "anime", anilist_id: 172463, title: "Jujutsu Kaisen Season 3" },
+    ]
+  },
+  {
+    id: "breaking-bad",
+    name: "Breaking Bad Universe",
+    overview: "The critically acclaimed saga of Walter White and Jimmy McGill.",
+    backdrop_path: "/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg",
+    poster_path: "/ztkUQFLlC19CCMYHW9o1zWhJRNq.jpg",
+    items: [
+      { id: 1396, media_type: "tv" },
+      { id: 559969, media_type: "movie", title: "El Camino: A Breaking Bad Movie" },
+      { id: 60059, media_type: "tv" },
+    ]
+  },
+  {
+    id: "indiana-jones",
+    name: "Indiana Jones Collection",
+    overview: "The globe-trotting archaeological adventures of Dr. Henry \"Indiana\" Jones Jr.",
+    backdrop_path: "/zPACwR32amTNvzId9qyapCWXYDJ.jpg",
+    poster_path: "/ceG9VzoRAVGwivFU403Wc3AHRys.jpg",
+    items: [
+      { id: 85, media_type: "movie" },
+      { id: 87, media_type: "movie" },
+      { id: 89, media_type: "movie" },
+      { id: 217, media_type: "movie" },
+      { id: 335977, media_type: "movie" },
+    ]
+  },
+  {
+    id: "transformers",
+    name: "Transformers Collection",
+    overview: "The war between the heroic Autobots and the evil Decepticons.",
+    backdrop_path: "/iCDMBi6WLjUBnt24dNwHqqF81UL.jpg",
+    poster_path: "/4N4sipl8T72tNE4earcctQa2Kw2.jpg",
+    items: [
+      { id: 1858, media_type: "movie" },
+      { id: 8373, media_type: "movie" },
+      { id: 37834, media_type: "movie" },
+      { id: 91314, media_type: "movie" },
+      { id: 335988, media_type: "movie" },
+      { id: 424783, media_type: "movie" },
+      { id: 667538, media_type: "movie" },
+      { id: 698687, media_type: "movie" }, // Transformers One
+    ]
+  },
+  {
+    id: "rocky",
+    name: "Rocky Collection",
+    overview: "The inspiring story of Philadelphia boxer Rocky Balboa.",
+    backdrop_path: "/xUZ2G8MRGEljqgqLxMJItK4iHfY.jpg",
+    poster_path: "/aYtBYWqCdUqcnoodWJdcTG3pFev.jpg",
+    items: [
+      { id: 1366, media_type: "movie" },
+      { id: 1367, media_type: "movie" },
+      { id: 1371, media_type: "movie" },
+      { id: 1374, media_type: "movie" },
+      { id: 1375, media_type: "movie" },
+      { id: 1246, media_type: "movie" },
+    ]
+  },
+  {
+    id: "creed",
+    name: "Creed Collection",
+    overview: "Adonis Creed's journey to forge his own legacy in the boxing world.",
+    backdrop_path: "/kODNw6GJNdgldUMEhKPlCw8wQCr.jpg",
+    poster_path: "/1BfTsk5VWuw8FCocAhCyqnRbEzq.jpg",
+    items: [
+      { id: 312221, media_type: "movie" },
+      { id: 480530, media_type: "movie" },
+      { id: 677179, media_type: "movie" },
+    ]
+  },
+  {
+    id: "kung-fu-panda",
+    name: "Kung Fu Panda Collection",
+    overview: "The adventures of Po, the clumsiest panda who must fulfill an ancient prophecy.",
+    backdrop_path: "/qdthf9WrRDSaIkGVQGhhJ9pz1hn.jpg",
+    poster_path: "/wWt4JYXTg5Wr3xBW2phBrMKgp3x.jpg",
+    items: [
+      { id: 9502, media_type: "movie" },
+      { id: 49444, media_type: "movie" },
+      { id: 140300, media_type: "movie" },
+      { id: 1011985, media_type: "movie" },
+    ]
+  },
+  {
+    id: "how-to-train-your-dragon",
+    name: "How to Train Your Dragon Collection",
+    overview: "Hiccup and Toothless unite vikings and dragons in an epic adventure.",
+    backdrop_path: "/59vDC1BuEQvti24OMr0ZvtAK6R1.jpg",
+    poster_path: "/ygGmAO60t8GyqUo9xYeYxSZAR3b.jpg",
+    items: [
+      { id: 10191, media_type: "movie" },
+      { id: 82702, media_type: "movie" },
+      { id: 166428, media_type: "movie" },
+    ]
+  },
+  {
+    id: "ice-age",
+    name: "Ice Age Collection",
+    overview: "A misfit herd of prehistoric animals go on hilarious adventures.",
+    backdrop_path: "/8pwIhymsxfAVjrAE7syDjQULn37.jpg",
+    poster_path: "/gLhHHZUzeseRXShoDyC4VqLgsNv.jpg",
+    items: [
+      { id: 425, media_type: "movie" },
+      { id: 950, media_type: "movie" },
+      { id: 8355, media_type: "movie" },
+      { id: 57800, media_type: "movie" },
+      { id: 278154, media_type: "movie" },
+    ]
+  },
+  {
+    id: "despicable-me",
+    name: "Despicable Me Collection",
+    overview: "The story of Gru, his adopted daughters, and the mischievous Minions.",
+    backdrop_path: "/2XSeKDmIa2KxaiJy4J9e8FrIZhk.jpg",
+    poster_path: "/b1BT309QWjtFUlJPLmXmrcHOWEL.jpg",
+    items: [
+      { id: 20352, media_type: "movie" },
+      { id: 93456, media_type: "movie" },
+      { id: 324852, media_type: "movie" },
+      { id: 519182, media_type: "movie" },
+    ]
+  },
+  {
+    id: "minions",
+    name: "Minions Collection",
+    overview: "The prequel adventures of the yellow, gibberish-speaking Minions.",
+    backdrop_path: "/wKrxeY6lbu7KFBsWVcMH6M8avwr.jpg",
+    poster_path: "/dr02BdCNAUPVU07aOodwPYv6HCf.jpg",
+    items: [
+      { id: 211672, media_type: "movie" },
+      { id: 438148, media_type: "movie" },
     ]
   }
 ];

@@ -8,7 +8,7 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const data = await getAnimeDetails(id, 100, true);
+    const data = await getAnimeDetails(id, 1500, true);
     if (!data) {
       return Response.json(
         { error: "Anime not found", success: false },

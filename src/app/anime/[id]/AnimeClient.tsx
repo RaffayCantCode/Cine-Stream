@@ -660,9 +660,25 @@ export default function AnimeClient() {
                     {!episodesLoading && (
                       <aside className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col max-h-[60vh] xl:max-h-[70vh]">
                         <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
-                          <div className="text-sm font-bold text-white flex items-center justify-between">
-                            <span>{currentSeasonInfo?.seasonLabel || "Episodes"}</span>
-                            <span className="text-xs font-normal text-white/40">{currentSeasonEps.length} eps</span>
+                          <div className="text-sm font-bold text-white flex items-center justify-between gap-2">
+                            {franchiseNodes.length > 1 ? (
+                              <select 
+                                className="bg-transparent border-none text-white font-bold outline-none cursor-pointer w-full max-w-[240px] truncate hover:text-primary transition-colors focus:ring-0"
+                                onChange={(e) => {
+                                  window.location.href = `/anime/${e.target.value}`;
+                                }}
+                                value={id}
+                              >
+                                {franchiseNodes.map(node => (
+                                  <option key={node.id} value={node.id} className="bg-zinc-900 text-white">
+                                    {node.title} {node.seasonYear ? `(${node.seasonYear})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span>{currentSeasonInfo?.seasonLabel || "Episodes"}</span>
+                            )}
+                            <span className="text-xs font-normal text-white/40 whitespace-nowrap">{currentSeasonEps.length} eps</span>
                           </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">

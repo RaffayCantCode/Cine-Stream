@@ -17,21 +17,44 @@ export async function GET(
     }
 
     // Helper function to fetch item details
-    const fetchItem = async (item: { id: number; media_type: string }) => {
+    const fetchItem = async (item: { id: number; media_type: string; anilist_id?: number; title?: string; release_date?: string }) => {
       try {
         const endpoint = item.media_type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
         const data = await tmdbFetch(`${endpoint}?language=en-US`) as any;
         
+        let poster_path = data.poster_path;
+        
+        if (item.media_type === "anime" && item.anilist_id) {
+          try {
+            const query = `query ($id: Int) { Media(id: $id, type: ANIME) { coverImage { extraLarge large } } }`;
+            const alRes = await fetch("https://graphql.anilist.co", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query, variables: { id: item.anilist_id } }),
+              next: { revalidate: 86400 }
+            });
+            if (alRes.ok) {
+              const alJson = await alRes.json();
+              const cover = alJson.data?.Media?.coverImage;
+              if (cover?.extraLarge || cover?.large) {
+                poster_path = cover.extraLarge || cover.large;
+              }
+            }
+          } catch (e) {
+            // ignore anilist fetch error and fallback to tmdb
+          }
+        }
+
         return {
-          id: data.id,
+          id: item.anilist_id || data.id,
           media_type: item.media_type,
-          title: data.title || data.name,
-          name: data.title || data.name,
+          title: item.title || data.title || data.name,
+          name: item.title || data.title || data.name,
           overview: data.overview,
-          poster_path: data.poster_path,
+          poster_path: poster_path,
           backdrop_path: data.backdrop_path,
           vote_average: data.vote_average,
-          release_date: data.release_date || data.first_air_date,
+          release_date: item.release_date || data.release_date || data.first_air_date,
         };
       } catch (err) {
         console.error(`Failed to fetch ${item.media_type} ${item.id}`, err);

@@ -13,7 +13,8 @@ import {
   LogIn,
   LogOut,
   Menu,
-  X
+  X,
+  Library
 } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";

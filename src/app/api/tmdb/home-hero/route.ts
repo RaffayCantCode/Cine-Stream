@@ -3,26 +3,32 @@ import { tmdbFetch } from "@/lib/tmdb";
 
 export const revalidate = 3600;
 
-async function fetchPage(endpoint: string, page: number) {
-  const data = await tmdbFetch(endpoint, { page: String(page), include_adult: "true" }) as { results?: unknown[] };
-  return data?.results ?? [];
+async function fetchPages(endpoint: string, pages: number[]) {
+  const promises = pages.map(page => 
+    tmdbFetch(endpoint, { page: String(page), include_adult: "false" })
+      .then(res => (res as { results?: unknown[] })?.results ?? [])
+  );
+  const results = await Promise.all(promises);
+  return results.flat();
 }
 
 export async function GET(_request: NextRequest) {
-  // We now fetch pages 1 and 2 deterministically. Next.js caches these perfectly.
-  // The client-side shuffle will handle randomization.
+  // Fetch multiple pages deterministically to build a very large pool.
+  // Next.js caches these perfectly. Client-side shuffle handles randomization.
+  const pagesToFetch = [1, 2, 3];
+  
   const results = await Promise.allSettled([
-    fetchPage("/trending/all/week", 1),
-    fetchPage("/movie/popular", 1),
-    fetchPage("/movie/top_rated", 1),
-    fetchPage("/movie/now_playing", 1),
-    fetchPage("/tv/popular", 1),
-    fetchPage("/tv/top_rated", 1),
-    fetchPage("/tv/on_the_air", 1),
-    fetchPage("/discover/movie?with_original_language=ja", 1),
-    fetchPage("/discover/tv?with_original_language=ja&with_genres=16", 1),
-    fetchPage("/trending/movie/day", 1),
-    fetchPage("/trending/tv/day", 1),
+    fetchPages("/trending/all/week", pagesToFetch),
+    fetchPages("/movie/popular", pagesToFetch),
+    fetchPages("/movie/top_rated", pagesToFetch),
+    fetchPages("/movie/now_playing", pagesToFetch),
+    fetchPages("/tv/popular", pagesToFetch),
+    fetchPages("/tv/top_rated", pagesToFetch),
+    fetchPages("/tv/on_the_air", pagesToFetch),
+    fetchPages("/discover/movie?with_original_language=ja", pagesToFetch),
+    fetchPages("/discover/tv?with_original_language=ja&with_genres=16", pagesToFetch),
+    fetchPages("/trending/movie/day", pagesToFetch),
+    fetchPages("/trending/tv/day", pagesToFetch),
   ]);
 
   const [trending, popularMovies, topRatedMovies, nowPlaying, popularTv, topRatedTv, onTheAir, animeMovies, animeTv, trendingMoviesToday, trendingTvToday] = results.map(r =>

@@ -382,7 +382,7 @@ export function AnimePlayer({
                 ref={iframeRef}
                 src={currentUrl}
                 className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; microphone"
                 allowFullScreen
                 referrerPolicy="strict-origin-when-cross-origin"
                 title={`${animeTitle} - Episode ${episode}`}

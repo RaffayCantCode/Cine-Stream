@@ -20,13 +20,16 @@ interface GridMediaCardProps {
 }
 
 export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
+  const isAnime = item.media_type === "anime";
   const isMovie = item.media_type ? item.media_type === "movie" : !!item.title;
-  const link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const link = isAnime ? `/anime/${item.id}` : isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
   const title = item.title || item.name || "";
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.poster_path
-    ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+    ? item.poster_path.startsWith("http")
+      ? item.poster_path
+      : `https://image.tmdb.org/t/p/w342${item.poster_path}`
     : null;
 
   return (
@@ -69,7 +72,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
         <div className="flex items-center gap-2 text-white/50 text-xs font-medium">
           {year && <span>{year}</span>}
           {year && <span>•</span>}
-          <span>{isMovie ? "Movie" : "TV"}</span>
+          <span>{isAnime ? "Anime" : isMovie ? "Movie" : "TV"}</span>
         </div>
       </div>
     </div>
