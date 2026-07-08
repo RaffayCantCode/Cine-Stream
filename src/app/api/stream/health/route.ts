@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { checkSourceHealth } from "@/lib/streaming-fetch";
 
 export async function GET() {

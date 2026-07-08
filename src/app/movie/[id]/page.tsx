@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { Metadata } from "next";
 import { tmdbFetch } from "@/lib/tmdb";
 import MovieClient from "./MovieClient";

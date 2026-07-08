@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { BrowseGridPage } from "@/components/BrowseGridPage";
 
 export default function PopularTvPage() {

@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { fetchAnimeApi } from "@/lib/anime-fetch";
 

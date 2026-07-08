@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import Link from "next/link";
 import { Film, Tv, Sparkles, Star, Clapperboard, Globe, ChevronRight } from "lucide-react";
 

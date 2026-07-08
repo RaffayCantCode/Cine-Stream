@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { tmdbFetch } from "@/lib/tmdb";
 
 export async function GET(

@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { NextResponse } from "next/server";
 
 const ANILIST_API = "https://graphql.anilist.co";

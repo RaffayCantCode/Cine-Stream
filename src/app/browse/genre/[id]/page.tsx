@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { BrowseGridPage } from "@/components/BrowseGridPage";
 
 export default async function GenrePage({ params }: { params: Promise<{ id: string }> }) {

@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
 import { FRANCHISES } from "@/lib/franchises";

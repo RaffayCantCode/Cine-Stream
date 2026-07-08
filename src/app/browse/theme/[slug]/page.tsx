@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { BrowseGridPage } from "@/components/BrowseGridPage";
 
 const themeTitles: Record<string, string> = {
