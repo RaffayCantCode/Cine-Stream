@@ -14,7 +14,8 @@ import {
   LogOut,
   Menu,
   X,
-  Library
+  Library,
+  Compass
 } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -145,7 +146,7 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-[#0d1233] border-r border-[#7288AE]/10">
+      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-[#050B14]/40 backdrop-blur-3xl border-r border-white/[0.05] shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
         {/* Logo */}
         <div className="p-4 md:p-3 lg:p-4">
           <Link href="/" className="flex items-center gap-3">

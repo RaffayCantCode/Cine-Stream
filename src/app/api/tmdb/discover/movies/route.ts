@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
   const watchRegion = searchParams.get("watchRegion");
   const minVote = searchParams.get("minVote");
   const year = searchParams.get("year");
+  const maxRuntime = searchParams.get("maxRuntime");
+  const minRuntime = searchParams.get("minRuntime");
   // Per-provider monetization override (defaults to "flatrate")
   const monetizationTypes = searchParams.get("monetizationTypes") || "flatrate";
 
@@ -22,6 +24,8 @@ export async function GET(request: NextRequest) {
   if (genreId) params.with_genres = genreId;
   if (minVote) params["vote_average.gte"] = minVote;
   if (year) params.primary_release_year = year;
+  if (maxRuntime) params["with_runtime.lte"] = maxRuntime;
+  if (minRuntime) params["with_runtime.gte"] = minRuntime;
 
   if (withProviders) {
     params.with_watch_providers = withProviders;

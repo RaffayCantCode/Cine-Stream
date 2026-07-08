@@ -17,6 +17,7 @@ interface MediaItem {
   vote_count?: number;
   original_language?: string;
   genre_ids?: number[];
+  profile_path?: string;
 }
 
 interface MediaCardProps {
@@ -30,17 +31,20 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
 };
 
 export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
-  const isMovie = item.media_type === "movie" || !!item.title;
+  const isPerson = item.media_type === "person";
+  const isMovie = item.media_type === "movie" || (!isPerson && !!item.title);
   const isAnime = isTmdbAnime(item);
   const title = item.title || item.name || "";
-  let link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  let link = isPerson ? `/person/${item.id}` : isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
 
   if (isAnime) {
     link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
   }
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
-  const posterUrl = item.poster_path
+  const posterUrl = item.profile_path 
+    ? `https://image.tmdb.org/t/p/w342${item.profile_path}`
+    : item.poster_path
     ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
     : null;
 
@@ -53,8 +57,8 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
     >
       <Link
         href={link}
-        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.05] hover:z-10 focus:outline-none ${
-          rank ? "w-[200px] sm:w-[240px] md:w-[280px]" : "w-[150px] sm:w-[180px] md:w-[200px]"
+        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.05] hover:z-10 focus:outline-none touch-pan-x ${
+          rank ? "w-[160px] sm:w-[190px] md:w-[220px]" : "w-[140px] sm:w-[170px] md:w-[200px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
@@ -95,7 +99,7 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-transparent opacity-60 group-hover:opacity-0 transition-opacity duration-500" />
 
         <div className="absolute inset-0 flex flex-col justify-between p-3.5 opacity-0 group-hover:opacity-100 transition-all duration-500">
-          {item.vote_average && item.vote_count && item.vote_count > 20 ? (
+          {!isPerson && item.vote_average && item.vote_count && item.vote_count > 20 ? (
             <div className="flex justify-end">
               <div className="flex items-center gap-1 bg-black/70 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">
                 <Star className="w-3 h-3 fill-current" />
@@ -106,30 +110,32 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
             <div />
           )}
 
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#111844] to-[#4B5694] flex items-center justify-center translate-y-4 group-hover:translate-y-0 transition-all duration-500 group-hover:scale-110">
-              <Play className="w-6 h-6 fill-white text-white ml-0.5" />
+          {!isPerson && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#111844] to-[#4B5694] flex items-center justify-center translate-y-4 group-hover:translate-y-0 transition-all duration-500 group-hover:scale-110">
+                <Play className="w-6 h-6 fill-white text-white ml-0.5" />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="relative z-10 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
             <h3 className="text-white font-bold text-sm leading-tight mb-1.5 line-clamp-2 drop-shadow-lg">
               {title}
             </h3>
             <div className="flex items-center gap-2">
-              {year && (
+              {year && !isPerson && (
                 <span className="text-white/80 text-xs font-medium bg-white/15 backdrop-blur-sm px-2 py-0.5 rounded">
                   {year}
                 </span>
               )}
               <span className="text-white/50 text-xs">
-                {isMovie ? "Movie" : "TV"}
+                {isPerson ? "Person" : isMovie ? "Movie" : "TV"}
               </span>
             </div>
           </div>
         </div>
 
-        {item.vote_average ? (
+        {!isPerson && item.vote_average ? (
           <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/60 backdrop-blur-sm text-amber-400 text-xs font-bold px-1.5 py-0.5 rounded-md group-hover:opacity-0 transition-opacity duration-300">
             <Star className="w-2.5 h-2.5 fill-current" />
             {item.vote_average.toFixed(1)}

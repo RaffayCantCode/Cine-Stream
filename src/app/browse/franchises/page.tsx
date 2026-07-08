@@ -40,7 +40,6 @@ export default function BrowseFranchisesPage() {
         </div>
 
         <div className="px-5 md:px-10 lg:px-16 relative z-10">
-          <ContinueWatching />
 
           <div className="mt-4 md:mt-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 md:gap-6 pb-24">
             {filteredFranchises.map((col) => {

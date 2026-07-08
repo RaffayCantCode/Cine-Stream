@@ -1,21 +1,56 @@
 {
   "name": "CineStream",
   "short_name": "CineStream",
-  "description": "Movies. TV. Anime. All in one place. Stream everything you love.",
+  "description": "Movies. TV. Anime. All in one place. Stream everything you love — premium, curated, and always fresh.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#020817",
   "theme_color": "#020817",
+  "categories": ["entertainment", "video"],
+  "lang": "en",
   "icons": [
     {
       "src": "/favicon.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     },
     {
       "src": "/favicon.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml"
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Browse Movies",
+      "short_name": "Movies",
+      "url": "/browse/movies",
+      "description": "Browse all movies"
+    },
+    {
+      "name": "Browse TV Shows",
+      "short_name": "TV Shows",
+      "url": "/browse/tv",
+      "description": "Browse all TV shows"
+    },
+    {
+      "name": "Browse Anime",
+      "short_name": "Anime",
+      "url": "/anime",
+      "description": "Browse anime"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "1280x720",
+      "type": "image/svg+xml",
+      "form_factor": "wide",
+      "label": "CineStream Homepage"
     }
   ]
 }

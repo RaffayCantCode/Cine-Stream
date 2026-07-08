@@ -82,7 +82,7 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
   return (
     <div
       className="py-6 md:py-8 space-y-5 animate-fade-in-up"
-      style={{ animationDuration: "0.5s" }}
+      style={{ animationDuration: "0.5s", contentVisibility: "auto", containIntrinsicSize: "auto 360px" }}
     >
       <div className="flex items-center justify-between px-5 md:px-14">
         <div className="flex items-center gap-3">
@@ -92,25 +92,29 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
             <h2 className="text-lg md:text-2xl font-black text-white tracking-tight">{title}</h2>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="hidden md:flex items-center gap-1">
+        <div className="flex items-center gap-3 md:gap-6">
+          <div className="hidden md:flex items-center gap-2">
             <button
-              type="button"
-              onClick={() => scrollByAmount("left")}
+              onClick={(e) => {
+                e.preventDefault();
+                scrollByAmount("left");
+              }}
               disabled={!canScrollLeft}
-              className="w-10 h-10 rounded-xl border border-white/10 bg-white/[0.05] text-white/70 hover:text-white hover:bg-white/[0.12] hover:border-[#7288AE]/30 disabled:opacity-30 transition-all duration-200 backdrop-blur-sm"
+              className={`w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${canScrollLeft ? 'hover:bg-primary hover:border-primary cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
               aria-label="Scroll left"
             >
-              <ChevronLeft className="w-5 h-5 mx-auto" />
+              <ChevronLeft className="w-5 h-5 ml-[-1px]" />
             </button>
             <button
-              type="button"
-              onClick={() => scrollByAmount("right")}
+              onClick={(e) => {
+                e.preventDefault();
+                scrollByAmount("right");
+              }}
               disabled={!canScrollRight}
-              className="w-10 h-10 rounded-xl border border-white/10 bg-white/[0.05] text-white/70 hover:text-white hover:bg-white/[0.12] hover:border-[#7288AE]/30 disabled:opacity-30 transition-all duration-200 backdrop-blur-sm"
+              className={`w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${canScrollRight ? 'hover:bg-primary hover:border-primary cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
               aria-label="Scroll right"
             >
-              <ChevronRight className="w-5 h-5 mx-auto" />
+              <ChevronRight className="w-5 h-5 mr-[-1px]" />
             </button>
           </div>
           {seeAllHref && (
@@ -125,11 +129,8 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
         </div>
       </div>
 
-      <div className="relative">
-        <div className="absolute left-0 top-0 bottom-4 w-16 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
-
-        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-6 pt-2 hide-scrollbar">
+      <div className="relative group/row">
+        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-6 pt-2 hide-scrollbar will-change-transform touch-pan-x">
           <div className={`flex gap-4 md:gap-5 px-5 md:px-14 w-max ${isTop10 ? "pl-8 md:pl-16" : ""}`}>
             {isLoading
               ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (

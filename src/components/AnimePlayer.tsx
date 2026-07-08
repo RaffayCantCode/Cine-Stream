@@ -149,14 +149,31 @@ export function AnimePlayer({
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
 
-  // Auto-dismiss spinner after 3.5 seconds to prevent frozen overlay
+  // Auto-dismiss spinner and handle timeout fallback
   useEffect(() => {
     setShowSpinner(true);
-    const timer = setTimeout(() => {
-      setShowSpinner(false);
-    }, 2500);
-    return () => clearTimeout(timer);
-  }, [currentUrl]);
+    let isLoaded = false;
+    
+    // Listen for iframe load externally or via state
+    const loadHandler = () => { isLoaded = true; };
+    iframeRef.current?.addEventListener('load', loadHandler);
+
+    const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
+    
+    // 8 second aggressive fallback for heavy load times
+    const fallbackTimer = setTimeout(() => {
+      if (isLoading && !isLoaded) {
+        setSourceIndex(prev => (prev + 1) % PROVIDERS.length);
+        setRetryCount(0);
+      }
+    }, 8000);
+
+    return () => {
+      clearTimeout(spinnerTimer);
+      clearTimeout(fallbackTimer);
+      iframeRef.current?.removeEventListener('load', loadHandler);
+    };
+  }, [currentUrl, isLoading]);
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {

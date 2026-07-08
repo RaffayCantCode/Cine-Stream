@@ -64,14 +64,47 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vixsrc;
   const lastSaveTimeRef = useRef<number>(0);
 
-  // Auto-dismiss spinner after 2.5 seconds to prevent frozen overlay
+  // Manual fallback: switch to the next source in the list
+  const switchToNext = useCallback(() => {
+    const currentIndex = sources.findIndex((s) => s.name === currentSource?.name);
+    const nextIndex = (currentIndex + 1) % sources.length;
+    if (nextIndex === currentIndex) {
+      setError("All sources failed to load.");
+      setIsLoading(false);
+      return;
+    }
+    const nextSource = sources[nextIndex];
+    setCurrentSource(nextSource);
+    setError(null);
+    setIsLoading(true);
+    setRetryCount(0);
+    try { localStorage.setItem(sourcePrefKey, nextSource.name); } catch {}
+  }, [sources, currentSource, sourcePrefKey]);
+
+  // Auto-dismiss spinner and handle timeout fallback
   useEffect(() => {
     setShowSpinner(true);
-    const timer = setTimeout(() => {
-      setShowSpinner(false);
-    }, 2500);
-    return () => clearTimeout(timer);
-  }, [currentSource?.url]);
+    let isLoaded = false;
+    
+    // Listen for iframe load externally or via state
+    const loadHandler = () => { isLoaded = true; };
+    iframeRef.current?.addEventListener('load', loadHandler);
+
+    const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
+    
+    // 8 second aggressive fallback for heavy load times
+    const fallbackTimer = setTimeout(() => {
+      if (isLoading && !isLoaded) {
+        switchToNext();
+      }
+    }, 8000);
+
+    return () => {
+      clearTimeout(spinnerTimer);
+      clearTimeout(fallbackTimer);
+      iframeRef.current?.removeEventListener('load', loadHandler);
+    };
+  }, [currentSource?.url, isLoading, switchToNext]);
 
   // Sources are all shown always — if an embed fails the user sees the error and can pick another
 
@@ -133,22 +166,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
     return () => window.removeEventListener('message', handleMessage);
   }, [id, type, season, episode]);
 
-  // Manual fallback: switch to the next source in the list
-  const switchToNext = useCallback(() => {
-    const currentIndex = sources.findIndex((s) => s.name === currentSource.name);
-    const nextIndex = (currentIndex + 1) % sources.length;
-    if (nextIndex === currentIndex) {
-      setError("All sources failed to load.");
-      setIsLoading(false);
-      return;
-    }
-    const nextSource = sources[nextIndex];
-    setCurrentSource(nextSource);
-    setError(null);
-    setIsLoading(true);
-    setRetryCount(0);
-    try { localStorage.setItem(sourcePrefKey, nextSource.name); } catch {}
-  }, [sources, currentSource, sourcePrefKey]);
+
 
   useEffect(() => {
     setCurrentSource(prev => {

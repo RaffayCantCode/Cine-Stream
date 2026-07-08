@@ -153,11 +153,11 @@ const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
 }`;
 
 const TRENDING_QUERY = `query ($page: Int, $genre: String) {
-  Page(page: $page, perPage: 50) {
+  Page(page: $page, perPage: 20) {
     media(
       type: ANIME,
       isAdult: false,
-      sort: [TRENDING_DESC],
+      sort: [TRENDING_DESC, POPULARITY_DESC],
       genre: $genre
     ) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge }

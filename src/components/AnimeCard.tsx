@@ -18,6 +18,7 @@ export interface AnimeItem {
   season?: string | null;
   seasonYear?: number | null;
   format?: string | null;
+  reason?: string;
 }
 
 interface AnimeCardProps {
@@ -40,8 +41,8 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
     >
       <Link
         href={`/anime/${item.id}`}
-        className={`group relative block shrink-0 transition-all duration-500 hover:scale-[1.06] hover:z-10 focus:outline-none ${
-          rank ? "w-[200px] sm:w-[240px] md:w-[280px]" : "w-[150px] sm:w-[180px] md:w-[210px]"
+        className={`group relative block shrink-0 transition-all duration-500 hover:scale-[1.06] hover:z-10 focus:outline-none touch-pan-x ${
+          rank ? "w-[160px] sm:w-[190px] md:w-[220px]" : "w-[140px] sm:w-[170px] md:w-[200px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
@@ -137,6 +138,11 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
                 </span>
               )}
             </div>
+            {item.reason && (
+              <div className="text-[10px] font-bold text-emerald-400 mt-1 line-clamp-1">
+                ✨ {item.reason}
+              </div>
+            )}
           </div>
         </div>
 

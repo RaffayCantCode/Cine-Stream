@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
 import { MediaCard } from "@/components/MediaCard";
+import { PersonCard } from "@/components/PersonCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Search as SearchIcon, MonitorPlay } from "lucide-react";
@@ -17,11 +18,13 @@ interface MediaItem {
   title?: string;
   name?: string;
   poster_path?: string;
-  media_type: "movie" | "tv";
+  media_type: "movie" | "tv" | "person";
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
   adult?: boolean;
+  profile_path?: string;
+  known_for_department?: string;
 }
 
 export default function SearchPage() {
@@ -41,6 +44,9 @@ export default function SearchPage() {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
     const search = async () => {
       if (debouncedQuery.length < 2) {
         setResults([]);
@@ -55,54 +61,66 @@ export default function SearchPage() {
       setError(null);
 
       // Determine which APIs to call based on mode
-      const fetchTmdb = mode === "all" || mode === "movies" || mode === "tv";
+      const fetchTmdb = mode === "all" || mode === "movies" || mode === "tv" || mode === "people";
       const fetchAnime = mode === "all" || mode === "anime";
 
-      // Run searches in parallel only if needed
-      const [tmdbResult, animeResult] = await Promise.allSettled([
-        fetchTmdb
-          ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`)
-          : Promise.resolve({ results: [] }),
-        fetchAnime
-          ? fetchJson<{ success: boolean; data: { animes: AnimeItem[] } }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`)
-          : Promise.resolve({ success: true, data: { animes: [] } }),
-      ]);
+      try {
+        // Run searches in parallel only if needed
+        const [tmdbResult, animeResult] = await Promise.allSettled([
+          fetchTmdb
+            ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
+            : Promise.resolve({ results: [] }),
+          fetchAnime
+            ? fetchJson<{ success: boolean; data: { animes: AnimeItem[] } }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`, { signal })
+            : Promise.resolve({ success: true, data: { animes: [] } }),
+        ]);
 
-      // Handle TMDB results
-      if (tmdbResult.status === "fulfilled") {
-        const filtered = filterReleasedSafeContent(tmdbResult.value.results
-          ?.filter((r) => (r.media_type === "movie" || r.media_type === "tv"))
-          || [], true);
-        setResults(filtered);
-      } else {
-        setResults([]);
-      }
-      setIsLoading(false);
+        if (signal.aborted) return;
 
-      // Handle Anime results
-      if (animeResult.status === "fulfilled" && animeResult.value.success) {
-        setAnimeResults(animeResult.value.data?.animes || []);
-      } else {
-        setAnimeResults([]);
-      }
-      setAnimeLoading(false);
+        // Handle TMDB results
+        if (tmdbResult.status === "fulfilled") {
+          const filtered = filterReleasedSafeContent(tmdbResult.value.results
+            ?.filter((r) => (r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"))
+            || [], true);
+          setResults(filtered);
+        } else {
+          setResults([]);
+        }
+        setIsLoading(false);
 
-      // Only show error if BOTH APIs failed
-      if (tmdbResult.status !== "fulfilled" && animeResult.status !== "fulfilled") {
-        setError("Search failed");
-      } else {
-        setError(null);
+        // Handle Anime results
+        if (animeResult.status === "fulfilled" && animeResult.value.success) {
+          setAnimeResults(animeResult.value.data?.animes || []);
+        } else {
+          setAnimeResults([]);
+        }
+        setAnimeLoading(false);
+
+        // Only show error if BOTH APIs failed
+        if (tmdbResult.status !== "fulfilled" && animeResult.status !== "fulfilled") {
+          setError("Search failed");
+        } else {
+          setError(null);
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
       }
     };
 
     search();
+
+    return () => {
+      controller.abort();
+    };
   }, [debouncedQuery, mode]);
 
-  // Build unified results ordered: movies → TV shows → anime
+  // Build unified results ordered: movies → TV shows → people → anime
   const filteredResults = activeTab === "movies"
     ? results.filter((r) => r.media_type === "movie")
     : activeTab === "tv"
     ? results.filter((r) => r.media_type === "tv")
+    : activeTab === "people"
+    ? results.filter((r) => r.media_type === "person")
     : activeTab === "anime"
     ? []
     : results;
@@ -111,6 +129,7 @@ export default function SearchPage() {
     ? [
         ...results.filter((r) => r.media_type === "movie").map((r, i) => ({ type: "media" as const, item: r, idx: i })),
         ...results.filter((r) => r.media_type === "tv").map((r, i) => ({ type: "media" as const, item: r, idx: results.filter((m) => m.media_type === "movie").length + i })),
+        ...results.filter((r) => r.media_type === "person").map((r, i) => ({ type: "media" as const, item: r, idx: results.filter((m) => m.media_type === "movie" || m.media_type === "tv").length + i })),
         ...animeResults.map((a, i) => ({ type: "anime" as const, item: a, idx: results.length + i })),
       ]
     : [];
@@ -123,7 +142,7 @@ export default function SearchPage() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
+      <main className="md:pl-56 lg:pl-64 pt-10 md:pt-10">
       <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
         <div className="relative max-w-3xl mx-auto mb-12">
           <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
@@ -133,7 +152,7 @@ export default function SearchPage() {
             ref={inputRef}
             type="text"
             className="w-full h-16 pl-14 pr-4 premium-glass text-xl rounded-2xl focus-visible:ring-[#7288AE] focus-visible:ring-offset-0 text-white placeholder:text-white/30"
-            placeholder="Search movies, TV shows & anime..."
+            placeholder="Search movies, TV shows, anime, actors & directors..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -141,10 +160,10 @@ export default function SearchPage() {
 
         {debouncedQuery.length >= 2 && (
           <div className="flex items-center gap-2 mb-8 max-w-3xl mx-auto flex-wrap">
-            {(["all", "movies", "tv", "anime"] as const).map((tab) => (
+            {(["all", "movies", "tv", "anime", "people"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setMode(tab)}
+                onClick={() => setMode(tab as any)}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 capitalize touch-manipulation ${
                   activeTab === tab
                     ? tab === "anime"
@@ -157,6 +176,7 @@ export default function SearchPage() {
                 {tab === "movies" && "🎥 Movies"}
                 {tab === "tv" && "📺 TV Shows"}
                 {tab === "anime" && "🇯🇵 Anime (JP)"}
+                {tab === "people" && "👥 People"}
               </button>
             ))}
             {!isLoading && !animeLoading && totalCount > 0 && (
@@ -173,7 +193,7 @@ export default function SearchPage() {
               <MonitorPlay className="w-10 h-10 text-white/30" />
             </div>
             <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Find something to watch</h3>
-            <p className="text-white/40 max-w-md">Search movies, TV shows, and <span className="text-[#7288AE] font-semibold">anime</span> all in one place.</p>
+            <p className="text-white/40 max-w-md">Search movies, TV shows, <span className="text-[#7288AE] font-semibold">anime</span>, and people all in one place.</p>
           </div>
         ) : error ? (
           <div className="premium-glass max-w-lg mx-auto p-8 rounded-2xl text-center">
@@ -195,7 +215,11 @@ export default function SearchPage() {
                   {unifiedResults.map((r) => (
                     <div key={`${r.type}-${r.type === "media" ? (r.item as MediaItem).id : (r.item as AnimeItem).id}`} className="w-full h-full flex justify-center">
                       {r.type === "media" ? (
-                        <MediaCard item={r.item as MediaItem} index={r.idx} />
+                        (r.item as MediaItem).media_type === "person" ? (
+                          <PersonCard item={r.item as MediaItem} />
+                        ) : (
+                          <MediaCard item={r.item as MediaItem} index={r.idx} />
+                        )
                       ) : (
                         <AnimeCard item={r.item as AnimeItem} index={r.idx} />
                       )}
@@ -220,7 +244,11 @@ export default function SearchPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                   {filteredResults.map((item) => (
                     <div key={`${item.media_type}-${item.id}`} className="w-full h-full flex justify-center">
-                      <MediaCard item={item} />
+                      {item.media_type === "person" ? (
+                        <PersonCard item={item} />
+                      ) : (
+                        <MediaCard item={item} />
+                      )}
                     </div>
                   ))}
                 </div>

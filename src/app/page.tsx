@@ -255,7 +255,7 @@ export default function Home() {
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const trendingTvTodaySafe = filterReleasedSafeContent(heroData.trendingTvToday?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
 
         setTrending(trendingSafe);
         setPopular(popularSafe);
@@ -310,7 +310,7 @@ export default function Home() {
 
         const recPool = [...fullPopular, ...topSafe, ...fullTrending, ...recentSafe];
         const daySalt = Math.floor(Date.now() / 86400000).toString();
-        
+
         try {
           const historyRes = await fetchJson<{ history: any[] }>("/api/watch-history", { skipCache: true }).catch(() => null);
           const historyItems = historyRes?.history || [];
@@ -334,7 +334,8 @@ export default function Home() {
         }
 
         if (animeResponse?.success && animeResponse.data?.items) {
-          setAnimeList(sessionShuffle(animeResponse.data.items, "anime").slice(0, 15));
+          // Keep AniList TRENDING_DESC order — do NOT shuffle
+          setAnimeList(animeResponse.data.items.slice(0, 10));
         }
         setIsLoading(false);
         setAnimeLoading(false);
@@ -370,7 +371,7 @@ export default function Home() {
     const m = pickRandom(movies);
     const s = pickRandom(shows);
     const a = pickRandom(animeItems);
-    
+
     return [m, s, a].filter(Boolean) as MediaItem[];
   }, [heroFeed]);
 
@@ -426,9 +427,13 @@ export default function Home() {
   }, [heroPool, timerReset]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20">
+    <div className="relative min-h-screen bg-background text-foreground pb-20 overflow-hidden">
+      {/* Ambient glassmorphism glowing background */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#7288AE]/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-[40%] right-[-10%] w-[30%] h-[50%] bg-[#4B5694]/10 rounded-full blur-[150px] pointer-events-none" />
+
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64 bleed-header">
+      <main className="relative z-10 md:pl-56 lg:pl-64 bleed-header">
 
         {/* ─── INFO LINK ─── */}
         <Link
@@ -443,13 +448,13 @@ export default function Home() {
 
         {/* ─── HERO BANNER ─── */}
         {hero ? (
-          <div 
+          <div
             className="relative group/hero select-none"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-              <HeroBanner key={hero?.id || "empty"} item={hero} />
+            <HeroBanner key={hero?.id || "empty"} item={hero} />
             {/* Hero dot indicators — sit just above the bottom edge of the hero */}
             {heroPool.length > 1 && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
@@ -458,11 +463,10 @@ export default function Home() {
                     key={i}
                     type="button"
                     onClick={() => goToHero(i)}
-                    className={`transition-all duration-300 rounded-full ${
-                      i === heroIndex
-                        ? "w-6 h-1.5 bg-white shadow-md"
-                        : "w-1.5 h-1.5 bg-white/30 hover:bg-white/50"
-                    }`}
+                    className={`transition-all duration-300 rounded-full ${i === heroIndex
+                      ? "w-6 h-1.5 bg-white shadow-md"
+                      : "w-1.5 h-1.5 bg-white/30 hover:bg-white/50"
+                      }`}
                     aria-label={`Go to slide ${i + 1}`}
                   />
                 ))}
@@ -492,7 +496,7 @@ export default function Home() {
           </div>
         ) : (
           !loadError && (
-            <div className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end overflow-hidden bg-[#0d1233]">
+            <div className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end overflow-hidden bg-background">
               <div className="absolute inset-0 skeleton-pulse" />
               <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
@@ -523,6 +527,12 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* ─── Bottom-edge dissolve (sits right below hero, bleeds upward) ─── */}
+        <div
+          className="relative pointer-events-none z-20"
+          style={{ marginTop: "-10rem", height: "10rem", background: "linear-gradient(to bottom, transparent, var(--background))" }}
+        />
 
         {/* ─── CONTINUE WATCHING ─── */}
         <ContinueWatching />
@@ -558,6 +568,7 @@ export default function Home() {
               items={animeList}
               isLoading={animeLoading}
               isTop10={true}
+              seeAllHref="/anime"
             />
           </LazySection>
 
@@ -687,7 +698,7 @@ export default function Home() {
                           <span className="text-center font-bold text-white text-sm">{col.name}</span>
                         </div>
                       )}
-                      
+
                       {posterUrl && (
                         <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-2 group-hover:translate-y-0 transition-transform">
                           <h4 className="text-white font-bold text-sm tracking-wide line-clamp-2 drop-shadow-md">
@@ -716,31 +727,42 @@ export default function Home() {
             </LazySection>
           )}
 
-          {/* ─── GENRE UNIVERSE ─── */}
-          <LazySection show={revealedSections >= 5} placeholderHeight={260}>
-            <SectionHeading
-              title="Genre Universe"
-              subtitle="Browse by category"
-              href="/browse/movies"
-            />
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {genres.slice(0, 12).map((genre) => (
+          {/* ─── THEMATIC UNIVERSE ─── */}
+          <LazySection show={revealedSections >= 5} placeholderHeight={220}>
+            <SectionHeading title="Browse by Mood" subtitle="Pick your vibe" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {[
+                { id: 'k-dramas',        name: 'K-Dramas',       color: '#C4006E', icon: '🌸', iconBg: '#E91E8C' },
+                { id: 'superhero',       name: 'Superheroes',    color: '#1565C0', icon: '⚡', iconBg: '#2979FF' },
+                { id: 'action-packed',   name: 'Adrenaline',     color: '#B74300', icon: '💥', iconBg: '#F4511E' },
+                { id: 'horror-thriller', name: 'Horror',         color: '#6A0000', icon: '👁️', iconBg: '#B71C1C' },
+                { id: 'sci-fi-fantasy',  name: 'Sci-Fi',         color: '#00607A', icon: '🛸', iconBg: '#0097A7' },
+                { id: 'rom-com',         name: 'Romance',        color: '#880037', icon: '💋', iconBg: '#E91E63' },
+                { id: 'fantasy-magic',   name: 'Fantasy',        color: '#1B5E20', icon: '🧙', iconBg: '#2E7D32' },
+                { id: 'feel-good-comedy',name: 'Comedy',         color: '#E65100', icon: '😂', iconBg: '#FF9800' },
+                { id: 'true-crime',      name: 'True Crime',     color: '#1A237E', icon: '🔪', iconBg: '#283593' },
+                { id: 'documentary',     name: 'Documentary',    color: '#4E342E', icon: '🎥', iconBg: '#6D4C41' },
+              ].map((g) => (
                 <Link
-                  key={genre.id}
-                  href={`/browse/genre/${genre.id}`}
-                  className="group relative overflow-hidden rounded-xl border border-[#7288AE]/10 bg-gradient-to-br from-[#111844]/80 to-[#1a2268]/40 p-4 hover:border-[#7288AE]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[#4B5694]/10"
+                  key={g.id}
+                  href={`/browse/theme/${g.id}`}
+                  className="group relative overflow-hidden rounded-xl flex flex-col justify-between p-3.5 h-[100px] transition-all duration-300 hover:brightness-110 hover:scale-[1.03] active:scale-[0.98]"
+                  style={{ backgroundColor: g.color }}
                 >
-                  <div className="absolute -top-4 -right-4 w-12 h-12 bg-[#4B5694]/10 rounded-full blur-xl group-hover:bg-[#7288AE]/20 transition-all" />
-                  <span className="text-sm font-bold text-[#EAE0CF]/80 group-hover:text-[#EAE0CF] transition-colors">{genre.name}</span>
+                  {/* Title */}
+                  <span className="text-white font-black text-base leading-tight tracking-tight drop-shadow-sm z-10 relative">
+                    {g.name}
+                  </span>
+
+                  {/* Rotated poster-card element — Spotify style */}
+                  <div
+                    className="absolute bottom-[-8px] right-[-8px] w-[62px] h-[62px] rounded-lg shadow-2xl flex items-center justify-center text-3xl rotate-[20deg] group-hover:rotate-[15deg] group-hover:scale-110 transition-all duration-500"
+                    style={{ backgroundColor: g.iconBg, boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}
+                  >
+                    {g.icon}
+                  </div>
                 </Link>
               ))}
-              <Link
-                href="/browse/movies"
-                className="group relative overflow-hidden rounded-xl border border-[#4B5694]/20 bg-[#4B5694]/10 p-4 flex items-center justify-center gap-2 hover:bg-[#4B5694]/20 transition-all"
-              >
-                <span className="text-xs font-bold text-[#7288AE]">View All</span>
-                <ChevronRight className="w-3 h-3 text-[#7288AE]" />
-              </Link>
             </div>
           </LazySection>
 

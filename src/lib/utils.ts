@@ -219,3 +219,17 @@ export function filterReleasedSafeContent<T extends {
     return true;
   });
 }
+
+export function getRecommendationReason(sourceGenres: number[], targetGenres: number[], title?: string): string {
+  if (!sourceGenres || !targetGenres || sourceGenres.length === 0 || targetGenres.length === 0) {
+    return "Recommended for you";
+  }
+  
+  const matches = sourceGenres.filter(g => targetGenres.includes(g)).length;
+  
+  if (matches >= 3) return "Similar story and themes";
+  if (matches === 2) return "Similar atmosphere";
+  if (matches === 1) return "Similar genre";
+  
+  return "Recommended for you";
+}

@@ -286,9 +286,10 @@ export function CinematicHero({
         )}
 
         {/* Gradient overlays — kept mostly opaque so text remains readable and blending works! */}
-        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible ? "opacity-0" : "opacity-100"} bg-gradient-to-t from-background via-background/80 to-black/10 z-10`} />
+        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible ? "opacity-0" : "opacity-100"} bg-gradient-to-t from-background via-background/60 to-transparent z-10`} />
         <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible ? "opacity-0" : "opacity-100"} bg-gradient-to-r from-background/90 via-background/40 to-transparent z-10`} />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background to-transparent z-10" />
+        {/* Deep bottom blend — very tall gradient for a seamless transition into the page */}
+        <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-background via-background/95 to-transparent z-10" />
         <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-background/60 to-transparent z-10" />
       </div>
 

@@ -9,9 +9,9 @@ const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sideb
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { AnimeRow } from "@/components/AnimeRow";
 import { CinematicHero } from "@/components/CinematicHero";
-import { fetchJson, cn } from "@/lib/utils";
+import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
 
 
 interface AnimeDetail {
@@ -214,7 +214,11 @@ export default function AnimeClient() {
       .then(r => r.json())
       .then(data => {
         if (data.success && data.items?.length) {
-          setRecommendations(data.items);
+          const withReasons = data.items.map((item: any) => ({
+            ...item,
+            reason: getRecommendationReason(anime.genres?.map(g => g.charCodeAt(0)) || [], item.genres?.map((g: string) => g.charCodeAt(0)) || [])
+          }));
+          setRecommendations(withReasons);
         }
       })
       .catch(() => {})
@@ -560,19 +564,33 @@ export default function AnimeClient() {
 
                   <div>
                     {!episodesLoading && currentSeasonEps.length > 0 ? (
-                      <button
-                        onClick={() => {
-                          const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
-                          handleWatchEpisode(first);
-                        }}
-                        className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
-                      >
-                        <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
-                        {isSingleItem
-                          ? `Watch ${anime.type === "MOVIE" ? "Movie" : "Anime"}`
-                          : `Watch S${currentSeasonInfo ? seasons.findIndex(s => s.id === currentSeasonId) + 1 : 1} E${currentSeasonEps[0]?.episodeNum || 1}`
-                        }
-                      </button>
+                      <div className="flex items-center flex-wrap gap-4 w-full">
+                        <button
+                          onClick={() => {
+                            const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
+                            handleWatchEpisode(first);
+                          }}
+                          className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+                        >
+                          <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
+                          {isSingleItem
+                            ? `Watch ${anime.type === "MOVIE" ? "Movie" : "Anime"}`
+                            : `Watch S${currentSeasonInfo ? seasons.findIndex(s => s.id === currentSeasonId) + 1 : 1} E${currentSeasonEps[0]?.episodeNum || 1}`
+                          }
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            const roomId = crypto.randomUUID();
+                            const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
+                            window.location.href = `/watch-party/${roomId}?mediaId=${anime.id}&mediaType=anime&episode=${first?.episodeNum || 1}&title=${encodeURIComponent(anime.name)}`;
+                          }}
+                          className="group flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 text-white/80 hover:text-white font-medium rounded-lg text-xs transition-all duration-200 sm:ml-auto"
+                        >
+                          <Users className="w-4 h-4 group-hover:scale-110 transition-transform text-primary/80 group-hover:text-primary" />
+                          Watch Together
+                        </button>
+                      </div>
                     ) : !episodesLoading ? (
                       <button disabled className="flex items-center gap-2.5 bg-white/10 text-white/30 font-bold px-8 py-4 rounded-xl text-sm cursor-not-allowed">
                         No Episodes Available
@@ -1116,6 +1134,7 @@ export default function AnimeClient() {
                   <AnimeRow title="You May Like" items={recommendations} />
                 </div>
               )}
+
               {recsLoading && !recommendations.length && (
                 <div className="-mx-5 md:-mx-0">
                   <AnimeRow title="You May Like" isLoading items={[]} />

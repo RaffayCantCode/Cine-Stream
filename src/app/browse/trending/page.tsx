@@ -215,18 +215,18 @@ export default function TrendingPage() {
           <div
             ref={sentinelRef}
             style={{ overflowAnchor: "none" }}
-            className="w-full py-12 flex flex-col items-center justify-center gap-3 text-white/40"
+            className="w-full py-16 flex flex-col items-center justify-center gap-3 text-white/40 min-h-[100px]"
           >
             {isLoadingMore || isLoading ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
                 <span className="text-sm font-medium text-white/50">Loading more...</span>
               </div>
-            ) : items.length > 0 && hasMore ? (
-              <button onClick={() => triggerLoadRef.current?.()} className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer">Load More</button>
             ) : items.length > 0 && !hasMore ? (
               <span className="text-xs text-white/20">No more results</span>
-            ) : null}
+            ) : (
+               <div className="h-10 w-full" />
+            )}
           </div>
         </div>
       </main>

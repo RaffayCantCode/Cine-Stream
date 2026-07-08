@@ -13,7 +13,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://cinestream-hd.netlify.app"),
+  metadataBase: new URL("https://cine-stream.site"),
   title: {
     template: "%s | CineStream",
     default: "CineStream - Movies, TV & Anime",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "CineStream - Movies, TV & Anime",
     description: "Stream premium curated Movies, TV Shows, and Anime.",
-    url: "https://cinestream-hd.netlify.app",
+    url: "https://cine-stream.site",
     siteName: "CineStream",
     images: [
       {
@@ -65,6 +65,15 @@ export default function RootLayout({
         <link rel="preconnect" href="https://api.anipub.xyz" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://api.anipub.xyz" />
         <link rel="dns-prefetch" href="https://api.tatakai.me" />
+        {/* PWA service worker registration */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .catch(function(err) { console.warn('SW registration failed:', err); });
+            });
+          }
+        `}} />
       </head>
       <body className={`${outfit.variable} font-sans antialiased bg-background text-foreground`}>
         {/* Global Background Glow */}

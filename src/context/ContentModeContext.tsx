@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
-export type ContentMode = "all" | "movies" | "tv" | "anime";
+export type ContentMode = "all" | "movies" | "tv" | "anime" | "people";
 
 interface ContentModeContextProps {
   mode: ContentMode;

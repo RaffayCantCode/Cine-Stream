@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Play, X, Tv, Film } from "lucide-react";
 import useSWR, { mutate } from "swr";
 import useEmblaCarousel from "embla-carousel-react";
+import { useRef, useState } from "react";
 
 interface WatchHistoryItem {
   id: number;
@@ -37,6 +38,10 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     dragFree: true,
     containScroll: "trimSnaps",
   });
+
+  // Season episode totals cache: key = `${mediaType}-${mediaId}-${season}` => total episodes
+  const episodeTotalsRef = useRef<Record<string, number>>({});
+  const [episodeTotals, setEpisodeTotals] = useState<Record<string, number>>({});
 
   if (status !== "authenticated" || isLoading || !data?.items?.length) {
     return null;
@@ -156,6 +161,45 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                       S{item.season} E{item.episode}
                     </div>
                   )}
+
+                  {/* Season progress bar */}
+                  {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (() => {
+                    const key = `${item.mediaType}-${item.mediaId}-${item.season}`;
+                    const total = episodeTotals[key];
+                    // Fetch total episodes for this season if we don't have it
+                    if (!total && !episodeTotalsRef.current[key + '_fetching']) {
+                      episodeTotalsRef.current[key + '_fetching'] = 1;
+                      const endpoint = item.mediaType === 'tv'
+                        ? `/api/tmdb/tv/${item.mediaId}/season/${item.season}`
+                        : null;
+                      if (endpoint) {
+                        fetch(endpoint)
+                          .then(r => r.json())
+                          .then(d => {
+                            const count = d?.episodes?.length;
+                            if (count > 0) {
+                              episodeTotalsRef.current[key] = count;
+                              setEpisodeTotals(prev => ({ ...prev, [key]: count }));
+                            }
+                          })
+                          .catch(() => {});
+                      }
+                    }
+                    const pct = total ? Math.min(100, Math.round((item.episode! / total) * 100)) : null;
+                    return pct !== null ? (
+                      <div className="absolute bottom-0 inset-x-0 h-1 bg-white/10 rounded-b-xl overflow-hidden">
+                        <div
+                          className="h-full rounded-b-xl transition-all duration-700"
+                          style={{
+                            width: `${pct}%`,
+                            background: item.mediaType === 'anime'
+                              ? 'linear-gradient(90deg, #7288AE, #4B5694)'
+                              : 'linear-gradient(90deg, #10b981, #059669)',
+                          }}
+                        />
+                      </div>
+                    ) : null;
+                  })()}
 
                   <button
                     onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}

@@ -37,7 +37,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const isAnime = isTmdbAnime(item);
   const title = item.title || item.name || "";
   let link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
-  
+
   if (isAnime) {
     link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
   }
@@ -51,21 +51,27 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   // Determine if this is an anime for label display (already calculated above)
 
   return (
-    <section className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end overflow-hidden bg-[#0d1233]">
+    <section className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end bg-background">
       {backdropUrl ? (
         <>
-          <Image
-            src={backdropUrl}
-            alt={title}
-            fill
-            sizes="100vw"
-            className="object-cover object-center md:object-top"
-            style={{ transform: "scale(1.03)", animation: "fade-in-up 1.4s ease-out both" }}
-            priority
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-black/20" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/30 to-transparent" />
-          <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/50 to-transparent" />
+          {/* Image clipped independently so gradients can bleed outside section */}
+          <div className="absolute inset-0 overflow-hidden">
+            <Image
+              src={backdropUrl}
+              alt={title}
+              fill
+              sizes="100vw"
+              className="object-cover object-center md:object-top"
+              style={{ transform: "scale(1.03)", animation: "fade-in-up 1.4s ease-out both" }}
+              priority
+            />
+          </div>
+          {/* Lighter overlays so backdrop art details show through */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/30 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/70 via-background/20 to-transparent" />
+          <div className="absolute top-0 inset-x-0 h-16 bg-gradient-to-b from-background/40 to-transparent" />
+          {/* Bottom blend — extends 5rem below section edge */}
+          <div className="absolute inset-x-0 bg-gradient-to-t from-background via-background/80 to-transparent" style={{ bottom: "0rem", height: "5rem" }} />
         </>
       ) : (
         <div className="absolute inset-0 bg-card" />

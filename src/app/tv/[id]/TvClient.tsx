@@ -7,13 +7,14 @@ import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
-import { Play, Star, Calendar, CheckCircle2, Loader2 } from "lucide-react";
+import { Play, Star, Calendar, CheckCircle2, Loader2, Users } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { CinematicHero } from "@/components/CinematicHero";
 import { GridMediaCard } from "@/components/GridMediaCard";
-import { cn, fetchJson, shuffleArray } from "@/lib/utils";
+import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { format } from "date-fns";
+import { CastRow } from "@/components/CastRow";
 
 interface Episode {
   id: number;
@@ -121,6 +122,8 @@ export default function TvClient() {
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(prev => {
+          // If we haven't loaded state yet, or we're on season 1 and there's no explicitly requested season,
+          // then default to the first available season (often >1 for anime/some shows).
           if (prev === 1 && firstSeason > 1 && !searchParams.get("season")) {
             return firstSeason;
           }
@@ -159,21 +162,25 @@ export default function TvClient() {
 
   useEffect(() => {
     if (!selectedSeason) return;
+    let isActive = true;
 
     const fetchSeason = async () => {
       setSeasonLoading(true);
       try {
         const data = await fetchJson<Season>(`/api/tmdb/tv/${id}/season/${selectedSeason}`);
-        setSeasonData(data);
+        if (isActive) setSeasonData(data);
       } catch (error) {
-        setSeasonData(null);
-        setError(error instanceof Error ? error.message : "Failed to fetch season");
+        if (isActive) {
+          setSeasonData(null);
+          setError(error instanceof Error ? error.message : "Failed to fetch season");
+        }
       } finally {
-        setSeasonLoading(false);
+        if (isActive) setSeasonLoading(false);
       }
     };
 
     fetchSeason();
+    return () => { isActive = false; };
   }, [id, selectedSeason]);
 
   const handleWatchEpisode = async (season: number, episodeNumber: number, episodeName?: string) => {
@@ -343,7 +350,7 @@ export default function TvClient() {
               {show.overview}
             </p>
 
-            <div>
+            <div className="flex items-center flex-wrap gap-4 w-full">
               <button
                 onClick={() => {
                   const ep = playingSeason === selectedSeason 
@@ -355,6 +362,17 @@ export default function TvClient() {
               >
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch S{playingSeason} E{playingEpisode}
+              </button>
+              
+              <button
+                onClick={() => {
+                  const roomId = crypto.randomUUID();
+                  window.location.href = `/watch-party/${roomId}?mediaId=${show.id}&mediaType=tv&season=${playingSeason}&episode=${playingEpisode}&title=${encodeURIComponent(show.name)}`;
+                }}
+                className="group flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 text-white/80 hover:text-white font-medium rounded-lg text-xs transition-all duration-200 sm:ml-auto"
+              >
+                <Users className="w-4 h-4 group-hover:scale-110 transition-transform text-primary/80 group-hover:text-primary" />
+                Watch Together
               </button>
             </div>
           </div>
@@ -521,40 +539,8 @@ export default function TvClient() {
             )}
         </section>
 
-        {show.credits?.cast && show.credits.cast.length > 0 && (
-          <section>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-1 h-5 bg-primary rounded-full" />
-              <h2 className="text-base font-bold text-white tracking-wide">Cast</h2>
-            </div>
-            <div className="flex overflow-x-auto gap-4 pb-4 hide-scrollbar">
-              {show.credits.cast.slice(0, 16).map((person, i) => (
-                <Link
-                  href={`/person/${person.id}`}
-                  key={person.id}
-                  className="w-[100px] shrink-0 text-center group cursor-pointer"
-                >
-                  <div className="aspect-[2/3] rounded-xl bg-card overflow-hidden mb-2.5 ring-1 ring-white/[0.06] transition-transform duration-300 group-hover:scale-105 group-hover:ring-primary/50">
-                    {person.profile_path ? (
-                      <img
-                        src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
-                        alt={person.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-muted">
-                        <span className="text-muted-foreground/40 text-lg font-bold">{person.name?.[0]}</span>
-                      </div>
-                    )}
-                  </div>
-                  <h4 className="font-semibold text-xs text-white line-clamp-1 leading-tight">{person.name}</h4>
-                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5 group-hover:text-muted-foreground/80 transition-colors">{person.character}</p>
-                </Link>
-              ))}
-            </div>
-          </section>
+        {(((show.credits as any)?.cast && (show.credits as any).cast.length > 0) || ((show.credits as any)?.crew && (show.credits as any).crew.length > 0)) && (
+          <CastRow cast={(show.credits as any).cast || []} crew={(show.credits as any).crew || []} />
         )}
 
         {(() => {
@@ -565,11 +551,13 @@ export default function TvClient() {
           for (const item of recs) {
             if (seen.has(item.id)) continue;
             seen.add(item.id);
+            item.reason = getRecommendationReason(show.genres?.map((g: any) => g.id) || [], item.genre_ids || []);
             merged.push(item);
           }
           for (const item of similar) {
             if (seen.has(item.id)) continue;
             seen.add(item.id);
+            item.reason = getRecommendationReason(show.genres?.map((g: any) => g.id) || [], item.genre_ids || []);
             merged.push(item);
             if (merged.length >= 20) break;
           }

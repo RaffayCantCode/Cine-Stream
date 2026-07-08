@@ -61,13 +61,13 @@ export async function tmdbFetch(
   }
 
   // Dynamic cache times (in seconds) based on path type
-  let revalidate = 7200; // default 2 hours (discover, popular, trending)
+  let revalidate = 21600; // default 6 hours (discover, popular, trending)
   if (path.includes("/movie/") || path.includes("/tv/")) {
-    revalidate = 86400; // 24 hours for movies/TV details, seasons, episodes, cast
+    revalidate = 86400 * 7; // 7 days for movies/TV details, seasons, episodes, cast
   } else if (path.includes("/genre/") || path.includes("/configuration")) {
-    revalidate = 86400 * 7; // 7 days for configuration/genres list
+    revalidate = 86400 * 14; // 14 days for configuration/genres list
   } else if (path.includes("/search/")) {
-    revalidate = 3600; // 1 hour for search queries
+    revalidate = 86400; // 24 hours for search queries
   }
 
   const cacheKey = url.toString();
@@ -383,11 +383,12 @@ export function filterTmdbResponse(data: unknown, isSearch: boolean = false): un
         overview?: string;
         poster_path?: string | null;
         backdrop_path?: string | null;
+        profile_path?: string | null;
         release_date?: string;
         first_air_date?: string;
       };
 
-      if (!media.poster_path && !media.backdrop_path) return false;
+      if (!media.poster_path && !media.backdrop_path && !media.profile_path) return false;
 
       // Bypass content filters if this is a search request
       if (isSearch) return true;
