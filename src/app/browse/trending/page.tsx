@@ -1,5 +1,5 @@
-export const runtime = 'edge';
 "use client";
+export const runtime = 'edge';
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
