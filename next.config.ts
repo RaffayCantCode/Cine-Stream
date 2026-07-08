@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
+// Force a redeploy for Cloudflare nodejs_compat flag
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
