@@ -8,7 +8,7 @@ export const revalidate = 3600;
 // Fetch multiple pages and merge results for a much larger pool to randomize from
 async function fetchMultiplePages(endpoint: string, pages: number[]) {
   const results = await Promise.allSettled(
-    pages.map((page) => tmdbFetch(endpoint, { page: String(page), include_adult: "true" }))
+    pages.map((page) => tmdbFetch(endpoint, { page: String(page), include_adult: "false" }))
   );
 
   const allItems: unknown[] = [];

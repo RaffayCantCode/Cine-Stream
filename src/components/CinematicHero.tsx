@@ -8,6 +8,7 @@ interface CinematicHeroProps {
   trailerId?: string | null;
   title: string;
   height?: string;
+  theme?: "movie" | "tv" | "anime";
   children: React.ReactNode;
 }
 
@@ -22,6 +23,7 @@ export function CinematicHero({
   trailerId,
   title,
   height = "h-[62vh] md:h-[75vh]",
+  theme = "movie",
   children,
 }: CinematicHeroProps) {
   const [trailerReady, setTrailerReady] = useState(false);
@@ -34,6 +36,12 @@ export function CinematicHero({
   const mountedRef = useRef(false);
   const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const isScrubbingRef = useRef(false);
+
+  const themeColorClass = theme === "anime" ? "bg-fuchsia-500" : theme === "tv" ? "bg-emerald-500" : "bg-blue-500";
 
   const backdropUrl = backdropPath
     ? (backdropPath.startsWith('http') ? backdropPath : `https://image.tmdb.org/t/p/w1280${backdropPath}`)
@@ -48,6 +56,7 @@ export function CinematicHero({
       mute: "1", // Always start muted
       loop: "0", // Don't loop, so we can detect when it ends and close it
       vq: "hd1080", // Try to force highest quality
+      hd: "1", // Hint for HD playback
       controls: "0",
       modestbranding: "1",
       rel: "0",
@@ -92,6 +101,12 @@ export function CinematicHero({
           if (data.info.playerState === 0) { // 0 = ENDED
             setTrailerVisible(false);
             setTimeout(() => setTrailerReady(false), 1000);
+          }
+          if (data.info.currentTime !== undefined && !isScrubbingRef.current) {
+            setCurrentTime(data.info.currentTime);
+          }
+          if (data.info.duration !== undefined) {
+            setDuration(data.info.duration);
           }
         }
       } catch (e) {}
@@ -242,6 +257,24 @@ export function CinematicHero({
     }
   };
 
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCurrentTime(parseFloat(e.target.value));
+  };
+
+  const handleSeekEnd = () => {
+    isScrubbingRef.current = false;
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func: "seekTo", args: [currentTime, true] }),
+        "*"
+      );
+    }
+  };
+
+  const handleSeekStart = () => {
+    isScrubbingRef.current = true;
+  };
+
   return (
     <div ref={heroRef} className="relative w-full flex flex-col">
       {/* ── Background layer (Fixed 85svh) ──────────────────────────────────────── */}
@@ -264,7 +297,7 @@ export function CinematicHero({
         {trailerId && trailerReady && trailerUrl && (
           <div
             className={`absolute inset-0 transition-opacity duration-1000 ${
-              trailerVisible ? "opacity-100" : "opacity-0"
+              trailerVisible ? "opacity-100" : "opacity-[0.01]"
             }`}
             aria-hidden="true"
           >
@@ -295,6 +328,7 @@ export function CinematicHero({
 
       {/* ── Trailer Controls (shown only when trailer is playing) ────── */}
       {trailerId && trailerVisible && (
+        <>
         <div className="absolute top-[calc(85svh-4rem)] md:top-[calc(85svh-4.5rem)] right-4 md:right-6 z-30 flex items-center gap-3">
           
           {/* Stop Trailer Button */}
@@ -341,6 +375,30 @@ export function CinematicHero({
             </button>
           </div>
         </div>
+
+        {/* Playback Progress Slider */}
+        <div className="absolute top-[calc(85svh-1.5rem)] md:top-[calc(85svh-2rem)] left-1/2 -translate-x-1/2 w-[90%] md:w-1/2 z-30 group/slider flex items-center h-6 cursor-pointer">
+          <div className="relative w-full h-1 group-hover/slider:h-1.5 bg-white/20 rounded-full overflow-hidden transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+            <div 
+              className={`absolute top-0 left-0 h-full ${themeColorClass} transition-all duration-75`} 
+              style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+            />
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={duration || 100}
+            step="0.1"
+            value={currentTime}
+            onChange={handleSeek}
+            onMouseDown={handleSeekStart}
+            onTouchStart={handleSeekStart}
+            onMouseUp={handleSeekEnd}
+            onTouchEnd={handleSeekEnd}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+        </div>
+        </>
       )}
 
       {/* ── Content Wrapper ────── */}

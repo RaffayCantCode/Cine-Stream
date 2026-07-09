@@ -58,8 +58,16 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     }
 
     const seen = new Set<number>();
-    filtered = filtered.filter((item) => {
+    filtered = filtered.filter((item: any) => {
       if (seen.has(item.id)) return false;
+      
+      // Filter out talk shows, reality, and news
+      const isTalkOrReality = item.genre_ids?.some((id: number) => id === 10767 || id === 10764 || id === 10763);
+      if (isTalkOrReality) return false;
+      
+      // Filter out roles where they just appear as themselves (interviews, panel shows, etc)
+      if (!isDirector && item.character && item.character.toLowerCase().includes("self")) return false;
+
       seen.add(item.id);
       return item.poster_path || item.backdrop_path;
     });

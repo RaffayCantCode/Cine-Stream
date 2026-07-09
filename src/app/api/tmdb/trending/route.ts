@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const data = await tmdbFetch(`/trending/${type}/${timeWindow}`, {
       page,
-      include_adult: "true",
+      include_adult: "false",
     }) as { results?: unknown[] };
 
 

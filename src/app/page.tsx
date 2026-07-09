@@ -259,8 +259,8 @@ export default function Home() {
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
 
         setTrending(trendingSafe);
-        setPopular(popularSafe);
-        setTopRated(heroTopSafe);
+        setPopular(sessionShuffle(popularSafe, "popular"));
+        setTopRated(sessionShuffle(heroTopSafe, "toprated"));
         setRecent(heroRecentSafe);
         setTrendingMoviesToday(trendingMoviesTodaySafe);
         setTrendingTvToday(trendingTvTodaySafe);
@@ -306,8 +306,8 @@ export default function Home() {
         }
 
         setTrending(fullTrending);
-        setPopular(fullPopular);
-        setTopRated(topSafe);
+        setPopular(sessionShuffle(fullPopular, "popular"));
+        setTopRated(sessionShuffle(topSafe, "toprated"));
         setRecent(recentSafe);
 
         const recPool = [...fullPopular, ...topSafe, ...fullTrending, ...recentSafe];
@@ -428,7 +428,7 @@ export default function Home() {
   }, [heroPool, timerReset]);
 
   return (
-    <div className="relative min-h-screen bg-background text-foreground pb-20 overflow-hidden">
+    <div className="relative min-h-screen bg-[#070B14] text-[#EAE0CF] pb-20 overflow-hidden">
       {/* Ambient glassmorphism glowing background */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#7288AE]/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute top-[40%] right-[-10%] w-[30%] h-[50%] bg-[#4B5694]/10 rounded-full blur-[150px] pointer-events-none" />

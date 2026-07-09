@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Skip all caches for provider-filtered requests — ensures fresh results after any config change
     const data = await tmdbFetch("/discover/movie", {
       ...params,
-      include_adult: "true",
+      include_adult: "false",
     }, { noCache: !!withProviders });
     return Response.json(data);
   } catch (error) {

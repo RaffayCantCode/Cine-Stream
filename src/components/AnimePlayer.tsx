@@ -217,20 +217,22 @@ export function AnimePlayer({
     };
   }, []);
 
-  // Pre-resolve ALL provider URLs client-side — instant, no server round-trip
+  const initialProgressRef = useRef(startProgress);
+
+  // Pre-resolve all provider URLs so switching is instant
   useEffect(() => {
     const urls: Record<string, string> = {};
     PROVIDERS.forEach(p => {
       urls[p.provider] = buildProviderUrl(
         p.provider, animeId, malId, rootAnimeId, rootMalId,
-        episode, episodeOffset || 0, tmdbId, tmdbSeason, startProgress
+        episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current
       );
     });
     setResolvedUrls(urls);
     setRetryCount(0);
     setIsLoading(true);
     setHasError(false);
-  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, startProgress]);
+  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason]);
 
   // When source index changes, pick the pre-resolved URL instantly
   useEffect(() => {
@@ -287,9 +289,16 @@ export function AnimePlayer({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [animeId, episode, tmdbSeason, onProgress]);
+  }, [animeId, episode, tmdbSeason, onProgress, onAutoNext]);
 
-
+  // Handle seamless syncing via postMessage without reloading the iframe
+  useEffect(() => {
+    if (iframeRef.current?.contentWindow && startProgress !== undefined) {
+      // Send standard player.seek event (Supported by VidLink and some others)
+      iframeRef.current.contentWindow.postMessage({ type: "player.seek", data: startProgress }, "*");
+      iframeRef.current.contentWindow.postMessage({ type: "player.play" }, "*");
+    }
+  }, [startProgress, forceReloadCount]);
 
   const switchSource = useCallback(() => {
     setSourceIndex(prev => {

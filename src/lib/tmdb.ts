@@ -51,7 +51,7 @@ export async function tmdbFetch(
 ): Promise<unknown> {
   const isSearch = path.includes("/search/");
   const url = new URL(`${TMDB_BASE}${path}`);
-  url.searchParams.set("include_adult", isSearch ? "true" : "false");
+  url.searchParams.set("include_adult", "false");
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== "") {

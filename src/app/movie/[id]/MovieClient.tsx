@@ -184,9 +184,10 @@ export default function MovieClient() {
 
       <main className="md:pl-56 lg:pl-64 bleed-header">
         <CinematicHero
-          backdropPath={movie.backdrop_path}
+          backdropPath={movie.backdrop_path || movie.poster_path}
           trailerId={trailerId}
           title={movie.title}
+          theme="movie"
         >
           <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
           {posterUrl && (

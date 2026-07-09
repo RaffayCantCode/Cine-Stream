@@ -62,6 +62,13 @@ export default function RootLayout({
         {/* ─── Performance: open connections to image CDN before images are needed ─── */}
         <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://image.tmdb.org" />
+        
+        {/* Streaming sources preconnect */}
+        <link rel="preconnect" href="https://vidlink.pro" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://vidfast.pro" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://vidlink.pro" />
+        <link rel="dns-prefetch" href="https://vidfast.pro" />
+        
         {/* Anime image sources */}
         <link rel="preconnect" href="https://api.anipub.xyz" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://api.anipub.xyz" />
@@ -78,7 +85,10 @@ export default function RootLayout({
       </head>
       <body className={`${outfit.variable} font-sans antialiased bg-background text-foreground`}>
         {/* Global Background Glow */}
-        <div className="fixed inset-0 z-[-1] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#1f285c]/30 via-background to-background pointer-events-none" />
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-[-1]">
+          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px]" />
+          <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-secondary/5 blur-[120px]" />
+        </div>
         <Providers>{children}</Providers>
       </body>
     </html>

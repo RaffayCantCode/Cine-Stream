@@ -39,9 +39,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     containScroll: "trimSnaps",
   });
 
-  // Season episode totals cache: key = `${mediaType}-${mediaId}-${season}` => total episodes
-  const episodeTotalsRef = useRef<Record<string, number>>({});
-  const [episodeTotals, setEpisodeTotals] = useState<Record<string, number>>({});
+
 
   if (status !== "authenticated" || isLoading || !data?.items?.length) {
     return null;
@@ -98,7 +96,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
   };
 
   return (
-    <section className="px-5 md:px-10 py-6">
+    <section className="px-5 md:px-10 lg:px-12 pt-6 pb-2">
       <div className="max-w-screen-2xl mx-auto">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-1 h-5 bg-primary rounded-full" />
@@ -162,44 +160,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                     </div>
                   )}
 
-                  {/* Season progress bar */}
-                  {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (() => {
-                    const key = `${item.mediaType}-${item.mediaId}-${item.season}`;
-                    const total = episodeTotals[key];
-                    // Fetch total episodes for this season if we don't have it
-                    if (!total && !episodeTotalsRef.current[key + '_fetching']) {
-                      episodeTotalsRef.current[key + '_fetching'] = 1;
-                      const endpoint = item.mediaType === 'tv'
-                        ? `/api/tmdb/tv/${item.mediaId}/season/${item.season}`
-                        : null;
-                      if (endpoint) {
-                        fetch(endpoint)
-                          .then(r => r.json())
-                          .then(d => {
-                            const count = d?.episodes?.length;
-                            if (count > 0) {
-                              episodeTotalsRef.current[key] = count;
-                              setEpisodeTotals(prev => ({ ...prev, [key]: count }));
-                            }
-                          })
-                          .catch(() => {});
-                      }
-                    }
-                    const pct = total ? Math.min(100, Math.round((item.episode! / total) * 100)) : null;
-                    return pct !== null ? (
-                      <div className="absolute bottom-0 inset-x-0 h-1 bg-white/10 rounded-b-xl overflow-hidden">
-                        <div
-                          className="h-full rounded-b-xl transition-all duration-700"
-                          style={{
-                            width: `${pct}%`,
-                            background: item.mediaType === 'anime'
-                              ? 'linear-gradient(90deg, #7288AE, #4B5694)'
-                              : 'linear-gradient(90deg, #10b981, #059669)',
-                          }}
-                        />
-                      </div>
-                    ) : null;
-                  })()}
+
 
                   <button
                     onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}

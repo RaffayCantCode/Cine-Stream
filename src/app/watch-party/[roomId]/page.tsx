@@ -336,6 +336,19 @@ function WatchPartyContent({ roomId }: { roomId: string }) {
                   <p className="text-white/50 text-sm leading-relaxed mb-8">
                     The host hasn&apos;t started anything yet. Browse Stream Vault and click "Watch Together" on any movie or show to start syncing!
                   </p>
+
+                  <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl mb-8 text-left shadow-lg shadow-primary/5">
+                    <h3 className="text-primary font-bold text-sm mb-1 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      Feature in Development
+                    </h3>
+                    <p className="text-white/60 text-xs leading-relaxed mb-3">
+                      Watch Together is currently a manual sync experience. The host must select a media, start playing, and then manually click the "Sync Everyone to Me" button above the chat to sync the room.
+                    </p>
+                    <p className="text-white/80 text-xs font-semibold bg-white/5 p-2 rounded-lg border border-white/10">
+                      💡 For the best syncing experience, ensure all users are on Source 3 (VidLink).
+                    </p>
+                  </div>
                   <button onClick={() => router.push("/")} className="px-6 py-3 bg-primary hover:bg-primary/80 text-white rounded-xl font-bold transition-all shadow-lg shadow-primary/20">
                     Browse Catalog
                   </button>

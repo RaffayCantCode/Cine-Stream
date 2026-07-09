@@ -62,8 +62,8 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
 
     case "vidlink":
       const timeParam = progress && progress > 0 ? `&t=${progress}` : "";
-      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=4b5694&autoplay=false${timeParam}`;
-      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=4b5694&autoplay=false${timeParam}`;
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=4b5694&autoplay=true${timeParam}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=4b5694&autoplay=true${timeParam}`;
 
     case "vidsrc":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;

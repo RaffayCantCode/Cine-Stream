@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   const page = searchParams.get("page") || "1";
 
   try {
-    const data = await tmdbFetch("/movie/popular", { page, include_adult: "true" });
+    const data = await tmdbFetch("/movie/popular", { page, include_adult: "false" });
     return Response.json(data);
   } catch (error) {
     return Response.json({ error: "Failed to fetch popular movies" }, { status: 500 });

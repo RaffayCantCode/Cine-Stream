@@ -39,7 +39,8 @@ const getSourcePrefKey = (type: string, id: number, userId: string) => `sv_src_$
 export function VideoPlayer({ type, id, season, episode, title, startProgress, onProgress, forcedSource, forceReloadCount }: VideoPlayerProps) {
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
-  const sources = useMemo(() => getStreamingSources(type, id, season, episode, startProgress), [type, id, season, episode, startProgress]);
+  const initialProgressRef = useRef(startProgress);
+  const sources = useMemo(() => getStreamingSources(type, id, season, episode, initialProgressRef.current), [type, id, season, episode]);
   const sourcePrefKey = getSourcePrefKey(type, id, userId);
 
   const [currentSource, setCurrentSource] = useState<StreamingSource>(sources[0]);

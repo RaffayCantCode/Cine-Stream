@@ -540,6 +540,7 @@ export default function AnimeClient() {
               backdropPath={anime.poster}
               trailerId={anime.trailerId}
               title={anime.name}
+              theme="anime"
             >
               <div className="relative z-10 pb-6 md:pb-16 px-5 md:px-12 flex flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-10 max-w-screen-2xl mx-auto w-full">
                 <div
@@ -599,18 +600,6 @@ export default function AnimeClient() {
                             ? `Watch ${anime.type === "MOVIE" ? "Movie" : "Anime"}`
                             : `Watch S${currentSeasonInfo ? seasons.findIndex(s => s.id === currentSeasonId) + 1 : 1} E${currentSeasonEps[0]?.episodeNum || 1}`
                           }
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            const roomId = crypto.randomUUID();
-                            const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
-                            window.location.href = `/watch-party/${roomId}?mediaId=${anime.id}&mediaType=anime&episode=${first?.episodeNum || 1}&title=${encodeURIComponent(anime.name)}`;
-                          }}
-                          className="group flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 text-white/80 hover:text-white font-medium rounded-lg text-xs transition-all duration-200 sm:ml-auto"
-                        >
-                          <Users className="w-4 h-4 group-hover:scale-110 transition-transform text-primary/80 group-hover:text-primary" />
-                          Watch Together
                         </button>
                       </div>
                     ) : !episodesLoading ? (
@@ -756,75 +745,33 @@ export default function AnimeClient() {
                   </div>
                 )}
 
-                {/* ── Metadata + Synopsis ── */}
-                <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="md:col-span-2 space-y-4">
-                    <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl h-full">
-                      <h3 className="text-base font-bold text-white mb-3">Synopsis</h3>
-                      <p className="text-white/60 text-sm leading-relaxed whitespace-pre-line">{anime.description || "No synopsis available."}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl space-y-4">
-                      <h3 className="text-base font-bold text-white">Details</h3>
-                      <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-xs">
-                        <div>
-                          <span className="text-white/40 block mb-1">Format</span>
-                          <span className="text-white font-bold text-sm bg-white/[0.06] px-2.5 py-1 rounded-lg uppercase">{anime.format || anime.type || "TV"}</span>
-                        </div>
-                        <div>
-                          <span className="text-white/40 block mb-1">Rating</span>
-                          <span className="text-amber-400 font-bold text-sm bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-lg flex items-center gap-1 w-max">
-                            <Star className="w-3.5 h-3.5 fill-current" /> {anime.rating || anime.score || "N/A"}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-white/40 block mb-1">Seasons</span>
-                          <span className="text-white font-semibold text-sm">{seasons.length || 1}</span>
-                        </div>
-                        <div>
-                          <span className="text-white/40 block mb-1">Status</span>
-                          <span className="text-white font-semibold text-sm">{anime.status || "N/A"}</span>
-                        </div>
-                        <div>
-                          <span className="text-white/40 block mb-1">Season</span>
-                          <span className="text-white font-semibold text-sm uppercase">{anime.season || "N/A"}</span>
-                        </div>
-                        <div>
-                          <span className="text-white/40 block mb-1">Year</span>
-                          <span className="text-white font-semibold text-sm">{anime.seasonYear || "N/A"}</span>
-                        </div>
+                {/* ── Details ── */}
+                <div className="w-full">
+                  <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl space-y-5">
+                    <h3 className="text-base font-bold text-white">Details</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-6 gap-x-4 text-xs">
+                      <div>
+                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Format</span>
+                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg uppercase">{anime.format || anime.type || "TV"}</span>
                       </div>
-                    </div>
-
-                    {/* ── Source Reference ── */}
-                    <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl space-y-3">
-                      <h3 className="text-base font-bold text-white">Anime Reference</h3>
-                      <p className="text-[10px] text-white/40 leading-relaxed">
-                        Verify this anime&apos;s information on the original source provider.
-                      </p>
-                      <div className="flex flex-col gap-2">
-                        <a
-                          href={`https://anilist.co/anime/${anime.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-[#4B5694]/20 to-[#7288AE]/10 border border-[#7288AE]/20 text-white/80 hover:text-white hover:border-[#7288AE]/40 text-xs font-bold transition-all"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          View on AniList
-                        </a>
-                        {anime.idMal && (
-                          <a
-                            href={`https://myanimelist.net/anime/${anime.idMal}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.06] hover:border-white/20 text-white/60 hover:text-white text-xs font-bold transition-all"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                            View on MyAnimeList
-                          </a>
-                        )}
+                      <div>
+                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Rating</span>
+                        <span className="text-amber-400 font-bold text-sm bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-max shadow-[0_0_15px_rgba(251,191,36,0.1)]">
+                          <Star className="w-4 h-4 fill-current" /> 
+                          {anime.rating || anime.score ? (Number(anime.rating || anime.score) > 10 ? (Number(anime.rating || anime.score) / 10).toFixed(1) : Number(anime.rating || anime.score).toFixed(1)) : "N/A"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Seasons</span>
+                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{seasons.length || 1}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Status</span>
+                        <span className="text-emerald-400 font-bold text-sm bg-emerald-400/10 border border-emerald-400/20 px-3 py-1.5 rounded-lg uppercase shadow-[0_0_15px_rgba(52,211,153,0.1)]">{anime.status || "N/A"}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Year</span>
+                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{anime.seasonYear || "N/A"}</span>
                       </div>
                     </div>
                   </div>

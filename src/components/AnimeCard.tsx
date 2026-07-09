@@ -92,54 +92,55 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
 
         <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-black/85 to-transparent pointer-events-none" />
 
-        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 sm:p-3 pointer-events-none">
-          <h3 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2 drop-shadow-xl">
+        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 sm:p-3 pointer-events-none transition-transform duration-500 group-hover:-translate-y-1">
+          <h3 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)]">
             {item.name}
           </h3>
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-4 pb-10">
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-            <div className="w-12 h-12 rounded-full bg-[#4B5694]/90 backdrop-blur-xl flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
-              <Play className="w-5 h-5 fill-white text-white ml-0.5" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-3 sm:p-4 pb-[3.5rem] sm:pb-[4.5rem]">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/90 backdrop-blur-xl flex items-center justify-center translate-y-4 group-hover:translate-y-0 transition-transform duration-500 shadow-[0_0_20px_rgba(213,82,163,0.4)]">
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white text-white ml-0.5" />
             </div>
           </div>
 
-          <div className="relative z-10 space-y-2">
-            <div className="flex items-center gap-1.5 flex-wrap font-bold">
+          <div className="relative z-10 flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap font-black">
               {item.seasonYear && (
-                <span className="bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm uppercase text-[10px] text-white/90">
+                <span className="bg-white/20 px-2 py-0.5 rounded backdrop-blur-md uppercase text-[10px] sm:text-[11px] text-white tracking-widest shadow-[0_4px_15px_rgba(0,0,0,0.5)] border border-white/20">
                   {item.season ? `${item.season} ` : ""}{item.seasonYear}
                 </span>
               )}
               {item.rating && (
-                <span className="flex items-center gap-0.5 text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded backdrop-blur-sm text-[10px]">
-                  <Star className="w-3 h-3 fill-current" />
+                <span className="flex items-center gap-1 text-amber-400 bg-amber-400/20 border border-amber-400/40 px-2 py-0.5 rounded backdrop-blur-md text-[10px] sm:text-[11px] tracking-wider shadow-[0_4px_15px_rgba(0,0,0,0.5)]">
+                  <Star className="w-3.5 h-3.5 fill-current" />
                   {item.rating}
                 </span>
               )}
             </div>
 
             {item.genres && item.genres.length > 0 && (
-              <p className="text-xs font-bold text-[#7288AE] line-clamp-1 uppercase tracking-wide leading-snug">
+              <p className="text-[11px] sm:text-xs font-black text-blue-300 line-clamp-1 uppercase tracking-widest leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
                 {item.genres.slice(0, 2).join(" · ")}
               </p>
             )}
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
               {item.type && (
-                <span className="text-white/50 text-[10px] font-bold uppercase tracking-wider">
+                <span className="text-white/90 text-[11px] sm:text-xs font-black uppercase tracking-widest">
                   {item.type}
                 </span>
               )}
               {subCount !== null && (
-                <span className="flex items-center gap-0.5 text-white/50 text-[10px] font-semibold">
-                  {subCount} eps
+                <span className="flex items-center gap-1 text-emerald-400 text-[11px] sm:text-xs font-black tracking-wider">
+                  {subCount} EPS
                 </span>
               )}
             </div>
+
             {item.reason && (
-              <div className="text-[10px] font-bold text-emerald-400 mt-1 line-clamp-1">
+              <div className="text-[10px] sm:text-[11px] font-black text-fuchsia-400 mt-0.5 line-clamp-1 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
                 ✨ {item.reason}
               </div>
             )}
