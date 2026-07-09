@@ -7,6 +7,7 @@ import { memo } from "react";
 
 export interface AnimeItem {
   id: string;
+  idMal?: string | null;
   name: string;
   jname?: string | null;
   poster: string;

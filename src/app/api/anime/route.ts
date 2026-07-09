@@ -42,8 +42,9 @@ export async function GET(request: NextRequest) {
     }, { headers: cacheHeaders(3600) });
   } catch (error) {
     console.error("[Anime API Route Error]:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return Response.json(
-      { error: "Failed to fetch anime", success: false },
+      { error: `API Error: ${errorMessage}`, success: false },
       { status: 500 }
     );
   }

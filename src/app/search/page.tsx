@@ -11,6 +11,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { Search as SearchIcon, MonitorPlay } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
+import { fetchClientAnime } from "@/lib/anilist-client";
 import { motion } from "framer-motion";
 import { useContentMode } from "@/context/ContentModeContext";
 
@@ -72,7 +73,7 @@ export default function SearchPage() {
             ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
             : Promise.resolve({ results: [] }),
           fetchAnime
-            ? fetchJson<{ success: boolean; data: { animes: AnimeItem[] } }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`, { signal })
+            ? fetchClientAnime("search", 1, "", debouncedQuery).then(res => ({ success: true, data: { animes: res.items } })).catch(() => ({ success: false, data: { animes: [] } }))
             : Promise.resolve({ success: true, data: { animes: [] } }),
         ]);
 

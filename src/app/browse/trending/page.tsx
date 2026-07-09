@@ -7,7 +7,8 @@ import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { Loader2 } from "lucide-react";
-import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
+import { fetchJson, isTmdbAnime, filterReleasedSafeContent } from "@/lib/utils";
+import { fetchClientAnime } from "@/lib/anilist-client";
 
 type TrendType = "movie" | "tv" | "anime";
 
@@ -74,12 +75,10 @@ export default function TrendingPage() {
             : [nextBatchRef.current, nextBatchRef.current + 1, nextBatchRef.current + 2];
 
         const rawResults = await Promise.all(
-          pagesToFetch.map((p) => {
+          pagesToFetch.map(async (p) => {
             if (activeTab === "anime") {
-              return fetchJson<{ success: boolean; data: { items: any[] }; hasMore?: boolean }>(
-                `/api/anime?category=trending&page=${p}`,
-                { cacheTtlMs: 120000 }
-              );
+              const res = await fetchClientAnime("trending", p);
+              return { data: { items: res?.items || [] }, hasMore: res?.hasMore };
             }
             return fetchJson<{ results: MediaItem[]; page: number; total_pages: number }>(
               `/api/tmdb/trending?type=${activeTab}&timeWindow=${timeWindow}&page=${p}`,

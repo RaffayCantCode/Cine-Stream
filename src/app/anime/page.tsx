@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/Sidebar";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { fetchJson, shuffleArray } from "@/lib/utils";
+import { fetchClientAnime } from "@/lib/anilist-client";
 
 type AnimeSort = "popular" | "ongoing" | "recent" | "subbed" | "movie" | "search";
 
@@ -63,12 +64,15 @@ export default function AnimeBrowsePage() {
     const rng = Math.floor(Math.random() * 50) + 1;
     try {
       const category = getCategory();
-      const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
-      const res = await fetchJson<{ success: boolean; data: { items: AnimeItem[] } }>(
-        `/api/anime?category=${category}&page=${rng}${genreParam}`,
-        { cacheTtlMs: 300000 }
-      );
-      const merged = res.data?.items || [];
+      let parsedCategory = category;
+      let q = "";
+      if (category.startsWith("search&q=")) {
+        parsedCategory = "search";
+        q = decodeURIComponent(category.substring("search&q=".length));
+      }
+      
+      const res = await fetchClientAnime(parsedCategory, rng, selectedGenre || "", q);
+      const merged = res.items || [];
       const seen = new Set<string>();
       const filtered = merged.filter((x: AnimeItem) => {
         if (!x.id || seen.has(x.id)) return false;
@@ -97,21 +101,23 @@ export default function AnimeBrowsePage() {
     setError(null);
 
     const category = getCategory();
-    const genreParam = selectedGenre ? `&genre=${encodeURIComponent(selectedGenre)}` : "";
-    const fetchUrl = `/api/anime?category=${category}&page=${loadPage}${genreParam}`;
+    let parsedCategory = category;
+    let q = "";
+    if (category.startsWith("search&q=")) {
+      parsedCategory = "search";
+      q = decodeURIComponent(category.substring("search&q=".length));
+    }
+    const fetchUrl = `/api/anime?category=${category}&page=${loadPage}&genre=${selectedGenre || ""}`;
     lastFetchedUrlRef.current = fetchUrl;
 
     try {
-      const res = await fetchJson<{ success: boolean; data: { items: AnimeItem[] }; hasMore?: boolean }>(
-        fetchUrl,
-        { cacheTtlMs: 300000 }
-      );
+      const res = await fetchClientAnime(parsedCategory, loadPage, selectedGenre || "", q);
 
       if (lastFetchedUrlRef.current !== fetchUrl) {
         return;
       }
 
-      const merged = res.data?.items || [];
+      const merged = res.items || [];
 
       const seen = new Set<string>();
       const filtered = merged.filter((x: AnimeItem) => {
@@ -126,11 +132,11 @@ export default function AnimeBrowsePage() {
 
       setItems(prev => {
         let combined = replace ? shuffleArray(filtered) : [...prev, ...filtered];
-        const seen = new Set();
+        const seenSet = new Set();
         return combined.filter(item => {
           if (!item || !item.id) return false;
-          if (seen.has(item.id)) return false;
-          seen.add(item.id);
+          if (seenSet.has(item.id)) return false;
+          seenSet.add(item.id);
           return true;
         });
       });

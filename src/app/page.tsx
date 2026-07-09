@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles } f
 import { fetchJson, filterReleasedSafeContent, isTmdbAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import type { AnimeItem } from "@/components/AnimeCard";
+import { fetchClientAnime } from "@/lib/anilist-client";
 
 const HeroBanner = dynamic(() => import("@/components/HeroBanner").then((m) => m.HeroBanner), { ssr: false });
 const MediaRow = dynamic(() => import("@/components/MediaRow").then((m) => m.MediaRow), { ssr: false });
@@ -214,10 +215,7 @@ export default function Home() {
           genres: { genres: Genre[] };
         }>("/api/tmdb/home", { cacheTtlMs: 180000 });
 
-        const animePromise = fetchJson<{ success: boolean; data: { items: AnimeItem[] } } | null>(
-          "/api/anime?category=trending&page=1",
-          { cacheTtlMs: 300000 }
-        ).catch(() => null);
+        const animePromise = fetchClientAnime("trending", 1).catch(() => null);
 
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 3600000 }).catch(() => ({ collections: [] }));
 
@@ -336,9 +334,9 @@ export default function Home() {
           setCollections(collectionsData.collections);
         }
 
-        if (animeResponse?.success && animeResponse.data?.items) {
+        if (animeResponse && animeResponse.items) {
           // Keep AniList TRENDING_DESC order — do NOT shuffle
-          setAnimeList(animeResponse.data.items.slice(0, 10));
+          setAnimeList(animeResponse.items.slice(0, 10));
         }
         setAnimeLoading(false);
 
