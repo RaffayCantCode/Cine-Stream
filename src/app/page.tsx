@@ -17,7 +17,7 @@ const ContinueWatching = dynamic(
   () => import("@/components/ContinueWatching").then((m) => m.ContinueWatching),
   { ssr: false }
 );
-const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+import { Sidebar } from "@/components/Sidebar";
 
 // Languages to exclude from home page (Indian content — most don't have working sources)
 const EXCLUDED_LANGS = new Set(["hi", "te", "ta", "ml", "kn", "bn", "mr", "gu", "pa", "ur"]);
@@ -275,6 +275,7 @@ export default function Home() {
           ...animeMovieSafe,
           ...animeTvSafe,
         ], "hero"));
+        setIsLoading(false);
 
         // ── Full rows data arrives (more TMDB pages) ────────────────────
         const [rowsData, animeResponse, collectionsData] = await Promise.all([rowsPromise, animePromise, collectionsPromise]);
@@ -338,7 +339,6 @@ export default function Home() {
           // Keep AniList TRENDING_DESC order — do NOT shuffle
           setAnimeList(animeResponse.data.items.slice(0, 10));
         }
-        setIsLoading(false);
         setAnimeLoading(false);
 
       } catch (e) {

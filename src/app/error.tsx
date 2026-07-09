@@ -33,9 +33,14 @@ export default function ErrorPage({
             System Error
           </h1>
           
-          <p className="text-muted-foreground text-lg mb-10 leading-relaxed">
+          <p className="text-muted-foreground text-lg mb-4 leading-relaxed">
             Something went wrong while loading this page. Our servers might be experiencing a hiccup, or the API failed to respond.
           </p>
+          
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 w-full text-left mb-10 overflow-auto max-h-48 text-sm">
+            <p className="font-mono text-red-200 break-words">{error.message || "Unknown client error"}</p>
+            {error.digest && <p className="font-mono text-red-300 mt-2 text-xs">Digest: {error.digest}</p>}
+          </div>
           
           <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
             <button 

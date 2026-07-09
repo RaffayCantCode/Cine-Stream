@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { getAnimeDetails } from "@/lib/anime-fetch";

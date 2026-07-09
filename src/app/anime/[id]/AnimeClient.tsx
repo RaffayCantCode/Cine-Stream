@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
-const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+import { Sidebar } from "@/components/Sidebar";
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { AnimeRow } from "@/components/AnimeRow";
 import { CinematicHero } from "@/components/CinematicHero";
@@ -58,7 +58,6 @@ interface Episode {
 
 export default function AnimeClient() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const id = params?.id as string;
   const { data: session, status: authStatus } = useSession();
 
@@ -160,6 +159,7 @@ export default function AnimeClient() {
           // 3) Fallback: the first season in the list
           const seasons = a.seasons || [];
           let urlSeasonId = null;
+          const searchParams = new URLSearchParams(window.location.search);
           const urlSeasonNum = Number(searchParams.get("season") || "");
           
           let savedState: any = null;
@@ -227,8 +227,9 @@ export default function AnimeClient() {
 
   // ── Autoplay via URL params & LocalStorage ────────────────────────────
   useEffect(() => {
-    if (episodes.length === 0) return;
+    if (episodes.length === 0 || typeof window === "undefined") return;
 
+    const searchParams = new URLSearchParams(window.location.search);
     const autoPlay = searchParams.get("autoplay") === "1";
     const episodeParam = Number(searchParams.get("episode") || "");
     const seasonIdParam = searchParams.get("seasonId") || "";
@@ -261,7 +262,7 @@ export default function AnimeClient() {
       setSelectedEp(target);
       if (autoPlay) setIsPlaying(true);
     }
-  }, [searchParams, episodes, id, selectedEp, session?.user?.id]);
+  }, [episodes, id, selectedEp, session?.user?.id]);
 
   // Persist State
   useEffect(() => {
@@ -624,7 +625,7 @@ export default function AnimeClient() {
                           episodeOffset={currentEpisodeOffset}
                           tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
                           tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
-                          startProgress={Number(searchParams.get("t") || 0)}
+                          startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
                           onAutoNext={handleAutoNext}
                         />
                       )}

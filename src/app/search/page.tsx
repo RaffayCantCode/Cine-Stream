@@ -3,7 +3,7 @@ export const runtime = 'edge';
 
 import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { PersonCard } from "@/components/PersonCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";

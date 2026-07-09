@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
-const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+import { Sidebar } from "@/components/Sidebar";
 import { Play, Star, Calendar, CheckCircle2, Loader2, Users } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
@@ -59,7 +59,6 @@ interface TvShow {
 
 export default function TvClient() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const id = Number(params.id);
   const { data: session, status } = useSession();
   const [show, setShow] = useState<TvShow | null>(null);
@@ -76,6 +75,7 @@ export default function TvClient() {
     let initSeason = 1;
     let initEp = 1;
     if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
       const urlSeason = Number(searchParams.get("season"));
       const urlEp = Number(searchParams.get("episode"));
       if (urlSeason > 0) initSeason = urlSeason;
@@ -97,7 +97,7 @@ export default function TvClient() {
     setPlayingSeason(initSeason);
     setPlayingEpisode(initEp);
     setIsStateLoaded(true);
-  }, [id, status, session, searchParams, isStateLoaded]);
+  }, [id, status, session, isStateLoaded]);
 
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -124,7 +124,7 @@ export default function TvClient() {
         setSelectedSeason(prev => {
           // If we haven't loaded state yet, or we're on season 1 and there's no explicitly requested season,
           // then default to the first available season (often >1 for anime/some shows).
-          if (prev === 1 && firstSeason > 1 && !searchParams.get("season")) {
+          if (prev === 1 && firstSeason > 1 && typeof window !== "undefined" && !new URLSearchParams(window.location.search).get("season")) {
             return firstSeason;
           }
           return prev;
@@ -141,6 +141,8 @@ export default function TvClient() {
   }, [id]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const searchParams = new URLSearchParams(window.location.search);
     const autoPlay = searchParams.get("autoplay") === "1";
     const season = Number(searchParams.get("season"));
     const episode = Number(searchParams.get("episode"));
@@ -148,7 +150,7 @@ export default function TvClient() {
     if (season > 0) { setSelectedSeason(season); setPlayingSeason(season); }
     if (episode > 0) setPlayingEpisode(episode);
     if (autoPlay) setIsPlaying(true);
-  }, [searchParams]);
+  }, []);
 
   // Persist state
   useEffect(() => {
@@ -389,7 +391,7 @@ export default function TvClient() {
               season={playingSeason}
               episode={playingEpisode}
               title={`${show.name} - S${playingSeason}E${playingEpisode}`}
-              startProgress={Number(searchParams.get("t") || 0)}
+              startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
             />
             <div className="mt-3 text-sm text-white/60">
               <span className="font-bold text-white">Now Playing: </span>

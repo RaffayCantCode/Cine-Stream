@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
+import { compare } from "bcrypt-ts";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
@@ -53,7 +53,7 @@ function getAuth() {
 
             if (!user || !user.password) return null;
 
-            const isValid = await bcrypt.compare(password, user.password);
+            const isValid = await compare(password, user.password);
             if (!isValid) return null;
 
             return {

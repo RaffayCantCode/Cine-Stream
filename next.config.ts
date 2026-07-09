@@ -74,6 +74,10 @@ const nextConfig: NextConfig = {
     serverMinification: true,
     optimizeServerReact: true,
     scrollRestoration: true,
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
   },
   // Security headers
   async headers() {

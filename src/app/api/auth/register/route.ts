@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { getDb } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import bcrypt from "bcryptjs";
+import { hash } from "bcrypt-ts";
 import { z } from "zod";
 
 const registerSchema = z.object({
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await hash(password, 12);
 
     const [user] = await db
       .insert(users)
@@ -62,10 +62,9 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error("[Register Error]:", error);
-    const message = error instanceof Error ? error.message : "Failed to create account";
+    console.error("Registration error:", error);
     return Response.json(
-      { error: message },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

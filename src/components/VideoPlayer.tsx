@@ -12,6 +12,9 @@ interface VideoPlayerProps {
   episode?: number;
   title?: string;
   startProgress?: number;
+  onProgress?: (time: number) => void;
+  forcedSource?: string;
+  forceReloadCount?: number;
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
@@ -33,7 +36,7 @@ const DEFAULT_TIMEOUT = 12000;
 // Per-media source key: each movie/show remembers its own preferred source independently per user
 const getSourcePrefKey = (type: string, id: number, userId: string) => `sv_src_${userId}_${type}_${id}`;
 
-export function VideoPlayer({ type, id, season, episode, title, startProgress }: VideoPlayerProps) {
+export function VideoPlayer({ type, id, season, episode, title, startProgress, onProgress, forcedSource, forceReloadCount }: VideoPlayerProps) {
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
   const sources = useMemo(() => getStreamingSources(type, id, season, episode, startProgress), [type, id, season, episode, startProgress]);
@@ -46,13 +49,13 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
     if (status === "loading" || isSourceLoaded) return;
     try {
       const saved = localStorage.getItem(sourcePrefKey);
-      if (saved) {
+      if (saved && !forcedSource) {
         const found = sources.find(s => s.name === saved);
         if (found) setCurrentSource(found);
       }
     } catch {}
     setIsSourceLoaded(true);
-  }, [status, sourcePrefKey, sources, isSourceLoaded]);
+  }, [status, sourcePrefKey, sources, isSourceLoaded, forcedSource]);
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,6 +144,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
       if (event.data.type === 'video.progress' && event.data.data) {
         const { time, duration } = event.data.data;
         if (typeof time === 'number') {
+          if (onProgress) onProgress(time);
+          
           const now = Date.now();
           // Save every 10 seconds
           if (now - lastSaveTimeRef.current > 10000) {
@@ -164,23 +169,23 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress }:
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [id, type, season, episode]);
+  }, [id, type, season, episode, onProgress]);
 
 
 
   useEffect(() => {
     setCurrentSource(prev => {
-      let targetName = prev?.name;
+      let targetName = forcedSource || prev?.name;
       try {
         const saved = localStorage.getItem(sourcePrefKey);
-        if (saved) targetName = saved;
+        if (!forcedSource && saved) targetName = saved;
       } catch {}
       return sources.find(s => s.name === targetName) || sources[0];
     });
     setError(null);
     setIsLoading(true);
-    setRetryCount(0);
-  }, [sources, sourcePrefKey]);
+    setRetryCount(prev => prev + 1);
+  }, [sources, sourcePrefKey, forcedSource, forceReloadCount]);
 
   const handleSourceChange = (source: StreamingSource) => {
     setCurrentSource(source);

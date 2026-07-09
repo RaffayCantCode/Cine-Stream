@@ -3,7 +3,7 @@ export const runtime = 'edge';
 
 import { useState, useEffect, use, useMemo } from "react";
 import dynamic from "next/dynamic";
-const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+import { Sidebar } from "@/components/Sidebar";
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { Loader2, User } from "lucide-react";
 import { fetchJson } from "@/lib/utils";

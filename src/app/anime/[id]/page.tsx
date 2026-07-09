@@ -1,6 +1,7 @@
 export const runtime = 'edge';
 import { Metadata } from "next";
 import AnimeClient from "./AnimeClient";
+import { Suspense } from "react";
 
 export async function generateMetadata(
   props: { params: Promise<{ id: string }> }

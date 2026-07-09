@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
-const Sidebar = dynamic(() => import("@/components/Sidebar").then((m) => m.Sidebar), { ssr: false });
+import { Sidebar } from "@/components/Sidebar";
 import { Play, Star, Clock, Calendar, Users } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
@@ -37,7 +37,6 @@ interface Movie {
 
 export default function MovieClient() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const id = Number(params.id);
   const { status } = useSession();
   const [movie, setMovie] = useState<Movie | null>(null);
@@ -72,10 +71,11 @@ export default function MovieClient() {
   }, [id]);
 
   useEffect(() => {
-    if (searchParams.get("autoplay") === "1") {
-      setIsPlaying(true);
-    }
-  }, [searchParams]);
+    if (typeof window === "undefined") return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const autoPlay = searchParams.get("autoplay") === "1";
+    if (autoPlay) setIsPlaying(true);
+  }, []);
 
   const handleWatch = async () => {
     if (status === "authenticated" && movie) {
@@ -264,7 +264,7 @@ export default function MovieClient() {
 
       {isPlaying && (
         <div ref={playerRef} className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 mb-4">
-          <VideoPlayer type="movie" id={id} title={movie.title} startProgress={Number(searchParams.get("t") || 0)} />
+          <VideoPlayer type="movie" id={id} title={movie.title} startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0} />
         </div>
       )}
 

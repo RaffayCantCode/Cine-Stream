@@ -25,7 +25,7 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://vidfast.pro",
   },
   {
-    name: "Source 3",
+    name: "Source 3 (Saves Progress)",
     baseUrl: "https://vidlink.pro",
     type: "vidlink",
     quality: "Best",

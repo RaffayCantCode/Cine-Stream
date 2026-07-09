@@ -23,12 +23,15 @@ interface AnimePlayerProps {
   tmdbSeason?: number | null;
   startProgress?: number;
   onAutoNext?: () => void;
+  onProgress?: (time: number) => void;
+  forcedSource?: string;
+  forceReloadCount?: number;
 }
 
 const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
   { name: "Source 2", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
-  { name: "Source 3", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
+  { name: "Source 3 (Saves Progress)", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
   { name: "Source 4", provider: "123embed", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
   { name: "Source 5", provider: "vidlink-alt", color: "from-[#8a2be2]/30 to-[#da70d6]/20" },
   { name: "Source 6", provider: "anyembed", color: "from-[#ff8c00]/30 to-[#ffa500]/20" },
@@ -101,7 +104,10 @@ export function AnimePlayer({
   tmdbId,
   tmdbSeason,
   startProgress,
-  onAutoNext
+  onAutoNext,
+  onProgress,
+  forcedSource,
+  forceReloadCount
 }: AnimePlayerProps) {
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
@@ -115,7 +121,7 @@ export function AnimePlayer({
     if (status === "loading" || isSourceLoaded) return;
     try {
       const saved = localStorage.getItem(sourcePrefKey);
-      if (saved !== null) {
+      if (saved !== null && !forcedSource) {
         // Support both name-based (new) and index-based (legacy) saved values
         const byName = PROVIDERS.findIndex(p => p.name === saved);
         if (byName >= 0) setSourceIndex(byName);
@@ -126,7 +132,19 @@ export function AnimePlayer({
       }
     } catch {}
     setIsSourceLoaded(true);
-  }, [status, sourcePrefKey, isSourceLoaded]);
+  }, [status, sourcePrefKey, isSourceLoaded, forcedSource]);
+
+  useEffect(() => {
+    if (forcedSource) {
+      const byName = PROVIDERS.findIndex(p => p.name === forcedSource);
+      if (byName >= 0) {
+        setSourceIndex(byName);
+        setRetryCount(prev => prev + 1);
+      }
+    } else if (forceReloadCount) {
+      setRetryCount(prev => prev + 1);
+    }
+  }, [forcedSource, forceReloadCount]);
 
   const handleSourceChange = (index: number, name: string) => {
     setSourceIndex(index);
@@ -241,6 +259,8 @@ export function AnimePlayer({
       if (event.data.type === 'video.progress' && event.data.data) {
         const { time, duration } = event.data.data;
         if (typeof time === 'number') {
+          if (onProgress) onProgress(time);
+
           const now = Date.now();
           if (now - lastSaveTimeRef.current > 10000) {
             lastSaveTimeRef.current = now;
@@ -267,7 +287,7 @@ export function AnimePlayer({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [animeId, episode, tmdbSeason]);
+  }, [animeId, episode, tmdbSeason, onProgress]);
 
 
 
