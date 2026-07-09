@@ -88,10 +88,21 @@ interface FranchiseNode {
 
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
+const anilistCache = new Map<string, { data: any; expires: number }>();
+const ANILIST_CACHE_TTL = 300000; // 5 minutes
 
 async function anilistQuery(query: string, variables: Record<string, any>, retries = 2): Promise<any> {
+  const cacheKey = JSON.stringify({ query, variables });
+  const cached = anilistCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       const res = await fetch(ANILIST_API, {
         method: "POST",
         headers: { 
@@ -100,20 +111,38 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
           "User-Agent": "CineStream/1.0 (https://github.com/RaffayCantCode/Cine-Stream)"
         },
         body: JSON.stringify({ query, variables }),
-        signal: AbortSignal.timeout(8000),
-        next: { revalidate: 86400 }, // Cache AniList queries for 24 hours to massively improve performance
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
+
       if (res.status === 429 && attempt < retries) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        const retryAfter = res.headers.get("retry-after");
+        const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * (attempt + 1);
+        await new Promise(r => setTimeout(r, delay));
         continue;
       }
-      return await res.json();
-    } catch {
+      
+      if (!res.ok) {
+        throw new Error(`AniList returned ${res.status}`);
+      }
+
+      const data = await res.json();
+      
+      // Keep cache size manageable
+      if (anilistCache.size > 200) {
+        const oldest = anilistCache.keys().next().value;
+        if (oldest) anilistCache.delete(oldest);
+      }
+      anilistCache.set(cacheKey, { data, expires: Date.now() + ANILIST_CACHE_TTL });
+      
+      return data;
+    } catch (e) {
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
         continue;
       }
-      throw new Error("AniList query failed");
+      throw e;
     }
   }
 }
@@ -263,29 +292,88 @@ function groupByFranchise(items: AnimeItem[]): AnimeItem[] {
   return [...grouped.values()];
 }
 
+function transformJikan(a: any): AnimeItem {
+  return {
+    id: String(a.mal_id),
+    idMal: String(a.mal_id),
+    isAdult: a.rating === "Rx - Hentai",
+    name: a.title_english || a.title,
+    jname: a.title_japanese || null,
+    poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
+    type: a.type || "TV",
+    episodes: { sub: a.episodes || null, dub: null },
+    rating: a.score ? String(a.score) : null,
+    description: a.synopsis || "",
+    genres: a.genres?.map((g: any) => g.name) || [],
+    status: a.status || null,
+    season: a.season || null,
+    seasonYear: a.year || null,
+    format: a.type || null,
+    duration: a.duration ? parseInt(a.duration) : null,
+    trailerId: a.trailer?.youtube_id || null,
+  };
+}
+
 export async function searchAnime(q: string, page = 1, genre?: string): Promise<AnimeItem[]> {
-  const data = await anilistQuery(LIST_QUERY, { page, q, genre: genre || null });
-  if (!data?.data?.Page?.media) throw new Error("Failed to search anime from AniList");
-  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+  try {
+    const data = await anilistQuery(LIST_QUERY, { page, q, genre: genre || null });
+    if (data?.data?.Page?.media) {
+      return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+    }
+  } catch (e) {
+    console.warn("AniList search failed, falling back to Jikan:", e);
+  }
+  
+  // Jikan fallback
+  const res = await fetch(`${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`);
+  const data = await res.json();
+  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
 
 export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
-  const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
-  if (!data?.data?.Page?.media) throw new Error("Failed to fetch popular anime from AniList");
-  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+  try {
+    const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
+    if (data?.data?.Page?.media) {
+      return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+    }
+  } catch (e) {
+    console.warn("AniList popular failed, falling back to Jikan:", e);
+  }
+
+  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`);
+  const data = await res.json();
+  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
 
 export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
-  const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
-  if (!data?.data?.Page?.media) throw new Error("Failed to fetch trending anime from AniList");
-  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+  try {
+    const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
+    if (data?.data?.Page?.media) {
+      return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+    }
+  } catch (e) {
+    console.warn("AniList trending failed, falling back to Jikan:", e);
+  }
+
+  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`);
+  const data = await res.json();
+  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
 
 export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
-  const { season, year } = getCurrentSeason();
-  const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
-  if (!data?.data?.Page?.media) throw new Error("Failed to fetch airing anime from AniList");
-  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+  try {
+    const { season, year } = getCurrentSeason();
+    const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
+    if (data?.data?.Page?.media) {
+      return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+    }
+  } catch (e) {
+    console.warn("AniList airing failed, falling back to Jikan:", e);
+  }
+
+  const res = await fetch(`${JIKAN_BASE}/seasons/now?page=${page}`);
+  const data = await res.json();
+  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
