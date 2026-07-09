@@ -1043,6 +1043,7 @@ export default function AnimeClient() {
                             const isUnreleased = ep.isReleased === false;
                             const thumbSrc = ep.thumbnail
                               || (isSingleItem && anime?.poster)
+                              || anime?.poster
                               || null;
                             const displayTitle = ep.title || (isSingleItem ? (anime?.name || "") : `Episode ${ep.episodeNum}`);
                             return (

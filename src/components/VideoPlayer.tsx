@@ -140,6 +140,10 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
 
   const autoPlayTriggeredRef = useRef(false);
 
+  useEffect(() => {
+    autoPlayTriggeredRef.current = false;
+  }, [season, episode]);
+
   // Listen to postMessage for progress updates (e.g., from VidLink)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {

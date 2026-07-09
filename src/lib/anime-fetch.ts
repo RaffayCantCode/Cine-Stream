@@ -795,7 +795,41 @@ export async function getAnimeDetails(
       const data = await anilistQuery(q, { id: numId });
       media = data?.data?.Media;
     } catch {
-      // AniList failed — try Jikan fallback
+      // AniList failed — try Tatakai fallback
+      try {
+        const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, { signal: AbortSignal.timeout(6000) });
+        if (tRes.ok) {
+          const tData = await tRes.json();
+          if (tData) {
+            media = {
+              id: tData.id,
+              idMal: tData.malId || null,
+              isAdult: false,
+              title: {
+                romaji: tData.title?.romaji,
+                english: tData.title?.english,
+                native: tData.title?.native,
+              },
+              coverImage: {
+                large: tData.image,
+                extraLarge: tData.cover || tData.image,
+              },
+              episodes: tData.totalEpisodes,
+              genres: tData.genres || [],
+              averageScore: tData.rating || null,
+              description: tData.description || "",
+              status: tData.status || null,
+              type: tData.type || "TV",
+              format: tData.type || "TV",
+              season: tData.season || null,
+              seasonYear: tData.releaseDate || null,
+              duration: tData.duration || null,
+            };
+          }
+        }
+      } catch {
+        // Fallthrough to Jikan
+      }
     }
   }
 

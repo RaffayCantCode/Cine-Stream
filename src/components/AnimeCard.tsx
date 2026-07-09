@@ -66,13 +66,11 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           style={{ aspectRatio: "2/3" }}
         >
         {item.poster ? (
-          <Image
+          <img
             src={item.poster}
             alt={item.name}
-            fill
-            sizes="(max-width: 640px) 150px, (max-width: 768px) 180px, 210px"
-            className="object-cover transition-transform duration-700 group-hover:scale-105"
-            priority={index < 6}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            loading={index < 6 ? "eager" : "lazy"}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
