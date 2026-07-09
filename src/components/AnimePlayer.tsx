@@ -244,15 +244,33 @@ export function AnimePlayer({
 
   const lastSaveTimeRef = useRef<number>(0);
 
+  const autoPlayTriggeredRef = useRef(false);
+
   // Listen to postMessage for progress updates (e.g., from VidLink)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data) return;
       
+      // Handle generic ended/next events
+      if (event.data.type === 'video.ended' || event.data.type === 'video.next') {
+        if (onProgress && (event.data.type as any) === 'video.ended') onProgress(999999);
+        if (onAutoNext && !autoPlayTriggeredRef.current) {
+          autoPlayTriggeredRef.current = true;
+          onAutoNext();
+        }
+      }
+      
       if (event.data.type === 'video.progress' && event.data.data) {
         const { time, duration } = event.data.data;
         if (typeof time === 'number') {
           if (onProgress) onProgress(time);
+
+          if (typeof duration === 'number' && duration > 0 && time >= duration - 2) {
+            if (onAutoNext && !autoPlayTriggeredRef.current) {
+              autoPlayTriggeredRef.current = true;
+              onAutoNext();
+            }
+          }
 
           const now = Date.now();
           if (now - lastSaveTimeRef.current > 10000) {

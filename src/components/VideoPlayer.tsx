@@ -13,6 +13,8 @@ interface VideoPlayerProps {
   title?: string;
   startProgress?: number;
   onProgress?: (time: number) => void;
+  onEpisodeChange?: (season: number, episode: number) => void;
+  onVideoEnd?: () => void;
   forcedSource?: string;
   forceReloadCount?: number;
 }
@@ -36,7 +38,7 @@ const DEFAULT_TIMEOUT = 12000;
 // Per-media source key: each movie/show remembers its own preferred source independently per user
 const getSourcePrefKey = (type: string, id: number, userId: string) => `sv_src_${userId}_${type}_${id}`;
 
-export function VideoPlayer({ type, id, season, episode, title, startProgress, onProgress, forcedSource, forceReloadCount }: VideoPlayerProps) {
+export function VideoPlayer({ type, id, season, episode, title, startProgress, onProgress, onEpisodeChange, onVideoEnd, forcedSource, forceReloadCount }: VideoPlayerProps) {
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
   const initialProgressRef = useRef(startProgress);
@@ -136,16 +138,47 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     };
   }, []);
 
+  const autoPlayTriggeredRef = useRef(false);
+
   // Listen to postMessage for progress updates (e.g., from VidLink)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data) return;
       
+      // Handle generic ended/next events
+      if (event.data.type === 'video.ended' || event.data.type === 'video.next') {
+        if (onProgress && (event.data.type as any) === 'video.ended') onProgress(999999); // max out progress
+        if (onVideoEnd && !autoPlayTriggeredRef.current) {
+          autoPlayTriggeredRef.current = true;
+          onVideoEnd();
+        }
+      }
+      
       // VidLink emits 'video.progress'
       if (event.data.type === 'video.progress' && event.data.data) {
         const { time, duration } = event.data.data;
+        const evSeason = event.data.data.season || event.data.meta?.season;
+        const evEpisode = event.data.data.episode || event.data.meta?.episode;
+        
+        // If the iframe player changed episodes internally, we should ideally notify the parent.
+        // For now, if we detect internal episode change, we just use those for saving progress, 
+        // but the parent URL might still be out of sync unless we emit an event.
+        const actualSeason = evSeason || season || 0;
+        const actualEpisode = evEpisode || episode || 0;
+
+        if ((evSeason && evSeason !== season) || (evEpisode && evEpisode !== episode)) {
+          if (onEpisodeChange) onEpisodeChange(actualSeason, actualEpisode);
+        }
+
         if (typeof time === 'number') {
           if (onProgress) onProgress(time);
+
+          if (typeof duration === 'number' && duration > 0 && time >= duration - 2) {
+            if (onVideoEnd && !autoPlayTriggeredRef.current) {
+              autoPlayTriggeredRef.current = true;
+              onVideoEnd();
+            }
+          }
           
           const now = Date.now();
           // Save every 10 seconds
@@ -157,8 +190,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
               body: JSON.stringify({
                 mediaId: id,
                 mediaType: type,
-                season: season || 0,
-                episode: episode || 0,
+                season: actualSeason,
+                episode: actualEpisode,
                 progress: Math.floor(time),
                 duration: Math.floor(duration || 0)
               })

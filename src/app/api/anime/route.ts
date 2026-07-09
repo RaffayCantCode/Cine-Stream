@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
-import { fetchAnimeApi } from "@/lib/anime-fetch";
+import { searchAnime, getPopularAnime, getTrendingAnime, getAiringAnime } from "@/lib/anime-fetch";
 import { cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(request: NextRequest) {
@@ -23,20 +23,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let data: any;
+    let items: any[] = [];
 
     if (category === "search") {
-      const endpoint = `/search?keyword=${encodeURIComponent(searchKeyword)}&page=${page}${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`;
-      data = await fetchAnimeApi(endpoint);
+      items = await searchAnime(searchKeyword, page, genre);
     } else if (category === "airing") {
-      data = await fetchAnimeApi(`/airing?page=${page}${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`);
+      items = await getAiringAnime(page, genre);
     } else if (category === "trending") {
-      data = await fetchAnimeApi(`/trending?page=${page}${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`);
+      items = await getTrendingAnime(page, genre);
     } else {
-      data = await fetchAnimeApi(`/popular?page=${page}${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`);
+      items = await getPopularAnime(page, genre);
     }
 
-    const items = data.data || [];
     return Response.json({
       success: true,
       data: { items },

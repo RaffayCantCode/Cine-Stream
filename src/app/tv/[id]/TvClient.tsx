@@ -310,6 +310,27 @@ export default function TvClient() {
   const mainTrailerId = show.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
   const trailerId = seasonTrailerId || mainTrailerId;
 
+  const handleAutoPlayNext = () => {
+    if (playingSeason === selectedSeason && seasonData?.episodes) {
+      const next = seasonData.episodes.find(ep => ep.episode_number === playingEpisode + 1);
+      if (next) {
+        handleWatchEpisode(playingSeason, next.episode_number, next.name);
+        return;
+      }
+    } else if (playingSeason !== selectedSeason) {
+      // If they navigated to another season tab while watching, we just boldly increment
+      handleWatchEpisode(playingSeason, playingEpisode + 1);
+      return;
+    }
+    
+    // If we reached the end of the season, try next season
+    const currentSeasonIndex = seasons.findIndex(s => s.season_number === playingSeason);
+    if (currentSeasonIndex !== -1 && currentSeasonIndex < seasons.length - 1) {
+      const nextSeasonNum = seasons[currentSeasonIndex + 1].season_number;
+      handleWatchEpisode(nextSeasonNum, 1);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
@@ -415,6 +436,8 @@ export default function TvClient() {
               episode={playingEpisode}
               title={`${show.name} - S${playingSeason}E${playingEpisode}`}
               startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
+              onEpisodeChange={(s, e) => handleWatchEpisode(s, e)}
+              onVideoEnd={handleAutoPlayNext}
             />
             <div className="mt-3 text-sm text-white/60">
               <span className="font-bold text-white">Now Playing: </span>
