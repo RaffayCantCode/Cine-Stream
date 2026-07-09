@@ -263,41 +263,29 @@ function groupByFranchise(items: AnimeItem[]): AnimeItem[] {
   return [...grouped.values()];
 }
 
-export async function searchAnime(query: string, page = 1, genre?: string): Promise<AnimeItem[]> {
-  try {
-    const data = await anilistQuery(LIST_QUERY, { page, q: query, genre: genre || null });
-    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
-  } catch {
-    return [];
-  }
+export async function searchAnime(q: string, page = 1, genre?: string): Promise<AnimeItem[]> {
+  const data = await anilistQuery(LIST_QUERY, { page, q, genre: genre || null });
+  if (!data?.data?.Page?.media) throw new Error("Failed to search anime from AniList");
+  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
 }
 
 export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
-  try {
-    const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
-    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
-  } catch {
-    return [];
-  }
+  const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
+  if (!data?.data?.Page?.media) throw new Error("Failed to fetch popular anime from AniList");
+  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
 }
 
 export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
-  try {
-    const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
-    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
-  } catch {
-    return [];
-  }
+  const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
+  if (!data?.data?.Page?.media) throw new Error("Failed to fetch trending anime from AniList");
+  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
 }
 
 export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   const { season, year } = getCurrentSeason();
-  try {
-    const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
-    return filterUnreleased(deduplicateAnime((data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[]));
-  } catch {
-    return [];
-  }
+  const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
+  if (!data?.data?.Page?.media) throw new Error("Failed to fetch airing anime from AniList");
+  return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -557,85 +545,7 @@ function parseSeasonNumberFromTitle(title: string): number {
   return 1;
 }
 
-async function buildSeasonsFromTmdb(
-  tmdbId: number,
-  currentId: number,
-  mainMalId: number | null,
-  expectedEpisodeCount?: number | null
-): Promise<{ seasons: SeasonInfo[]; tmdbSeasonMap: Record<string, number> }> {
-  const showData = await tmdbFetch(`/tv/${tmdbId}`) as {
-    seasons?: { season_number: number; name: string; episode_count: number; overview?: string }[];
-  } | null;
 
-  const tmdbSeasons = showData?.seasons || [];
-  const sorted = tmdbSeasons
-    .filter(s => s.season_number >= 0 && (s.episode_count || 0) > 0)
-    .sort((a, b) => a.season_number - b.season_number);
-
-  const seasons: SeasonInfo[] = [];
-  const tmdbSeasonMap: Record<string, number> = {};
-
-  let first = true;
-  let accumulatedEpisodes = 0;
-  for (const tmdbSeason of sorted) {
-    const seasonNum = tmdbSeason.season_number;
-    const epCount = tmdbSeason.episode_count || 0;
-
-    // Check if we should split this season (e.g. TMDB Season 1 has 24 episodes but MAL/Jikan expects 12)
-    if (seasonNum > 0 && expectedEpisodeCount && epCount > expectedEpisodeCount) {
-      const parts = Math.ceil(epCount / expectedEpisodeCount);
-      for (let p = 0; p < parts; p++) {
-        const partEpCount = Math.min(expectedEpisodeCount, epCount - p * expectedEpisodeCount);
-        if (partEpCount <= 0) continue;
-
-        const partSeasonNum = seasonNum + p;
-        const label = `Season ${partSeasonNum}`;
-        const seasonId = `tmdb-${tmdbId}-s${seasonNum}-p${p}`;
-
-        seasons.push({
-          id: seasonId,
-          name: tmdbSeason.name ? `${tmdbSeason.name} Part ${p + 1}` : label,
-          seasonLabel: label,
-          totalEpisodes: partEpCount,
-          isCurrent: first,
-          idMal: mainMalId,
-          seasonYear: null,
-          tmdbSeasonNumber: seasonNum,
-          tmdbId: tmdbId,
-          episodeOffset: accumulatedEpisodes,
-        });
-        first = false;
-        accumulatedEpisodes += partEpCount;
-        tmdbSeasonMap[seasonId] = seasonNum;
-      }
-    } else {
-      const label = seasonNum === 0 ? "Specials" : `Season ${seasonNum}`;
-      const seasonId = `tmdb-${tmdbId}-s${seasonNum}`;
-
-      seasons.push({
-        id: seasonId,
-        name: tmdbSeason.name || label,
-        seasonLabel: label,
-        totalEpisodes: Math.max(epCount, 1),
-        isCurrent: first,
-        idMal: mainMalId,
-        seasonYear: null,
-        tmdbSeasonNumber: seasonNum,
-        tmdbId: tmdbId,
-        episodeOffset: accumulatedEpisodes,
-      });
-      first = false;
-
-      if (seasonNum > 0) {
-        accumulatedEpisodes += epCount;
-      }
-
-      tmdbSeasonMap[seasonId] = seasonNum;
-    }
-  }
-
-  return { seasons, tmdbSeasonMap };
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SERVER-SIDE CACHE
@@ -873,18 +783,16 @@ export async function getAnimeDetails(
 
           if (tmdbId) {
             try {
-              const tmdbData = await buildSeasonsFromTmdb(tmdbId, numId, a.mal_id, totalEps);
-              if (tmdbData && tmdbData.seasons.length > 0) {
-                seasonsList = tmdbData.seasons;
-                const season1 = seasonsList.find(s => s.tmdbSeasonNumber === 1) || seasonsList[0];
-                if (season1) {
-                  season1.id = String(id);
-                }
-                seasonsList.forEach((s) => {
-                  s.isCurrent = s.id === String(id);
-                });
-                tmdbSeasonMap = tmdbData.tmdbSeasonMap;
+              const tmdbData = await tmdbFetch(`/tv/${tmdbId}`) as { seasons?: { season_number: number }[] };
+              const tmdbSeasons = tmdbData?.seasons || [];
+              let tmdbSeasonNum = 1;
+              if (tmdbSeasons.length > 0) {
+                const season1 = tmdbSeasons.find(s => s.season_number === 1);
+                tmdbSeasonNum = season1 ? 1 : tmdbSeasons.find(s => s.season_number > 0)?.season_number || 1;
               }
+              jikanSeason.tmdbSeasonNumber = tmdbSeasonNum;
+              jikanSeason.tmdbId = tmdbId;
+              tmdbSeasonMap = { [String(id)]: tmdbSeasonNum };
             } catch { /* ignore */ }
           }
 

@@ -2,6 +2,7 @@ export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { fetchAnimeApi } from "@/lib/anime-fetch";
+import { cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: { items },
       hasMore: items.length > 0,
-    });
+    }, { headers: cacheHeaders(3600) });
   } catch (error) {
     console.error("[Anime API Route Error]:", error);
     return Response.json(

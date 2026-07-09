@@ -226,7 +226,7 @@ export default function AnimeBrowsePage() {
             <div>
               <h1 className="text-4xl font-bold text-white">Anime</h1>
               <p className="text-sm text-white/40 mt-2">Japanese audio with English subtitles.</p>
-              <p className="text-xs text-amber-400/70 mt-2 max-w-lg">This section is a work in progress — not all anime stream or display properly, but many do! Give it a try.</p>
+              <p className="text-xs text-amber-400/70 mt-2 max-w-lg">Warning: Not all anime will stream or display properly.</p>
             </div>
             {!debouncedQuery.trim() && (
               <div className="flex items-center gap-3">

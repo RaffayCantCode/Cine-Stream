@@ -72,6 +72,7 @@ export default function AnimeClient() {
   // Franchise node data for Season Guide
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
   const [showSeasonGuide, setShowSeasonGuide] = useState(false);
+  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
 
   const tmdbIdRef = useRef<number | null>(null);
   const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
@@ -248,7 +249,8 @@ export default function AnimeClient() {
     // Fallback to localStorage if no URL params specify an episode
     if (!target && !episodeParam) {
       try {
-        const saved = localStorage.getItem(`sv_anime_state_${id}`);
+        const userId = session?.user?.id || "guest";
+        const saved = localStorage.getItem(`sv_anime_state_${userId}_${id}`);
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed?.episodeId) {
@@ -317,6 +319,13 @@ export default function AnimeClient() {
     setIsPlaying(false);
     setSelectedEp(null);
     loadSeasonEpisodes(season.id);
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("seasonId", season.id);
+      url.searchParams.delete("episode");
+      window.history.replaceState({}, "", url.toString());
+    }
   }, [currentSeasonId, loadSeasonEpisodes]);
 
   // ── Watch episode handler ───────────────────────────────────────────────
@@ -324,6 +333,15 @@ export default function AnimeClient() {
     if (ep.isReleased === false) return;
     setSelectedEp(ep);
     setIsPlaying(true);
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (ep.seasonId) {
+        url.searchParams.set("seasonId", ep.seasonId);
+      }
+      url.searchParams.set("episode", ep.episodeNum.toString());
+      window.history.replaceState({}, "", url.toString());
+    }
 
     if (authStatus === "authenticated" && anime) {
       const numericId = parseInt(anime.id, 10);
@@ -621,7 +639,7 @@ export default function AnimeClient() {
               <div className="flex flex-col gap-6">
                 {/* ── Player + Queue ── */}
                 {isPlaying && selectedEp && (
-                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
+                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 select-none">
                     <div ref={playerRef} className="w-full min-w-0">
                       {!episodesLoading && (
                         <AnimePlayer
@@ -691,19 +709,44 @@ export default function AnimeClient() {
                         <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
                           <div className="text-sm font-bold text-white flex items-center justify-between gap-2">
                             {franchiseNodes.length > 1 ? (
-                              <select 
-                                className="bg-transparent border-none text-white font-bold outline-none cursor-pointer w-full max-w-[240px] truncate hover:text-primary transition-colors focus:ring-0"
-                                onChange={(e) => {
-                                  window.location.href = `/anime/${e.target.value}`;
-                                }}
-                                value={id}
-                              >
-                                {franchiseNodes.map(node => (
-                                  <option key={node.id} value={node.id} className="bg-zinc-900 text-white">
-                                    {node.title} {node.seasonYear ? `(${node.seasonYear})` : ""}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="relative w-full max-w-[300px]">
+                                <button 
+                                  onClick={() => setSeasonDropdownOpen(!seasonDropdownOpen)}
+                                  onBlur={() => setTimeout(() => setSeasonDropdownOpen(false), 200)}
+                                  className="flex items-center justify-between w-full bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] text-white font-bold rounded-xl px-3 py-2.5 text-sm transition-all focus:ring-2 focus:ring-[#7288AE]/50 outline-none"
+                                >
+                                  <span className="truncate">
+                                    {franchiseNodes.find(n => String(n.id) === id)?.title || "Select Season"} 
+                                    {franchiseNodes.find(n => String(n.id) === id)?.seasonYear ? ` (${franchiseNodes.find(n => String(n.id) === id)?.seasonYear})` : ""}
+                                  </span>
+                                  <svg className={cn("w-4 h-4 ml-2 text-white/50 shrink-0 transition-transform duration-300", seasonDropdownOpen && "rotate-180")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                                
+                                {seasonDropdownOpen && (
+                                  <div className="absolute top-full left-0 mt-2 w-[340px] max-w-[90vw] bg-[#0c0d14] border border-white/[0.08] rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] overflow-hidden z-50 flex flex-col max-h-72 overflow-y-auto backdrop-blur-xl">
+                                    {franchiseNodes.map(node => {
+                                      const isCurrent = String(node.id) === id;
+                                      return (
+                                        <button
+                                          key={node.id}
+                                          onClick={() => window.location.href = `/anime/${node.id}`}
+                                          className={cn(
+                                            "flex items-center justify-between w-full px-3 py-3 text-left text-sm transition-all",
+                                            isCurrent 
+                                              ? "bg-[#7288AE]/15 text-[#9cb1db] font-bold border-l-[3px] border-[#7288AE]" 
+                                              : "text-white/60 hover:bg-white/[0.05] hover:text-white border-l-[3px] border-transparent"
+                                          )}
+                                        >
+                                          <span className="truncate pr-3">
+                                            {node.title} {node.seasonYear ? `(${node.seasonYear})` : ""}
+                                          </span>
+                                          {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-[#7288AE] shrink-0 shadow-[0_0_8px_rgba(114,136,174,0.8)]" />}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <span>{currentSeasonInfo?.seasonLabel || "Episodes"}</span>
                             )}
@@ -839,21 +882,28 @@ export default function AnimeClient() {
                           {currentSeasonInfo.seasonLabel}
                         </span>
                       )}
-                      {!episodesLoading && currentSeasonEps.length > 0 && (
-                        <button
-                          onClick={() => setGridMode(g => !g)}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white/[0.06] hover:bg-white/[0.10] text-white/60 hover:text-white border border-white/[0.06]"
-                          title={gridMode ? "Switch to list view" : "Switch to compact grid view"}
-                        >
-                          {gridMode ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
-                          {gridMode ? "List" : "Grid"}
-                        </button>
-                      )}
                     </div>
 
+                  {/* ── Right Side Controls ── */}
+                  <div className="flex items-center gap-3 flex-wrap max-w-xl justify-end">
+                    {!episodesLoading && currentSeasonEps.length > 0 && (
+                      <button
+                        onClick={() => setGridMode(g => !g)}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
+                          gridMode 
+                            ? "bg-white/[0.06] text-white/60 hover:text-white border-white/[0.06] hover:bg-white/[0.10]" 
+                            : "bg-[#7288AE]/20 text-white border-[#7288AE]/50 shadow-[0_0_15px_rgba(114,136,174,0.3)] hover:bg-[#7288AE]/40"
+                        )}
+                        title={gridMode ? "Switch to list view" : "Switch to compact grid view (Recommended for long anime)"}
+                      >
+                        {gridMode ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5 text-blue-400" />}
+                        {gridMode ? "List View" : "Grid View"}
+                      </button>
+                    )}
                   {/* ── Season Tabs ── */}
                   {seasons.length > 1 && (
-                    <div className="flex items-center gap-2 flex-wrap max-w-xl justify-end">
+                    <>
                       {seasons.map((season) => {
                         const isActive = season.id === currentSeasonId;
                         return (
@@ -874,8 +924,9 @@ export default function AnimeClient() {
                           </button>
                         );
                       })}
-                    </div>
+                    </>
                   )}
+                  </div>
                 </div>
 
                 {/* ── Source disclaimer ── */}
@@ -923,6 +974,10 @@ export default function AnimeClient() {
                         <div
                           key={`grid-${currentSeasonId}`}
                         >
+                          <div className="flex items-center gap-2 mb-4 text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-md w-fit">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span>Yellow dot indicates a filler episode</span>
+                          </div>
                           <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-1.5">
                             {sliceEps.map((ep) => {
                               const isSelected = selectedEp?.episodeId === ep.episodeId;
@@ -941,6 +996,11 @@ export default function AnimeClient() {
                                       : "bg-white/[0.06] hover:bg-white/[0.12] text-white/70 hover:text-white border border-white/[0.06] hover:border-white/20"
                                   )}
                                 >
+                                  {isSelected && (
+                                    <div className="absolute -top-2 z-20 px-1.5 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
+                                      Playing
+                                    </div>
+                                  )}
                                   {ep.isFiller && !isSelected && (
                                     <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-amber-400" />
                                   )}

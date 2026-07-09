@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export const revalidate = 3600;
 
@@ -37,8 +37,6 @@ export async function GET(_request: NextRequest) {
     r.status === "fulfilled" ? r.value : []
   );
 
-
-
   return Response.json({
     trending: { results: trending },
     popularMovies: { results: popularMovies },
@@ -51,5 +49,5 @@ export async function GET(_request: NextRequest) {
     animeTv: { results: animeTv },
     trendingMoviesToday: { results: trendingMoviesToday },
     trendingTvToday: { results: trendingTvToday },
-  });
+  }, { headers: cacheHeaders(3600) });
 }

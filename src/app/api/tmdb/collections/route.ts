@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from "next/server";
 import { FRANCHISES } from "@/lib/franchises";
+import { cacheHeaders } from "@/lib/tmdb";
 
 export async function GET() {
   try {
@@ -15,7 +16,7 @@ export async function GET() {
       backdrop_path: f.backdrop_path,
     }));
 
-    return NextResponse.json({ collections });
+    return NextResponse.json({ collections }, { headers: cacheHeaders(86400) });
   } catch (error) {
     console.error("Collections error:", error);
     return NextResponse.json({ collections: [] }, { status: 500 });

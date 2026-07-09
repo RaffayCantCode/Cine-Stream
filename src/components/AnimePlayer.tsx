@@ -167,7 +167,7 @@ export function AnimePlayer({
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
 
-  // Auto-dismiss spinner and handle timeout fallback
+  // Auto-dismiss spinner
   useEffect(() => {
     setShowSpinner(true);
     let isLoaded = false;
@@ -178,17 +178,8 @@ export function AnimePlayer({
 
     const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
     
-    // 8 second aggressive fallback for heavy load times
-    const fallbackTimer = setTimeout(() => {
-      if (isLoading && !isLoaded) {
-        setSourceIndex(prev => (prev + 1) % PROVIDERS.length);
-        setRetryCount(0);
-      }
-    }, 8000);
-
     return () => {
       clearTimeout(spinnerTimer);
-      clearTimeout(fallbackTimer);
       iframeRef.current?.removeEventListener('load', loadHandler);
     };
   }, [currentUrl, isLoading]);

@@ -71,6 +71,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   experimental: {
+    reactCompiler: true,
     serverMinification: true,
     optimizeServerReact: true,
     scrollRestoration: true,

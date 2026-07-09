@@ -18,6 +18,7 @@ const ContinueWatching = dynamic(
   { ssr: false }
 );
 import { Sidebar } from "@/components/Sidebar";
+import { TrendingProvidersHub } from "@/components/TrendingProvidersHub";
 
 // Languages to exclude from home page (Indian content — most don't have working sources)
 const EXCLUDED_LANGS = new Set(["hi", "te", "ta", "ml", "kn", "bn", "mr", "gu", "pa", "ur"]);
@@ -573,16 +574,7 @@ export default function Home() {
             />
           </LazySection>
 
-          {/* ─── 1. TRENDING NOW ─── */}
-          <LazySection show={revealedSections >= 1} placeholderHeight={360}>
-            <MediaRow
-              title="Trending Now"
-              items={trending}
-              isLoading={isLoading}
-              seeAllHref="/browse/trending"
-              accentIcon={<TrendingUp className="w-4 h-4 text-[#7288AE]" />}
-            />
-          </LazySection>
+
 
           {/* ─── 2. TOP RATED MOVIES ─── */}
           <LazySection show={revealedSections >= 2} placeholderHeight={360}>
@@ -606,66 +598,9 @@ export default function Home() {
             />
           </LazySection>
 
-          {/* ─── STREAMING SERVICES ─── */}
-          <LazySection show={revealedSections >= 4} placeholderHeight={280}>
-            <SectionHeading
-              title="Streaming Services"
-              subtitle="Browse by platform"
-            />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {PROVIDERS.map((p) => (
-                <Link
-                  key={p.slug}
-                  href={`/browse/provider/${p.slug}`}
-                  className="group relative overflow-hidden rounded-2xl border border-white/[0.07] transition-all duration-500 hover:scale-[1.03] hover:-translate-y-1 focus:outline-none"
-                  style={{
-                    background: `linear-gradient(145deg, ${p.color}22 0%, ${p.color}08 60%, transparent 100%)`,
-                    boxShadow: `0 0 0 1px ${p.color}18, 0 8px 32px ${p.color}10`,
-                  }}
-                >
-                  <div
-                    className="absolute -inset-4 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-2xl"
-                    style={{ background: `radial-gradient(circle at 60% 40%, ${p.color}30, transparent 70%)` }}
-                  />
-                  <div
-                    className="absolute top-0 inset-x-0 h-[2px] rounded-t-2xl opacity-60 group-hover:opacity-100 transition-opacity"
-                    style={{ background: `linear-gradient(to right, transparent, ${p.color}, transparent)` }}
-                  />
-
-                  <div className="relative p-6 flex items-center justify-center h-full min-h-[120px]">
-                    <div className="transition-transform duration-500 group-hover:scale-110 flex items-center justify-center w-full h-full">
-                      {p.slug === "netflix" && (
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg" alt="Netflix" className="h-8" />
-                      )}
-                      {p.slug === "disney-plus" && (
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg" alt="Disney+" className="h-12" style={{ filter: "brightness(0) invert(1)" }} />
-                      )}
-                      {p.slug === "prime-video" && (
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png" alt="Prime Video" className="h-16 w-32 object-contain" />
-                      )}
-                      {p.slug === "apple-tv-plus" && (
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg" alt="Apple TV+" className="h-8" style={{ filter: "brightness(0) invert(1)" }} />
-                      )}
-                      {p.slug === "hulu" && (
-                        <img src="/hulu-logo.svg" alt="Hulu" className="h-20 w-auto object-contain scale-110" />
-                      )}
-                      {p.slug === "hbo-max" && (
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg" alt="Max" className="h-7" style={{ filter: "brightness(0) invert(1)" }} />
-                      )}
-                      {p.slug === "paramount-plus" && (
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg" alt="Paramount+" className="h-20 w-auto object-contain scale-110" style={{ filter: "brightness(0) invert(1)" }} />
-                      )}
-                      {p.slug === "peacock" && (
-                        <div className="flex items-center gap-2">
-                          <ProviderIcon slug="peacock" className="w-9 h-9" />
-                          <span className="text-white font-black text-3xl tracking-tighter" style={{ fontFamily: "Arial, sans-serif" }}>peacock</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+          {/* ─── STREAMING SERVICES HUB ─── */}
+          <LazySection show={revealedSections >= 4} placeholderHeight={380}>
+            <TrendingProvidersHub />
           </LazySection>
 
           {/* ─── EPIC FRANCHISES ─── */}

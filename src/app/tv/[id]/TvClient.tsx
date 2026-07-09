@@ -76,12 +76,13 @@ export default function TvClient() {
     let initEp = 1;
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search);
-      const urlSeason = Number(searchParams.get("season"));
-      const urlEp = Number(searchParams.get("episode"));
-      if (urlSeason > 0) initSeason = urlSeason;
-      if (urlEp > 0) initEp = urlEp;
+      const urlSeason = searchParams.get("season");
+      const urlEp = searchParams.get("episode");
       
-      if (initSeason === 1 && initEp === 1) {
+      if (urlSeason || urlEp) {
+        if (urlSeason && Number(urlSeason) > 0) initSeason = Number(urlSeason);
+        if (urlEp && Number(urlEp) > 0) initEp = Number(urlEp);
+      } else {
         try {
           const userId = session?.user?.id || "guest";
           const saved = localStorage.getItem(`sv_tv_state_${userId}_${id}`);
@@ -213,6 +214,13 @@ export default function TvClient() {
     setSelectedSeason(season);
     setPlayingSeason(season);
     setPlayingEpisode(episodeNumber);
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("season", season.toString());
+      url.searchParams.set("episode", episodeNumber.toString());
+      window.history.replaceState({}, "", url.toString());
+    }
 
     if (status === "authenticated" && show) {
       // Use the specific season's poster if available, otherwise fallback to the show's main poster
@@ -398,7 +406,7 @@ export default function TvClient() {
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
       {isPlaying && (
-        <div ref={playerRef} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+        <div ref={playerRef} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start select-none">
           <div>
             <VideoPlayer
               type="tv"

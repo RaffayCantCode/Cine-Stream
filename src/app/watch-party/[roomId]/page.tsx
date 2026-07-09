@@ -57,6 +57,12 @@ function WatchPartyContent({ roomId }: { roomId: string }) {
   const [forceReloadCount, setForceReloadCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const partyStateRef = useRef<PartyState | null>(null);
+  useEffect(() => { partyStateRef.current = partyState; }, [partyState]);
+
+  const hostCurrentTimeRef = useRef<number>(0);
+  useEffect(() => { hostCurrentTimeRef.current = hostCurrentTime; }, [hostCurrentTime]);
+
   // Episode Queue State
   const [activeTab, setActiveTab] = useState<"chat" | "episodes">("chat");
   const [tvSeasons, setTvSeasons] = useState<any[]>([]);
@@ -99,6 +105,19 @@ function WatchPartyContent({ roomId }: { roomId: string }) {
           setForceReloadCount(prev => prev + 1);
         }
       })
+      .on("broadcast", { event: "request_state" }, () => {
+        if (partyStateRef.current?.hostId === userId && partyStateRef.current.mediaId) {
+          roomChannel.send({
+            type: "broadcast",
+            event: "media_sync",
+            payload: {
+              ...partyStateRef.current,
+              syncTimestamp: hostCurrentTimeRef.current,
+              syncId: undefined // undefined so we don't force iframe reload for existing viewers
+            }
+          });
+        }
+      })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           await roomChannel.track({ user: userEmail, online_at: new Date().toISOString() });
@@ -118,6 +137,12 @@ function WatchPartyContent({ roomId }: { roomId: string }) {
               type: "broadcast",
               event: "media_sync",
               payload: newState,
+            });
+          } else {
+            roomChannel.send({
+              type: "broadcast",
+              event: "request_state",
+              payload: {}
             });
           }
         }

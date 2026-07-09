@@ -107,7 +107,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
   },
   {
     id: "lotr",
-    name: "Middle-earth Saga",
+    name: "Lord of the Rings Saga",
     overview: "The complete journey through Middle-earth, from the Second Age to the destruction of the One Ring.",
     backdrop_path: "/2u7zbn8EudG6kLlBzUYqP8RyFU4.jpg", // Return of the King backdrop
     poster_path: "/rCzpDGLbOoPwLjy3OAm5NUPOTrC.jpg", // Return of the king poster
@@ -466,6 +466,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 324552, media_type: "movie" },
       { id: 458156, media_type: "movie" },
       { id: 603692, media_type: "movie" },
+      { id: 541671, media_type: "movie", title: "Ballerina" },
     ]
   },
   {
@@ -683,6 +684,66 @@ export const FRANCHISES: FranchiseDefinition[] = [
     items: [
       { id: 211672, media_type: "movie" },
       { id: 438148, media_type: "movie" },
+    ]
+  },
+  {
+    id: "toy-story",
+    name: "Toy Story Collection",
+    overview: "The adventures of Woody, Buzz Lightyear, and their toy friends as they navigate the challenges of growing up.",
+    backdrop_path: "/3Rfvhy1Nl6sSGJwyjb0QiZzZYlB.jpg",
+    poster_path: "/uXDfjJbdP4ijW5hWSBrPrlKpxab.jpg",
+    items: [
+      { id: 862, media_type: "movie", title: "Toy Story" },
+      { id: 863, media_type: "movie", title: "Toy Story 2" },
+      { id: 10193, media_type: "movie", title: "Toy Story 3" },
+      { id: 301528, media_type: "movie", title: "Toy Story 4" },
+    ]
+  },
+  {
+    id: "dune",
+    name: "Dune Collection",
+    overview: "The epic saga of Paul Atreides and the desert planet of Arrakis.",
+    backdrop_path: "/zRKQW58MBEY078AxkHxEJzUskCl.jpg",
+    poster_path: "/gDzOcq0pfeCeqMBwKIJlSmQpjkZ.jpg",
+    items: [
+      { id: 90228, media_type: "tv", title: "Dune: Prophecy" },
+      { id: 438631, media_type: "movie", title: "Dune: Part One" },
+      { id: 693134, media_type: "movie", title: "Dune: Part Two" },
+    ]
+  },
+  {
+    id: "jojo",
+    name: "JoJo's Bizarre Adventure",
+    overview: "The multi-generational saga of the Joestar family, who are possessed with intense psychic strength, and the adventures each member encounters.",
+    backdrop_path: "/mLKN1dsimKPiXCZ48KED0X8a02t.jpg",
+    poster_path: "/ogAWwbh3frWtiTyyXrZaVFtqCgp.jpg",
+    items: [
+      { id: 45790, media_type: "anime", anilist_id: 14719, title: "Phantom Blood & Battle Tendency (Part 1 & 2)" },
+      { id: 45790, media_type: "anime", anilist_id: 20474, title: "Stardust Crusaders (Part 3)" },
+      { id: 45790, media_type: "anime", anilist_id: 20799, title: "Stardust Crusaders - Battle in Egypt" },
+      { id: 45790, media_type: "anime", anilist_id: 21450, title: "Diamond is Unbreakable (Part 4)" },
+      { id: 45790, media_type: "anime", anilist_id: 102883, title: "Golden Wind (Part 5)" },
+      { id: 45790, media_type: "anime", anilist_id: 131942, title: "Stone Ocean (Part 6)" },
+    ]
+  },
+  {
+    id: "fate-series",
+    name: "Fate Anime Series",
+    overview: "The epic Fate universe, exploring the Holy Grail Wars where mages summon heroic spirits from history to battle for their deepest wishes. Listed in chronological watch order.",
+    backdrop_path: "/b2mskN6F9kUolFc8mTBiEJwfXLC.jpg",
+    poster_path: "/x7nYPOveHhINREhTtwBHot9ersB.jpg",
+    items: [
+      { id: 45845, media_type: "anime", anilist_id: 10087, title: "Fate/Zero (Season 1)" },
+      { id: 45845, media_type: "anime", anilist_id: 11741, title: "Fate/Zero (Season 2)" },
+      { id: 37858, media_type: "anime", anilist_id: 356, title: "Fate/stay night (2006)" },
+      { id: 61415, media_type: "anime", anilist_id: 19603, title: "Unlimited Blade Works (Season 1)" },
+      { id: 61415, media_type: "anime", anilist_id: 20792, title: "Unlimited Blade Works (Season 2)" },
+      { id: 1445, media_type: "anime", anilist_id: 20791, title: "Heaven's Feel I. presage flower" },
+      { id: 1445, media_type: "anime", anilist_id: 21718, title: "Heaven's Feel II. lost butterfly" },
+      { id: 1445, media_type: "anime", anilist_id: 21719, title: "Heaven's Feel III. spring song" },
+      { id: 72304, media_type: "anime", anilist_id: 98035, title: "Fate/Apocrypha" },
+      { id: 90677, media_type: "anime", anilist_id: 103275, title: "Fate/Grand Order: Babylonia" },
+      { id: 219816, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake" },
     ]
   }
 ];

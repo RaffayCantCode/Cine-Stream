@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export const revalidate = 3600;
 
@@ -36,15 +36,13 @@ export async function GET(_request: NextRequest) {
       tmdbFetch("/genre/movie/list"),
     ]);
 
-
-
     return Response.json({
       trending,
       popular,
       topRated,
       nowPlaying,
       genres,
-    });
+    }, { headers: cacheHeaders(3600) });
   } catch (error) {
     console.error("[TMDB Home API Error]:", error);
     return Response.json({ error: "Failed to fetch home media" }, { status: 500 });
