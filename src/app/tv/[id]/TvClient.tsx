@@ -309,7 +309,8 @@ export default function TvClient() {
       <main className="md:pl-56 lg:pl-64 bleed-header">
       <CinematicHero
         backdropPath={show.backdrop_path || show.poster_path}
-        trailerId={trailerId}
+        trailerId={seasonTrailerId || mainTrailerId}
+        fallbackTrailerIds={seasonTrailerId && mainTrailerId ? [mainTrailerId] : undefined}
         title={show.name}
         theme="tv"
       >

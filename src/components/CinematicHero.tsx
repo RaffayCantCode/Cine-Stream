@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { VolumeX, Volume2, X } from "lucide-react";
 
 interface CinematicHeroProps {
   backdropPath?: string | null;
   trailerId?: string | null;
+  fallbackTrailerIds?: string[];
   title: string;
   height?: string;
   theme?: "movie" | "tv" | "anime";
@@ -21,21 +22,26 @@ interface CinematicHeroProps {
 export function CinematicHero({
   backdropPath,
   trailerId,
+  fallbackTrailerIds = [],
   title,
   height = "h-[62vh] md:h-[75vh]",
   theme = "movie",
   children,
 }: CinematicHeroProps) {
+  const [activeTrailerId, setActiveTrailerId] = useState<string | null>(null);
   const [trailerReady, setTrailerReady] = useState(false);
   const [trailerVisible, setTrailerVisible] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(100);
   const [isAtTop, setIsAtTop] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const fallbackIndexRef = useRef(-1);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
   const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -81,22 +87,44 @@ export function CinematicHero({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Listen to YouTube API to detect when trailer ends
+  const triggerFallback = useCallback(() => {
+    fallbackIndexRef.current += 1;
+    if (fallbackIndexRef.current < fallbackTrailerIds.length) {
+      setTrailerReady(false);
+      setIsPlaying(false);
+      setTrailerVisible(false);
+      setTimeout(() => setActiveTrailerId(fallbackTrailerIds[fallbackIndexRef.current]), 100);
+    } else {
+      setTrailerReady(false);
+      setIsPlaying(false);
+      setTrailerVisible(false);
+    }
+  }, [fallbackTrailerIds]);
+
+  // Listen to YouTube API to detect when trailer ends or errors
   useEffect(() => {
-    if (!trailerId) return;
+    if (!activeTrailerId) return;
 
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== "https://www.youtube-nocookie.com") return;
       try {
         const data = JSON.parse(event.data);
+
+        // Handle direct errors from YouTube
+        if (data.event === "onError" || data.event === "error") {
+           triggerFallback();
+           return;
+        }
+
         if (data.event === "infoDelivery" && data.info) {
-          if (data.info.playerState === 1) {
+          if (data.info.playerState === 1 && !isPlaying) {
             // Force high quality when playing
             iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
               event: "command",
               func: "setPlaybackQuality",
               args: ["hd1080"]
             }), "*");
+            setIsPlaying(true);
           }
           if (data.info.playerState === 0) { // 0 = ENDED
             setTrailerVisible(false);
@@ -127,48 +155,52 @@ export function CinematicHero({
       window.removeEventListener("message", handleMessage);
       clearInterval(pingInterval);
     };
+  }, [activeTrailerId, isPlaying, triggerFallback]);
+
+  // Init trailer id and handle fallbacks
+  useEffect(() => {
+    if (trailerId) {
+      fallbackIndexRef.current = -1;
+      setActiveTrailerId(trailerId);
+    } else {
+      setActiveTrailerId(null);
+    }
   }, [trailerId]);
 
   // Start the trailer after a delay once the component mounts
   useEffect(() => {
     mountedRef.current = true;
-    if (!trailerId) return;
+    if (!activeTrailerId) return;
 
     // Wait 1.5s before loading the iframe
     delayTimerRef.current = setTimeout(() => {
       if (!mountedRef.current) return;
       setTrailerReady(true);
-      // Give the iframe 2.5s to buffer and hide UI before starting the crossfade
-      fadeTimerRef.current = setTimeout(() => {
+      
+      // Start an error timer: if it doesn't play in 6s, it probably failed
+      errorTimerRef.current = setTimeout(() => {
         if (!mountedRef.current) return;
-        setTrailerVisible(true);
-      }, 2500);
+        triggerFallback();
+      }, 6000);
     }, 1500);
 
     return () => {
-      mountedRef.current = false;
       if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
-      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
     };
-  }, [trailerId]);
+  }, [activeTrailerId]);
 
-  // When the trailer prop changes (e.g. season switch), reset and restart
+  // Once it actually starts playing, clear the error timer and fade it in
   useEffect(() => {
-    setTrailerReady(false);
-    setTrailerVisible(false);
-
-    if (!trailerId) return;
-    const t1 = setTimeout(() => {
-      if (!mountedRef.current) return;
-      setTrailerReady(true);
-      const t2 = setTimeout(() => {
-        if (!mountedRef.current) return;
-        setTrailerVisible(true);
-      }, 2500);
-      fadeTimerRef.current = t2;
-    }, 1500);
-    delayTimerRef.current = t1;
-  }, [trailerId]);
+    if (isPlaying) {
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      // Give it just a tiny bit more time to hide YouTube UI before fading in
+      const t = setTimeout(() => {
+        if (mountedRef.current) setTrailerVisible(true);
+      }, 1000);
+      return () => clearTimeout(t);
+    }
+  }, [isPlaying]);
 
   // Pause when the tab is hidden
   useEffect(() => {
@@ -294,10 +326,10 @@ export function CinematicHero({
         )}
 
         {/* YouTube trailer iframe — hidden behind backdrop until ready */}
-        {trailerId && trailerReady && trailerUrl && (
+        {trailerReady && activeTrailerId && (
           <div
             className={`absolute inset-0 transition-opacity duration-1000 ${
-              trailerVisible ? "opacity-100" : "opacity-[0.01]"
+              trailerVisible ? "opacity-100" : "opacity-0"
             }`}
             aria-hidden="true"
           >
@@ -306,7 +338,7 @@ export function CinematicHero({
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               <iframe
                 ref={iframeRef}
-                src={trailerUrl}
+                src={`https://www.youtube-nocookie.com/embed/${activeTrailerId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}&widgetid=1&loop=0&vq=hd1080&hd=1`}
                 className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[85svh] min-w-[151.11svh] -translate-x-1/2 -translate-y-1/2"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen={false}
@@ -327,7 +359,7 @@ export function CinematicHero({
       </div>
 
       {/* ── Trailer Controls (shown only when trailer is playing) ────── */}
-      {trailerId && trailerVisible && (
+      {activeTrailerId && trailerVisible && (
         <>
         <div className="absolute top-[calc(85svh-4rem)] md:top-[calc(85svh-4.5rem)] right-4 md:right-6 z-30 flex items-center gap-3">
           
