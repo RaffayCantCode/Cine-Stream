@@ -140,8 +140,12 @@ export default function TvClient() {
     fetchShow();
   }, [id]);
 
+  const autoPlayHandledRef = useRef(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !show || status === "loading") return;
+    if (autoPlayHandledRef.current) return;
+    
+    autoPlayHandledRef.current = true;
     const searchParams = new URLSearchParams(window.location.search);
     const autoPlay = searchParams.get("autoplay") === "1";
     const season = Number(searchParams.get("season"));
@@ -149,8 +153,28 @@ export default function TvClient() {
 
     if (season > 0) { setSelectedSeason(season); setPlayingSeason(season); }
     if (episode > 0) setPlayingEpisode(episode);
-    if (autoPlay) setIsPlaying(true);
-  }, []);
+
+    if (autoPlay) {
+      const targetSeason = season > 0 ? season : 1;
+      const targetEpisode = episode > 0 ? episode : 1;
+      if (status === "authenticated") {
+        fetch("/api/watch-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mediaId: show.id,
+            mediaType: "tv",
+            title: show.name,
+            posterPath: show.poster_path ?? null,
+            backdropPath: show.backdrop_path ?? null,
+            season: targetSeason,
+            episode: targetEpisode,
+          }),
+        }).catch(() => {});
+      }
+      setIsPlaying(true);
+    }
+  }, [show, status]);
 
   // Persist state
   useEffect(() => {

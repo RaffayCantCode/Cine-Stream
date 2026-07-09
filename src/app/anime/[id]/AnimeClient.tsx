@@ -260,9 +260,30 @@ export default function AnimeClient() {
 
     if (target && !selectedEp) {
       setSelectedEp(target);
-      if (autoPlay) setIsPlaying(true);
+      if (autoPlay) {
+        if (authStatus === "authenticated" && anime) {
+          const numericId = parseInt(anime.id, 10);
+          if (!Number.isNaN(numericId)) {
+            fetch("/api/watch-history", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mediaId: numericId,
+                mediaType: "anime",
+                title: anime.name,
+                posterPath: anime.poster || null,
+                backdropPath: null,
+                season: target.seasonNum || 1,
+                episode: target.episodeNum,
+                episodeName: target.title || `Episode ${target.episodeNum}`,
+              }),
+            }).catch(() => {});
+          }
+        }
+        setIsPlaying(true);
+      }
     }
-  }, [episodes, id, selectedEp, session?.user?.id]);
+  }, [episodes, id, selectedEp, session?.user?.id, authStatus, anime]);
 
   // Persist State
   useEffect(() => {

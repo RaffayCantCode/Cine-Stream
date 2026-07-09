@@ -70,12 +70,32 @@ export default function MovieClient() {
     fetchMovie();
   }, [id]);
 
+  const autoPlayHandledRef = useRef(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !movie || status === "loading") return;
+    if (autoPlayHandledRef.current) return;
+    
+    autoPlayHandledRef.current = true;
     const searchParams = new URLSearchParams(window.location.search);
     const autoPlay = searchParams.get("autoplay") === "1";
-    if (autoPlay) setIsPlaying(true);
-  }, []);
+    
+    if (autoPlay) {
+      if (status === "authenticated") {
+        fetch("/api/watch-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mediaId: movie.id,
+            mediaType: "movie",
+            title: movie.title,
+            posterPath: movie.poster_path ?? null,
+            backdropPath: movie.backdrop_path ?? null,
+          }),
+        }).catch(() => {});
+      }
+      setIsPlaying(true);
+    }
+  }, [movie, status]);
 
   const handleWatch = async () => {
     if (status === "authenticated" && movie) {
