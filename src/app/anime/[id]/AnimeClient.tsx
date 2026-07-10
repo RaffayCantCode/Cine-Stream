@@ -107,6 +107,93 @@ async function fetchFranchiseClientSide(startId: number) {
   });
 }
 
+async function fetchAnimeMetaClientSide(idStr: string) {
+  const isMal = idStr.startsWith("mal-");
+  const parsedId = parseInt(idStr.replace("mal-", ""), 10);
+  if (isNaN(parsedId)) return null;
+
+  const query = isMal 
+    ? `query ($idMal: Int) {
+        Media(idMal: $idMal, type: ANIME, isAdult: false) {
+          id idMal title { romaji english native } coverImage { large extraLarge }
+          episodes genres averageScore description status type format season seasonYear duration trailer { id site }
+        }
+      }`
+    : `query ($id: Int) {
+        Media(id: $id, type: ANIME, isAdult: false) {
+          id idMal title { romaji english native } coverImage { large extraLarge }
+          episodes genres averageScore description status type format season seasonYear duration trailer { id site }
+        }
+      }`;
+
+  const variables = isMal ? { idMal: parsedId } : { id: parsedId };
+
+  try {
+    const res = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ query, variables })
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const media = json?.data?.Media;
+    if (!media) return null;
+
+    const anime: AnimeDetail = {
+      id: String(media.id),
+      idMal: media.idMal ? String(media.idMal) : null,
+      name: media.title?.english || media.title?.romaji || media.title?.native || "Unknown",
+      jname: media.title?.native || null,
+      poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
+      description: media.description || "",
+      type: media.format || media.type || "TV",
+      rating: media.averageScore ? String(media.averageScore) : null,
+      score: media.averageScore ? String(media.averageScore) : null,
+      status: media.status || null,
+      genres: media.genres || [],
+      totalEpisodes: media.episodes || 12,
+      seasons: [],
+      season: media.season || null,
+      seasonYear: media.seasonYear || null,
+      format: media.format || null,
+      openedSeasonId: String(media.id),
+      tmdbId: null,
+      duration: media.duration || null,
+      trailerId: media.trailer?.site === "youtube" ? media.trailer.id : null,
+    };
+
+    // Get franchise nodes
+    const clientNodes = await fetchFranchiseClientSide(media.id);
+    const finalSeasons = clientNodes.map(node => {
+      const isCurrent = node.id === media.id;
+      return {
+        id: String(node.id),
+        idMal: node.idMal || null,
+        name: node.title,
+        totalEpisodes: node.episodes || 12,
+        seasonLabel: `${node.season || ""} ${node.seasonYear || ""}`.trim() || node.format || "Unknown",
+        episodeOffset: 0,
+        isCurrent,
+        seasonYear: node.seasonYear || null,
+        tmdbId: null,
+        tmdbSeasonNumber: null,
+      } as any;
+    });
+    anime.seasons = finalSeasons;
+
+    return {
+      success: true,
+      data: {
+        anime,
+        franchiseNodes: clientNodes,
+      }
+    };
+  } catch (e) {
+    console.error("[Anime Client Fallback Meta] Error fetching client side", e);
+  }
+  return null;
+}
+
 
 
 interface AnimeDetail {
@@ -254,9 +341,23 @@ export default function AnimeClient() {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(`/api/anime/${id}/meta?v=4`);
+        let data: any = null;
+        try {
+          data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(`/api/anime/${id}/meta?v=4`);
+        } catch (e) {
+          console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
+        }
+
+        if (!data || !data.success || !data.data?.anime) {
+          console.log("[Anime Client] Server meta returned degraded or failed response. Trying client-side AniList query...");
+          const fallbackData = await fetchAnimeMetaClientSide(id);
+          if (fallbackData) {
+            data = fallbackData;
+          }
+        }
+
         if (cancelled) return;
-        if (data.success && data.data?.anime) {
+        if (data && data.success && data.data?.anime) {
           const a = data.data.anime;
           setAnime(a);
           if (data.data.franchiseNodes) setFranchiseNodes(data.data.franchiseNodes);
@@ -312,8 +413,8 @@ export default function AnimeClient() {
           } else if (serverFranchiseNodes.length <= 1) {
             // Derive franchiseNodes from seasons (no extra API call needed)
             const derivedNodes: FranchiseNode[] = finalSeasons
-              .filter(s => !String(s.id).startsWith("tmdb-") && s.name)
-              .map(s => ({
+              .filter((s: SeasonInfo) => !String(s.id).startsWith("tmdb-") && s.name)
+              .map((s: SeasonInfo) => ({
                 id: Number(s.id),
                 idMal: (s as any).idMal || null,
                 title: s.name,
@@ -341,7 +442,7 @@ export default function AnimeClient() {
           }
 
           // Find it in the season list
-          const matchingSeason = finalSeasons.find(s => s.id === urlSeasonId);
+          const matchingSeason = finalSeasons.find((s: SeasonInfo) => s.id === urlSeasonId);
           const activeSeason = matchingSeason || finalSeasons[0];
           const activeSeasonId = activeSeason?.id || urlSeasonId || id;
 
