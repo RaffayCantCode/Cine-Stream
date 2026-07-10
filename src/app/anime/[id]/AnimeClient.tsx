@@ -15,6 +15,23 @@ import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
 
+async function getAniZipMappingClientSide(anilistId: number) {
+  try {
+    const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`);
+    if (res.ok) {
+      const data = await res.json();
+      const tmdbId = data.mappings?.themoviedb_id ? parseInt(data.mappings.themoviedb_id, 10) : null;
+      const azEp1 = data.episodes?.["1"];
+      const tmdbSeasonNumber = azEp1?.seasonNumber !== undefined ? azEp1.seasonNumber : null;
+      const episodeOffset = azEp1?.episodeNumber !== undefined ? azEp1.episodeNumber - 1 : 0;
+      return { tmdbId, tmdbSeasonNumber, episodeOffset };
+    }
+  } catch (e) {
+    console.warn(`[AniZip Client] Failed to fetch mappings for ${anilistId}`, e);
+  }
+  return null;
+}
+
 async function fetchFranchiseClientSide(startId: number) {
   // Query fetches the node's OWN metadata AND its relation edges
   const RELATIONS_QUERY = `query ($id: Int) {
@@ -53,12 +70,12 @@ async function fetchFranchiseClientSide(startId: number) {
           });
         }
         
-        // Only traverse SEQUEL/PREQUEL (matching server-side behavior)
+        // Traverse SEQUEL, PREQUEL, ALTERNATIVE, PARENT relations
         const edges = media.relations?.edges || [];
         for (const edge of edges) {
           if (!edge.node) continue;
           const rType = edge.relationType;
-          if (!["PREQUEL", "SEQUEL"].includes(rType)) continue;
+          if (!["PREQUEL", "SEQUEL", "ALTERNATIVE", "PARENT"].includes(rType)) continue;
           if (edge.node.type !== "ANIME" || edge.node.isAdult) continue;
           const relId = edge.node.id;
           if (!visited.has(relId) && !queue.includes(relId)) {
@@ -76,8 +93,22 @@ async function fetchFranchiseClientSide(startId: number) {
   }
   
   const nodes = Array.from(visited.values()).filter(n => n.title); // Drop nodes with no title
+  
+  // Resolve mappings in parallel for all nodes
+  const nodesWithMappings = await Promise.all(
+    nodes.map(async (node) => {
+      const mapping = await getAniZipMappingClientSide(node.id);
+      return {
+        ...node,
+        tmdbId: mapping?.tmdbId || null,
+        tmdbSeasonNumber: mapping?.tmdbSeasonNumber || null,
+        episodeOffset: mapping?.episodeOffset || 0,
+      };
+    })
+  );
+
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-  return nodes.sort((a, b) => {
+  return nodesWithMappings.sort((a, b) => {
     const yearA = a.seasonYear || 9999;
     const yearB = b.seasonYear || 9999;
     if (yearA !== yearB) return yearA - yearB;
@@ -88,6 +119,7 @@ async function fetchFranchiseClientSide(startId: number) {
     return seasonOrder.indexOf(a.season || "FALL") - seasonOrder.indexOf(b.season || "FALL");
   });
 }
+
 
 
 interface AnimeDetail {
@@ -181,14 +213,25 @@ export default function AnimeClient() {
 
   // ── Fetch episodes for a specific season by its AniList ID ─────────────
   // NOTE: Must be defined before the meta useEffect that calls it
-  const loadSeasonEpisodes = useCallback(async (seasonId: string, forceReload = false) => {
+  const loadSeasonEpisodes = useCallback(async (
+    seasonId: string, 
+    forceReload = false,
+    clientTmdbId?: number | null,
+    clientTmdbSeason?: number | null,
+    clientEpisodeOffset?: number | null
+  ) => {
     if (!forceReload && loadedSeasonIds.current.has(seasonId)) return;
 
     setEpisodesLoading(true);
     setSeasonOverview(null);
+
+    const tmdbIdQuery = clientTmdbId ? `&tmdbId=${clientTmdbId}` : "";
+    const tmdbSeasonQuery = clientTmdbSeason ? `&tmdbSeason=${clientTmdbSeason}` : "";
+    const episodeOffsetQuery = clientEpisodeOffset !== undefined && clientEpisodeOffset !== null ? `&episodeOffset=${clientEpisodeOffset}` : "";
+
     try {
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}&v=4`
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=4`
       );
       if (epData.success && epData.data?.episodes?.length) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
@@ -214,6 +257,8 @@ export default function AnimeClient() {
   // ── Load meta (fast, skipEpisodes) ─────────────────────────────────────
   useEffect(() => {
     if (!id || authStatus === "loading") return;
+    if (anime && anime.id === id) return; // Prevent re-fetching and flickering when session/authStatus changes
+
     let cancelled = false;
     loadedSeasonIds.current.clear();
     tmdbIdRef.current = null;
@@ -257,7 +302,6 @@ export default function AnimeClient() {
             const clientNodes = await fetchFranchiseClientSide(Number(id));
             if (clientNodes.length > 1) {
               // Map nodes to seasons
-              let cum = 0;
               finalSeasons = clientNodes.map(node => {
                 const isCurrent = node.id === Number(id);
                 if (isCurrent) urlSeasonId = String(node.id);
@@ -267,11 +311,12 @@ export default function AnimeClient() {
                   name: node.title,
                   totalEpisodes: node.episodes || 12,
                   seasonLabel: `${node.season || ""} ${node.seasonYear || ""}`.trim() || node.format || "Unknown",
-                  episodeOffset: cum,
+                  episodeOffset: node.episodeOffset || 0,
                   isCurrent,
                   seasonYear: node.seasonYear || null,
+                  tmdbId: node.tmdbId || null,
+                  tmdbSeasonNumber: node.tmdbSeasonNumber || null,
                 } as any;
-                cum += (node.episodes || 12);
                 return res;
               });
               setFranchiseNodes(clientNodes);
@@ -315,8 +360,14 @@ export default function AnimeClient() {
 
           setCurrentSeasonId(activeSeasonId);
 
-          // Load the active season's episodes immediately
-          loadSeasonEpisodes(activeSeasonId);
+          // Load the active season's episodes immediately with exact mapping parameters
+          loadSeasonEpisodes(
+            activeSeasonId,
+            false,
+            activeSeason?.tmdbId,
+            activeSeason?.tmdbSeasonNumber,
+            activeSeason?.episodeOffset
+          );
         } else {
           throw new Error("Anime not found");
         }
@@ -329,7 +380,7 @@ export default function AnimeClient() {
 
     loadMeta();
     return () => { cancelled = true; };
-  }, [id, loadSeasonEpisodes, authStatus, session]);
+  }, [id, loadSeasonEpisodes, authStatus, session, anime]);
 
   // ── Fetch You May Like recommendations ─────────────────────────────────
   useEffect(() => {
@@ -352,6 +403,84 @@ export default function AnimeClient() {
       .catch(() => {})
       .finally(() => setRecsLoading(false));
   }, [anime?.id, id, franchiseNodes]);
+
+  // ── Background Mapping Verification & Suspicious Mapping Corrector ─────
+  useEffect(() => {
+    if (isLoading || !anime || !anime.seasons || anime.seasons.length <= 1) return;
+
+    let active = true;
+
+    const isMappingSuspicious = (s: SeasonInfo) => {
+      if (s.tmdbSeasonNumber === undefined || s.tmdbSeasonNumber === null || s.tmdbSeasonNumber === 1) {
+        const label = s.seasonLabel.toLowerCase();
+        if (
+          label.includes("season 2") || 
+          label.includes("season 3") || 
+          label.includes("season 4") || 
+          label.includes("season 5") || 
+          label.includes("season 6") || 
+          label.includes("final season")
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const verifyMappings = async () => {
+      const updatedSeasons = [...anime.seasons];
+      let changed = false;
+
+      await Promise.all(
+        anime.seasons.map(async (s, idx) => {
+          const needsVerify = s.tmdbSeasonNumber === undefined || 
+                              s.tmdbSeasonNumber === null || 
+                              (s as any).episodeOffset === undefined ||
+                              isMappingSuspicious(s);
+          if (needsVerify) {
+            const mapping = await getAniZipMappingClientSide(Number(s.id));
+            if (mapping && active) {
+              const current = updatedSeasons[idx];
+              if (
+                current.tmdbSeasonNumber !== mapping.tmdbSeasonNumber ||
+                (current as any).episodeOffset !== mapping.episodeOffset ||
+                (current as any).tmdbId !== mapping.tmdbId
+              ) {
+                console.log(`[Anime Mappings] Background correction for "${s.name}": corrected tmdbSeasonNumber=${mapping.tmdbSeasonNumber}, episodeOffset=${mapping.episodeOffset}`);
+                updatedSeasons[idx] = {
+                  ...current,
+                  tmdbId: mapping.tmdbId || (current as any).tmdbId,
+                  tmdbSeasonNumber: mapping.tmdbSeasonNumber || current.tmdbSeasonNumber,
+                  episodeOffset: mapping.episodeOffset !== undefined ? mapping.episodeOffset : (current as any).episodeOffset,
+                } as any;
+                changed = true;
+              }
+            }
+          }
+        })
+      );
+
+      if (changed && active) {
+        setAnime(prev => prev ? { ...prev, seasons: updatedSeasons } : prev);
+        
+        // Also force a reload of the current season episodes if they are currently loaded
+        // but might have used the incorrect mapping earlier
+        const currentActiveSeason = updatedSeasons.find(s => s.id === currentSeasonId);
+        if (currentActiveSeason) {
+          loadSeasonEpisodes(
+            currentSeasonId,
+            true, // forceReload = true
+            (currentActiveSeason as any).tmdbId,
+            currentActiveSeason.tmdbSeasonNumber,
+            (currentActiveSeason as any).episodeOffset
+          );
+        }
+      }
+    };
+
+    verifyMappings();
+    return () => { active = false; };
+  }, [isLoading, anime?.id, anime?.seasons?.length, currentSeasonId, loadSeasonEpisodes]);
 
   // ── Autoplay via URL params & LocalStorage ────────────────────────────
   useEffect(() => {
@@ -445,7 +574,13 @@ export default function AnimeClient() {
     setCurrentSeasonId(season.id);
     setIsPlaying(false);
     setSelectedEp(null);
-    loadSeasonEpisodes(season.id);
+    loadSeasonEpisodes(
+      season.id,
+      false,
+      (season as any).tmdbId,
+      season.tmdbSeasonNumber,
+      (season as any).episodeOffset
+    );
 
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -914,13 +1049,23 @@ export default function AnimeClient() {
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
                 {/* ── Season Guide Section (franchise order reference) ── */}
                 {(() => {
-                  const visibleFranchiseNodes = franchiseNodes.filter(node =>
-                    node.title && (
-                      node.format === "TV" || node.format === "TV_SHORT" ||
-                      node.format === "ONA" || node.format === "MOVIE" ||
-                      String(node.id) === anime?.id
-                    )
-                  );
+                  const visibleFranchiseNodes = franchiseNodes.filter(node => {
+                    if (!node.title) return false;
+                    if (String(node.id) === anime?.id) return true;
+                    
+                    const format = node.format;
+                    if (format === "TV" || format === "TV_SHORT" || format === "ONA" || format === "MOVIE") {
+                      return true;
+                    }
+                    
+                    if (format === "SPECIAL" || format === "OVA") {
+                      const lowerTitle = node.title.toLowerCase();
+                      const plotKeywords = ["final", "part", "chapter", "season", "arc", "prologue", "epilogue", "special"];
+                      return plotKeywords.some(kw => lowerTitle.includes(kw));
+                    }
+                    
+                    return false;
+                  });
                   if (visibleFranchiseNodes.length <= 1) return null;
                   return (
                   <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden">

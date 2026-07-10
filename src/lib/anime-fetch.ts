@@ -382,7 +382,7 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Relation types that constitute the same franchise
-const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL"]);
+const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL", "ALTERNATIVE", "PARENT"]);
 // These formats get included in the season list
 const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "MOVIE"]);
 
@@ -663,15 +663,15 @@ function getCachedDetail(key: string) {
   animeDetailCache.delete(key);
   return null;
 }
-function setCachedDetail(key: string, data: any) {
+function setCachedDetail(key: string, data: any, isDegradedOverride?: boolean) {
   if (animeDetailCache.size >= ANIME_CACHE_MAX) {
     const oldest = animeDetailCache.keys().next();
     if (!oldest.done) animeDetailCache.delete(oldest.value);
   }
   const isDev = process.env.NODE_ENV === "development";
   
-  // If data lacks franchise nodes (e.g. Jikan fallback), only cache for 1 minute so it can recover
-  const isDegraded = !data?.franchiseNodes || data.franchiseNodes.length === 0;
+  // If data lacks franchise nodes or has explicit override, cache for 1 minute to allow quick recovery
+  const isDegraded = isDegradedOverride || !data?.franchiseNodes || data.franchiseNodes.length === 0;
   
   let ttl = 1800000; // 30 min TTL
   if (isDev) ttl = 5000; // 5 sec TTL in dev
@@ -1051,6 +1051,7 @@ export async function getAnimeDetails(
   // Resolve TMDB show IDs for each AniList season in parallel
   const tmdbIds: Record<string, number | null> = {};
   const allAniZipMappings: Record<string, any> = {};
+  let hasFailedAniZip = false;
   
   await Promise.all(
     baseSeasons.map(async (s) => {
@@ -1059,6 +1060,7 @@ export async function getAnimeDetails(
         if (String(s.id) === id) {
           tid = tmdbId;
           allAniZipMappings[s.id] = aniZipMapping;
+          if (!aniZipMapping) hasFailedAniZip = true;
         } else {
           try {
             const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
@@ -1072,8 +1074,12 @@ export async function getAnimeDetails(
                 tid = parseInt(azJson.mappings.themoviedb_id, 10);
                 if (isNaN(tid)) tid = null;
               }
+            } else {
+              hasFailedAniZip = true;
             }
-          } catch { /* ignore */ }
+          } catch {
+            hasFailedAniZip = true;
+          }
           
           if (!tid) {
             tid = await searchTmdbShow(s.name, s.seasonYear || undefined);
@@ -1087,6 +1093,7 @@ export async function getAnimeDetails(
         if (tid) uniqueTmdbIds.add(tid);
       } catch {
         tmdbIds[s.id] = null;
+        hasFailedAniZip = true;
       }
     })
   );
@@ -1206,7 +1213,7 @@ export async function getAnimeDetails(
       tmdbId,
       tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
     };
-    setCachedDetail(cacheKey, skipResult);
+    setCachedDetail(cacheKey, skipResult, hasFailedAniZip);
     return skipResult;
   }
 
@@ -1271,7 +1278,7 @@ export async function getAnimeDetails(
     tmdbId,
     tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
   };
-  setCachedDetail(cacheKey, fullResult);
+  setCachedDetail(cacheKey, fullResult, hasFailedAniZip);
   return fullResult;
 }
 
