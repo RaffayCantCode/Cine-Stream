@@ -16,9 +16,11 @@ import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
 
 async function fetchFranchiseClientSide(startId: number) {
+  // Query fetches the node's OWN metadata AND its relation edges
   const RELATIONS_QUERY = `query ($id: Int) {
     Media(id: $id, type: ANIME) {
-      id relations { edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format } } }
+      id idMal title { romaji english native } episodes season seasonYear format
+      relations { edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format type isAdult } } }
     }
   }`;
   
@@ -42,30 +44,38 @@ async function fetchFranchiseClientSide(startId: number) {
         if (!data?.data?.Media) return;
         
         const media = data.data.Media;
+        // Register this node with its OWN data (title, format, etc.)
         if (!visited.has(media.id)) {
           visited.set(media.id, {
             id: media.id, idMal: media.idMal || null, episodes: media.episodes,
             season: media.season, seasonYear: media.seasonYear, format: media.format,
-            title: media.title?.english || media.title?.romaji || ""
+            title: media.title?.english || media.title?.romaji || media.title?.native || ""
           });
         }
         
+        // Only traverse SEQUEL/PREQUEL (matching server-side behavior)
         const edges = media.relations?.edges || [];
         for (const edge of edges) {
           if (!edge.node) continue;
           const rType = edge.relationType;
-          if (["PREQUEL", "SEQUEL", "ALTERNATIVE", "PARENT", "SIDE_STORY"].includes(rType)) {
-            const relId = edge.node.id;
-            if (!visited.has(relId) && !queue.includes(relId)) {
-              queue.push(relId);
-            }
+          if (!["PREQUEL", "SEQUEL"].includes(rType)) continue;
+          if (edge.node.type !== "ANIME" || edge.node.isAdult) continue;
+          const relId = edge.node.id;
+          if (!visited.has(relId) && !queue.includes(relId)) {
+            // Pre-populate with relation data so we have title even if we can't fetch its own page
+            visited.set(relId, {
+              id: relId, idMal: edge.node.idMal || null, episodes: edge.node.episodes,
+              season: edge.node.season, seasonYear: edge.node.seasonYear, format: edge.node.format,
+              title: edge.node.title?.english || edge.node.title?.romaji || edge.node.title?.native || ""
+            });
+            queue.push(relId);
           }
         }
       } catch (e) { /* ignore */ }
     }));
   }
   
-  const nodes = Array.from(visited.values());
+  const nodes = Array.from(visited.values()).filter(n => n.title); // Drop nodes with no title
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
   return nodes.sort((a, b) => {
     const yearA = a.seasonYear || 9999;
@@ -78,6 +88,7 @@ async function fetchFranchiseClientSide(startId: number) {
     return seasonOrder.indexOf(a.season || "FALL") - seasonOrder.indexOf(b.season || "FALL");
   });
 }
+
 
 interface AnimeDetail {
   id: string;
@@ -235,31 +246,55 @@ export default function AnimeClient() {
             if (saved) savedState = JSON.parse(saved);
           } catch {}
 
-          // Client-side fallback for Season Guide if server got rate-limited
+          // ── Fallback strategy for missing server data ───────────────────
+          // Case 1: Server has seasons but no/sparse franchiseNodes → derive nodes from seasons (fast)
+          // Case 2: Server has no seasons either → run client-side BFS (slower but complete)
           let finalSeasons = seasons;
+          const serverFranchiseNodes = data.data.franchiseNodes || [];
+
           if (finalSeasons.length <= 1) {
-             const clientNodes = await fetchFranchiseClientSide(Number(id));
-             if (clientNodes.length > 1) {
-                // Map nodes to seasons
-                let cum = 0;
-                finalSeasons = clientNodes.map(node => {
-                  const isCurrent = node.id === Number(id);
-                  if (isCurrent) urlSeasonId = String(node.id);
-                  const res = {
-                    id: String(node.id),
-                    idMal: node.idMal || null,
-                    name: node.title,
-                    episodes: node.episodes,
-                    seasonLabel: `${node.season || ""} ${node.seasonYear || ""}`.trim() || node.format || "Unknown",
-                    episodeOffset: cum
-                  } as any;
-                  cum += (node.episodes || 12);
-                  return res;
-                });
-                
-                setFranchiseNodes(clientNodes);
-                setAnime(prev => prev ? { ...prev, seasons: finalSeasons } : prev);
-             }
+            // Full BFS fallback: server had no franchise data at all
+            const clientNodes = await fetchFranchiseClientSide(Number(id));
+            if (clientNodes.length > 1) {
+              // Map nodes to seasons
+              let cum = 0;
+              finalSeasons = clientNodes.map(node => {
+                const isCurrent = node.id === Number(id);
+                if (isCurrent) urlSeasonId = String(node.id);
+                const res = {
+                  id: String(node.id),
+                  idMal: node.idMal || null,
+                  name: node.title,
+                  totalEpisodes: node.episodes || 12,
+                  seasonLabel: `${node.season || ""} ${node.seasonYear || ""}`.trim() || node.format || "Unknown",
+                  episodeOffset: cum,
+                  isCurrent,
+                  seasonYear: node.seasonYear || null,
+                } as any;
+                cum += (node.episodes || 12);
+                return res;
+              });
+              setFranchiseNodes(clientNodes);
+              setAnime(prev => prev ? { ...prev, seasons: finalSeasons } : prev);
+            }
+          } else if (serverFranchiseNodes.length <= 1) {
+            // Derive franchiseNodes from seasons (no extra API call needed)
+            const derivedNodes: FranchiseNode[] = finalSeasons
+              .filter(s => !String(s.id).startsWith("tmdb-") && s.name)
+              .map(s => ({
+                id: Number(s.id),
+                idMal: (s as any).idMal || null,
+                title: s.name,
+                episodes: s.totalEpisodes || null,
+                season: null,
+                seasonYear: (s as any).seasonYear || null,
+                format: s.seasonLabel.startsWith("Movie") ? "MOVIE"
+                  : s.seasonLabel.startsWith("OVA") ? "OVA"
+                  : s.seasonLabel.startsWith("Special") ? "SPECIAL" : "TV",
+              }));
+            if (derivedNodes.length > 1) {
+              setFranchiseNodes(derivedNodes);
+            }
           }
 
           if (urlSeasonNum > 0 && data.data.tmdbSeasonMap) {
@@ -878,7 +913,16 @@ export default function AnimeClient() {
               {/* ── Episodes Section ── */}
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
                 {/* ── Season Guide Section (franchise order reference) ── */}
-                {franchiseNodes.length > 1 && (
+                {(() => {
+                  const visibleFranchiseNodes = franchiseNodes.filter(node =>
+                    node.title && (
+                      node.format === "TV" || node.format === "TV_SHORT" ||
+                      node.format === "ONA" || node.format === "MOVIE" ||
+                      String(node.id) === anime?.id
+                    )
+                  );
+                  if (visibleFranchiseNodes.length <= 1) return null;
+                  return (
                   <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden">
                     <button
                       onClick={() => setShowSeasonGuide(!showSeasonGuide)}
@@ -888,7 +932,7 @@ export default function AnimeClient() {
                         <BookOpen className="w-4 h-4 text-[#7288AE]" />
                         <h3 className="text-base font-bold text-white">Season Guide</h3>
                         <span className="text-[10px] text-white/30 font-medium">
-                          {franchiseNodes.length} {franchiseNodes.length === 1 ? "entry" : "entries"}
+                          {visibleFranchiseNodes.length} {visibleFranchiseNodes.length === 1 ? "entry" : "entries"}
                         </span>
                       </div>
                       <ChevronRight className={`w-4 h-4 text-white/40 transition-transform ${showSeasonGuide ? "rotate-90" : ""}`} />
@@ -896,7 +940,7 @@ export default function AnimeClient() {
 
                     {showSeasonGuide && (
                       <div className="px-5 pb-5 space-y-2 border-t border-white/[0.06] pt-4">
-                        {franchiseNodes.map((node) => {
+                        {visibleFranchiseNodes.map((node) => {
                           const nodeId = String(node.id);
                           const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
                           const formatLabel = node.format === "TV" ? "TV" : node.format || "";
@@ -925,7 +969,8 @@ export default function AnimeClient() {
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
                     <div className="flex items-center gap-3">

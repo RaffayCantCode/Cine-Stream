@@ -427,7 +427,7 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
           visited.set(nodeId, {
             id: nodeId,
             idMal: data.idMal || null,
-            title: data.title?.english || data.title?.romaji || "",
+            title: data.title?.english || data.title?.romaji || data.title?.native || "",
             episodes: data.episodes || null,
             season: data.season || null,
             seasonYear: data.seasonYear || null,
@@ -453,7 +453,7 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
             visited.set(neighborId, {
               id: neighborId,
               idMal: node.idMal || null,
-              title: node.title?.english || node.title?.romaji || "",
+              title: node.title?.english || node.title?.romaji || node.title?.native || "",
               episodes: node.episodes || null,
               season: node.season || null,
               seasonYear: node.seasonYear || null,
@@ -477,7 +477,8 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
     }
   }
 
-  return [...visited.values()];
+  // Filter out nodes with no title (partial/failed AniList responses)
+  return [...visited.values()].filter(n => n.title);
 }
 
 /**

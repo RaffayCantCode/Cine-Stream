@@ -207,6 +207,8 @@ export async function GET(
 
         // Calculate needed TMDB seasons early based on mapRelativeToTmdb
         let dynamicTotalEpisodes = safeTotalEpisodes;
+        // True episode count from AniList (null if unknown/airing)
+        const knownEpisodeCount = season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
         if (tmdbSeasonsList.length > 0) {
           const currentTmdbSeason = tmdbSeasonsList.find((s: any) => s.season_number === (tmdbSeasonNum || 1));
           const nextSeasonInTMDB = meta.seasons.find((s: any) => 
@@ -215,21 +217,28 @@ export async function GET(
             s.totalEpisodes > 2 // Ignore OVAs and specials when clamping
           );
           if (nextSeasonInTMDB) {
+            // The next AniList season also maps to the same TMDB season — clamp to that boundary
             dynamicTotalEpisodes = (nextSeasonInTMDB.episodeOffset || 0) - episodeOffset;
           } else if (currentTmdbSeason) {
-            dynamicTotalEpisodes = Math.max(safeTotalEpisodes, currentTmdbSeason.episode_count - episodeOffset);
-            // Cap it to the exact AniList count (if known) to prevent bleeding into merged TMDB seasons
-            if (season.totalEpisodes && season.totalEpisodes > 0) {
-              dynamicTotalEpisodes = Math.min(dynamicTotalEpisodes, season.totalEpisodes);
+            const tmdbAvailable = currentTmdbSeason.episode_count - episodeOffset;
+            if (knownEpisodeCount) {
+              // AniList has a real episode count: trust it as authoritative
+              dynamicTotalEpisodes = knownEpisodeCount;
+            } else {
+              // AniList count is unknown (airing): use TMDB episode_count as the cap
+              dynamicTotalEpisodes = tmdbAvailable;
             }
           }
+          // Absolute safety cap: never return more than 1500 episodes at once
+          dynamicTotalEpisodes = Math.min(dynamicTotalEpisodes, 1500);
         }
 
         const neededSeasons = new Set<number>();
-        // If episodeOffset > 0, it represents the absolute episode number in the entire franchise.
-        // We MUST start searching from TMDB Season 1 to map it correctly.
-        // If episodeOffset === 0, it's either the first season, or an isolated season where tmdbSeasonNum is our only hint.
-        const startSeason = episodeOffset > 0 ? 1 : (tmdbSeasonNum || 1);
+        // Always start mapping from the tmdbSeasonNum for this AniList season.
+        // episodeOffset is the 0-based index of this season's first episode WITHIN the TMDB season
+        // (e.g., AoT S3P2 ep1 = TMDB S3E13, so episodeOffset=12, tmdbSeasonNum=3).
+        // Starting from TMDB season 1 would incorrectly count from the very beginning of the show.
+        const startSeason = tmdbSeasonNum || 1;
         for (let i = 1; i <= dynamicTotalEpisodes; i++) {
           const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
           neededSeasons.add(mapped.seasonNumber);
