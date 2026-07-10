@@ -19,7 +19,7 @@ export async function GET(
     }
 
     // Helper function to fetch item details
-    const fetchItem = async (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string }) => {
+    const fetchItem = async (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string; poster_path?: string }) => {
       try {
         const tmdbType = item.tmdb_type || (item.media_type === "movie" ? "movie" : "tv");
         const endpoint = `/${tmdbType}/${item.id}`;
