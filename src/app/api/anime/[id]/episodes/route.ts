@@ -247,8 +247,7 @@ export async function GET(
               const totalTmdbAvailable = futureSeasons.reduce((acc: number, s: any) => acc + s.episode_count, 0) - episodeOffset;
               
               // Also check if AniZip mapped more episodes than TMDB has logged
-              const overlayMax = overlayEpsPromise ? 0 : 0; // We resolve this below, but we can't await it here synchronously. 
-              // Wait, we can just use totalTmdbAvailable
+              // We can't await overlayEpsPromise here synchronously, so we just use totalTmdbAvailable
               dynamicTotalEpisodes = totalTmdbAvailable;
             }
           }
