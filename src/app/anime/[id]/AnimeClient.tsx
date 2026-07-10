@@ -38,8 +38,8 @@ async function fetchFranchiseClientSide(startId: number) {
   // Query fetches the node's OWN metadata AND its relation edges
   const RELATIONS_QUERY = `query ($id: Int) {
     Media(id: $id, type: ANIME) {
-      id idMal title { romaji english native } episodes season seasonYear format
-      relations { edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format type isAdult } } }
+      id idMal title { romaji english native } episodes season seasonYear format bannerImage coverImage { large extraLarge }
+      relations { edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format type isAdult bannerImage coverImage { large extraLarge } } } }
     }
   }`;
   
@@ -47,7 +47,7 @@ async function fetchFranchiseClientSide(startId: number) {
   const queue = [startId];
   let hops = 0;
   
-  while (queue.length > 0 && visited.size < 50 && hops < 15) {
+  while (queue.length > 0 && visited.size < 150 && hops < 15) {
     const batch = queue.splice(0, queue.length);
     hops++;
     
@@ -69,7 +69,9 @@ async function fetchFranchiseClientSide(startId: number) {
           visited.set(media.id, {
             id: media.id, idMal: media.idMal || null, episodes: media.episodes,
             season: media.season, seasonYear: media.seasonYear, format: media.format,
-            title: media.title?.english || media.title?.romaji || media.title?.native || ""
+            title: media.title?.english || media.title?.romaji || media.title?.native || "",
+            bannerImage: media.bannerImage || null,
+            coverImage: media.coverImage?.extraLarge || media.coverImage?.large || null
           });
         }
         
@@ -86,7 +88,9 @@ async function fetchFranchiseClientSide(startId: number) {
             visited.set(relId, {
               id: relId, idMal: edge.node.idMal || null, episodes: edge.node.episodes,
               season: edge.node.season, seasonYear: edge.node.seasonYear, format: edge.node.format,
-              title: edge.node.title?.english || edge.node.title?.romaji || edge.node.title?.native || ""
+              title: edge.node.title?.english || edge.node.title?.romaji || edge.node.title?.native || "",
+              bannerImage: edge.node.bannerImage || null,
+              coverImage: edge.node.coverImage?.extraLarge || edge.node.coverImage?.large || null
             });
             queue.push(relId);
           }
@@ -97,8 +101,21 @@ async function fetchFranchiseClientSide(startId: number) {
   
   const nodes = Array.from(visited.values()).filter(n => n.title); // Drop nodes with no title
   
+  // Filter out the 3 unrelated/redundant Fate movies/OVAs
+  const EXCLUDED_IDS = new Set([6922, 19165, 12565]);
+  const filteredNodes = nodes.filter(n => !EXCLUDED_IDS.has(Number(n.id)));
+
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-  return nodes.sort((a, b) => {
+  return filteredNodes.sort((a, b) => {
+    // Custom chronological order for the Fate series
+    const FATE_ORDER = [10087, 11741, 356, 19603, 20792, 20791, 21718, 21719];
+    const idxA = FATE_ORDER.indexOf(Number(a.id));
+    const idxB = FATE_ORDER.indexOf(Number(b.id));
+    
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+
     const yearA = a.seasonYear || 9999;
     const yearB = b.seasonYear || 9999;
     if (yearA !== yearB) return yearA - yearB;
@@ -800,6 +817,10 @@ export default function AnimeClient() {
     return currentSeason?.episodeOffset || 0;
   }, [currentSeason]);
 
+  const displayPoster = currentSeasonInfo?.coverImage || anime?.poster || "";
+  const displayBanner = currentSeasonInfo?.bannerImage || currentSeasonInfo?.coverImage || anime?.poster || "";
+  const displayTitle = currentSeasonInfo?.name || anime?.name || "";
+
   const franchiseAbsoluteEp = useMemo(() => {
     const currentIdx = seasons.findIndex(s => s.id === currentSeasonId);
     if (currentIdx < 0) return 0;
@@ -915,16 +936,16 @@ export default function AnimeClient() {
           <>
             {/* ── Hero Banner ── */}
             <CinematicHero
-              backdropPath={anime.poster}
+              backdropPath={displayBanner}
               trailerId={anime.trailerId}
-              title={anime.name}
+              title={displayTitle}
               theme="anime"
             >
               <div className="relative z-10 pb-6 md:pb-16 px-5 md:px-12 flex flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-10 max-w-screen-2xl mx-auto w-full">
                 <div
                   className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
-                  <img src={anime.poster} alt={anime.name} className="w-full h-full object-cover" />
+                  <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
                 </div>
 
                 <div
@@ -942,7 +963,7 @@ export default function AnimeClient() {
                       }`}>{anime.status}</span>
                     )}
                   </div>
-                  <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight">{anime.name}</h1>
+                  <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight">{displayTitle}</h1>
                   {anime.jname && <p className="text-white/40 text-xs sm:text-sm font-medium">{anime.jname}</p>}
 
                   {/* Season count pill */}
@@ -1360,10 +1381,10 @@ export default function AnimeClient() {
                             const isSelected = selectedEp?.episodeId === ep.episodeId;
                             const isUnreleased = ep.isReleased === false;
                             const thumbSrc = ep.thumbnail
-                              || (isSingleItem && anime?.poster)
-                              || anime?.poster
+                              || (isSingleItem && displayPoster)
+                              || displayPoster
                               || null;
-                            const displayTitle = ep.title || (isSingleItem ? (anime?.name || "") : `Episode ${ep.episodeNum}`);
+                            const displayEpTitle = ep.title || (isSingleItem ? displayTitle : `Episode ${ep.episodeNum}`);
                             return (
                               <div
                                 key={`${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`}
@@ -1392,7 +1413,7 @@ export default function AnimeClient() {
                                   {thumbSrc ? (
                                     <img
                                       src={thumbSrc}
-                                      alt={displayTitle || `Episode ${ep.episodeNum}`}
+                                      alt={displayEpTitle || `Episode ${ep.episodeNum}`}
                                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                       loading="lazy"
                                     />
@@ -1421,10 +1442,16 @@ export default function AnimeClient() {
                                 {/* Episode Info */}
                                 <div className="flex-1 min-w-0 py-0.5">
                                   <div className="flex items-start justify-between gap-2 mb-1.5">
-                                    <h4 className="font-bold text-sm leading-tight text-white">
-                                      <span className="sm:hidden text-white/40 mr-1.5">E{ep.episodeNum}.</span>
-                                      {displayTitle}
-                                    </h4>
+                                    <div className="flex flex-col gap-1.5 flex-1 pr-2">
+                                      <h4 className="text-[13px] md:text-sm font-bold text-white/90 leading-tight line-clamp-2">
+                                        {displayEpTitle}
+                                      </h4>
+                                      {ep.description && (
+                                        <p className="text-white/40 text-xs leading-relaxed line-clamp-2">
+                                          {ep.description}
+                                        </p>
+                                      )}
+                                    </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
                                       {ep.vote_average && ep.vote_average > 0 && ep.vote_count && ep.vote_count > 5 ? (
                                         <div className="flex items-center gap-0.5 text-amber-400">
@@ -1439,11 +1466,7 @@ export default function AnimeClient() {
                                       {new Date(ep.releasedDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
                                     </p>
                                   )}
-                                  {ep.description && (
-                                    <p className="text-white/40 text-xs leading-relaxed line-clamp-2">
-                                      {ep.description}
-                                    </p>
-                                  )}
+
                                   {ep.runtime && ep.runtime > 0 && (
                                     <p className="text-white/30 text-xs mt-1.5">{ep.runtime} min</p>
                                   )}

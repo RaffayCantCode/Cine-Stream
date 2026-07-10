@@ -36,6 +36,8 @@ export interface SeasonInfo {
   tmdbSeasonNumber?: number | null;
   tmdbId?: number | null;
   episodeOffset?: number;
+  coverImage?: string | null;
+  bannerImage?: string | null;
 }
 
 export interface EpisodeDetail {
@@ -84,6 +86,8 @@ interface FranchiseNode {
   seasonYear: number | null;
   format: string | null;
   duration: number | null;
+  coverImage?: string | null;
+  bannerImage?: string | null;
 }
 
 const ANILIST_API = "https://graphql.anilist.co";
@@ -391,9 +395,9 @@ const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "
 
 const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   Media(id: $id, type: ANIME) {
-    id idMal title { romaji english native } episodes season seasonYear format duration
+    id idMal title { romaji english native } episodes season seasonYear format duration bannerImage coverImage { large extraLarge }
     relations {
-      edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult } }
+      edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge } } }
     }
   }
 }`;
@@ -401,7 +405,7 @@ const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
   const visited = new Map<number, FranchiseNode>(); // id → node
   const queue: number[] = [startId];
-  const MAX_NODES = 50; // safety cap
+  const MAX_NODES = 150; // Increased safety cap for large franchises like MHA
   const MAX_HOPS = 15; // Increased max hops for deep franchises like AOT and MHA
   let hops = 0;
 
@@ -436,6 +440,8 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
             seasonYear: data.seasonYear || null,
             format: data.format || null,
             duration: data.duration || null,
+            coverImage: data.coverImage?.extraLarge || data.coverImage?.large || null,
+            bannerImage: data.bannerImage || null,
           });
         }
 
@@ -462,6 +468,8 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
               seasonYear: node.seasonYear || null,
               format: node.format || null,
               duration: node.duration || null,
+              coverImage: node.coverImage?.extraLarge || node.coverImage?.large || null,
+              bannerImage: node.bannerImage || null,
             });
             // Also queue it so we fetch its own relations (to continue the chain)
             if (visited.size < MAX_NODES) {
@@ -980,7 +988,21 @@ export async function getAnimeDetails(
   
   if (franchiseNodes && franchiseNodes.length > 0) {
     const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
+    
+    // Filter out the 3 unrelated/redundant Fate movies/OVAs
+    const EXCLUDED_IDS = new Set([6922, 19165, 12565]);
+    franchiseNodes = franchiseNodes.filter(n => !EXCLUDED_IDS.has(Number(n.id)));
+
     franchiseNodes.sort((a, b) => {
+      // Custom chronological order for the Fate series
+      const FATE_ORDER = [10087, 11741, 356, 19603, 20792, 20791, 21718, 21719];
+      const idxA = FATE_ORDER.indexOf(Number(a.id));
+      const idxB = FATE_ORDER.indexOf(Number(b.id));
+      
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+
       const yearA = a.seasonYear || 9999;
       const yearB = b.seasonYear || 9999;
       if (yearA !== yearB) return yearA - yearB;
@@ -1065,11 +1087,27 @@ export async function getAnimeDetails(
           allAniZipMappings[s.id] = aniZipMapping;
           if (!aniZipMapping) hasFailedAniZip = true;
         } else {
-          // Skip secondary AniZip/TMDB mapping resolution for non-active seasons on the server
-          // to dramatically speed up initial metadata response time (from ~1.5s to <150ms).
-          // Browser-side background verification will lazily resolve them.
-          tmdbIds[s.id] = null;
-          return;
+          try {
+            const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
+              signal: AbortSignal.timeout(3000),
+              next: { revalidate: 86400 }
+            });
+            if (azRes.ok) {
+              const azData = await azRes.json();
+              allAniZipMappings[s.id] = azData;
+              if (azData.mappings?.themoviedb_id) {
+                tid = parseInt(azData.mappings.themoviedb_id, 10);
+                if (isNaN(tid)) tid = tmdbId;
+              } else {
+                tid = tmdbId;
+              }
+            } else {
+              tid = tmdbId;
+            }
+          } catch {
+            tid = tmdbId;
+            hasFailedAniZip = true;
+          }
         }
         tmdbIds[s.id] = tid;
         if (tid) uniqueTmdbIds.add(tid);
@@ -1150,6 +1188,8 @@ export async function getAnimeDetails(
       tmdbId: tid,
       tmdbSeasonNumber: tmdbSeasonNum,
       episodeOffset: episodeOffset,
+      coverImage: s.coverImage,
+      bannerImage: s.bannerImage,
     });
   }
 

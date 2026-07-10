@@ -382,6 +382,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
               className="w-full h-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
               allowFullScreen={true}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation allow-presentation"
               referrerPolicy="strict-origin-when-cross-origin"
               title={title || "Watch"}
               onLoad={() => { setIsLoading(false); setShowSpinner(false); }}

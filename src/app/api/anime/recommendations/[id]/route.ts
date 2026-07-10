@@ -35,7 +35,11 @@ query ($genres: [String], $page: Int) {
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
   const res = await fetch(ANILIST_API, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: { 
+      "Content-Type": "application/json", 
+      "Accept": "application/json",
+      "User-Agent": "CineStream/1.0 (https://github.com/RaffayCantCode/Cine-Stream)"
+    },
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(8000),
   });

@@ -238,17 +238,22 @@ export async function GET(
             // The next AniList season also maps to the same TMDB season — clamp to that boundary
             dynamicTotalEpisodes = (nextSeasonInTMDB.episodeOffset || 0) - episodeOffset;
           } else if (currentTmdbSeason) {
-            const tmdbAvailable = currentTmdbSeason.episode_count - episodeOffset;
             if (knownEpisodeCount) {
               // AniList has a real episode count: trust it as authoritative
               dynamicTotalEpisodes = knownEpisodeCount;
             } else {
-              // AniList count is unknown (airing): use TMDB episode_count as the cap
-              dynamicTotalEpisodes = tmdbAvailable;
+              // AniList count is unknown (airing): sum all TMDB episodes from this season onwards
+              const futureSeasons = tmdbSeasonsList.filter((s: any) => s.season_number >= (tmdbSeasonNum || 1));
+              const totalTmdbAvailable = futureSeasons.reduce((acc: number, s: any) => acc + s.episode_count, 0) - episodeOffset;
+              
+              // Also check if AniZip mapped more episodes than TMDB has logged
+              const overlayMax = overlayEpsPromise ? 0 : 0; // We resolve this below, but we can't await it here synchronously. 
+              // Wait, we can just use totalTmdbAvailable
+              dynamicTotalEpisodes = totalTmdbAvailable;
             }
           }
           // Absolute safety cap: never return more than 1500 episodes at once
-          dynamicTotalEpisodes = Math.min(dynamicTotalEpisodes, 1500);
+          dynamicTotalEpisodes = Math.min(Math.max(dynamicTotalEpisodes, 1), 1500);
         }
 
         const neededSeasons = new Set<number>();
