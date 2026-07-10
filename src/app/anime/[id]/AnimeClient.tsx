@@ -114,7 +114,7 @@ export default function AnimeClient() {
     setSeasonOverview(null);
     try {
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}&v=2`
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}&v=4`
       );
       if (epData.success && epData.data?.episodes?.length) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
@@ -148,7 +148,7 @@ export default function AnimeClient() {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(`/api/anime/${id}/meta`);
+        const data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(`/api/anime/${id}/meta?v=4`);
         if (cancelled) return;
         if (data.success && data.data?.anime) {
           const a = data.data.anime;
@@ -213,7 +213,7 @@ export default function AnimeClient() {
     const genres = anime.genres?.length ? anime.genres.join(",") : "";
     const franchiseIds = franchiseNodes.map(n => n.id).filter(Boolean).join(",");
     const excludeIds = [id, franchiseIds].filter(Boolean).join(",");
-    fetch(`/api/anime/recommendations/${id}?genres=${encodeURIComponent(genres)}&minItems=12&excludeIds=${encodeURIComponent(excludeIds)}`)
+    fetch(`/api/anime/recommendations/${id}?genres=${encodeURIComponent(genres)}&minItems=12&excludeIds=${encodeURIComponent(excludeIds)}&v=4`)
       .then(r => r.json())
       .then(data => {
         if (data.success && data.items?.length) {
