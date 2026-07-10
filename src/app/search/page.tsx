@@ -1,7 +1,8 @@
 "use client";
 export const runtime = 'edge';
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
@@ -29,8 +30,12 @@ interface MediaItem {
   known_for_department?: string;
 }
 
-export default function SearchPage() {
-  const [query, setQuery] = useState("");
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") || "";
+  const initialMode = searchParams.get("mode") || "";
+  
+  const [query, setQuery] = useState(initialQuery);
   const debouncedQuery = useDebounce(query, 500);
   const inputRef = useRef<HTMLInputElement>(null);
   const [results, setResults] = useState<MediaItem[]>([]);
@@ -39,7 +44,30 @@ export default function SearchPage() {
   const [animeLoading, setAnimeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { mode, setMode } = useContentMode();
+  
+  // Initialize mode from URL once
+  useEffect(() => {
+    if (initialMode && ["all", "movies", "tv", "anime", "people"].includes(initialMode)) {
+      setMode(initialMode as any);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const activeTab = mode;
+
+  // Sync state to URL
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (query) url.searchParams.set("q", query);
+      else url.searchParams.delete("q");
+      
+      if (mode !== "all") url.searchParams.set("mode", mode);
+      else url.searchParams.delete("mode");
+      
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [query, mode]);
+
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -266,5 +294,20 @@ export default function SearchPage() {
       </div>
       </main>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background text-foreground pb-20">
+        <Sidebar />
+        <main className="md:pl-56 lg:pl-64 pt-10 md:pt-10 flex justify-center items-center h-[50vh]">
+          <div className="w-10 h-10 border-3 border-white/10 border-t-[#7288AE] rounded-full animate-spin" />
+        </main>
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   );
 }

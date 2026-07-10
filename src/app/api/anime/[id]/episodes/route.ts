@@ -53,77 +53,37 @@ async function getEnrichedEpisodesList(
 ): Promise<any[]> {
   let seasonEps: any[] = [];
 
-  // 1. Try AniZip first
-  try {
-    const aniZipEps = await fetchEpisodesFromAniZip(seasonId, totalEpisodes);
-    if (aniZipEps && aniZipEps.length > 0) {
-      seasonEps = aniZipEps;
-    }
-  } catch { /* ignore */ }
+  // 1 & 2. Try AniZip and Jikan in parallel
+  const [aniZipEpsRes, jikanEpsRes] = await Promise.allSettled([
+    fetchEpisodesFromAniZip(seasonId, totalEpisodes),
+    idMal ? fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes) : Promise.resolve([])
+  ]);
 
-  // 2. Overlay from Jikan to retrieve filler information and any missing thumbnails/descriptions
-  if (idMal) {
-    try {
-      const jikanEps = await fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes);
-      if (jikanEps && jikanEps.length > 0) {
-        if (seasonEps.length === 0) {
-          seasonEps = jikanEps;
-        } else {
-          seasonEps = seasonEps.map((ep) => {
-            const jEp = jikanEps.find(je => je.episodeNum === ep.episodeNum);
-            return {
-              ...ep,
-              thumbnail: ep.thumbnail || jEp?.thumbnail || null,
-              description: ep.description || jEp?.description || null,
-              isFiller: jEp?.isFiller || false,
-            };
-          });
-        }
-      }
-    } catch { /* ignore */ }
+  const aniZipEps = aniZipEpsRes.status === 'fulfilled' ? aniZipEpsRes.value : [];
+  const jikanEps = jikanEpsRes.status === 'fulfilled' ? jikanEpsRes.value : [];
+
+  if (aniZipEps && aniZipEps.length > 0) {
+    seasonEps = aniZipEps;
   }
 
-  // 3. If we STILL lack thumbnails or summaries, overlay from Kitsu
-  const stillLacksMetadata = seasonEps.length === 0 || seasonEps.some(e => !e.thumbnail || !e.description);
-  if (stillLacksMetadata) {
-    try {
-      const kitsuEps = await fetchEpisodesFromKitsu(seasonName, totalEpisodes);
-      if (kitsuEps && kitsuEps.length > 0) {
-        if (seasonEps.length === 0) {
-          seasonEps = kitsuEps;
-        } else {
-          seasonEps = seasonEps.map((ep) => {
-            const kEp = kitsuEps.find(ke => ke.episodeNum === ep.episodeNum);
-            return {
-              ...ep,
-              thumbnail: ep.thumbnail || kEp?.thumbnail || null,
-              description: ep.description || kEp?.description || null,
-            };
-          });
-        }
-      }
-    } catch { /* ignore */ }
-  }
-
-  // Retry once after delay if all sources returned empty (transient API failure)
-  if (seasonEps.length === 0 && totalEpisodes > 0) {
-    console.log(`[EnrichedEps] Empty after first pass, retrying seasonId=${seasonId}`);
-    await new Promise(r => setTimeout(r, 2000));
-    try {
-      const aniZipEps = await fetchEpisodesFromAniZip(seasonId, totalEpisodes);
-      if (aniZipEps && aniZipEps.length > 0) {
-        seasonEps = aniZipEps;
-      }
-    } catch { /* ignore */ }
-    if (seasonEps.length === 0 && idMal) {
-      try {
-        const jikanEps = await fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes);
-        if (jikanEps && jikanEps.length > 0) {
-          seasonEps = jikanEps;
-        }
-      } catch { /* ignore */ }
+  if (jikanEps && jikanEps.length > 0) {
+    if (seasonEps.length === 0) {
+      seasonEps = jikanEps;
+    } else {
+      seasonEps = seasonEps.map((ep) => {
+        const jEp = jikanEps.find(je => je.episodeNum === ep.episodeNum);
+        return {
+          ...ep,
+          thumbnail: ep.thumbnail || jEp?.thumbnail || null,
+          description: ep.description || jEp?.description || null,
+          isFiller: jEp?.isFiller || false,
+        };
+      });
     }
   }
+
+  // Kitsu fallback and retries have been moved to be lazily evaluated only if TMDB fails
+  // to prevent unnecessarily blocking the API for 2-3 seconds on 99% of requests.
 
   return seasonEps;
 }
@@ -222,46 +182,111 @@ export async function GET(
 
       if (isTMDBReady) {
         // ── TMDB is the source of truth for episodes ─────────────────────
-        let tmdbSeasonsList: TmdbSeasonMin[] = [];
-        try {
-          const showData = await tmdbFetch(`/tv/${tmdbId}`) as { seasons?: TmdbSeasonMin[] };
-          if (showData?.seasons) {
-            tmdbSeasonsList = showData.seasons
-              .filter(s => s.season_number > 0)
-              .sort((a, b) => a.season_number - b.season_number);
-            console.log(`[Episodes API] TMDB show seasons:`, tmdbSeasonsList);
-          } else {
-            console.warn(`[Episodes API] TMDB show data has no seasons for tmdbId=${tmdbId}`);
-          }
-        } catch (e) {
+        // ── TMDB is the source of truth for episodes ─────────────────────
+        const tmdbShowPromise = tmdbFetch(`/tv/${tmdbId}`).catch(e => {
           console.error(`[Episodes API] TMDB show fetch failed for tmdbId=${tmdbId}:`, e);
+          return null;
+        });
+
+        // Get overlay data using our enriched helper in parallel
+        const overlayEpsPromise = getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
+
+        const showData = await tmdbShowPromise;
+
+        let tmdbSeasonsList: TmdbSeasonMin[] = [];
+        if ((showData as any)?.seasons) {
+          tmdbSeasonsList = (showData as any).seasons
+            .filter((s: any) => s.season_number > 0)
+            .sort((a: any, b: any) => a.season_number - b.season_number);
+          console.log(`[Episodes API] TMDB show seasons:`, tmdbSeasonsList);
+        } else if (showData === undefined || showData === null) {
+          // fetch failed, caught above
+        } else {
+          console.warn(`[Episodes API] TMDB show data has no seasons for tmdbId=${tmdbId}`);
         }
 
-        // Get overlay data using our enriched helper
-        const overlayEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
-        console.log(`[Episodes API] Overlay episodes count: ${overlayEps.length}`);
+        // Calculate needed TMDB seasons early based on mapRelativeToTmdb
+        let dynamicTotalEpisodes = safeTotalEpisodes;
+        if (tmdbSeasonsList.length > 0) {
+          const currentTmdbSeason = tmdbSeasonsList.find((s: any) => s.season_number === (tmdbSeasonNum || 1));
+          const nextSeasonInTMDB = meta.seasons.find((s: any) => 
+            s.tmdbSeasonNumber === (tmdbSeasonNum || 1) && 
+            (s.episodeOffset || 0) > episodeOffset &&
+            s.totalEpisodes > 2 // Ignore OVAs and specials when clamping
+          );
+          if (nextSeasonInTMDB) {
+            dynamicTotalEpisodes = (nextSeasonInTMDB.episodeOffset || 0) - episodeOffset;
+          } else if (currentTmdbSeason) {
+            dynamicTotalEpisodes = Math.max(safeTotalEpisodes, currentTmdbSeason.episode_count - episodeOffset);
+            // Cap it to the exact AniList count (if known) to prevent bleeding into merged TMDB seasons
+            if (season.totalEpisodes && season.totalEpisodes > 0) {
+              dynamicTotalEpisodes = Math.min(dynamicTotalEpisodes, season.totalEpisodes);
+            }
+          }
+        }
 
-        // Calculate needed TMDB seasons
         const neededSeasons = new Set<number>();
-        overlayEps.forEach(ep => {
-          if (ep.seasonNumber) neededSeasons.add(ep.seasonNumber);
-        });
         const startSeason = tmdbSeasonNum || 1;
-        for (let i = 1; i <= safeTotalEpisodes; i++) {
+        for (let i = 1; i <= dynamicTotalEpisodes; i++) {
           const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
           neededSeasons.add(mapped.seasonNumber);
         }
 
         const seasonNumbers = Array.from(neededSeasons);
         console.log(`[Episodes API] Needed TMDB seasons:`, seasonNumbers);
-        const tmdbEpisodes = seasonNumbers.length > 0
-          ? await fetchTmdbEpisodeData(tmdbId, seasonNumbers)
-          : new Map<string, any>();
+        
+        // Fetch TMDB episodes in parallel with the still-running overlayEpsPromise
+        const tmdbEpisodesPromise = seasonNumbers.length > 0
+          ? fetchTmdbEpisodeData(tmdbId, seasonNumbers)
+          : Promise.resolve(new Map<string, any>());
+
+        const [overlayEps, tmdbEpisodes] = await Promise.all([overlayEpsPromise, tmdbEpisodesPromise]);
+        
+        console.log(`[Episodes API] Overlay episodes count: ${overlayEps.length}`);
         console.log(`[Episodes API] TMDB episodes fetched count: ${tmdbEpisodes.size}`);
 
         // If TMDB returned no data, fall back to overlay episodes
-        if (tmdbEpisodes.size === 0 && overlayEps.length > 0) {
+        if (tmdbEpisodes.size === 0) {
           console.warn(`[Episodes API] TMDB returned no episodes, falling back to overlay data`);
+          
+          // Fallback retry block (only runs when TMDB fails)
+          if (overlayEps.length === 0 && safeTotalEpisodes > 0) {
+            console.log(`[Episodes API] Overlay also empty! Retrying AniZip/Jikan and falling back to Kitsu...`);
+            await new Promise(r => setTimeout(r, 2000)); // The 2-second sleep to handle Cloudflare/AniZip transient errors
+            try {
+              const aniZipEps = await fetchEpisodesFromAniZip(season.id, safeTotalEpisodes);
+              if (aniZipEps && aniZipEps.length > 0) overlayEps.push(...aniZipEps);
+            } catch { /* ignore */ }
+            if (overlayEps.length === 0 && season.idMal) {
+              try {
+                const jikanEps = await fetchEpisodesFromJikan(season.idMal, season.id, safeTotalEpisodes);
+                if (jikanEps && jikanEps.length > 0) overlayEps.push(...jikanEps);
+              } catch { /* ignore */ }
+            }
+          }
+          
+          // Kitsu fallback block (only runs if AniZip/Jikan still lack thumbnails or are empty)
+          const stillLacksMetadata = overlayEps.length === 0 || overlayEps.some(e => !e.thumbnail || !e.description);
+          if (stillLacksMetadata) {
+            try {
+              const kitsuEps = await fetchEpisodesFromKitsu(season.name, safeTotalEpisodes);
+              if (kitsuEps && kitsuEps.length > 0) {
+                if (overlayEps.length === 0) {
+                   overlayEps.push(...kitsuEps);
+                } else {
+                   overlayEps.forEach(ep => {
+                     const kEp = kitsuEps.find(ke => ke.episodeNum === ep.episodeNum);
+                     if (kEp) {
+                       ep.thumbnail = ep.thumbnail || kEp.thumbnail || null;
+                       ep.description = ep.description || kEp.description || null;
+                     }
+                   });
+                }
+              }
+            } catch { /* ignore */ }
+          }
+          
+          if (overlayEps.length > 0) {
           seasonEps = overlayEps.map((ep) => ({
             episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
             episodeNum: ep.episodeNum,
@@ -273,14 +298,14 @@ export async function GET(
             description: ep.description || null,
             seasonNum: seasonNumFromList,
             seasonId: season.id,
-            seasonName: season.name,
             seasonMalId: season.idMal || null,
           }));
+          }
         }
 
         // Build episodes from TMDB, overlay AniZip/Jikan data (only if TMDB data was available)
         if (tmdbEpisodes.size > 0) {
-          for (let i = 1; i <= safeTotalEpisodes; i++) {
+          for (let i = 1; i <= dynamicTotalEpisodes; i++) {
             const matchEp = overlayEps.find(j => j.episodeNum === i);
             
             let tmdbSeason = matchEp?.seasonNumber || null;
@@ -620,7 +645,14 @@ export async function GET(
     if (episodes.length > 0) {
       episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
     }
-    return Response.json(resPayload);
+    const isDev = process.env.NODE_ENV === "development";
+    return Response.json(resPayload, { 
+      headers: { 
+        "Cache-Control": isDev 
+          ? "no-cache, no-store, must-revalidate" 
+          : "public, s-maxage=3600, stale-while-revalidate=7200" 
+      } 
+    });
   } catch (error) {
     console.error("[Anime Episodes Error]:", error);
     return Response.json(

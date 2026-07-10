@@ -385,48 +385,52 @@ const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL"]);
 // These formats get included in the season list
 const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "MOVIE"]);
 
-/**
- * Build the complete franchise graph using BFS from a given AniList ID.
- * Follows SEQUEL and PREQUEL edges to collect all related entries.
- * Returns all nodes discovered, sorted chronologically.
- */
+const RELATIONS_BULK_QUERY = `query ($ids: [Int]) {
+  Page {
+    media(id_in: $ids, type: ANIME) {
+      id idMal title { romaji english native } episodes season seasonYear format duration
+      relations {
+        edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult } }
+      }
+    }
+  }
+}`;
+
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
   const visited = new Map<number, FranchiseNode>(); // id → node
   const queue: number[] = [startId];
-  const MAX_NODES = 30; // safety cap — no franchise has 30+ entries in practice
-  const MAX_HOPS = 12;
+  const MAX_NODES = 30; // safety cap
+  const MAX_HOPS = 5; // Reduced max hops since we fetch bulk
   let hops = 0;
 
   while (queue.length > 0 && visited.size < MAX_NODES && hops < MAX_HOPS) {
-    // Process up to 3 nodes per hop in parallel to keep latency low
-    const batch = queue.splice(0, 3);
+    // Process all queued nodes in one single bulk request!
+    const batch = queue.splice(0, queue.length);
     hops++;
 
-    const results = await Promise.allSettled(
-      batch.map(id => anilistQuery(RELATIONS_QUERY, { id }))
-    );
+    try {
+      const result = await anilistQuery(RELATIONS_BULK_QUERY, { ids: batch });
+      const medias = result?.data?.Page?.media || [];
 
-    for (const result of results) {
-      if (result.status !== "fulfilled") continue;
-      const data = result.value?.data?.Media;
-      if (!data) continue;
+      for (const data of medias) {
+        if (!data) continue;
 
-      const nodeId = data.id as number;
-      if (!visited.has(nodeId)) {
-        visited.set(nodeId, {
-          id: nodeId,
-          idMal: data.idMal || null,
-          title: data.title?.english || data.title?.romaji || "",
-          episodes: data.episodes || null,
-          season: data.season || null,
-          seasonYear: data.seasonYear || null,
-          format: data.format || null,
-          duration: data.duration || null,
-        });
-      }
+        const nodeId = data.id as number;
+        if (!visited.has(nodeId)) {
+          visited.set(nodeId, {
+            id: nodeId,
+            idMal: data.idMal || null,
+            title: data.title?.english || data.title?.romaji || "",
+            episodes: data.episodes || null,
+            season: data.season || null,
+            seasonYear: data.seasonYear || null,
+            format: data.format || null,
+            duration: data.duration || null,
+          });
+        }
 
-      // Traverse edges
-      const edges = data.relations?.edges || [];
+        // Traverse edges
+        const edges = data.relations?.edges || [];
       for (const edge of edges) {
         const node = edge.node;
         const relType: string = edge.relationType || "";
@@ -455,6 +459,9 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
           }
         }
       }
+      }
+    } catch (e) {
+      console.warn("Bulk query failed:", e);
     }
 
     // Small delay between hops to be nice to AniList rate limits
@@ -653,7 +660,16 @@ function setCachedDetail(key: string, data: any) {
     const oldest = animeDetailCache.keys().next();
     if (!oldest.done) animeDetailCache.delete(oldest.value);
   }
-  animeDetailCache.set(key, { data, expires: Date.now() + 1800000 }); // 30 min TTL
+  const isDev = process.env.NODE_ENV === "development";
+  
+  // If data lacks franchise nodes (e.g. Jikan fallback), only cache for 1 minute so it can recover
+  const isDegraded = !data?.franchiseNodes || data.franchiseNodes.length === 0;
+  
+  let ttl = 1800000; // 30 min TTL
+  if (isDev) ttl = 5000; // 5 sec TTL in dev
+  else if (isDegraded) ttl = 60000; // 1 min TTL if degraded
+  
+  animeDetailCache.set(key, { data, expires: Date.now() + ttl });
 }
 
 const INITIAL_EP_LIMIT = 100;
@@ -1009,20 +1025,24 @@ export async function getAnimeDetails(
   }
 
   // Step 3: Build season list from the AniList franchise graph
-  // TO KEEP ANIMES SEPARATE AS REQUESTED BY USER, we only pass the current node to buildSeasonList!
-  const currentNode = franchiseNodes.find(n => n.id === numId) || franchiseNodes[0];
-  const baseSeasons = buildSeasonList([currentNode], numId);
+  const baseSeasons = buildSeasonList(franchiseNodes, numId);
   const mappedSeasons: SeasonInfo[] = [];
   const uniqueTmdbIds = new Set<number>();
   
+  // Also, add ALL franchise nodes as independent seasons in the Season Guide.
+  // We don't map them here to episodes, we just use them for navigation.
+  
   // Resolve TMDB show IDs for each AniList season in parallel
   const tmdbIds: Record<string, number | null> = {};
+  const allAniZipMappings: Record<string, any> = {};
+  
   await Promise.all(
     baseSeasons.map(async (s) => {
       try {
         let tid: number | null = null;
         if (s.id === id) {
           tid = tmdbId;
+          allAniZipMappings[s.id] = aniZipMapping;
         } else {
           try {
             const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
@@ -1031,6 +1051,7 @@ export async function getAnimeDetails(
             });
             if (azRes.ok) {
               const azJson = await azRes.json();
+              allAniZipMappings[s.id] = azJson;
               if (azJson.mappings?.themoviedb_id) {
                 tid = parseInt(azJson.mappings.themoviedb_id, 10);
                 if (isNaN(tid)) tid = null;
@@ -1081,7 +1102,9 @@ export async function getAnimeDetails(
       const tmdbSeasons = showSeasonsMap[tid] || [];
       const parsedSeasonNum = parseSeasonNumberFromTitle(s.name);
 
-      const azEp1 = s.id === String(numId) ? aniZipMapping?.episodes?.["1"] : null;
+      const sAniZip = allAniZipMappings[s.id];
+      const azEp1 = sAniZip?.episodes?.["1"];
+      
       if (azEp1?.seasonNumber !== undefined && azEp1?.episodeNumber !== undefined) {
         tmdbSeasonNum = azEp1.seasonNumber;
         episodeOffset = azEp1.episodeNumber - 1;
@@ -1106,6 +1129,7 @@ export async function getAnimeDetails(
 
         if (tmdbSeason) {
           tmdbSeasonNum = tmdbSeason.season_number;
+          // Calculate offset by looking at franchise node accumulation
           const key = `${tid}-${tmdbSeasonNum}`;
           episodeOffset = mappedEpisodesCount[key] || 0;
           mappedEpisodesCount[key] = episodeOffset + s.totalEpisodes;
@@ -1572,6 +1596,9 @@ export async function fetchAnimeApi(
           totalEpisodes: result.totalEpisodes,
           seasons: result.seasons,
           openedSeasonId: result.openedSeasonId,
+          franchiseNodes: result.franchiseNodes,
+          tmdbId: result.tmdbId,
+          tmdbSeasonMap: result.tmdbSeasonMap,
         },
       };
       detailCache.set(cacheKeyDetail, { data: response, expires: Date.now() + 300000 });

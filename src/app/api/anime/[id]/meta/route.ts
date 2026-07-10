@@ -20,6 +20,7 @@ export async function GET(
 
     const { anime, totalEpisodes, seasons, openedSeasonId, franchiseNodes, tmdbId, tmdbSeasonMap } = data;
 
+    const isDev = process.env.NODE_ENV === "development";
     return Response.json({
       success: true,
       data: {
@@ -33,7 +34,13 @@ export async function GET(
         franchiseNodes,
         tmdbSeasonMap,
       },
-    }, { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200" } });
+    }, { 
+      headers: { 
+        "Cache-Control": isDev 
+          ? "no-cache, no-store, must-revalidate" 
+          : "public, s-maxage=3600, stale-while-revalidate=7200" 
+      } 
+    });
   } catch (error) {
     console.error("[Anime Meta Error]:", error);
     return Response.json(

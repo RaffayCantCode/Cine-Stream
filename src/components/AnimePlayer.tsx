@@ -21,6 +21,7 @@ interface AnimePlayerProps {
   episodeOffset?: number;
   tmdbId?: number | null;
   tmdbSeason?: number | null;
+  isMovie?: boolean;
   startProgress?: number;
   onAutoNext?: () => void;
   onProgress?: (time: number) => void;
@@ -37,7 +38,6 @@ const PROVIDERS: ProviderSource[] = [
   { name: "Source 6", provider: "anyembed", color: "from-[#ff8c00]/30 to-[#ffa500]/20" },
 ];
 
-// Build a provider embed URL entirely client-side — no server round-trip needed
 function buildProviderUrl(
   provider: string,
   animeId: string,
@@ -48,7 +48,8 @@ function buildProviderUrl(
   episodeOffset: number,
   tmdbId: number | null | undefined,
   tmdbSeason: number | null | undefined,
-  startProgress?: number
+  startProgress?: number,
+  isMovie?: boolean
 ): string {
   const clean = (id: string | null | undefined) => id?.replace(/\D/g, "") || null;
   const curAni = clean(animeId);
@@ -71,23 +72,32 @@ function buildProviderUrl(
         : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
     case "vidlink":
       const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
-      return tmdbId
-        ? `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=false${timeParam}`
-        : `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?primaryColor=4b5694&autoplay=false&fallback=true${timeParam}`;
+      if (tmdbId) {
+        return isMovie 
+          ? `https://vidlink.pro/movie/${tmdbId}?primaryColor=4b5694&autoplay=true${timeParam}`
+          : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
+      }
+      return `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?primaryColor=4b5694&autoplay=true&fallback=true${timeParam}`;
     case "123embed":
-      return tmdbId
-        ? `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`
-        : malId_
-          ? `https://animeplay.cfd/stream/mal/${malId_}/${ep}/sub`
-          : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
+      if (tmdbId) {
+        return isMovie
+          ? `https://play2.123embed.net/movie/${tmdbId}`
+          : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
+      }
+      return malId_
+        ? `https://animeplay.cfd/stream/mal/${malId_}/${ep}/sub`
+        : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
     case "vidlink-alt":
       return malId_ || aniId
-        ? `https://vidlink.pro/anime/${malId_ || aniId}/${ep}/sub?primaryColor=4b5694&autoplay=false`
+        ? `https://vidlink.pro/anime/${malId_ || aniId}/${ep}/sub?primaryColor=4b5694&autoplay=true`
         : `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
     case "anyembed":
-      return tmdbId
-        ? `https://anyembed.xyz/embed/tmdb-tv-${tmdbId}-${tmdbSeason || 1}-${absEp}`
-        : `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
+      if (tmdbId) {
+        return isMovie
+          ? `https://anyembed.xyz/embed/tmdb-movie-${tmdbId}`
+          : `https://anyembed.xyz/embed/tmdb-tv-${tmdbId}-${tmdbSeason || 1}-${absEp}`;
+      }
+      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
     default:
       return "";
   }
@@ -103,6 +113,7 @@ export function AnimePlayer({
   episodeOffset,
   tmdbId,
   tmdbSeason,
+  isMovie,
   startProgress,
   onAutoNext,
   onProgress,
@@ -216,14 +227,14 @@ export function AnimePlayer({
     PROVIDERS.forEach(p => {
       urls[p.provider] = buildProviderUrl(
         p.provider, animeId, malId, rootAnimeId, rootMalId,
-        episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current
+        episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current, isMovie
       );
     });
     setResolvedUrls(urls);
     setRetryCount(0);
     setIsLoading(true);
     setHasError(false);
-  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason]);
+  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie]);
 
   // When source index changes, pick the pre-resolved URL instantly
   useEffect(() => {

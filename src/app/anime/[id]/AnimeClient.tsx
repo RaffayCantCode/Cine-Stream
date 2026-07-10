@@ -653,6 +653,7 @@ export default function AnimeClient() {
                           episodeOffset={currentEpisodeOffset}
                           tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
                           tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
+                          isMovie={anime?.format === 'MOVIE' || anime?.format === 'SPECIAL'}
                           startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
                           onAutoNext={handleAutoNext}
                         />
@@ -708,48 +709,9 @@ export default function AnimeClient() {
                       <aside className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col max-h-[60vh] xl:max-h-[70vh]">
                         <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
                           <div className="text-sm font-bold text-white flex items-center justify-between gap-2">
-                            {franchiseNodes.length > 1 ? (
-                              <div className="relative w-full max-w-[300px]">
-                                <button 
-                                  onClick={() => setSeasonDropdownOpen(!seasonDropdownOpen)}
-                                  onBlur={() => setTimeout(() => setSeasonDropdownOpen(false), 200)}
-                                  className="flex items-center justify-between w-full bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] text-white font-bold rounded-xl px-3 py-2.5 text-sm transition-all focus:ring-2 focus:ring-[#7288AE]/50 outline-none"
-                                >
-                                  <span className="truncate">
-                                    {franchiseNodes.find(n => String(n.id) === id)?.title || "Select Season"} 
-                                    {franchiseNodes.find(n => String(n.id) === id)?.seasonYear ? ` (${franchiseNodes.find(n => String(n.id) === id)?.seasonYear})` : ""}
-                                  </span>
-                                  <svg className={cn("w-4 h-4 ml-2 text-white/50 shrink-0 transition-transform duration-300", seasonDropdownOpen && "rotate-180")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                                </button>
-                                
-                                {seasonDropdownOpen && (
-                                  <div className="absolute top-full left-0 mt-2 w-[340px] max-w-[90vw] bg-[#0c0d14] border border-white/[0.08] rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] overflow-hidden z-50 flex flex-col max-h-72 overflow-y-auto backdrop-blur-xl">
-                                    {franchiseNodes.map(node => {
-                                      const isCurrent = String(node.id) === id;
-                                      return (
-                                        <button
-                                          key={node.id}
-                                          onClick={() => window.location.href = `/anime/${node.id}`}
-                                          className={cn(
-                                            "flex items-center justify-between w-full px-3 py-3 text-left text-sm transition-all",
-                                            isCurrent 
-                                              ? "bg-[#7288AE]/15 text-[#9cb1db] font-bold border-l-[3px] border-[#7288AE]" 
-                                              : "text-white/60 hover:bg-white/[0.05] hover:text-white border-l-[3px] border-transparent"
-                                          )}
-                                        >
-                                          <span className="truncate pr-3">
-                                            {node.title} {node.seasonYear ? `(${node.seasonYear})` : ""}
-                                          </span>
-                                          {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-[#7288AE] shrink-0 shadow-[0_0_8px_rgba(114,136,174,0.8)]" />}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span>{currentSeasonInfo?.seasonLabel || "Episodes"}</span>
-                            )}
+                            <span className="truncate">
+                              {franchiseNodes.find(n => String(n.id) === currentSeasonId)?.title || currentSeasonInfo?.seasonLabel || "Episodes"}
+                            </span>
                             <span className="text-xs font-normal text-white/40 whitespace-nowrap">{currentSeasonEps.length} eps</span>
                           </div>
                         </div>
@@ -901,31 +863,7 @@ export default function AnimeClient() {
                         {gridMode ? "List View" : "Grid View"}
                       </button>
                     )}
-                  {/* ── Season Tabs ── */}
-                  {seasons.length > 1 && (
-                    <>
-                      {seasons.map((season) => {
-                        const isActive = season.id === currentSeasonId;
-                        return (
-                          <button
-                            key={season.id}
-                            onClick={() => handleSeasonClick(season)}
-                            className={cn(
-                              "px-3.5 py-2 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap flex items-center gap-1.5",
-                              isActive
-                                ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                                : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
-                            )}
-                          >
-                            {season.seasonLabel}
-                            {isActive && episodesLoading && (
-                              <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </>
-                  )}
+
                   </div>
                 </div>
 
