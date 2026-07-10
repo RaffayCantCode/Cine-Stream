@@ -406,14 +406,18 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
     // Process all queued nodes in one single bulk request!
     const batch = queue.splice(0, queue.length);
     hops++;
-
     try {
-      const medias = (await Promise.all(
-        batch.map(async (nodeId) => {
+      const medias = [];
+      for (const nodeId of batch) {
+        try {
           const result = await anilistQuery(RELATIONS_SINGLE_QUERY, { id: nodeId });
-          return result?.data?.Media;
-        })
-      )).filter(Boolean);
+          if (result?.data?.Media) {
+            medias.push(result.data.Media);
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch relations for ${nodeId}`, e);
+        }
+      }
 
       for (const data of medias) {
         if (!data) continue;
@@ -434,34 +438,34 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
 
         // Traverse edges
         const edges = data.relations?.edges || [];
-      for (const edge of edges) {
-        const node = edge.node;
-        const relType: string = edge.relationType || "";
-        if (
-          !FRANCHISE_RELATION_TYPES.has(relType) ||
-          node.type !== "ANIME" ||
-          node.isAdult
-        ) continue;
+        for (const edge of edges) {
+          const node = edge.node;
+          const relType: string = edge.relationType || "";
+          if (
+            !FRANCHISE_RELATION_TYPES.has(relType) ||
+            node.type !== "ANIME" ||
+            node.isAdult
+          ) continue;
 
-        const neighborId = node.id as number;
-        if (!visited.has(neighborId)) {
-          // Pre-add to visited immediately (with data we already have) to prevent duplicates
-          visited.set(neighborId, {
-            id: neighborId,
-            idMal: node.idMal || null,
-            title: node.title?.english || node.title?.romaji || "",
-            episodes: node.episodes || null,
-            season: node.season || null,
-            seasonYear: node.seasonYear || null,
-            format: node.format || null,
-            duration: node.duration || null,
-          });
-          // Also queue it so we fetch its own relations (to continue the chain)
-          if (visited.size < MAX_NODES) {
-            queue.push(neighborId);
+          const neighborId = node.id as number;
+          if (!visited.has(neighborId)) {
+            // Pre-add to visited immediately (with data we already have) to prevent duplicates
+            visited.set(neighborId, {
+              id: neighborId,
+              idMal: node.idMal || null,
+              title: node.title?.english || node.title?.romaji || "",
+              episodes: node.episodes || null,
+              season: node.season || null,
+              seasonYear: node.seasonYear || null,
+              format: node.format || null,
+              duration: node.duration || null,
+            });
+            // Also queue it so we fetch its own relations (to continue the chain)
+            if (visited.size < MAX_NODES) {
+              queue.push(neighborId);
+            }
           }
         }
-      }
       }
     } catch (e) {
       console.warn("Bulk query failed:", e);
@@ -868,7 +872,7 @@ export async function getAnimeDetails(
         const jData = await jikanRes.json();
         const a = jData.data;
         if (a && a.rating !== "rx") {
-          const totalEps = Math.max(a.episodes || 12, 1);
+          const totalEps = Math.max(a.episodes || (a.status?.includes("Airing") ? 1500 : 12), 1);
           let episodes: EpisodeDetail[] = [];
           if (!skipEpisodes) {
             const realEps = await fetchEpisodesFromJikan(a.mal_id, String(id), Math.min(totalEps, epLimit));
@@ -1043,7 +1047,7 @@ export async function getAnimeDetails(
     baseSeasons.map(async (s) => {
       try {
         let tid: number | null = null;
-        if (s.id === id) {
+        if (String(s.id) === id) {
           tid = tmdbId;
           allAniZipMappings[s.id] = aniZipMapping;
         } else {
@@ -1152,7 +1156,7 @@ export async function getAnimeDetails(
   }
 
   // Step 4: Find the opened season (the one matching the requested ID)
-  let openedSeasonIndex = mappedSeasons.findIndex(s => s.id === id);
+  let openedSeasonIndex = mappedSeasons.findIndex(s => String(s.id) === id);
   if (openedSeasonIndex === -1) openedSeasonIndex = 0;
   const openedSeason = mappedSeasons[openedSeasonIndex];
   const activeSeasonId = openedSeason?.id || id;

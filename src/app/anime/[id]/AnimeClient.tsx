@@ -8,6 +8,8 @@ import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimePlayer } from "@/components/AnimePlayer";
 import { AnimeRow } from "@/components/AnimeRow";
+import { AnimeCard } from "@/components/AnimeCard";
+import { CastRow } from "@/components/CastRow";
 import { CinematicHero } from "@/components/CinematicHero";
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
@@ -1098,15 +1100,35 @@ export default function AnimeClient() {
               </section>
 
               {recommendations.length > 0 && (
-                <div className="-mx-5 md:-mx-0">
-                  <AnimeRow title="You May Like" items={recommendations} />
+                <>
+                <div className="mt-16 mb-6 px-5 md:px-0">
+                  <h2 className="text-lg md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
+                    You May Like
+                  </h2>
                 </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8 px-5 md:px-0">
+                  {recommendations.map((item: any, i: number) => (
+                    <AnimeCard key={item.id} item={item} index={i} />
+                  ))}
+                </div>
+                </>
               )}
 
               {recsLoading && !recommendations.length && (
-                <div className="-mx-5 md:-mx-0">
-                  <AnimeRow title="You May Like" isLoading items={[]} />
+                <>
+                <div className="mt-16 mb-6 px-5 md:px-0">
+                  <h2 className="text-lg md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
+                    You May Like
+                  </h2>
                 </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8 px-5 md:px-0">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div key={i} className="aspect-[2/3] w-full shrink-0 rounded-2xl shimmer" style={{ animationDelay: `${i * 80}ms` }} />
+                  ))}
+                </div>
+                </>
               )}
             </div>
           </>

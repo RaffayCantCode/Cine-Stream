@@ -79,6 +79,14 @@ export default function RootLayout({
             window.addEventListener('load', function() {
               navigator.serviceWorker.register('/sw.js', { scope: '/' })
                 .catch(function(err) { console.warn('SW registration failed:', err); });
+                
+              let refreshing = false;
+              navigator.serviceWorker.addEventListener('controllerchange', function() {
+                if (!refreshing) {
+                  refreshing = true;
+                  window.location.reload();
+                }
+              });
             });
           }
         `}} />

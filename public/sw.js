@@ -1,9 +1,9 @@
 // CineStream Service Worker
-// Strategy: Network-first for API/auth, Cache-first for static + images
+// Strategy: Network-first for API/auth/html, Cache-first for static + images
 
-const CACHE_NAME = 'cinestream-v1';
-const IMAGE_CACHE = 'cinestream-images-v1';
-const STATIC_CACHE = 'cinestream-static-v1';
+const CACHE_NAME = 'cinestream-v2';
+const IMAGE_CACHE = 'cinestream-images-v2';
+const STATIC_CACHE = 'cinestream-static-v2';
 
 const STATIC_ASSETS = ['/', '/manifest.json', '/favicon.svg'];
 
@@ -12,7 +12,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS))
   );
-  self.skipWaiting();
+  self.skipWaiting(); // Force the waiting service worker to become the active service worker
 });
 
 // Activate — clean old caches
@@ -26,7 +26,7 @@ self.addEventListener('activate', (event) => {
       )
     )
   );
-  self.clients.claim();
+  self.clients.claim(); // Claim clients immediately so the new SW takes control
 });
 
 self.addEventListener('fetch', (event) => {
@@ -42,6 +42,15 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('vidsrc') ||
     url.hostname.includes('embed')
   ) {
+    return;
+  }
+
+  // FORCE NETWORK AND BYPASS HTTP CACHE FOR HTML NAVIGATIONS
+  // This guarantees the user ALWAYS gets the newest Next.js build HTML
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request.url, { cache: 'no-store' }).catch(() => caches.match(request))
+    );
     return;
   }
 
