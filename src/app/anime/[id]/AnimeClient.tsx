@@ -112,7 +112,7 @@ export default function AnimeClient() {
     setSeasonOverview(null);
     try {
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}`
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}&v=2`
       );
       if (epData.success && epData.data?.episodes?.length) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
