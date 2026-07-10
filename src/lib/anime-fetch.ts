@@ -931,10 +931,18 @@ export async function getAnimeDetails(
               const tmdbData = await tmdbFetch(`/tv/${tmdbId}`) as { seasons?: { season_number: number }[] };
               const tmdbSeasons = tmdbData?.seasons || [];
               let tmdbSeasonNum = 1;
-              if (tmdbSeasons.length > 0) {
-                const season1 = tmdbSeasons.find(s => s.season_number === 1);
-                tmdbSeasonNum = season1 ? 1 : tmdbSeasons.find(s => s.season_number > 0)?.season_number || 1;
+              
+              if (aniZipMapping?.episodes?.["1"]?.tmdbSeason) {
+                tmdbSeasonNum = aniZipMapping.episodes["1"].tmdbSeason;
+              } else {
+                const matched = tmdbSeasons.find((s: any) => {
+                  if (!s.air_date) return false;
+                  const year = animeItem.seasonYear?.toString();
+                  return year ? s.air_date.startsWith(year) : false;
+                }) || tmdbSeasons.find((s: any) => s.season_number > 0);
+                tmdbSeasonNum = matched?.season_number || 1;
               }
+              
               jikanSeason.tmdbSeasonNumber = tmdbSeasonNum;
               jikanSeason.tmdbId = tmdbId;
               tmdbSeasonMap = { [String(id)]: tmdbSeasonNum };

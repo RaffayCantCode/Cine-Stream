@@ -172,8 +172,8 @@ export async function GET(
       let seasonEps: any[] = [];
       let seasonOverview: string | null = null;
 
-      // Guard against zero/undefined totalEpisodes — default to 12 for TV seasons
-      const safeTotalEpisodes = Math.max(season.totalEpisodes || 12, 1);
+      // Guard against zero/undefined totalEpisodes — default to 1500 for TV seasons
+      const safeTotalEpisodes = Math.max(season.totalEpisodes || 1500, 1);
       if (safeTotalEpisodes !== season.totalEpisodes) {
         console.warn(`[Episodes API] Clamped totalEpisodes from ${season.totalEpisodes} to ${safeTotalEpisodes} for seasonId=${seasonId}`);
       }
@@ -226,7 +226,10 @@ export async function GET(
         }
 
         const neededSeasons = new Set<number>();
-        const startSeason = tmdbSeasonNum || 1;
+        // If episodeOffset > 0, it represents the absolute episode number in the entire franchise.
+        // We MUST start searching from TMDB Season 1 to map it correctly.
+        // If episodeOffset === 0, it's either the first season, or an isolated season where tmdbSeasonNum is our only hint.
+        const startSeason = episodeOffset > 0 ? 1 : (tmdbSeasonNum || 1);
         for (let i = 1; i <= dynamicTotalEpisodes; i++) {
           const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
           neededSeasons.add(mapped.seasonNumber);

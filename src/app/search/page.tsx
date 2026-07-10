@@ -31,6 +31,7 @@ interface MediaItem {
 }
 
 function SearchContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const initialMode = searchParams.get("mode") || "";
@@ -57,16 +58,14 @@ function SearchContent() {
   // Sync state to URL
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (query) url.searchParams.set("q", query);
-      else url.searchParams.delete("q");
+      const params = new URLSearchParams();
+      if (query) params.set("q", query);
+      if (mode !== "all") params.set("mode", mode);
       
-      if (mode !== "all") url.searchParams.set("mode", mode);
-      else url.searchParams.delete("mode");
-      
-      window.history.replaceState({}, "", url.toString());
+      const searchString = params.toString() ? `?${params.toString()}` : '';
+      router.replace(`/search${searchString}`, { scroll: false });
     }
-  }, [query, mode]);
+  }, [query, mode, router]);
 
 
   useEffect(() => {

@@ -15,6 +15,69 @@ import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
 
+async function fetchFranchiseClientSide(startId: number) {
+  const RELATIONS_QUERY = `query ($id: Int) {
+    Media(id: $id, type: ANIME) {
+      id relations { edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format } } }
+    }
+  }`;
+  
+  const visited = new Map<number, any>();
+  const queue = [startId];
+  let hops = 0;
+  
+  while (queue.length > 0 && visited.size < 50 && hops < 15) {
+    const batch = queue.splice(0, queue.length);
+    hops++;
+    
+    await Promise.all(batch.map(async (nodeId) => {
+      try {
+        const res = await fetch("https://graphql.anilist.co", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({ query: RELATIONS_QUERY, variables: { id: nodeId } })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data?.data?.Media) return;
+        
+        const media = data.data.Media;
+        if (!visited.has(media.id)) {
+          visited.set(media.id, {
+            id: media.id, idMal: media.idMal || null, episodes: media.episodes,
+            season: media.season, seasonYear: media.seasonYear, format: media.format,
+            title: media.title?.english || media.title?.romaji || ""
+          });
+        }
+        
+        const edges = media.relations?.edges || [];
+        for (const edge of edges) {
+          if (!edge.node) continue;
+          const rType = edge.relationType;
+          if (["PREQUEL", "SEQUEL", "ALTERNATIVE", "PARENT", "SIDE_STORY"].includes(rType)) {
+            const relId = edge.node.id;
+            if (!visited.has(relId) && !queue.includes(relId)) {
+              queue.push(relId);
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }));
+  }
+  
+  const nodes = Array.from(visited.values());
+  const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
+  return nodes.sort((a, b) => {
+    const yearA = a.seasonYear || 9999;
+    const yearB = b.seasonYear || 9999;
+    if (yearA !== yearB) return yearA - yearB;
+    const formatOrder = { TV: 0, TV_SHORT: 1, ONA: 2, OVA: 3, SPECIAL: 4, MOVIE: 5 };
+    const fA = (formatOrder as any)[a.format || "TV"] ?? 6;
+    const fB = (formatOrder as any)[b.format || "TV"] ?? 6;
+    if (fA !== fB) return fA - fB;
+    return seasonOrder.indexOf(a.season || "FALL") - seasonOrder.indexOf(b.season || "FALL");
+  });
+}
 
 interface AnimeDetail {
   id: string;
@@ -161,7 +224,7 @@ export default function AnimeClient() {
           // 2) The openedSeasonId returned by the server
           // 3) Fallback: the first season in the list
           const seasons = a.seasons || [];
-          let urlSeasonId = null;
+          let urlSeasonId: string | null = null;
           const searchParams = new URLSearchParams(window.location.search);
           const urlSeasonNum = Number(searchParams.get("season") || "");
           
@@ -172,6 +235,33 @@ export default function AnimeClient() {
             if (saved) savedState = JSON.parse(saved);
           } catch {}
 
+          // Client-side fallback for Season Guide if server got rate-limited
+          let finalSeasons = seasons;
+          if (finalSeasons.length <= 1) {
+             const clientNodes = await fetchFranchiseClientSide(Number(id));
+             if (clientNodes.length > 1) {
+                // Map nodes to seasons
+                let cum = 0;
+                finalSeasons = clientNodes.map(node => {
+                  const isCurrent = node.id === Number(id);
+                  if (isCurrent) urlSeasonId = String(node.id);
+                  const res = {
+                    id: String(node.id),
+                    idMal: node.idMal || null,
+                    name: node.title,
+                    episodes: node.episodes,
+                    seasonLabel: `${node.season || ""} ${node.seasonYear || ""}`.trim() || node.format || "Unknown",
+                    episodeOffset: cum
+                  } as any;
+                  cum += (node.episodes || 12);
+                  return res;
+                });
+                
+                setFranchiseNodes(clientNodes);
+                setAnime(prev => prev ? { ...prev, seasons: finalSeasons } : prev);
+             }
+          }
+
           if (urlSeasonNum > 0 && data.data.tmdbSeasonMap) {
             const entry = Object.entries(data.data.tmdbSeasonMap).find(([_, num]) => num === urlSeasonNum);
             if (entry) urlSeasonId = entry[0];
@@ -179,14 +269,14 @@ export default function AnimeClient() {
             urlSeasonId = searchParams.get("seasonId");
           } else if (savedState?.seasonId) {
             urlSeasonId = savedState.seasonId;
+          } else if (data.data.anime.openedSeasonId) {
+            urlSeasonId = data.data.anime.openedSeasonId;
           }
 
-          const openedId = urlSeasonId || a.openedSeasonId || id;
-
           // Find it in the season list
-          const matchingSeason = seasons.find(s => s.id === openedId);
-          const activeSeason = matchingSeason || seasons[0];
-          const activeSeasonId = activeSeason?.id || openedId;
+          const matchingSeason = finalSeasons.find(s => s.id === urlSeasonId);
+          const activeSeason = matchingSeason || finalSeasons[0];
+          const activeSeasonId = activeSeason?.id || urlSeasonId || id;
 
           setCurrentSeasonId(activeSeasonId);
 
