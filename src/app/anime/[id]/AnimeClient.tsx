@@ -367,7 +367,7 @@ export default function AnimeClient() {
   const [gridMode, setGridMode] = useState(false);
 
   // ── Derived state ───────────────────────────────────────────────────────
-  const EPISODES_PER_PAGE = 20;
+  const INITIAL_EPISODES_PER_PAGE = 50;
 
   const seasons = useMemo(() => anime?.seasons || [], [anime]);
 
@@ -386,11 +386,11 @@ export default function AnimeClient() {
     [episodesBySeason, currentSeasonId]
   );
 
-  const [visibleCount, setVisibleCount] = useState(EPISODES_PER_PAGE);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_EPISODES_PER_PAGE);
 
   // Reset visible count when season changes
   useEffect(() => {
-    setVisibleCount(EPISODES_PER_PAGE);
+    setVisibleCount(INITIAL_EPISODES_PER_PAGE);
   }, [currentSeasonId]);
 
   const currentIdx = useMemo(
@@ -963,6 +963,8 @@ export default function AnimeClient() {
 
                   const sliceEps = currentSeasonEps.slice(0, visibleCount);
                   const hasMore = visibleCount < currentSeasonEps.length;
+                  const remainingEps = currentSeasonEps.length - visibleCount;
+                  const loadMoreCount = remainingEps >= 100 ? 100 : remainingEps >= 50 ? 50 : Math.min(20, remainingEps);
 
                   return (
                       <div
@@ -1084,10 +1086,10 @@ export default function AnimeClient() {
                           {hasMore && (
                             <div className="flex justify-center pt-2 pb-4">
                               <button
-                                onClick={() => setVisibleCount(c => c + EPISODES_PER_PAGE)}
+                                onClick={() => setVisibleCount(c => c + loadMoreCount)}
                                 className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
                               >
-                                Show {Math.min(EPISODES_PER_PAGE, currentSeasonEps.length - visibleCount)} More Episodes
+                                Show {loadMoreCount} More Episodes
                               </button>
                             </div>
                           )}

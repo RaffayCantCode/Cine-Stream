@@ -112,6 +112,7 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
         },
         body: JSON.stringify({ query, variables }),
         signal: controller.signal,
+        next: { revalidate: 86400 } as any,
       });
       
       clearTimeout(timeoutId);
@@ -385,13 +386,11 @@ const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL"]);
 // These formats get included in the season list
 const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "MOVIE"]);
 
-const RELATIONS_BULK_QUERY = `query ($ids: [Int]) {
-  Page {
-    media(id_in: $ids, type: ANIME) {
-      id idMal title { romaji english native } episodes season seasonYear format duration
-      relations {
-        edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult } }
-      }
+const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
+  Media(id: $id, type: ANIME) {
+    id idMal title { romaji english native } episodes season seasonYear format duration
+    relations {
+      edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult } }
     }
   }
 }`;
@@ -399,8 +398,8 @@ const RELATIONS_BULK_QUERY = `query ($ids: [Int]) {
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
   const visited = new Map<number, FranchiseNode>(); // id → node
   const queue: number[] = [startId];
-  const MAX_NODES = 30; // safety cap
-  const MAX_HOPS = 5; // Reduced max hops since we fetch bulk
+  const MAX_NODES = 50; // safety cap
+  const MAX_HOPS = 15; // Increased max hops for deep franchises like AOT and MHA
   let hops = 0;
 
   while (queue.length > 0 && visited.size < MAX_NODES && hops < MAX_HOPS) {
@@ -409,8 +408,12 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
     hops++;
 
     try {
-      const result = await anilistQuery(RELATIONS_BULK_QUERY, { ids: batch });
-      const medias = result?.data?.Page?.media || [];
+      const medias = (await Promise.all(
+        batch.map(async (nodeId) => {
+          const result = await anilistQuery(RELATIONS_SINGLE_QUERY, { id: nodeId });
+          return result?.data?.Media;
+        })
+      )).filter(Boolean);
 
       for (const data of medias) {
         if (!data) continue;
@@ -1298,6 +1301,7 @@ export async function fetchEpisodesFromAniZip(
   try {
     const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
       signal: AbortSignal.timeout(6000),
+      next: { revalidate: 86400 } as any,
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -1353,7 +1357,7 @@ export async function fetchEpisodesFromJikan(
     // First request to get total pages
     const firstRes = await fetch(
       `${JIKAN_BASE}/anime/${malId}/episodes?page=1`,
-      { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" } }
+      { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
     );
     if (!firstRes.ok) return null;
     
@@ -1384,20 +1388,26 @@ export async function fetchEpisodesFromJikan(
       const promises = [];
       
       for (let p = 2; p <= maxPagesToFetch; p++) {
-        const delay = (p - 2) * 350;
         promises.push(
-          new Promise<any>(resolve => setTimeout(resolve, delay)).then(async () => {
+          (async () => {
             try {
-              const res = await fetch(
-                `${JIKAN_BASE}/anime/${malId}/episodes?page=${p}`,
-                { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } }
-              );
+              const url = `${JIKAN_BASE}/anime/${malId}/episodes?page=${p}`;
+              const options = { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } };
+              const res = await fetch(url, options as any);
+              
+              if (res.status === 429) {
+                await new Promise(r => setTimeout(r, 1000 + (p * 350)));
+                const retryRes = await fetch(url, options as any);
+                if (retryRes.ok) return await retryRes.json();
+                return null;
+              }
+              
               if (res.ok) return await res.json();
             } catch {
               return null;
             }
             return null;
-          })
+          })()
         );
       }
       
@@ -1445,7 +1455,7 @@ export async function fetchEpisodesFromJikanPage(
     while (hasMore && allEps.length < limit) {
       const res = await fetch(
         `${JIKAN_BASE}/anime/${malId}/episodes?page=${page}`,
-        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" } }
+        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
       );
       if (res.status === 429 && retries < 3) {
         retries++;
