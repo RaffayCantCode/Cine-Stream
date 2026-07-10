@@ -905,9 +905,12 @@ export default function AnimeClient() {
                     );
                   }
 
+                  const sliceEps = currentSeasonEps.slice(0, visibleCount);
+                  const hasMore = visibleCount < currentSeasonEps.length;
+                  const remainingEps = currentSeasonEps.length - visibleCount;
+                  const loadMoreCount = remainingEps >= 100 ? 100 : remainingEps >= 50 ? 50 : Math.min(20, remainingEps);
+
                   if (gridMode) {
-                    const sliceEps = currentSeasonEps.slice(0, visibleCount);
-                    const hasMore = visibleCount < currentSeasonEps.length;
                     return (
                         <div
                           key={`grid-${currentSeasonId}`}
@@ -950,21 +953,16 @@ export default function AnimeClient() {
                           {hasMore && (
                             <div className="flex justify-center pt-4 pb-2">
                               <button
-                                onClick={() => setVisibleCount(c => c + EPISODES_PER_PAGE)}
+                                onClick={() => setVisibleCount(c => c + loadMoreCount)}
                                 className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
                               >
-                                Show {Math.min(EPISODES_PER_PAGE, currentSeasonEps.length - visibleCount)} More Episodes
+                                Show {loadMoreCount} More Episodes
                               </button>
                             </div>
                           )}
                         </div>
                     );
                   }
-
-                  const sliceEps = currentSeasonEps.slice(0, visibleCount);
-                  const hasMore = visibleCount < currentSeasonEps.length;
-                  const remainingEps = currentSeasonEps.length - visibleCount;
-                  const loadMoreCount = remainingEps >= 100 ? 100 : remainingEps >= 50 ? 50 : Math.min(20, remainingEps);
 
                   return (
                       <div
