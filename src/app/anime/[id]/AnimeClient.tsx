@@ -17,7 +17,9 @@ import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, B
 
 async function getAniZipMappingClientSide(anilistId: number) {
   try {
-    const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`);
+    const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
+      signal: AbortSignal.timeout(3000)
+    });
     if (res.ok) {
       const data = await res.json();
       const tmdbId = data.mappings?.themoviedb_id ? parseInt(data.mappings.themoviedb_id, 10) : null;
@@ -54,7 +56,8 @@ async function fetchFranchiseClientSide(startId: number) {
         const res = await fetch("https://graphql.anilist.co", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({ query: RELATIONS_QUERY, variables: { id: nodeId } })
+          body: JSON.stringify({ query: RELATIONS_QUERY, variables: { id: nodeId } }),
+          signal: AbortSignal.timeout(3000)
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -108,6 +111,7 @@ async function fetchFranchiseClientSide(startId: number) {
 }
 
 async function fetchAnimeMetaClientSide(idStr: string) {
+  if (!idStr) return null;
   const isMal = idStr.startsWith("mal-");
   const parsedId = parseInt(idStr.replace("mal-", ""), 10);
   if (isNaN(parsedId)) return null;
@@ -129,11 +133,12 @@ async function fetchAnimeMetaClientSide(idStr: string) {
   const variables = isMal ? { idMal: parsedId } : { id: parsedId };
 
   try {
-    const res = await fetch("https://graphql.anilist.co", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ query, variables })
-    });
+      const res = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ query, variables }),
+        signal: AbortSignal.timeout(4000)
+      });
     if (!res.ok) return null;
     const json = await res.json();
     const media = json?.data?.Media;
@@ -421,9 +426,9 @@ export default function AnimeClient() {
                 episodes: s.totalEpisodes || null,
                 season: null,
                 seasonYear: (s as any).seasonYear || null,
-                format: s.seasonLabel.startsWith("Movie") ? "MOVIE"
-                  : s.seasonLabel.startsWith("OVA") ? "OVA"
-                  : s.seasonLabel.startsWith("Special") ? "SPECIAL" : "TV",
+                format: s.seasonLabel?.startsWith("Movie") ? "MOVIE"
+                  : s.seasonLabel?.startsWith("OVA") ? "OVA"
+                  : s.seasonLabel?.startsWith("Special") ? "SPECIAL" : "TV",
               }));
             if (derivedNodes.length > 1) {
               setFranchiseNodes(derivedNodes);
@@ -767,9 +772,9 @@ export default function AnimeClient() {
   // start with "tmdb-" and won't work as streaming identifiers.
   // Fall back to the page's main AniList ID in that case.
   const streamingAnimeId = useMemo(() => {
-    const id = selectedEp?.seasonId || currentSeasonId;
-    if (id.startsWith("tmdb-")) return anime?.id || id;
-    return id;
+    const sId = selectedEp?.seasonId || currentSeasonId;
+    if (sId && sId.startsWith("tmdb-")) return anime?.id || sId;
+    return sId || "";
   }, [selectedEp?.seasonId, currentSeasonId, anime?.id]);
 
   const streamingMalId = useMemo(() => {
@@ -939,8 +944,8 @@ export default function AnimeClient() {
                   {seasons.length > 1 && (
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs font-bold text-[#7288AE] bg-[#4B5694]/15 border border-[#7288AE]/20 px-2.5 py-0.5 rounded-full">
-                        {seasons.filter(s => s.seasonLabel.startsWith("Season")).length} Seasons
-                        {seasons.filter(s => !s.seasonLabel.startsWith("Season")).length > 0 && ` + ${seasons.filter(s => !s.seasonLabel.startsWith("Season")).length} More`}
+                        {seasons.filter(s => s.seasonLabel?.startsWith("Season")).length} Seasons
+                        {seasons.filter(s => !s.seasonLabel?.startsWith("Season")).length > 0 && ` + ${seasons.filter(s => !s.seasonLabel?.startsWith("Season")).length} More`}
                       </span>
                     </div>
                   )}
