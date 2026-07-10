@@ -94,21 +94,8 @@ async function fetchFranchiseClientSide(startId: number) {
   
   const nodes = Array.from(visited.values()).filter(n => n.title); // Drop nodes with no title
   
-  // Resolve mappings in parallel for all nodes
-  const nodesWithMappings = await Promise.all(
-    nodes.map(async (node) => {
-      const mapping = await getAniZipMappingClientSide(node.id);
-      return {
-        ...node,
-        tmdbId: mapping?.tmdbId || null,
-        tmdbSeasonNumber: mapping?.tmdbSeasonNumber || null,
-        episodeOffset: mapping?.episodeOffset || 0,
-      };
-    })
-  );
-
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-  return nodesWithMappings.sort((a, b) => {
+  return nodes.sort((a, b) => {
     const yearA = a.seasonYear || 9999;
     const yearB = b.seasonYear || 9999;
     if (yearA !== yearB) return yearA - yearB;
