@@ -120,6 +120,9 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
       if (res.status === 429 && attempt < retries) {
         const retryAfter = res.headers.get("retry-after");
         const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * (attempt + 1);
+        if (delay > 3000) {
+          throw new Error("AniList rate limited with long delay");
+        }
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
@@ -407,17 +410,17 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
     const batch = queue.splice(0, queue.length);
     hops++;
     try {
-      const medias = [];
-      for (const nodeId of batch) {
-        try {
-          const result = await anilistQuery(RELATIONS_SINGLE_QUERY, { id: nodeId });
-          if (result?.data?.Media) {
-            medias.push(result.data.Media);
+      const medias = (await Promise.all(
+        batch.map(async (nodeId) => {
+          try {
+            const result = await anilistQuery(RELATIONS_SINGLE_QUERY, { id: nodeId });
+            return result?.data?.Media || null;
+          } catch (e) {
+            console.warn(`Failed to fetch relations for ${nodeId}`, e);
+            return null;
           }
-        } catch (e) {
-          console.warn(`Failed to fetch relations for ${nodeId}`, e);
-        }
-      }
+        })
+      )).filter(Boolean);
 
       for (const data of medias) {
         if (!data) continue;

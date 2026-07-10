@@ -348,7 +348,10 @@ export default function AnimeClient() {
       try {
         let data: any = null;
         try {
-          data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(`/api/anime/${id}/meta?v=4`);
+          data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
+            `/api/anime/${id}/meta?v=4`,
+            { signal: AbortSignal.timeout(15000) }
+          );
         } catch (e) {
           console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
         }
@@ -364,6 +367,7 @@ export default function AnimeClient() {
         if (cancelled) return;
         if (data && data.success && data.data?.anime) {
           const a = data.data.anime;
+          setIsLoading(false); // Set false before setting anime to avoid cancelled effect skipping
           setAnime(a);
           if (data.data.franchiseNodes) setFranchiseNodes(data.data.franchiseNodes);
           tmdbIdRef.current = a.tmdbId || null;
@@ -465,15 +469,16 @@ export default function AnimeClient() {
           throw new Error("Anime not found");
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load anime");
-      } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load anime");
+          setIsLoading(false);
+        }
       }
     };
 
     loadMeta();
     return () => { cancelled = true; };
-  }, [id, loadSeasonEpisodes, authStatus, session, anime]);
+  }, [id, loadSeasonEpisodes, authStatus, session]);
 
   // ── Fetch You May Like recommendations ─────────────────────────────────
   useEffect(() => {

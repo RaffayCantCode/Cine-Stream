@@ -19,14 +19,15 @@ export async function GET(
     }
 
     // Helper function to fetch item details
-    const fetchItem = async (item: { id: number; media_type: string; anilist_id?: number; title?: string; release_date?: string }) => {
+    const fetchItem = async (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string }) => {
       try {
-        const endpoint = item.media_type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
+        const tmdbType = item.tmdb_type || (item.media_type === "movie" ? "movie" : "tv");
+        const endpoint = `/${tmdbType}/${item.id}`;
         const data = await tmdbFetch(`${endpoint}?language=en-US`) as any;
         
-        let poster_path = data.poster_path;
+        let poster_path = item.poster_path || data.poster_path;
         
-        if (item.media_type === "anime" && item.anilist_id) {
+        if (!item.poster_path && item.media_type === "anime" && item.anilist_id) {
           try {
             const query = `query ($id: Int) { Media(id: $id, type: ANIME) { coverImage { extraLarge large } } }`;
             const alRes = await fetch("https://graphql.anilist.co", {

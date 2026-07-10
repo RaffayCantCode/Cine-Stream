@@ -1,9 +1,11 @@
 export interface FranchiseItem {
   id: number;
   media_type: "movie" | "tv" | "anime";
+  tmdb_type?: "movie" | "tv";
   anilist_id?: number;
   title?: string;
   release_date?: string;
+  poster_path?: string;
 }
 
 export interface FranchiseGroup {
@@ -718,12 +720,12 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/mLKN1dsimKPiXCZ48KED0X8a02t.jpg",
     poster_path: "/ogAWwbh3frWtiTyyXrZaVFtqCgp.jpg",
     items: [
-      { id: 45790, media_type: "anime", anilist_id: 14719, title: "Phantom Blood & Battle Tendency (Part 1 & 2)" },
-      { id: 45790, media_type: "anime", anilist_id: 20474, title: "Stardust Crusaders (Part 3)" },
-      { id: 45790, media_type: "anime", anilist_id: 20799, title: "Stardust Crusaders - Battle in Egypt" },
-      { id: 45790, media_type: "anime", anilist_id: 21450, title: "Diamond is Unbreakable (Part 4)" },
-      { id: 45790, media_type: "anime", anilist_id: 102883, title: "Golden Wind (Part 5)" },
-      { id: 45790, media_type: "anime", anilist_id: 131942, title: "Stone Ocean (Part 6)" },
+      { id: 45790, media_type: "anime", anilist_id: 14719, title: "Phantom Blood & Battle Tendency (Part 1 & 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx14719-VT5dRzTBSZ0w.jpg" },
+      { id: 45790, media_type: "anime", anilist_id: 20474, title: "Stardust Crusaders (Part 3)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20474-xuqem5GBlBtb.jpg" },
+      { id: 45790, media_type: "anime", anilist_id: 20799, title: "Stardust Crusaders - Battle in Egypt", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20799-S1eyqBDlx51E.jpg" },
+      { id: 45790, media_type: "anime", anilist_id: 21450, title: "Diamond is Unbreakable (Part 4)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21450-D7XFwEQjZ5GA.jpg" },
+      { id: 45790, media_type: "anime", anilist_id: 102883, title: "Golden Wind (Part 5)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx102883-S9KzdMJhDswJ.png" },
+      { id: 45790, media_type: "anime", anilist_id: 131942, title: "Stone Ocean (Part 6)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131942-rermlZ9lplHX.png" },
     ]
   },
   {
@@ -733,17 +735,17 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/b2mskN6F9kUolFc8mTBiEJwfXLC.jpg",
     poster_path: "/x7nYPOveHhINREhTtwBHot9ersB.jpg",
     items: [
-      { id: 45845, media_type: "anime", anilist_id: 10087, title: "Fate/Zero (Season 1)" },
-      { id: 45845, media_type: "anime", anilist_id: 11741, title: "Fate/Zero (Season 2)" },
-      { id: 37858, media_type: "anime", anilist_id: 356, title: "Fate/stay night (2006)" },
-      { id: 61415, media_type: "anime", anilist_id: 19603, title: "Unlimited Blade Works (Season 1)" },
-      { id: 61415, media_type: "anime", anilist_id: 20792, title: "Unlimited Blade Works (Season 2)" },
-      { id: 1445, media_type: "anime", anilist_id: 20791, title: "Heaven's Feel I. presage flower" },
-      { id: 1445, media_type: "anime", anilist_id: 21718, title: "Heaven's Feel II. lost butterfly" },
-      { id: 1445, media_type: "anime", anilist_id: 21719, title: "Heaven's Feel III. spring song" },
-      { id: 72304, media_type: "anime", anilist_id: 98035, title: "Fate/Apocrypha" },
-      { id: 90677, media_type: "anime", anilist_id: 103275, title: "Fate/Grand Order: Babylonia" },
-      { id: 219816, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake" },
+      { id: 45845, media_type: "anime", anilist_id: 10087, title: "Fate/Zero (Season 1)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx10087-M4Hd9qrHGrXk.png" },
+      { id: 45845, media_type: "anime", anilist_id: 11741, title: "Fate/Zero (Season 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx11741-oEy1fJHYm2zJ.jpg" },
+      { id: 37858, media_type: "anime", anilist_id: 356, title: "Fate/stay night (2006)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx356-mTpMvtillumS.png" },
+      { id: 61415, media_type: "anime", anilist_id: 19603, title: "Unlimited Blade Works (Season 1)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx19603-ycT0pyEgDVQu.jpg" },
+      { id: 61415, media_type: "anime", anilist_id: 20792, title: "Unlimited Blade Works (Season 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20792-Q53sZsUAh5FF.jpg" },
+      { id: 441130, media_type: "anime", tmdb_type: "movie", anilist_id: 20791, title: "Heaven's Feel I. presage flower", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20791-yPCX5GJuMH2k.png" },
+      { id: 530254, media_type: "anime", tmdb_type: "movie", anilist_id: 21718, title: "Heaven's Feel II. lost butterfly", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21718-Hjj26Sapx1bd.jpg" },
+      { id: 556973, media_type: "anime", tmdb_type: "movie", anilist_id: 21719, title: "Heaven's Feel III. spring song", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21719-MSdTlkno0Z0u.jpg" },
+      { id: 72304, media_type: "anime", anilist_id: 98035, title: "Fate/Apocrypha", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx98035-rdkjeqUUsG2j.jpg" },
+      { id: 90677, media_type: "anime", anilist_id: 103275, title: "Fate/Grand Order: Babylonia", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx103275-SN0wwshS3tWA.jpg" },
+      { id: 219816, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154966-eQRCmSrCh96j.png" },
     ]
   }
 ];
