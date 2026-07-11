@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Star, Play } from "lucide-react";
-import { isTmdbAnime } from "@/lib/utils";
 
 interface MediaItem {
   id: number;
@@ -33,13 +32,9 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
 export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
   const isPerson = item.media_type === "person";
   const isMovie = item.media_type === "movie" || (!isPerson && !!item.title);
-  const isAnime = isTmdbAnime(item);
   const title = item.title || item.name || "";
   let link = isPerson ? `/person/${item.id}` : isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
 
-  if (isAnime) {
-    link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
-  }
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.profile_path 
@@ -142,11 +137,6 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
           </div>
         ) : null}
 
-        {isAnime && (
-          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90 text-white text-[10px] sm:text-[11px] font-black px-2 py-1 rounded-md backdrop-blur-sm tracking-widest uppercase group-hover:opacity-0 transition-opacity duration-300 shadow-lg">
-            JP Sub
-          </div>
-        )}
         </div>
       </Link>
     </div>

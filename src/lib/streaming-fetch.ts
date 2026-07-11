@@ -18,22 +18,6 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
-    baseUrl: "https://vidfast.pro",
-    type: "vidfast",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidfast.pro",
-  },
-  {
-    name: "Source 3 (Saves Progress)",
-    baseUrl: "https://vidlink.pro",
-    type: "vidlink",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidlink.pro",
-  },
-  {
-    name: "Source 4",
     baseUrl: "https://vidsrc.to",
     type: "vidsrc",
     quality: "Best",
@@ -41,7 +25,31 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://vidsrc.to",
   },
   {
+    name: "Source 3",
+    baseUrl: "https://autoembed.co",
+    type: "autoembed",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://autoembed.co",
+  },
+  {
+    name: "Source 4",
+    baseUrl: "https://vidfast.to",
+    type: "vidfast",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidfast.to",
+  },
+  {
     name: "Source 5",
+    baseUrl: "https://vidlink.pro",
+    type: "vidlink",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidlink.pro",
+  },
+  {
+    name: "Source 6",
     baseUrl: "https://www.2embed.cc",
     type: "twoembed",
     quality: "Best",
@@ -53,25 +61,29 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): string {
   switch (api.type) {
     case "vixsrc":
-      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
-      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?ds_lang=en`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?ds_lang=en`;
 
     case "twoembed":
       if (type === "movie") return `${api.baseUrl}/embed/${id}`;
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
-
-    case "vidlink":
-      const timeParam = progress && progress > 0 ? `&t=${progress}` : "";
-      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=4b5694&autoplay=true${timeParam}`;
-      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=4b5694&autoplay=true${timeParam}`;
+      return `${api.baseUrl}/embedtv/${id}&s=${season ?? 1}&e=${episode ?? 1}`;
 
     case "vidsrc":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}?ds_lang=en&color=8B5CF6`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?ds_lang=en&color=8B5CF6`;
+
+
+    case "autoembed":
+      if (type === "movie") return `${api.baseUrl}/movie/tmdb/${id}?color=8B5CF6&lang=en`;
+      return `${api.baseUrl}/tv/tmdb/${id}-${season ?? 1}-${episode ?? 1}?color=8B5CF6&lang=en`;
 
     case "vidfast":
-      if (type === "movie") return `${api.baseUrl}/movie/${id}?autoPlay=true`;
-      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?autoPlay=true`;
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}?lang=en`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?lang=en`;
+
+    case "vidlink":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=8B5CF6&autoplay=false`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?primaryColor=8B5CF6&autoplay=false`;
 
     default:
       return "";

@@ -22,9 +22,10 @@ interface VideoPlayerProps {
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   vixsrc: { bg: "bg-teal-600", badge: "bg-teal-500/20 text-teal-300" },
   twoembed: { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
-  vidlink: { bg: "bg-violet-600", badge: "bg-violet-500/20 text-violet-300" },
-  vidsrc: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
   vidfast: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
+  vidlink: { bg: "bg-fuchsia-600", badge: "bg-fuchsia-500/20 text-fuchsia-300" },
+  vidsrc: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
+  autoembed: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -302,11 +303,16 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
       </div>
 
         {showSources && (
-          <div
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl animate-fade-in-up"
-            style={{ animationDuration: "0.2s" }}
-          >
-            {sources.map((source) => {
+          <div className="space-y-3 animate-fade-in-up" style={{ animationDuration: "0.2s" }}>
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-amber-200/80 text-xs leading-relaxed">
+                <strong className="text-amber-400 font-bold block mb-0.5">Try different sources!</strong>
+                If a video is buffering, loads slowly, or shows an error, simply try another source. Some servers may be experiencing high load.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl">
+              {sources.map((source) => {
               const isActive = currentSource?.name === source.name;
               const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.vixsrc;
               return (
@@ -330,7 +336,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
               );
             })}
             </div>
-          )}
+          </div>
+        )}
 
       <div
         ref={playerContainerRef}
