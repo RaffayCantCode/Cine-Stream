@@ -21,6 +21,11 @@ export async function GET(
     const { anime, totalEpisodes, seasons, openedSeasonId, franchiseNodes, tmdbId, tmdbSeasonMap } = data;
 
     const isDev = process.env.NODE_ENV === "development";
+    // Check if the result is degraded (any season missing tmdbSeasonNumber)
+    const isDegraded = seasons.some((s: any) => s.tmdbSeasonNumber == null && s.seasonLabel?.startsWith("Season"));
+    // Use short CDN cache for degraded results so they are quickly replaced.
+    // Healthy results use a longer 30-min CDN cache (server in-memory cache is still 30min).
+    const cdnMaxAge = isDegraded ? 30 : 1800;
     return Response.json({
       success: true,
       data: {
@@ -38,7 +43,7 @@ export async function GET(
       headers: { 
         "Cache-Control": isDev 
           ? "no-cache, no-store, must-revalidate" 
-          : "public, s-maxage=3600, stale-while-revalidate=7200" 
+          : `public, s-maxage=${cdnMaxAge}, stale-while-revalidate=${cdnMaxAge * 2}` 
       } 
     });
   } catch (error) {

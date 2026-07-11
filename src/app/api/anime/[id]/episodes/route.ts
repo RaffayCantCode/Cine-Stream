@@ -124,67 +124,102 @@ export async function GET(
 
     // ── Fetch a specific season's episodes by its AniList ID ───────────────
     if (seasonId) {
-      console.log(`[Episodes API] Fetching seasonId=${seasonId} for anime id=${id}`);
-      let meta = await getAnimeDetails(id, 1500, true);
-      if (!meta) {
-        console.error(`[Episodes API] getAnimeDetails returned null for id=${id}`);
-        throw new Error("Anime not found");
-      }
-
       const tmdbIdParam = searchParams.get("tmdbId");
       const tmdbSeasonParam = searchParams.get("tmdbSeason");
       const episodeOffsetParam = searchParams.get("episodeOffset");
 
-      const clientTmdbId = tmdbIdParam ? parseInt(tmdbIdParam, 10) : null;
-      const clientTmdbSeasonNum = tmdbSeasonParam ? parseInt(tmdbSeasonParam, 10) : null;
-      const clientEpisodeOffset = episodeOffsetParam ? parseInt(episodeOffsetParam, 10) : 0;
+      // Parse client params — note: tmdbSeason=1 and episodeOffset=0 are valid and must NOT be skipped!
+      const clientTmdbId = tmdbIdParam != null ? parseInt(tmdbIdParam, 10) : null;
+      const clientTmdbSeasonNum = tmdbSeasonParam != null ? parseInt(tmdbSeasonParam, 10) : null;
+      const clientEpisodeOffset = episodeOffsetParam != null ? parseInt(episodeOffsetParam, 10) : null;
 
-      let season = meta.seasons.find(s => s.id === seasonId);
-      console.log(`[Episodes API] Initial season lookup: found=${!!season}, available seasons:`, meta.seasons.map(s => ({ id: s.id, name: s.name, label: s.seasonLabel, totalEp: s.totalEpisodes, tmdbId: (s as any).tmdbId, tmdbSeasonNum: s.tmdbSeasonNumber })));
+      // When all mapping params are provided by client, we don't need to derive them from meta.
+      // This is the fast path and avoids the AniZip cold-start race condition on Cloudflare edge.
+      const allParamsProvided = clientTmdbId != null && !isNaN(clientTmdbId) &&
+                                clientTmdbSeasonNum != null && !isNaN(clientTmdbSeasonNum) &&
+                                clientEpisodeOffset != null && !isNaN(clientEpisodeOffset);
 
-      if (!season && (clientTmdbId || clientTmdbSeasonNum !== null)) {
-        console.log(`[Episodes API] Season not found in meta, constructing synthetic season from client params: tmdbId=${clientTmdbId}, season=${clientTmdbSeasonNum}`);
+      let season: any = null;
+      let meta: any = null;
+      let seasonNumFromList = 1;
+
+      if (allParamsProvided) {
+        // Fast path: trust client params, fetch meta only for supplementary data (name, idMal, totalEpisodes)
+        console.log(`[Episodes API] Fast path: all params provided. seasonId=${seasonId}, tmdbId=${clientTmdbId}, tmdbSeason=${clientTmdbSeasonNum}, offset=${clientEpisodeOffset}`);
+        meta = await getAnimeDetails(seasonId, 1500, true).catch(() => null);
+        if (!meta) {
+          meta = await getAnimeDetails(id, 1500, true).catch(() => null);
+        }
+
+        const foundInMeta = meta?.seasons?.find((s: any) => s.id === seasonId);
         season = {
           id: seasonId,
-          name: meta.anime.name,
-          seasonLabel: "Episodes",
-          totalEpisodes: meta.totalEpisodes || 12,
-          isCurrent: seasonId === id,
-          idMal: meta.anime.idMal ? parseInt(meta.anime.idMal, 10) : null,
+          name: foundInMeta?.name || meta?.anime?.name || "Unknown",
+          seasonLabel: foundInMeta?.seasonLabel || "Episodes",
+          totalEpisodes: foundInMeta?.totalEpisodes || meta?.totalEpisodes || 12,
+          isCurrent: true,
+          idMal: foundInMeta?.idMal ?? (meta?.anime?.idMal ? parseInt(meta.anime.idMal, 10) : null),
           tmdbId: clientTmdbId,
           tmdbSeasonNumber: clientTmdbSeasonNum,
           episodeOffset: clientEpisodeOffset,
-        } as any;
-      }
+        };
 
-      if (!season) {
-        // Cache might be stale (AniList API transient failure on earlier fetch).
-        // Force a fresh fetch with a different cache key.
-        console.log(`[Episodes API] Season not found, forcing fresh fetch`);
-        const freshMeta = await getAnimeDetails(id, 1500, true);
-        if (freshMeta) {
-          meta = freshMeta;
-          season = meta.seasons.find(s => s.id === seasonId);
-          console.log(`[Episodes API] Fresh fetch season lookup: found=${!!season}`);
+        if (meta?.seasons) {
+          const idx = meta.seasons.findIndex((s: any) => s.id === seasonId);
+          seasonNumFromList = idx >= 0 ? idx + 1 : 1;
         }
+      } else {
+        // Slow path: derive mapping data from full meta lookup
+        console.log(`[Episodes API] Slow path: fetching full meta for seasonId=${seasonId}, anime id=${id}`);
+        meta = await getAnimeDetails(id, 1500, true);
+        if (!meta) {
+          console.error(`[Episodes API] getAnimeDetails returned null for id=${id}`);
+          throw new Error("Anime not found");
+        }
+
+        season = meta.seasons.find((s: any) => s.id === seasonId);
+        console.log(`[Episodes API] Season lookup: found=${!!season}, seasons:`, meta.seasons.map((s: any) => ({ id: s.id, label: s.seasonLabel, tmdbSeason: s.tmdbSeasonNumber, offset: s.episodeOffset })));
+
+        if (!season && (clientTmdbId != null || clientTmdbSeasonNum != null)) {
+          season = {
+            id: seasonId,
+            name: meta.anime.name,
+            seasonLabel: "Episodes",
+            totalEpisodes: meta.totalEpisodes || 12,
+            isCurrent: seasonId === id,
+            idMal: meta.anime.idMal ? parseInt(meta.anime.idMal, 10) : null,
+            tmdbId: clientTmdbId,
+            tmdbSeasonNumber: clientTmdbSeasonNum,
+            episodeOffset: clientEpisodeOffset ?? 0,
+          };
+        }
+
+        if (!season) {
+          console.log(`[Episodes API] Season not found, forcing fresh fetch`);
+          const freshMeta = await getAnimeDetails(id, 1500, true);
+          if (freshMeta) {
+            meta = freshMeta;
+            season = meta.seasons.find((s: any) => s.id === seasonId);
+          }
+        }
+
+        if (!season) {
+          console.warn(`[Episodes API] Season ${seasonId} not found in any meta result`);
+          return Response.json({ success: true, data: { episodes: [], totalEpisodes: 0 } });
+        }
+
+        const idx = meta.seasons.findIndex((s: any) => s.id === seasonId);
+        seasonNumFromList = idx >= 0 ? idx + 1 : 1;
       }
 
-      if (!season) {
-        console.warn(`[Episodes API] Season ${seasonId} not found in any meta result`);
-        return Response.json({
-          success: true,
-          data: { episodes: [], totalEpisodes: 0 },
-        });
-      }
-
-      const tmdbId = clientTmdbId || (season as any).tmdbId;
-      const tmdbSeasonNum = clientTmdbSeasonNum !== null ? clientTmdbSeasonNum : season.tmdbSeasonNumber;
-      const episodeOffset = tmdbIdParam && episodeOffsetParam !== null ? clientEpisodeOffset : ((season as any).episodeOffset || 0);
+      // Client params always win over server-derived values
+      const tmdbId = clientTmdbId ?? (season as any).tmdbId;
+      const tmdbSeasonNum = clientTmdbSeasonNum ?? season.tmdbSeasonNumber;
+      const episodeOffset = clientEpisodeOffset ?? (season as any).episodeOffset ?? 0;
 
       console.log(`[Episodes API] Using mapping details: tmdbId=${tmdbId}, tmdbSeasonNum=${tmdbSeasonNum}, episodeOffset=${episodeOffset}`);
 
-      const seasonNumFromList = meta.seasons.findIndex(s => s.id === seasonId) + 1 || 1;
-      const isTMDBReady = tmdbId && tmdbSeasonNum !== undefined && tmdbSeasonNum !== null;
+      const isTMDBReady = tmdbId != null && !isNaN(tmdbId) && tmdbSeasonNum != null && !isNaN(tmdbSeasonNum);
 
 
       let seasonEps: any[] = [];
@@ -229,7 +264,7 @@ export async function GET(
         const knownEpisodeCount = season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
         if (tmdbSeasonsList.length > 0) {
           const currentTmdbSeason = tmdbSeasonsList.find((s: any) => s.season_number === (tmdbSeasonNum || 1));
-          const nextSeasonInTMDB = meta.seasons.find((s: any) => 
+          const nextSeasonInTMDB = (meta?.seasons || []).find((s: any) => 
             s.tmdbSeasonNumber === (tmdbSeasonNum || 1) && 
             (s.episodeOffset || 0) > episodeOffset &&
             s.totalEpisodes > 2 // Ignore OVAs and specials when clamping

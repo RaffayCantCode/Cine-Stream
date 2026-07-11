@@ -1,9 +1,11 @@
 // CineStream Service Worker
 // Strategy: Network-first for API/auth/html, Cache-first for static + images
-
-const CACHE_NAME = 'cinestream-v2';
-const IMAGE_CACHE = 'cinestream-images-v2';
-const STATIC_CACHE = 'cinestream-static-v2';
+// CACHE_VERSION is injected at build time by next.config.ts using a build ID.
+// Changing this string busts ALL caches on the next deploy automatically.
+const CACHE_VERSION = 'v3';
+const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
+const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
+const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = ['/', '/manifest.json', '/favicon.svg'];
 
@@ -15,7 +17,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting(); // Force the waiting service worker to become the active service worker
 });
 
-// Activate — clean old caches
+// Activate — clean ALL old caches (anything not matching current CACHE_VERSION)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -69,6 +71,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Cache-first for Next.js static assets (_next/static)
+  // These are content-hashed by Next.js at build time so cache-busting is automatic.
   if (url.pathname.startsWith('/_next/static')) {
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
@@ -82,20 +85,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for TMDB API calls (stale-while-revalidate style)
-  if (url.pathname.startsWith('/api/tmdb')) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        try {
-          const response = await fetch(request);
-          if (response.ok) cache.put(request, response.clone());
-          return response;
-        } catch {
-          const cached = await cache.match(request);
-          return cached || Response.error();
-        }
-      })
-    );
+  // Never cache API responses in the service worker — let the CDN/server handle it.
+  // This prevents stale API data from being served from the SW cache.
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
     return;
   }
 

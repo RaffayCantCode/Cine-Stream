@@ -321,9 +321,10 @@ export default function AnimeClient() {
     setEpisodesLoading(true);
     setSeasonOverview(null);
 
-    const tmdbIdQuery = clientTmdbId ? `&tmdbId=${clientTmdbId}` : "";
-    const tmdbSeasonQuery = clientTmdbSeason ? `&tmdbSeason=${clientTmdbSeason}` : "";
-    const episodeOffsetQuery = clientEpisodeOffset !== undefined && clientEpisodeOffset !== null ? `&episodeOffset=${clientEpisodeOffset}` : "";
+    const tmdbIdQuery = clientTmdbId != null ? `&tmdbId=${clientTmdbId}` : "";
+    // Always send tmdbSeason and episodeOffset when known — never skip on 0 (falsy)
+    const tmdbSeasonQuery = clientTmdbSeason != null ? `&tmdbSeason=${clientTmdbSeason}` : "";
+    const episodeOffsetQuery = clientEpisodeOffset != null ? `&episodeOffset=${clientEpisodeOffset}` : "";
 
     try {
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
@@ -556,17 +557,23 @@ export default function AnimeClient() {
             const mapping = await getAniZipMappingClientSide(Number(s.id));
             if (mapping && active) {
               const current = updatedSeasons[idx];
-              if (
-                current.tmdbSeasonNumber !== mapping.tmdbSeasonNumber ||
-                (current as any).episodeOffset !== mapping.episodeOffset ||
-                (current as any).tmdbId !== mapping.tmdbId
-              ) {
-                console.log(`[Anime Mappings] Background correction for "${s.name}": corrected tmdbSeasonNumber=${mapping.tmdbSeasonNumber}, episodeOffset=${mapping.episodeOffset}`);
+              // Resolve effective values — mapping values win only if they are not null
+              const resolvedTmdbId = mapping.tmdbId || (current as any).tmdbId;
+              const resolvedTmdbSeason = mapping.tmdbSeasonNumber ?? current.tmdbSeasonNumber;
+              const resolvedOffset = mapping.episodeOffset !== undefined ? mapping.episodeOffset : ((current as any).episodeOffset ?? 0);
+              
+              const effectivelyChanged = 
+                resolvedTmdbSeason !== current.tmdbSeasonNumber ||
+                resolvedOffset !== ((current as any).episodeOffset ?? 0) ||
+                resolvedTmdbId !== (current as any).tmdbId;
+
+              if (effectivelyChanged) {
+                console.log(`[Anime Mappings] Background correction for "${s.name}": tmdbSeasonNumber=${resolvedTmdbSeason}, episodeOffset=${resolvedOffset}`);
                 updatedSeasons[idx] = {
                   ...current,
-                  tmdbId: mapping.tmdbId || (current as any).tmdbId,
-                  tmdbSeasonNumber: mapping.tmdbSeasonNumber || current.tmdbSeasonNumber,
-                  episodeOffset: mapping.episodeOffset !== undefined ? mapping.episodeOffset : (current as any).episodeOffset,
+                  tmdbId: resolvedTmdbId,
+                  tmdbSeasonNumber: resolvedTmdbSeason,
+                  episodeOffset: resolvedOffset,
                 } as any;
                 changed = true;
               }
