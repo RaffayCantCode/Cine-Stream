@@ -179,13 +179,13 @@ export default function TvClient() {
 
   // Persist state
   useEffect(() => {
-    if (typeof window !== "undefined" && status !== "loading") {
+    if (typeof window !== "undefined" && status !== "loading" && isStateLoaded) {
       try {
         const userId = session?.user?.id || "guest";
         localStorage.setItem(`sv_tv_state_${userId}_${id}`, JSON.stringify({ season: playingSeason, episode: playingEpisode }));
       } catch {}
     }
-  }, [id, playingSeason, playingEpisode, status, session]);
+  }, [id, playingSeason, playingEpisode, status, session, isStateLoaded]);
 
   useEffect(() => {
     if (!selectedSeason) return;
@@ -335,7 +335,7 @@ export default function TvClient() {
     <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 bleed-header">
+      <main className="md:pl-56 lg:pl-64 bleed-header select-none">
       <CinematicHero
         backdropPath={show.backdrop_path || show.poster_path}
         trailerId={seasonTrailerId || mainTrailerId}
@@ -358,11 +358,11 @@ export default function TvClient() {
 
           <div className="flex-1 space-y-4">
             <div>
-              <h1 className="font-bold text-5xl md:text-7xl text-white leading-none tracking-wide mb-2">
+              <h1 className="font-bold text-5xl md:text-7xl text-white leading-none tracking-wide mb-2 select-text">
                 {show.name}
               </h1>
               {show.tagline && (
-                <p className="text-primary/90 font-semibold italic text-base md:text-lg">
+                <p className="text-primary/90 font-semibold italic text-base md:text-lg select-text">
                   {show.tagline}
                 </p>
               )}
@@ -402,7 +402,7 @@ export default function TvClient() {
             </div>
 
             <p
-              className="text-white/65 text-base leading-relaxed max-w-2xl"
+              className="text-white/65 text-base leading-relaxed max-w-2xl select-text"
             >
               {show.overview}
             </p>
@@ -525,17 +525,24 @@ export default function TvClient() {
                 key={selectedSeason}
               >
                 {seasonData.overview && (
-                  <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic">
+                  <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
                     {seasonData.overview}
                   </p>
                 )}
 
                 <div className="space-y-3">
-                  {seasonData.episodes?.map((episode, i) => (
+                  {seasonData.episodes?.map((episode, i) => {
+                    const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+                    return (
                     <div
                       key={episode.id}
                       onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
-                      className="group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
+                      className={cn(
+                        "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
+                        isWatching
+                          ? "ring-2 ring-primary bg-gradient-to-br from-primary/15 to-primary/5 border-transparent shadow-lg shadow-primary/20"
+                          : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
+                      )}
                     >
                       <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
                         <span className="text-sm font-bold text-white/40">{episode.episode_number}</span>
@@ -556,10 +563,15 @@ export default function TvClient() {
                           </div>
                         )}
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-lg">
+                          <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
                             <Play className="w-4 h-4 fill-white text-white ml-0.5" />
                           </div>
                         </div>
+                        {isWatching && (
+                          <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-primary/90 backdrop-blur-md text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
+                            {isPlaying ? "Playing" : "Watching"}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0 py-0.5">
@@ -581,7 +593,7 @@ export default function TvClient() {
                         {episode.runtime && <p className="text-white/30 text-xs mt-1.5">{episode.runtime} min</p>}
                       </div>
                     </div>
-                  ))}
+                  ); })}
                 </div>
               </div>
             )}

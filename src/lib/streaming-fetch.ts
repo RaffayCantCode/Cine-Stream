@@ -26,14 +26,6 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 3",
-    baseUrl: "https://autoembed.co",
-    type: "autoembed",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://autoembed.co",
-  },
-  {
-    name: "Source 4",
     baseUrl: "https://vidfast.to",
     type: "vidfast",
     quality: "Best",
@@ -41,12 +33,20 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://vidfast.to",
   },
   {
-    name: "Source 5",
+    name: "Source 4",
     baseUrl: "https://vidlink.pro",
     type: "vidlink",
     quality: "Best",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://vidlink.pro",
+  },
+  {
+    name: "Source 5",
+    baseUrl: "https://autoembed.co",
+    type: "autoembed",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://autoembed.co",
   },
   {
     name: "Source 6",

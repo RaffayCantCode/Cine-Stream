@@ -145,10 +145,16 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     autoPlayTriggeredRef.current = false;
   }, [season, episode]);
 
+  const isLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
   // Listen to postMessage for progress updates (e.g., from VidLink)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data) return;
+      if (isLoadingRef.current) return; // Ignore messages from the old page while the new page is loading
       
       // Handle generic ended/next events
       if (event.data.type === 'video.ended' || event.data.type === 'video.next') {
@@ -223,8 +229,15 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     });
     setError(null);
     setIsLoading(true);
-    setRetryCount(prev => prev + 1);
-  }, [sources, sourcePrefKey, forcedSource, forceReloadCount]);
+  }, [sources, sourcePrefKey, forcedSource]);
+
+  const prevForceReloadRef = useRef(forceReloadCount);
+  useEffect(() => {
+    if (forceReloadCount !== prevForceReloadRef.current) {
+      prevForceReloadRef.current = forceReloadCount;
+      setRetryCount(prev => prev + 1);
+    }
+  }, [forceReloadCount]);
 
   const handleSourceChange = (source: StreamingSource) => {
     setCurrentSource(source);

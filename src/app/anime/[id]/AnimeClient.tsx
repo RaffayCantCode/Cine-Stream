@@ -277,6 +277,7 @@ export default function AnimeClient() {
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
   const [showSeasonGuide, setShowSeasonGuide] = useState(false);
   const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
+  const [hasRestoredState, setHasRestoredState] = useState(false);
 
   const tmdbIdRef = useRef<number | null>(null);
   const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
@@ -663,11 +664,15 @@ export default function AnimeClient() {
         setIsPlaying(true);
       }
     }
-  }, [episodes, id, selectedEp, session?.user?.id, authStatus, anime]);
+
+    if (!hasRestoredState) {
+      setHasRestoredState(true);
+    }
+  }, [episodes, id, selectedEp, session?.user?.id, authStatus, anime, hasRestoredState]);
 
   // Persist State
   useEffect(() => {
-    if (typeof window !== "undefined" && currentSeasonId) {
+    if (typeof window !== "undefined" && currentSeasonId && hasRestoredState) {
       try {
         const userId = session?.user?.id || "guest";
         localStorage.setItem(`sv_anime_state_${userId}_${id}`, JSON.stringify({
@@ -676,7 +681,7 @@ export default function AnimeClient() {
         }));
       } catch {}
     }
-  }, [id, currentSeasonId, selectedEp, session?.user?.id]);
+  }, [id, currentSeasonId, selectedEp, session?.user?.id, hasRestoredState]);
 
   // ── Scroll to player on play ────────────────────────────────────────────
   useEffect(() => {
@@ -909,7 +914,7 @@ export default function AnimeClient() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-0 bleed-header">
+      <main className="md:pl-56 lg:pl-64 pt-0 bleed-header select-none">
         {isLoading ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
             <div className="w-full h-[55vh] md:h-[65vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
@@ -970,8 +975,8 @@ export default function AnimeClient() {
                       }`}>{anime.status}</span>
                     )}
                   </div>
-                  <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight">{displayTitle}</h1>
-                  {anime.jname && <p className="text-white/40 text-xs sm:text-sm font-medium">{anime.jname}</p>}
+                  <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
+                  {anime.jname && <p className="text-white/40 text-xs sm:text-sm font-medium select-text">{anime.jname}</p>}
 
                   {/* Season count pill */}
                   {seasons.length > 1 && (
@@ -1347,7 +1352,7 @@ export default function AnimeClient() {
                                 >
                                   {isSelected && (
                                     <div className="absolute -top-2 z-20 px-1.5 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
-                                      Playing
+                                      {isPlaying ? "Playing" : "Watching"}
                                     </div>
                                   )}
                                   {ep.isFiller && !isSelected && (
@@ -1378,7 +1383,7 @@ export default function AnimeClient() {
                       >
                         {/* Season description (TMDB overview from episodes response) */}
                         {seasonOverview && (
-                          <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic">
+                          <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
                             {seasonOverview}
                           </p>
                         )}
@@ -1436,7 +1441,7 @@ export default function AnimeClient() {
                                   </div>
                                   {isSelected && (
                                     <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase">
-                                      Playing
+                                      {isPlaying ? "Playing" : "Watching"}
                                     </div>
                                   )}
                                   {isUnreleased && (
