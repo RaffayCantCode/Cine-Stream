@@ -31,32 +31,52 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/9BBTo63ANSmhC4e6r62OJFuK2GL.jpg", // Avengers backdrop
     poster_path: "/RYMX2wcKCBAr24UyPD7xwmjaTn.jpg", // Avengers poster
     items: [
+      { id: 241388, media_type: "tv" }, // Eyes of Wakanda
       { id: 1771, media_type: "movie" }, // Captain America: The First Avenger
+
+      { id: 61550, media_type: "tv" }, // Agent Carter
       { id: 299537, media_type: "movie" }, // Captain Marvel
       { id: 1726, media_type: "movie" }, // Iron Man
       { id: 10138, media_type: "movie" }, // Iron Man 2
       { id: 1724, media_type: "movie" }, // The Incredible Hulk
+
       { id: 10195, media_type: "movie" }, // Thor
       { id: 24428, media_type: "movie" }, // The Avengers
+
+      { id: 1403, media_type: "tv" }, // Agents of S.H.I.E.L.D.
       { id: 76338, media_type: "movie" }, // Thor: The Dark World
       { id: 68721, media_type: "movie" }, // Iron Man 3
+
       { id: 100402, media_type: "movie" }, // Captain America: The Winter Soldier
       { id: 118340, media_type: "movie" }, // Guardians of the Galaxy
       { id: 283995, media_type: "movie" }, // Guardians of the Galaxy Vol. 2
       { id: 232125, media_type: "tv" }, // I Am Groot
+      { id: 61889, media_type: "tv" }, // Daredevil
+      { id: 38472, media_type: "tv" }, // Jessica Jones
       { id: 99861, media_type: "movie" }, // Avengers: Age of Ultron
+      { id: 62126, media_type: "tv" }, // Luke Cage
       { id: 102899, media_type: "movie" }, // Ant-Man
+      { id: 62127, media_type: "tv" }, // Iron Fist
       { id: 271110, media_type: "movie" }, // Captain America: Civil War
+
       { id: 497698, media_type: "movie" }, // Black Widow
-      { id: 284054, media_type: "movie" }, // Black Panther
-      { id: 315635, media_type: "movie" }, // Spider-Man: Homecoming
+      { id: 62285, media_type: "tv" }, // The Defenders
       { id: 284052, media_type: "movie" }, // Doctor Strange
+      { id: 284054, media_type: "movie" }, // Black Panther
+      { id: 69088, media_type: "tv" }, // Agents of S.H.I.E.L.D.: Slingshot
+      { id: 315635, media_type: "movie" }, // Spider-Man: Homecoming
       { id: 284053, media_type: "movie" }, // Thor: Ragnarok
+
+      { id: 68716, media_type: "tv" }, // Inhumans
+      { id: 67178, media_type: "tv" }, // The Punisher
+      { id: 67466, media_type: "tv" }, // Runaways
+      { id: 66190, media_type: "tv" }, // Cloak & Dagger
       { id: 363088, media_type: "movie" }, // Ant-Man and the Wasp
       { id: 299536, media_type: "movie" }, // Avengers: Infinity War
       { id: 299534, media_type: "movie" }, // Avengers: Endgame
       { id: 84958, media_type: "tv" }, // Loki
       { id: 91363, media_type: "tv" }, // What If...?
+      { id: 138505, media_type: "tv" }, // Marvel Zombies
       { id: 85271, media_type: "tv" }, // WandaVision
       { id: 533535, media_type: "movie" }, // Deadpool & Wolverine
       { id: 566525, media_type: "movie" }, // Shang-Chi and the Legend of the Ten Rings
@@ -72,6 +92,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 92783, media_type: "tv" }, // She-Hulk: Attorney at Law
       { id: 92782, media_type: "tv" }, // Ms. Marvel
       { id: 616037, media_type: "movie" }, // Thor: Love and Thunder
+      { id: 114471, media_type: "tv" }, // Ironheart
       { id: 894205, media_type: "movie" }, // Werewolf by Night
       { id: 774752, media_type: "movie" }, // The Guardians of the Galaxy Holiday Special
       { id: 640146, media_type: "movie" }, // Ant-Man and The Wasp: Quantumania
@@ -79,6 +100,12 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 114472, media_type: "tv" }, // Secret Invasion
       { id: 609681, media_type: "movie" }, // The Marvels
       { id: 138501, media_type: "tv" }, // Agatha All Along
+      { id: 202555, media_type: "tv" }, // Daredevil: Born Again
+      { id: 822119, media_type: "movie" }, // Captain America: Brave New World
+      { id: 986056, media_type: "movie" }, // Thunderbolts*
+      { id: 617126, media_type: "movie" }, // The Fantastic Four: First Steps
+      { id: 198178, media_type: "tv" }, // Wonder Man
+      { id: 1439930, media_type: "movie" } // The Punisher: One Last Kill
     ],
   },
   {
@@ -140,7 +167,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
     name: "The Fast Saga",
     overview: "The high-octane franchise centered on illegal street racing, heists, spies, and family.",
     backdrop_path: "/4XM8DUTQb3lhLemJC51Jx4a2EuA.jpg",
-    poster_path: "/fiVW06jE7z9YnO4trhaMEdclSiC.jpg",
+    poster_path: "/zOCnMPoUxgJK1RFPfN4PcnT16gr.jpg",
     items: [
       { id: 9799, media_type: "movie" }, // The Fast and the Furious
       { id: 584, media_type: "movie" }, // 2 Fast 2 Furious
@@ -534,12 +561,12 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/3GQKYh6Trm8pxd2AypovoYQf4Ay.jpg",
     poster_path: "/xUfRZu2mi8jH6SzQEJGP6tjBuYj.jpg",
     items: [
-      { id: 85937, media_type: "anime", anilist_id: 101922, title: "Demon Slayer: Season 1" },
-      { id: 635302, media_type: "anime", anilist_id: 112151, title: "Mugen Train (Movie)" },
-      { id: 85937, media_type: "anime", anilist_id: 129874, title: "Mugen Train Arc" },
-      { id: 85937, media_type: "anime", anilist_id: 142329, title: "Entertainment District Arc" },
-      { id: 85937, media_type: "anime", anilist_id: 145117, title: "Swordsmith Village Arc" },
-      { id: 85937, media_type: "anime", anilist_id: 166240, title: "Hashira Training Arc" },
+      { id: 85937, media_type: "anime", anilist_id: 101922, title: "Demon Slayer: Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg" },
+      { id: 635302, media_type: "anime", anilist_id: 112151, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png" },
+      { id: 85937, media_type: "anime", anilist_id: 129874, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg" },
+      { id: 85937, media_type: "anime", anilist_id: 142329, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg" },
+      { id: 85937, media_type: "anime", anilist_id: 145117, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx145117-Ifr7hYCRldjr.jpg" },
+      { id: 85937, media_type: "anime", anilist_id: 166240, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png" },
     ]
   },
   {
@@ -549,10 +576,10 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/lthkKBLe1rX6iThgVFg22O02sJw.jpg",
     poster_path: "/fHpKWq9ayzSk8nSwqRuaAUemRKh.jpg",
     items: [
-      { id: 95479, media_type: "anime", anilist_id: 113415, title: "Jujutsu Kaisen Season 1" },
-      { id: 810693, media_type: "anime", anilist_id: 131573, title: "Jujutsu Kaisen 0 (Movie)" },
-      { id: 95479, media_type: "anime", anilist_id: 145064, title: "Jujutsu Kaisen Season 2" },
-      { id: 95479, media_type: "anime", anilist_id: 172463, title: "Jujutsu Kaisen Season 3" },
+      { id: 95479, media_type: "anime", anilist_id: 113415, title: "Jujutsu Kaisen Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-LHBAeoZDIsnF.jpg" },
+      { id: 810693, media_type: "anime", anilist_id: 131573, title: "Jujutsu Kaisen 0 (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131573-rpl82vDEDRm6.jpg" },
+      { id: 95479, media_type: "anime", anilist_id: 145064, title: "Jujutsu Kaisen Season 2", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145064-hSNRJM03pvv1.jpg" },
+      { id: 95479, media_type: "anime", anilist_id: 172463, title: "Jujutsu Kaisen Season 3", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx172463-LnXqHzt74SJL.jpg" },
     ]
   },
   {
@@ -746,6 +773,33 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 72304, media_type: "anime", anilist_id: 98035, title: "Fate/Apocrypha", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx98035-rdkjeqUUsG2j.jpg" },
       { id: 90677, media_type: "anime", anilist_id: 103275, title: "Fate/Grand Order: Babylonia", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx103275-SN0wwshS3tWA.jpg" },
       { id: 219816, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154966-eQRCmSrCh96j.png" },
+    ]
+  },
+  {
+    id: "the-matrix",
+    name: "The Matrix Collection",
+    overview: "Welcome to the Desert of the Real. The groundbreaking sci-fi franchise that challenged our perception of reality.",
+    backdrop_path: "/bRm2DEgUiYciDw3myHuYFInD7la.jpg",
+    poster_path: "/bV9qTVHTVf0gkW0j7p7M0ILD4pG.jpg",
+    items: [
+      { id: 603, media_type: "movie", title: "The Matrix" },
+      { id: 604, media_type: "movie", title: "The Matrix Reloaded" },
+      { id: 605, media_type: "movie", title: "The Matrix Revolutions" },
+      { id: 624860, media_type: "movie", title: "The Matrix Resurrections" }
+    ]
+  },
+  {
+    id: "twilight-saga",
+    name: "The Twilight Saga",
+    overview: "The epic romance of a teenage girl and a vampire, based on the bestselling novels by Stephenie Meyer.",
+    backdrop_path: "/3be0BffeZTyMbj4Ndzo6Y877SBQ.jpg",
+    poster_path: "/3PlBwwizkPDZITeIPUlXQCejeQD.jpg",
+    items: [
+      { id: 1587, media_type: "movie", title: "Twilight" },
+      { id: 18239, media_type: "movie", title: "The Twilight Saga: New Moon" },
+      { id: 24021, media_type: "movie", title: "The Twilight Saga: Eclipse" },
+      { id: 41233, media_type: "movie", title: "The Twilight Saga: Breaking Dawn - Part 1" },
+      { id: 82690, media_type: "movie", title: "The Twilight Saga: Breaking Dawn - Part 2" }
     ]
   }
 ];
