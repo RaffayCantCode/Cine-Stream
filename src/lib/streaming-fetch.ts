@@ -18,11 +18,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
-    baseUrl: "https://vidsrc.to",
+    baseUrl: "https://vidsrc.me",
     type: "vidsrc",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidsrc.to",
+    healthCheckUrl: "https://vidsrc.me",
   },
   {
     name: "Source 3",
