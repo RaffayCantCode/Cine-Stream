@@ -68,20 +68,24 @@ export async function GET(
     let resolvedParts: any[] = [];
     let resolvedGroups: { name: string; parts: any[] }[] = [];
 
+    async function batchFetch(items: any[]): Promise<any[]> {
+      const results: any[] = [];
+      for (let i = 0; i < items.length; i += 50) {
+        const batch = items.slice(i, i + 50);
+        const batchResults = await Promise.all(batch.map(fetchItem));
+        results.push(...batchResults);
+      }
+      return results.filter(Boolean);
+    }
+
     if (franchise.items) {
-      const itemPromises = franchise.items.map(fetchItem);
-      const results = await Promise.all(itemPromises);
-      resolvedParts = results.filter(Boolean);
+      resolvedParts = await batchFetch(franchise.items);
     }
 
     if (franchise.groups) {
       for (const group of franchise.groups) {
-        const itemPromises = group.items.map(fetchItem);
-        const results = await Promise.all(itemPromises);
-        resolvedGroups.push({
-          name: group.name,
-          parts: results.filter(Boolean),
-        });
+        const parts = await batchFetch(group.items);
+        resolvedGroups.push({ name: group.name, parts });
       }
     }
 
