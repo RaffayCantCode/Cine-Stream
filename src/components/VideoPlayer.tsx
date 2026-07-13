@@ -119,7 +119,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   useEffect(() => {
     const domains = [
       "https://vixsrc.to",
-      "https://vidfast.pro",
+      "https://vidfast.vc",
       "https://vidlink.pro",
       "https://vidsrc.to",
       "https://www.2embed.cc"

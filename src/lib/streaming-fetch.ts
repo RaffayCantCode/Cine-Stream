@@ -18,19 +18,19 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
-    baseUrl: "https://vidsrc.me",
-    type: "vidsrc",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidsrc.me",
-  },
-  {
-    name: "Source 3",
-    baseUrl: "https://vidfast.to",
+    baseUrl: "https://vidfast.vc",
     type: "vidfast",
     quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidfast.to",
+    healthCheckUrl: "https://vidfast.vc",
+  },
+  {
+    name: "Source 3",
+    baseUrl: "https://vidsrc.to",
+    type: "vidsrc",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidsrc.to",
   },
   {
     name: "Source 4",
@@ -69,8 +69,8 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       return `${api.baseUrl}/embedtv/${id}&s=${season ?? 1}&e=${episode ?? 1}`;
 
     case "vidsrc":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}?ds_lang=en&color=8B5CF6`;
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?ds_lang=en&color=8B5CF6`;
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
 
     case "autoembed":
@@ -78,8 +78,8 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       return `${api.baseUrl}/tv/tmdb/${id}-${season ?? 1}-${episode ?? 1}?color=8B5CF6&lang=en`;
 
     case "vidfast":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}?lang=en`;
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?lang=en`;
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?autoPlay=true`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?autoPlay=true`;
 
     case "vidlink":
       if (type === "movie") return `${api.baseUrl}/movie/${id}?primaryColor=8B5CF6&autoplay=false`;
