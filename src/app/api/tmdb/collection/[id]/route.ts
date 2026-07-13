@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
 import { FRANCHISES } from "@/lib/franchises";
 
@@ -10,23 +10,20 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    
-    // Find the custom franchise
+
     const franchise = FRANCHISES.find(f => f.id === id);
-    
+
     if (!franchise) {
-      return NextResponse.json({ error: "Franchise not found" }, { status: 404 });
+      return Response.json({ error: "Franchise not found" }, { status: 404 });
     }
 
-    // Helper function to fetch item details
     const fetchItem = async (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string; poster_path?: string }) => {
       try {
         const tmdbType = item.tmdb_type || (item.media_type === "movie" ? "movie" : "tv");
-        const endpoint = `/${tmdbType}/${item.id}`;
-        const data = await tmdbFetch(`${endpoint}?language=en-US`) as any;
-        
+        const data = await tmdbFetch(`/${tmdbType}/${item.id}?language=en-US`) as any;
+
         let poster_path = item.poster_path || data.poster_path;
-        
+
         if (!item.poster_path && item.media_type === "anime" && item.anilist_id) {
           try {
             const query = `query ($id: Int) { Media(id: $id, type: ANIME) { coverImage { extraLarge large } } }`;
@@ -43,9 +40,7 @@ export async function GET(
                 poster_path = cover.extraLarge || cover.large;
               }
             }
-          } catch (e) {
-            // ignore anilist fetch error and fallback to tmdb
-          }
+          } catch (e) {}
         }
 
         return {
@@ -60,50 +55,65 @@ export async function GET(
           release_date: item.release_date || data.release_date || data.first_air_date,
         };
       } catch (err) {
-        console.error(`Failed to fetch ${item.media_type} ${item.id}`, err);
         return null;
       }
     };
 
-    let resolvedParts: any[] = [];
-    let resolvedGroups: { name: string; parts: any[] }[] = [];
+    const encoder = new TextEncoder();
 
-    async function batchFetch(items: any[]): Promise<any[]> {
-      const results: any[] = [];
-      for (let i = 0; i < items.length; i += 50) {
-        const batch = items.slice(i, i + 50);
-        const batchResults = await Promise.all(batch.map(fetchItem));
-        results.push(...batchResults);
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const meta = {
+            id: franchise.id,
+            name: franchise.name,
+            overview: franchise.overview,
+            backdrop_path: franchise.backdrop_path,
+            poster_path: franchise.poster_path,
+            parts: [],
+            groups: [] as { name: string; parts: any[] }[],
+          };
+
+          controller.enqueue(encoder.encode(JSON.stringify({ type: "meta", data: meta }) + "\n"));
+
+          if (franchise.items) {
+            for (let i = 0; i < franchise.items.length; i += 25) {
+              const batch = franchise.items.slice(i, i + 25);
+              const batchResults = await Promise.allSettled(batch.map(fetchItem));
+              const parts = batchResults.map(r => r.status === "fulfilled" ? r.value : null).filter(Boolean);
+              controller.enqueue(encoder.encode(JSON.stringify({ type: "parts", data: parts }) + "\n"));
+            }
+          }
+
+          if (franchise.groups) {
+            for (const group of franchise.groups) {
+              const groupParts: any[] = [];
+              for (let i = 0; i < group.items.length; i += 25) {
+                const batch = group.items.slice(i, i + 25);
+                const batchResults = await Promise.allSettled(batch.map(fetchItem));
+                groupParts.push(...batchResults.map(r => r.status === "fulfilled" ? r.value : null).filter(Boolean));
+              }
+              controller.enqueue(encoder.encode(JSON.stringify({ type: "group", data: { name: group.name, parts: groupParts } }) + "\n"));
+            }
+          }
+
+          controller.enqueue(encoder.encode(JSON.stringify({ type: "done" }) + "\n"));
+          controller.close();
+        } catch (err) {
+          controller.enqueue(encoder.encode(JSON.stringify({ type: "error", data: "Failed to fetch collection" }) + "\n"));
+          controller.close();
+        }
       }
-      return results.filter(Boolean);
-    }
+    });
 
-    if (franchise.items) {
-      resolvedParts = await batchFetch(franchise.items);
-    }
-
-    if (franchise.groups) {
-      for (const group of franchise.groups) {
-        const parts = await batchFetch(group.items);
-        resolvedGroups.push({ name: group.name, parts });
-      }
-    }
-
-    // Format the response to match the TMDB Collection structure expected by the frontend
-    const response = {
-      id: franchise.id,
-      name: franchise.name,
-      overview: franchise.overview,
-      backdrop_path: franchise.backdrop_path,
-      poster_path: franchise.poster_path,
-      parts: resolvedParts,
-      groups: resolvedGroups.length > 0 ? resolvedGroups : undefined,
-    };
-
-    return NextResponse.json(response);
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200",
+      },
+    });
   } catch (error) {
-    console.error(`Collection ${await params.then(p => p.id)} error:`, error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to fetch collection" },
       { status: 500 }
     );

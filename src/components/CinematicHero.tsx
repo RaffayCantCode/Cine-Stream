@@ -369,66 +369,69 @@ export function CinematicHero({
               setTrailerVisible(false);
               setTimeout(() => setTrailerReady(false), 1000);
             }}
-            className="flex items-center bg-black/50 backdrop-blur-md border border-white/20 rounded-full group/stop hover:bg-black/70 transition-all duration-300 shadow-lg px-2.5 h-10 overflow-hidden max-w-[40px] hover:max-w-[150px]"
+            className="flex items-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-red-500/80 hover:border-red-400/50 transition-all duration-300 shadow-lg px-3 h-10"
             title="Stop trailer"
           >
-            <X className="w-5 h-5 text-white shrink-0 group-hover/stop:text-red-500 transition-colors" />
-            <span className="text-white text-sm font-medium whitespace-nowrap ml-2 opacity-0 group-hover/stop:opacity-100 transition-opacity duration-300">
-              Stop Trailer
+            <X className="w-4 h-4 text-white shrink-0" />
+            <span className="text-white text-xs font-bold whitespace-nowrap ml-1.5">
+              Stop
             </span>
           </button>
 
           {/* Audio Controls */}
-          <div className="flex items-center bg-black/50 backdrop-blur-md border border-white/20 rounded-full group hover:bg-black/70 transition-all duration-300 shadow-lg pr-1">
-            {/* Volume slider (expands on hover) */}
-            <div className="w-0 overflow-hidden opacity-0 group-hover:w-24 group-hover:opacity-100 transition-all duration-300 ease-in-out flex items-center group-hover:ml-3 group-hover:mr-1">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                className="w-full h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-primary outline-none"
-              />
-            </div>
+          <div className="flex items-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-black/80 transition-all duration-300 shadow-lg px-3 gap-2">
+            {/* Volume slider */}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={isMuted ? 0 : volume}
+              onChange={handleVolumeChange}
+              className="w-20 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-primary outline-none"
+            />
 
             {/* Mute button */}
             <button
               onClick={toggleMute}
-              className="w-10 h-10 flex items-center justify-center text-white shrink-0 rounded-full hover:text-primary transition-colors duration-200"
+              className="w-8 h-8 flex items-center justify-center text-white shrink-0 rounded-full hover:text-primary transition-colors duration-200"
               title={isMuted ? "Unmute trailer" : "Mute trailer"}
               aria-label={isMuted ? "Unmute trailer" : "Mute trailer"}
             >
               {isMuted || volume === 0 ? (
-                <VolumeX className="w-5 h-5" />
+                <VolumeX className="w-4 h-4" />
               ) : (
-                <Volume2 className="w-5 h-5" />
+                <Volume2 className="w-4 h-4" />
               )}
             </button>
           </div>
         </div>
 
         {/* Playback Progress Slider */}
-        <div className="absolute top-[calc(85svh-1.5rem)] md:top-[calc(85svh-2rem)] left-1/2 -translate-x-1/2 w-[90%] md:w-1/2 z-30 group/slider flex items-center h-6 cursor-pointer">
-          <div className="relative w-full h-1 group-hover/slider:h-1.5 bg-white/20 rounded-full overflow-hidden transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
-            <div 
-              className={`absolute top-0 left-0 h-full ${themeColorClass} transition-all duration-75`} 
-              style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+        <div className="absolute top-[calc(85svh-1.5rem)] md:top-[calc(85svh-2rem)] left-1/2 -translate-x-1/2 w-[90%] md:w-1/2 z-30 flex items-center gap-3">
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3">
+            <span className="text-white/90 text-xs md:text-sm font-black uppercase tracking-[0.2em] bg-black/60 backdrop-blur-md px-3 py-1 rounded-md border border-white/20 shadow-lg">Trailer</span>
+          </div>
+          <div className="relative flex-1 group/slider flex items-center h-6 cursor-pointer">
+            <div className="relative w-full h-1 group-hover/slider:h-1.5 bg-white/20 rounded-full overflow-hidden transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+              <div 
+                className={`absolute top-0 left-0 h-full ${themeColorClass} transition-all duration-75`} 
+                style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+              />
+            </div>
+            <input
+              type="range"
+              min="0"
+              max={duration || 100}
+              step="0.1"
+              value={currentTime}
+              onChange={handleSeek}
+              onMouseDown={handleSeekStart}
+              onTouchStart={handleSeekStart}
+              onMouseUp={handleSeekEnd}
+              onTouchEnd={handleSeekEnd}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
           </div>
-          <input
-            type="range"
-            min="0"
-            max={duration || 100}
-            step="0.1"
-            value={currentTime}
-            onChange={handleSeek}
-            onMouseDown={handleSeekStart}
-            onTouchStart={handleSeekStart}
-            onMouseUp={handleSeekEnd}
-            onTouchEnd={handleSeekEnd}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          />
         </div>
         </>
       )}

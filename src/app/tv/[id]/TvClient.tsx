@@ -69,11 +69,13 @@ export default function TvClient() {
   const [playingSeason, setPlayingSeason] = useState<number>(1);
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
+  const [hasEverWatched, setHasEverWatched] = useState(false);
 
   useEffect(() => {
     if (status === "loading" || isStateLoaded) return;
     let initSeason = 1;
     let initEp = 1;
+    let hadSavedState = false;
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search);
       const urlSeason = searchParams.get("season");
@@ -82,6 +84,7 @@ export default function TvClient() {
       if (urlSeason || urlEp) {
         if (urlSeason && Number(urlSeason) > 0) initSeason = Number(urlSeason);
         if (urlEp && Number(urlEp) > 0) initEp = Number(urlEp);
+        hadSavedState = true;
       } else {
         try {
           const userId = session?.user?.id || "guest";
@@ -90,6 +93,7 @@ export default function TvClient() {
             const parsed = JSON.parse(saved);
             if (parsed?.season) initSeason = parsed.season;
             if (parsed?.episode) initEp = parsed.episode;
+            hadSavedState = true;
           }
         } catch {}
       }
@@ -97,6 +101,7 @@ export default function TvClient() {
     setSelectedSeason(initSeason);
     setPlayingSeason(initSeason);
     setPlayingEpisode(initEp);
+    if (hadSavedState) setHasEverWatched(true);
     setIsStateLoaded(true);
   }, [id, status, session, isStateLoaded]);
 
@@ -211,6 +216,7 @@ export default function TvClient() {
   }, [id, selectedSeason]);
 
   const handleWatchEpisode = async (season: number, episodeNumber: number, episodeName?: string) => {
+    setHasEverWatched(true);
     setSelectedSeason(season);
     setPlayingSeason(season);
     setPlayingEpisode(episodeNumber);
@@ -477,7 +483,8 @@ export default function TvClient() {
                       playingSeason === selectedSeason && playingEpisode === episode.episode_number
                         ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
-                    }`}
+                    }
+                  `}
                   >
                     <span className={`text-sm font-black w-10 shrink-0 ${playingSeason === selectedSeason && playingEpisode === episode.episode_number ? "text-white" : ""}`}>
                       E{episode.episode_number}
@@ -567,7 +574,7 @@ export default function TvClient() {
                             <Play className="w-4 h-4 fill-white text-white ml-0.5" />
                           </div>
                         </div>
-                        {isWatching && (
+                        {isWatching && hasEverWatched && (
                           <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-primary/90 backdrop-blur-md text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
                             {isPlaying ? "Playing" : "Watching"}
                           </div>

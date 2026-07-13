@@ -28,8 +28,8 @@ export const FRANCHISES: FranchiseDefinition[] = [
     id: "marvel",
     name: "Marvel Cinematic Universe",
     overview: "The complete chronological timeline of the Marvel Cinematic Universe, spanning from the origins of the first Avenger to the multiverse saga.",
-    backdrop_path: "/9BBTo63ANSmhC4e6r62OJFuK2GL.jpg", // Avengers backdrop
-    poster_path: "/RYMX2wcKCBAr24UyPD7xwmjaTn.jpg", // Avengers poster
+    backdrop_path: "/2UNUv4NJdC36E5myDHACBJ99EwL.jpg", // Avengers Collection banner
+    poster_path: "/yFSIUVTCvgYrpalUktulvk3Gi5Y.jpg", // Avengers Collection poster
     items: [
       { id: 241388, media_type: "tv" }, // Eyes of Wakanda
       { id: 1771, media_type: "movie" }, // Captain America: The First Avenger
@@ -112,8 +112,8 @@ export const FRANCHISES: FranchiseDefinition[] = [
     id: "star-wars",
     name: "Star Wars Saga",
     overview: "A long time ago in a galaxy far, far away... The epic Skywalker saga and surrounding stories in chronological order.",
-    backdrop_path: "/ziECpBRIyclmBNaFSWlvCfsKbMD.jpg", // Return of the Jedi backdrop
-    poster_path: "/jQYlydvHm3kUix1f8prMucrplhm.jpg", // Return of the Jedi poster
+    backdrop_path: "/zZDkgOmFMVYpGAkR9Tkxw0CRnxX.jpg", // Star Wars Collection backdrop
+    poster_path: "/r8Ph5MYXL04Qzu4QBbq2KjqwtkQ.jpg", // Star Wars Collection poster
     items: [
       { id: 1893, media_type: "movie" }, // The Phantom Menace
       { id: 1894, media_type: "movie" }, // Attack of the Clones

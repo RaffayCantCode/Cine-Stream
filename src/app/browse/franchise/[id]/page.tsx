@@ -1,13 +1,10 @@
 "use client";
-export const runtime = 'edge';
-
 import { useState, useEffect, use } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
+import { CinematicHero } from "@/components/CinematicHero";
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { Loader2, ArrowLeft } from "lucide-react";
-import { fetchJson } from "@/lib/utils";
 
 interface Collection {
   id: string | number;
@@ -24,16 +21,59 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
   const [collection, setCollection] = useState<Collection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [streamDone, setStreamDone] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    const acc: Collection = { id, name: "", overview: "", poster_path: null, backdrop_path: null, parts: [], groups: [] };
+    let buffer = "";
+
     const load = async () => {
       try {
-        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}`);
-        setCollection(data);
+        const res = await fetch(`/api/tmdb/collection/${id}`);
+        if (!res.ok) throw new Error("Failed to load franchise");
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "meta") {
+                acc.name = msg.data.name;
+                acc.overview = msg.data.overview;
+                acc.backdrop_path = msg.data.backdrop_path;
+                acc.poster_path = msg.data.poster_path;
+                setCollection({ ...acc, parts: [...acc.parts], groups: acc.groups?.length ? [...acc.groups] : undefined });
+                setIsLoading(false);
+              } else if (msg.type === "parts") {
+                acc.parts.push(...msg.data);
+                setCollection({ ...acc, parts: [...acc.parts], groups: acc.groups?.length ? [...acc.groups] : undefined });
+              } else if (msg.type === "group") {
+                acc.groups!.push(msg.data);
+                setCollection({ ...acc, parts: [...acc.parts], groups: [...acc.groups!] });
+              } else if (msg.type === "done") {
+                setStreamDone(true);
+              } else if (msg.type === "error") {
+                throw new Error(msg.data);
+              }
+            } catch (e) {
+              if (e instanceof SyntaxError) continue;
+              throw e;
+            }
+          }
+        }
+        setStreamDone(true);
       } catch (err) {
         setError("Failed to load franchise");
-      } finally {
         setIsLoading(false);
       }
     };
@@ -62,54 +102,31 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
       <main className="md:pl-56 lg:pl-64 bleed-header">
-        {collection.backdrop_path && (
-          <div className="relative w-full h-[40vh] md:h-[50vh] min-h-[300px]">
-            <img
-              src={`https://image.tmdb.org/t/p/w1280${collection.backdrop_path}`}
-              alt={collection.name}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-5 md:p-10 max-w-screen-2xl mx-auto">
-              <Link 
-                href="/browse/franchises"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white/80 hover:text-white rounded-full text-sm font-medium transition-all mb-6 border border-white/10 hover:border-white/20 w-fit"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Franchises
-              </Link>
-              <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4">
-                {collection.name}
-              </h1>
-              {collection.overview && (
-                <p className="text-white/70 max-w-2xl text-sm md:text-base leading-relaxed">
-                  {collection.overview}
-                </p>
-              )}
-            </div>
+        <CinematicHero
+          backdropPath={collection.backdrop_path}
+          title={collection.name}
+          theme="movie"
+        >
+          <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto">
+            <Link 
+              href="/browse/franchises"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white/80 hover:text-white rounded-full text-sm font-medium transition-all mb-6 border border-white/10 hover:border-white/20 w-fit"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Franchises
+            </Link>
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4">
+              {collection.name}
+            </h1>
+            {collection.overview && (
+              <p className="text-white/70 max-w-2xl text-sm md:text-base leading-relaxed">
+                {collection.overview}
+              </p>
+            )}
           </div>
-        )}
+        </CinematicHero>
 
-        <div className={`max-w-screen-2xl mx-auto px-5 md:px-10 pb-10 ${collection.backdrop_path ? "pt-8" : "pt-24"}`}>
-          {!collection.backdrop_path && (
-            <div className="mb-10">
-              <Link 
-                href="/browse/franchises"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white/[0.05] hover:bg-white/[0.1] text-white/80 hover:text-white rounded-full text-sm font-medium transition-all border border-white/10 hover:border-white/20 mb-6 w-fit"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Franchises
-              </Link>
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white mb-4">
-                {collection.name}
-              </h1>
-              {collection.overview && (
-                <p className="text-white/70 max-w-2xl text-sm leading-relaxed">
-                  {collection.overview}
-                </p>
-              )}
-            </div>
-          )}
+        <div className="max-w-screen-2xl mx-auto px-5 md:px-10 pb-10 pt-8">
           {collection.groups && collection.groups.length > 0 ? (
             <div className="flex flex-col gap-12">
               {collection.groups.map((group, gIdx) => (
@@ -138,6 +155,12 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
                   <GridMediaCard key={item.id} item={item} index={index} />
                 ))}
               </div>
+              {!streamDone && (
+                <div className="flex items-center justify-center gap-2 mt-8 text-white/30 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading more...
+                </div>
+              )}
             </>
           )}
         </div>

@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { Play, Star, Clock, Calendar, Users } from "lucide-react";
+import { Play, Star, Clock, Calendar } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { CinematicHero } from "@/components/CinematicHero";
@@ -266,17 +266,6 @@ export default function MovieClient() {
               >
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch Now
-              </button>
-              
-              <button
-                onClick={() => {
-                  const roomId = crypto.randomUUID();
-                  window.location.href = `/watch-party/${roomId}?mediaId=${movie.id}&mediaType=movie&title=${encodeURIComponent(movie.title)}`;
-                }}
-                className="group flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 text-white/80 hover:text-white font-medium rounded-lg text-xs transition-all duration-200 sm:ml-auto"
-              >
-                <Users className="w-4 h-4 group-hover:scale-110 transition-transform text-primary/80 group-hover:text-primary" />
-                Watch Together
               </button>
             </div>
           </div>
