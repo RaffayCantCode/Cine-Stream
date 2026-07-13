@@ -402,7 +402,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
               className="w-full h-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
               allowFullScreen={true}
-              referrerPolicy="strict-origin-when-cross-origin"
+              referrerPolicy="unsafe-url"
               title={title || "Watch"}
               onLoad={() => { setIsLoading(false); setShowSpinner(false); }}
               onError={handleIframeError}
