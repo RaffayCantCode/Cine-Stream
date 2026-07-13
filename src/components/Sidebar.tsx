@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   Library,
-  Compass
+  Compass,
+  Bug
 } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,14 @@ export const Sidebar = memo(function Sidebar() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <Link
+            href="/contact"
+            className="p-2.5 text-white/30 hover:text-[#f59e0b] rounded-xl transition-all touch-manipulation"
+            aria-label="Report Issue"
+          >
+            <Bug className="w-4 h-4" />
+          </Link>
           <Link
             href="/search"
             className={cn(
@@ -200,8 +208,19 @@ export const Sidebar = memo(function Sidebar() {
           })}
         </nav>
 
+        {/* Report Issue */}
+        <div className="px-3">
+          <Link
+            href="/contact"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-[#f59e0b] hover:bg-[#f59e0b]/[0.06] transition-all text-xs font-medium"
+          >
+            <Bug className="w-4 h-4" />
+            <span>Report Issue</span>
+          </Link>
+        </div>
+
         {/* Search */}
-        <div className="px-3 py-4">
+        <div className="px-3 py-3">
           <Link
             href="/search"
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"

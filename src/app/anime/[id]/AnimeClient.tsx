@@ -15,6 +15,107 @@ import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
 
+// ── Client-side AniList helpers ────────────────────────────────────────────
+const ANILIST_API = "https://graphql.anilist.co";
+
+async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
+  const res = await fetch(ANILIST_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error("AniList query failed");
+  return res.json();
+}
+
+function transformRecItem(media: any): any {
+  if (media.isAdult) return null;
+  return {
+    id: String(media.id),
+    idMal: media.idMal ? String(media.idMal) : null,
+    name: media.title?.english || media.title?.romaji || "Unknown",
+    jname: media.title?.native || null,
+    poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
+    type: media.type || "ANIME",
+    episodes: { sub: media.episodes || null, dub: null },
+    rating: media.averageScore ? String((media.averageScore / 10).toFixed(1)) : null,
+    description: media.description?.replace(/<[^>]*>/g, "") || "",
+    genres: media.genres || [],
+    status: media.status || null,
+    season: media.season || null,
+    seasonYear: media.seasonYear || null,
+    format: media.format || null,
+  };
+}
+
+async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<string>, minItems = 12): Promise<any[]> {
+  let items: any[] = [];
+
+  try {
+    const data = await anilistQuery(`
+      query ($id: Int) {
+        Media(id: $id, type: ANIME) {
+          recommendations(page: 1, perPage: 25, sort: [RATING_DESC]) {
+            nodes {
+              mediaRecommendation {
+                id idMal isAdult title { romaji english native }
+                coverImage { large extraLarge }
+                episodes genres averageScore description status type format season seasonYear
+              }
+            }
+          }
+        }
+      }
+    `, { id: anilistId });
+
+    const nodes = data?.data?.Media?.recommendations?.nodes || [];
+    items = nodes
+      .map((n: any) => n?.mediaRecommendation)
+      .filter(Boolean)
+      .map(transformRecItem)
+      .filter(Boolean)
+      .filter((item: any) => !excludeIds.has(item.id) && item.id !== String(anilistId));
+  } catch { /* recommendations failed */ }
+
+  if (items.length < minItems) {
+    try {
+      const existingIds = new Set(items.map((i: any) => i.id));
+      const seenGenres = new Set<string>();
+      items.forEach((i: any) => i.genres?.forEach((g: string) => seenGenres.add(g)));
+      const genreList = [...seenGenres].slice(0, 3);
+      if (genreList.length > 0) {
+        const padData = await anilistQuery(`
+          query ($genres: [String], $page: Int) {
+            Page(page: $page, perPage: 25) {
+              media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC], genre_in: $genres) {
+                id idMal isAdult title { romaji english native }
+                coverImage { large extraLarge }
+                episodes genres averageScore description status type format season seasonYear
+              }
+            }
+          }
+        `, { genres: genreList, page: 1 });
+
+        const padItems = (padData?.data?.Page?.media || [])
+          .map(transformRecItem)
+          .filter(Boolean)
+          .filter((item: any) => !existingIds.has(item.id) && !excludeIds.has(item.id) && item.id !== String(anilistId));
+        items = [...items, ...padItems];
+      }
+    } catch { /* padding failed */ }
+  }
+
+  const seen = new Set<string>();
+  items = items.filter((item: any) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+
+  return items.slice(0, Math.max(minItems, 20));
+}
+
 async function getAniZipMappingClientSide(anilistId: number) {
   try {
     const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
@@ -499,18 +600,16 @@ export default function AnimeClient() {
     return () => { cancelled = true; };
   }, [id, loadSeasonEpisodes, authStatus, session]);
 
-  // ── Fetch You May Like recommendations ─────────────────────────────────
+  // ── Fetch You May Like recommendations (client-side AniList) ────────────
   useEffect(() => {
     if (!anime || !id) return;
     setRecsLoading(true);
-    const genres = anime.genres?.length ? anime.genres.join(",") : "";
-    const franchiseIds = franchiseNodes.map(n => n.id).filter(Boolean).join(",");
-    const excludeIds = [id, franchiseIds].filter(Boolean).join(",");
-    fetch(`/api/anime/recommendations/${id}?genres=${encodeURIComponent(genres)}&minItems=12&excludeIds=${encodeURIComponent(excludeIds)}&v=5`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.items?.length) {
-          const withReasons = data.items.map((item: any) => ({
+    const franchiseIds = new Set(franchiseNodes.map(n => String(n.id)).filter(Boolean));
+    const excludeIds = new Set([id, ...franchiseIds]);
+    fetchAnilistRecommendations(Number(id), excludeIds, 12)
+      .then(items => {
+        if (items.length > 0) {
+          const withReasons = items.map((item: any) => ({
             ...item,
             reason: getRecommendationReason(anime.genres?.map(g => g.charCodeAt(0)) || [], item.genres?.map((g: string) => g.charCodeAt(0)) || [])
           }));
@@ -1350,9 +1449,9 @@ export default function AnimeClient() {
                                       : "bg-white/[0.06] hover:bg-white/[0.12] text-white/70 hover:text-white border border-white/[0.06] hover:border-white/20"
                                   )}
                                 >
-                                  {isSelected && (
+                                  {isSelected && isPlaying && (
                                     <div className="absolute -top-2 z-20 px-1.5 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
-                                      {isPlaying ? "Playing" : "Watching"}
+                                      Playing
                                     </div>
                                   )}
                                   {ep.isFiller && !isSelected && (
@@ -1439,9 +1538,9 @@ export default function AnimeClient() {
                                       <Play className="w-4 h-4 fill-white text-white ml-0.5" />
                                     </div>
                                   </div>
-                                  {isSelected && (
+                                  {isSelected && isPlaying && (
                                     <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase">
-                                      {isPlaying ? "Playing" : "Watching"}
+                                      Playing
                                     </div>
                                   )}
                                   {isUnreleased && (

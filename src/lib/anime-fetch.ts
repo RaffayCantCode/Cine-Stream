@@ -1143,7 +1143,14 @@ export async function getAnimeDetails(
 
     if (tid) {
       const tmdbSeasons = showSeasonsMap[tid] || [];
-      const parsedSeasonNum = parseSeasonNumberFromTitle(s.name);
+      // Use the season label number (e.g., "Season 2" → 2) as the primary source.
+      // AniList season labels are computed chronologically in buildSeasonList()
+      // and are far more reliable than parsing the AniList title, which often
+      // lacks explicit season markers.
+      const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
+      const parsedSeasonNum = labelNumMatch
+        ? parseInt(labelNumMatch[1], 10)
+        : parseSeasonNumberFromTitle(s.name);
 
       const sAniZip = allAniZipMappings[s.id];
       const azEp1 = sAniZip?.episodes?.["1"];

@@ -30,8 +30,8 @@ interface AnimePlayerProps {
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Source 1", provider: "animeplay", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
-  { name: "Source 2", provider: "vidnest", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
+  { name: "Source 1", provider: "vidnest", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
+  { name: "Source 2", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
   { name: "Source 3 (Saves Progress)", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
   { name: "Source 4", provider: "123embed", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
   { name: "Source 5", provider: "vidlink-alt", color: "from-[#8a2be2]/30 to-[#da70d6]/20" },
@@ -67,9 +67,7 @@ function buildProviderUrl(
     case "vidnest":
       return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
     case "animeplay":
-      return malId_
-        ? `https://animeplay.cfd/stream/mal/${malId_}/${ep}/sub`
-        : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
+      return `https://megaplay.buzz/stream/ani/${aniId || ""}/${ep}/sub`;
     case "vidlink":
       const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
       if (tmdbId) {
@@ -84,9 +82,7 @@ function buildProviderUrl(
           ? `https://play2.123embed.net/movie/${tmdbId}`
           : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
       }
-      return malId_
-        ? `https://animeplay.cfd/stream/mal/${malId_}/${ep}/sub`
-        : `https://animeplay.cfd/stream/ani/${aniId || ""}/${ep}/sub`;
+      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
     case "vidlink-alt":
       return malId_ || aniId
         ? `https://vidlink.pro/anime/${malId_ || aniId}/${ep}/sub?primaryColor=4b5694&autoplay=true`
@@ -163,6 +159,7 @@ export function AnimePlayer({
     setIsLoading(true);
     setShowSources(false);
     setRetryCount(0);
+    setIframeReady(false);
     try { localStorage.setItem(sourcePrefKey, name); } catch {}
   };
 
@@ -172,6 +169,7 @@ export function AnimePlayer({
   const [showSpinner, setShowSpinner] = useState(true);
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
   const [retryCount, setRetryCount] = useState(0);
+  const [iframeReady, setIframeReady] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -198,7 +196,7 @@ export function AnimePlayer({
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
-      "https://animeplay.cfd",
+      "https://megaplay.buzz",
       "https://vidnest.fun",
       "https://vidlink.pro",
       "https://player.autoembed.co",
@@ -234,6 +232,7 @@ export function AnimePlayer({
     setRetryCount(0);
     setIsLoading(true);
     setHasError(false);
+    setIframeReady(false);
   }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie]);
 
   // When source index changes, pick the pre-resolved URL instantly
@@ -312,13 +311,13 @@ export function AnimePlayer({
   }, [animeId, episode, tmdbSeason, onProgress, onAutoNext]);
 
   // Handle seamless syncing via postMessage without reloading the iframe
+  // Only send for VidLink (Source 3) — other providers don't understand these messages
   useEffect(() => {
-    if (iframeRef.current?.contentWindow && startProgress !== undefined) {
-      // Send standard player.seek event (Supported by VidLink and some others)
+    if (iframeReady && iframeRef.current?.contentWindow && startProgress !== undefined && currentSource.provider === "vidlink") {
       iframeRef.current.contentWindow.postMessage({ type: "player.seek", data: startProgress }, "*");
       iframeRef.current.contentWindow.postMessage({ type: "player.play" }, "*");
     }
-  }, [startProgress, forceReloadCount]);
+  }, [startProgress, forceReloadCount, iframeReady, currentSource.provider]);
 
   const switchSource = useCallback(() => {
     setSourceIndex(prev => {
@@ -327,11 +326,13 @@ export function AnimePlayer({
       return next;
     });
     setRetryCount(0);
+    setIframeReady(false);
   }, [sourcePrefKey]);
 
 
   const retrySource = useCallback(() => {
     setRetryCount(prev => prev + 1);
+    setIframeReady(false);
   }, []);
 
   const toggleFullscreen = async () => {
@@ -381,6 +382,12 @@ export function AnimePlayer({
           </button>
         </div>
       </div>
+
+      {currentSource.provider === "animeplay" && ( 
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-300/80 text-xs font-medium">
+          Not working? Use <strong className="mx-1">Source 1</strong> instead
+        </div>
+      )}
 
       {showSources && (
         <div
@@ -452,7 +459,7 @@ export function AnimePlayer({
                 allowFullScreen
                 referrerPolicy="strict-origin-when-cross-origin"
                 title={`${animeTitle} - Episode ${episode}`}
-                onLoad={() => { setIsLoading(false); setHasError(false); setShowSpinner(false); }}
+                onLoad={() => { setIsLoading(false); setHasError(false); setShowSpinner(false); setIframeReady(true); }}
                 onError={() => {
                   console.warn(`[AnimePlayer] ${currentSource.name} failed to load`);
                   setHasError(true);
