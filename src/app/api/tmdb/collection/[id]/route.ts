@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
 import { FRANCHISES } from "@/lib/franchises";
 
@@ -14,7 +14,7 @@ export async function GET(
     const franchise = FRANCHISES.find(f => f.id === id);
 
     if (!franchise) {
-      return Response.json({ error: "Franchise not found" }, { status: 404 });
+      return NextResponse.json({ error: "Franchise not found" }, { status: 404 });
     }
 
     const fetchItem = async (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string; poster_path?: string }) => {
@@ -59,61 +59,47 @@ export async function GET(
       }
     };
 
-    const encoder = new TextEncoder();
+    let resolvedParts: any[] = [];
+    let resolvedGroups: { name: string; parts: any[] }[] = [];
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          const meta = {
-            id: franchise.id,
-            name: franchise.name,
-            overview: franchise.overview,
-            backdrop_path: franchise.backdrop_path,
-            poster_path: franchise.poster_path,
-            parts: [],
-            groups: [] as { name: string; parts: any[] }[],
-          };
-
-          controller.enqueue(encoder.encode(JSON.stringify({ type: "meta", data: meta }) + "\n"));
-
-          if (franchise.items) {
-            for (let i = 0; i < franchise.items.length; i += 25) {
-              const batch = franchise.items.slice(i, i + 25);
-              const batchResults = await Promise.allSettled(batch.map(fetchItem));
-              const parts = batchResults.map(r => r.status === "fulfilled" ? r.value : null).filter(Boolean);
-              controller.enqueue(encoder.encode(JSON.stringify({ type: "parts", data: parts }) + "\n"));
-            }
-          }
-
-          if (franchise.groups) {
-            for (const group of franchise.groups) {
-              const groupParts: any[] = [];
-              for (let i = 0; i < group.items.length; i += 25) {
-                const batch = group.items.slice(i, i + 25);
-                const batchResults = await Promise.allSettled(batch.map(fetchItem));
-                groupParts.push(...batchResults.map(r => r.status === "fulfilled" ? r.value : null).filter(Boolean));
-              }
-              controller.enqueue(encoder.encode(JSON.stringify({ type: "group", data: { name: group.name, parts: groupParts } }) + "\n"));
-            }
-          }
-
-          controller.enqueue(encoder.encode(JSON.stringify({ type: "done" }) + "\n"));
-          controller.close();
-        } catch (err) {
-          controller.enqueue(encoder.encode(JSON.stringify({ type: "error", data: "Failed to fetch collection" }) + "\n"));
-          controller.close();
-        }
+    async function batchFetch(items: any[]): Promise<any[]> {
+      const results: any[] = [];
+      for (let i = 0; i < items.length; i += 50) {
+        const batch = items.slice(i, i + 50);
+        const batchResults = await Promise.allSettled(batch.map(fetchItem));
+        results.push(...batchResults.map(r => r.status === "fulfilled" ? r.value : null).filter(Boolean));
       }
-    });
+      return results;
+    }
 
-    return new Response(stream, {
+    if (franchise.items) {
+      resolvedParts = await batchFetch(franchise.items);
+    }
+
+    if (franchise.groups) {
+      for (const group of franchise.groups) {
+        const parts = await batchFetch(group.items);
+        resolvedGroups.push({ name: group.name, parts });
+      }
+    }
+
+    const response = {
+      id: franchise.id,
+      name: franchise.name,
+      overview: franchise.overview,
+      backdrop_path: franchise.backdrop_path,
+      poster_path: franchise.poster_path,
+      parts: resolvedParts,
+      groups: resolvedGroups.length > 0 ? resolvedGroups : undefined,
+    };
+
+    return NextResponse.json(response, {
       headers: {
-        "Content-Type": "application/x-ndjson",
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200",
+        "Cache-Control": "public, max-age=0, s-maxage=0",
       },
     });
   } catch (error) {
-    return Response.json(
+    return NextResponse.json(
       { error: "Failed to fetch collection" },
       { status: 500 }
     );

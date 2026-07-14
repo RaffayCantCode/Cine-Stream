@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { CinematicHero } from "@/components/CinematicHero";
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { Loader2, ArrowLeft } from "lucide-react";
+import { fetchJson } from "@/lib/utils";
 
 interface Collection {
   id: string | number;
@@ -21,59 +22,16 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
   const [collection, setCollection] = useState<Collection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [streamDone, setStreamDone] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    const acc: Collection = { id, name: "", overview: "", poster_path: null, backdrop_path: null, parts: [], groups: [] };
-    let buffer = "";
-
     const load = async () => {
       try {
-        const res = await fetch(`/api/tmdb/collection/${id}`);
-        if (!res.ok) throw new Error("Failed to load franchise");
-        const reader = res.body?.getReader();
-        if (!reader) throw new Error("No response body");
-        const decoder = new TextDecoder();
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const msg = JSON.parse(line);
-              if (msg.type === "meta") {
-                acc.name = msg.data.name;
-                acc.overview = msg.data.overview;
-                acc.backdrop_path = msg.data.backdrop_path;
-                acc.poster_path = msg.data.poster_path;
-                setCollection({ ...acc, parts: [...acc.parts], groups: acc.groups?.length ? [...acc.groups] : undefined });
-                setIsLoading(false);
-              } else if (msg.type === "parts") {
-                acc.parts.push(...msg.data);
-                setCollection({ ...acc, parts: [...acc.parts], groups: acc.groups?.length ? [...acc.groups] : undefined });
-              } else if (msg.type === "group") {
-                acc.groups!.push(msg.data);
-                setCollection({ ...acc, parts: [...acc.parts], groups: [...acc.groups!] });
-              } else if (msg.type === "done") {
-                setStreamDone(true);
-              } else if (msg.type === "error") {
-                throw new Error(msg.data);
-              }
-            } catch (e) {
-              if (e instanceof SyntaxError) continue;
-              throw e;
-            }
-          }
-        }
-        setStreamDone(true);
+        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}`);
+        setCollection(data);
       } catch (err) {
         setError("Failed to load franchise");
+      } finally {
         setIsLoading(false);
       }
     };
@@ -155,12 +113,6 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
                   <GridMediaCard key={item.id} item={item} index={index} />
                 ))}
               </div>
-              {!streamDone && (
-                <div className="flex items-center justify-center gap-2 mt-8 text-white/30 text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading more...
-                </div>
-              )}
             </>
           )}
         </div>
