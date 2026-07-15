@@ -27,7 +27,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
     window.scrollTo(0, 0);
     const load = async () => {
       try {
-        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}`);
+        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}?v=franchise-complete-v2`, { skipCache: true });
         setCollection(data);
       } catch (err) {
         setError("Failed to load franchise");

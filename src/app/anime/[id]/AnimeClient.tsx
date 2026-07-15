@@ -16,6 +16,7 @@ import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
+const ANIME_API_VERSION = "anime-filler-fix-v7";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -125,9 +126,10 @@ async function getAniZipMappingClientSide(anilistId: number) {
       const data = await res.json();
       const tmdbId = data.mappings?.themoviedb_id ? parseInt(data.mappings.themoviedb_id, 10) : null;
       const azEp1 = data.episodes?.["1"];
-      const tmdbSeasonNumber = azEp1?.seasonNumber !== undefined ? azEp1.seasonNumber : null;
-      const episodeOffset = azEp1?.episodeNumber !== undefined ? azEp1.episodeNumber - 1 : 0;
-      return { tmdbId, tmdbSeasonNumber, episodeOffset };
+      const tmdbSeasonNumber = typeof azEp1?.seasonNumber === "number" ? azEp1.seasonNumber : null;
+      const episodeOffset = typeof azEp1?.episodeNumber === "number" ? azEp1.episodeNumber - 1 : null;
+      const hasEpisodeMapping = tmdbId != null && tmdbSeasonNumber != null && episodeOffset != null;
+      return { tmdbId, tmdbSeasonNumber, episodeOffset, hasEpisodeMapping };
     }
   } catch (e) {
     console.warn(`[AniZip Client] Failed to fetch mappings for ${anilistId}`, e);
@@ -399,6 +401,7 @@ export default function AnimeClient() {
   const [currentSeasonId, setCurrentSeasonId] = useState<string>(id);
 
   const playerRef = useRef<HTMLDivElement>(null);
+  const selectedQueueEpRef = useRef<HTMLButtonElement>(null);
 
   // Tracks which seasonIds we have already loaded episodes for
   const loadedSeasonIds = useRef<Set<string>>(new Set());
@@ -430,7 +433,8 @@ export default function AnimeClient() {
 
     try {
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=5`
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`,
+        { skipCache: true }
       );
       if (epData.success && epData.data?.episodes?.length) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
@@ -469,8 +473,8 @@ export default function AnimeClient() {
         let data: any = null;
         try {
           data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
-            `/api/anime/${id}/meta?v=5`,
-            { signal: AbortSignal.timeout(15000) }
+            `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
+            { signal: AbortSignal.timeout(15000), skipCache: true }
           );
         } catch (e) {
           console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
@@ -655,19 +659,20 @@ export default function AnimeClient() {
                               isMappingSuspicious(s);
           if (needsVerify) {
             const mapping = await getAniZipMappingClientSide(Number(s.id));
-            if (mapping && active) {
+            if (mapping?.hasEpisodeMapping && active) {
               const current = updatedSeasons[idx];
               // Resolve effective values — mapping values win only if they are not null
-              const resolvedTmdbId = mapping.tmdbId || (current as any).tmdbId;
-              const resolvedTmdbSeason = mapping.tmdbSeasonNumber ?? current.tmdbSeasonNumber;
-              const resolvedOffset = mapping.episodeOffset !== undefined ? mapping.episodeOffset : ((current as any).episodeOffset ?? 0);
+              const resolvedTmdbId = mapping.tmdbId ?? (current as any).tmdbId;
+              const resolvedTmdbSeason = mapping.tmdbSeasonNumber;
+              const resolvedOffset = mapping.episodeOffset;
+              const currentOffset = (current as any).episodeOffset ?? 0;
               
               const effectivelyChanged = 
                 resolvedTmdbSeason !== current.tmdbSeasonNumber ||
-                resolvedOffset !== ((current as any).episodeOffset ?? 0) ||
+                resolvedOffset !== currentOffset ||
                 resolvedTmdbId !== (current as any).tmdbId;
 
-              if (effectivelyChanged) {
+              if (effectivelyChanged && resolvedTmdbSeason != null && resolvedOffset != null) {
                 console.log(`[Anime Mappings] Background correction for "${s.name}": tmdbSeasonNumber=${resolvedTmdbSeason}, episodeOffset=${resolvedOffset}`);
                 updatedSeasons[idx] = {
                   ...current,
@@ -790,6 +795,15 @@ export default function AnimeClient() {
     }, 100);
     return () => clearTimeout(timer);
   }, [selectedEp?.episodeId, isPlaying, episodesLoading]);
+
+  // Keep the player queue aligned with the active episode for long seasons.
+  useEffect(() => {
+    if (!selectedEp || !isPlaying || episodesLoading) return;
+    const timer = setTimeout(() => {
+      selectedQueueEpRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [selectedEp?.episodeId, isPlaying, episodesLoading, currentSeasonId]);
 
   // ── Season overview text from TMDB (included in episodes response) ────
   // The episodes endpoint now returns TMDB-enriched data directly with seasonOverview
@@ -1214,6 +1228,7 @@ export default function AnimeClient() {
                             return (
                               <button
                                 key={ep.episodeId}
+                                ref={isSelected ? selectedQueueEpRef : undefined}
                                 onClick={() => {
                                   if (ep.isReleased === false) return;
                                   handleWatchEpisode(ep);

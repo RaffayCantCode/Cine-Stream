@@ -3,6 +3,12 @@ export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { fetchAnimeApi } from "@/lib/anime-fetch";
 
+const animeNoStoreHeaders = {
+  "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+  "CDN-Cache-Control": "no-store",
+  "Cloudflare-CDN-Cache-Control": "no-store",
+} as const;
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -15,7 +21,7 @@ export async function GET(
     if (!data || !data.success || !data.data) {
       return Response.json(
         { error: "Anime not found", success: false },
-        { status: 404 }
+        { status: 404, headers: animeNoStoreHeaders }
       );
     }
 
@@ -33,12 +39,12 @@ export async function GET(
           seasons,
         },
       },
-    }, { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200" } });
+    }, { headers: animeNoStoreHeaders });
   } catch (error) {
     console.error("[Anime Details Error]:", error);
     return Response.json(
       { error: "Failed to fetch anime details", success: false },
-      { status: 500 }
+      { status: 500, headers: animeNoStoreHeaders }
     );
   }
 }

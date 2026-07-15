@@ -57,6 +57,11 @@ export interface EpisodeDetail {
   runtime?: number | null;
 }
 
+export interface FillerLookup {
+  filler: Set<number>;
+  mixed: Set<number>;
+}
+
 interface AniListMedia {
   id: number;
   idMal: number | null;
@@ -92,6 +97,7 @@ interface FranchiseNode {
 
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
+const ANIME_FILLER_LIST_BASE = "https://www.animefillerlist.com/shows";
 const anilistCache = new Map<string, { data: any; expires: number }>();
 const ANILIST_CACHE_TTL = 300000; // 5 minutes
 
@@ -1395,6 +1401,99 @@ export async function fetchEpisodesFromAniZip(
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Fetch real episode metadata (titles, thumbnails, airdates) from Jikan
+const fillerLookupCache = new Map<string, { data: FillerLookup | null; expires: number }>();
+const FILLER_LOOKUP_TTL = 86400000; // 24 hours
+
+function normalizeFillerSlugPart(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/\b(tv|ona|ova|special|movie)\b/g, " ")
+    .replace(/\b(part|cour)\s+\d+\b/g, " ")
+    .replace(/\bseason\s+\d+\b/g, " ")
+    .replace(/\b\d+(st|nd|rd|th)\s+season\b/g, " ")
+    .replace(/\bfinal\s+season\b/g, " ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function buildAnimeFillerListSlugCandidates(animeName: string): string[] {
+  const raw = animeName.trim();
+  const candidates = new Set<string>();
+
+  const add = (value: string) => {
+    const slug = normalizeFillerSlugPart(value);
+    if (slug.length >= 3) candidates.add(slug);
+  };
+
+  add(raw);
+
+  const splitBase = raw.split(/\s*[:|-]\s*/)[0];
+  if (splitBase && splitBase !== raw) add(splitBase);
+
+  add(raw.replace(/\bshippuuden\b/i, "shippuden"));
+  add(raw.replace(/\bboruto:\s*/i, "boruto-"));
+
+  return Array.from(candidates).slice(0, 5);
+}
+
+function parseAnimeFillerListRows(html: string): FillerLookup {
+  const filler = new Set<number>();
+  const mixed = new Set<number>();
+  const rowRegex = /<tr\b([^>]*)>([\s\S]*?)<\/tr>/gi;
+  let rowMatch: RegExpExecArray | null;
+
+  while ((rowMatch = rowRegex.exec(html))) {
+    const attrs = rowMatch[1] || "";
+    const body = rowMatch[2] || "";
+    const classMatch = attrs.match(/class=["']([^"']+)["']/i);
+    const rowClass = (classMatch?.[1] || "").toLowerCase();
+    if (!rowClass.includes("filler")) continue;
+
+    const numberMatch = body.match(/<td\b[^>]*class=["'][^"']*\bNumber\b[^"']*["'][^>]*>\s*(\d+)\s*<\/td>/i)
+      || body.match(/<td\b[^>]*>\s*(\d+)\s*<\/td>/i);
+    const episodeNum = numberMatch ? parseInt(numberMatch[1], 10) : NaN;
+    if (!episodeNum || Number.isNaN(episodeNum)) continue;
+
+    if (rowClass.includes("mixed_canon/filler")) mixed.add(episodeNum);
+    else filler.add(episodeNum);
+  }
+
+  return { filler, mixed };
+}
+
+export async function fetchFillerLookupFromAnimeFillerList(
+  animeName: string
+): Promise<FillerLookup | null> {
+  const cacheKey = normalizeFillerSlugPart(animeName);
+  const cached = fillerLookupCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.data;
+
+  for (const slug of buildAnimeFillerListSlugCandidates(animeName)) {
+    try {
+      const res = await fetch(`${ANIME_FILLER_LIST_BASE}/${slug}`, {
+        signal: AbortSignal.timeout(6000),
+        headers: { "User-Agent": "CineStream/1.0" },
+        next: { revalidate: 86400 } as any,
+      });
+      if (!res.ok) continue;
+
+      const lookup = parseAnimeFillerListRows(await res.text());
+      if (lookup.filler.size > 0 || lookup.mixed.size > 0) {
+        fillerLookupCache.set(cacheKey, { data: lookup, expires: Date.now() + FILLER_LOOKUP_TTL });
+        return lookup;
+      }
+    } catch {
+      // Try the next slug candidate.
+    }
+  }
+
+  fillerLookupCache.set(cacheKey, { data: null, expires: Date.now() + 3600000 });
+  return null;
+}
+
 export async function fetchEpisodesFromJikan(
   malId: number | string,
   anilistId: string,

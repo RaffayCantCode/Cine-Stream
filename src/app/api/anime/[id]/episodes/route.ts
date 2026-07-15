@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
-import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromKitsu } from "@/lib/anime-fetch";
+import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromKitsu, fetchFillerLookupFromAnimeFillerList } from "@/lib/anime-fetch";
 import { tmdbFetch, fetchTmdbEpisodeData } from "@/lib/tmdb";
 
 interface TmdbSeasonMin {
@@ -54,13 +54,15 @@ async function getEnrichedEpisodesList(
   let seasonEps: any[] = [];
 
   // 1 & 2. Try AniZip and Jikan in parallel
-  const [aniZipEpsRes, jikanEpsRes] = await Promise.allSettled([
+  const [aniZipEpsRes, jikanEpsRes, fillerLookupRes] = await Promise.allSettled([
     fetchEpisodesFromAniZip(seasonId, totalEpisodes),
-    idMal ? fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes) : Promise.resolve([])
+    idMal ? fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes) : Promise.resolve([]),
+    fetchFillerLookupFromAnimeFillerList(seasonName)
   ]);
 
   const aniZipEps = aniZipEpsRes.status === 'fulfilled' ? aniZipEpsRes.value : [];
   const jikanEps = jikanEpsRes.status === 'fulfilled' ? jikanEpsRes.value : [];
+  const fillerLookup = fillerLookupRes.status === 'fulfilled' ? fillerLookupRes.value : null;
 
   if (aniZipEps && aniZipEps.length > 0) {
     seasonEps = aniZipEps;
@@ -76,10 +78,17 @@ async function getEnrichedEpisodesList(
           ...ep,
           thumbnail: ep.thumbnail || jEp?.thumbnail || null,
           description: ep.description || jEp?.description || null,
-          isFiller: jEp?.isFiller || false,
+          isFiller: Boolean(jEp?.isFiller || fillerLookup?.filler.has(ep.episodeNum)),
         };
       });
     }
+  }
+
+  if (fillerLookup && seasonEps.length > 0) {
+    seasonEps = seasonEps.map((ep) => ({
+      ...ep,
+      isFiller: Boolean(ep.isFiller || fillerLookup.filler.has(ep.episodeNum)),
+    }));
   }
 
   // Kitsu fallback and retries have been moved to be lazily evaluated only if TMDB fails
@@ -89,6 +98,11 @@ async function getEnrichedEpisodesList(
 }
 
 const episodesCache = new Map<string, { data: any; expires: number }>();
+const animeNoStoreHeaders = {
+  "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+  "CDN-Cache-Control": "no-store",
+  "Cloudflare-CDN-Cache-Control": "no-store",
+} as const;
 
 export async function GET(
   request: NextRequest,
@@ -105,7 +119,7 @@ export async function GET(
   const cacheKey = `${id}:${searchParams.toString()}`;
   const cached = episodesCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
-    return Response.json(cached.data);
+    return Response.json(cached.data, { headers: animeNoStoreHeaders });
   }
 
   try {
@@ -119,7 +133,7 @@ export async function GET(
       if (newEps.length > 0) {
         episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
       }
-      return Response.json(resPayload);
+      return Response.json(resPayload, { headers: animeNoStoreHeaders });
     }
 
     // ── Fetch a specific season's episodes by its AniList ID ───────────────
@@ -205,7 +219,7 @@ export async function GET(
 
         if (!season) {
           console.warn(`[Episodes API] Season ${seasonId} not found in any meta result`);
-          return Response.json({ success: true, data: { episodes: [], totalEpisodes: 0 } });
+          return Response.json({ success: true, data: { episodes: [], totalEpisodes: 0 } }, { headers: animeNoStoreHeaders });
         }
 
         const idx = meta.seasons.findIndex((s: any) => s.id === seasonId);
@@ -471,7 +485,7 @@ export async function GET(
         console.warn(`[Episodes API] Not caching empty episode result for seasonId=${seasonId}`);
       }
 
-      return Response.json(resPayload);
+      return Response.json(resPayload, { headers: animeNoStoreHeaders });
     }
 
     // ── Fallback: fetch by season index (backward compat) ──────────────────
@@ -593,7 +607,7 @@ export async function GET(
       if (seasonEps.length > 0) {
         episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
       }
-      return Response.json(resPayload);
+      return Response.json(resPayload, { headers: animeNoStoreHeaders });
     }
 
     // ── Default: fetch ALL seasons' episodes ───────────────────────────────
@@ -716,19 +730,12 @@ export async function GET(
     if (episodes.length > 0) {
       episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
     }
-    const isDev = process.env.NODE_ENV === "development";
-    return Response.json(resPayload, { 
-      headers: { 
-        "Cache-Control": isDev 
-          ? "no-cache, no-store, must-revalidate" 
-          : "public, s-maxage=3600, stale-while-revalidate=7200" 
-      } 
-    });
+    return Response.json(resPayload, { headers: animeNoStoreHeaders });
   } catch (error) {
     console.error("[Anime Episodes Error]:", error);
     return Response.json(
       { error: "Failed to fetch episodes", success: false },
-      { status: 500 }
+      { status: 500, headers: animeNoStoreHeaders }
     );
   }
 }

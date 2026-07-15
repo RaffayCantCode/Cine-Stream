@@ -4,6 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
 import { FRANCHISES } from "@/lib/franchises";
 
+const noStoreHeaders = {
+  "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+  "CDN-Cache-Control": "no-store",
+  "Cloudflare-CDN-Cache-Control": "no-store",
+} as const;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,8 +20,20 @@ export async function GET(
     const franchise = FRANCHISES.find(f => f.id === id);
 
     if (!franchise) {
-      return NextResponse.json({ error: "Franchise not found" }, { status: 404 });
+      return NextResponse.json({ error: "Franchise not found" }, { status: 404, headers: noStoreHeaders });
     }
+
+    const fallbackItem = (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string; poster_path?: string }) => ({
+      id: item.anilist_id || item.id,
+      media_type: item.media_type,
+      title: item.title || `${item.media_type === "tv" ? "TV" : item.media_type === "anime" ? "Anime" : "Movie"} ${item.id}`,
+      name: item.title || `${item.media_type === "tv" ? "TV" : item.media_type === "anime" ? "Anime" : "Movie"} ${item.id}`,
+      overview: "",
+      poster_path: item.poster_path || null,
+      backdrop_path: null,
+      vote_average: null,
+      release_date: item.release_date || "",
+    });
 
     const fetchItem = async (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string; poster_path?: string }) => {
       try {
@@ -55,7 +73,7 @@ export async function GET(
           release_date: item.release_date || data.release_date || data.first_air_date,
         };
       } catch (err) {
-        return null;
+        return fallbackItem(item);
       }
     };
 
@@ -64,10 +82,10 @@ export async function GET(
 
     async function batchFetch(items: any[]): Promise<any[]> {
       const results: any[] = [];
-      for (let i = 0; i < items.length; i += 50) {
-        const batch = items.slice(i, i + 50);
+      for (let i = 0; i < items.length; i += 15) {
+        const batch = items.slice(i, i + 15);
         const batchResults = await Promise.allSettled(batch.map(fetchItem));
-        results.push(...batchResults.map(r => r.status === "fulfilled" ? r.value : null).filter(Boolean));
+        results.push(...batchResults.map((r, idx) => r.status === "fulfilled" ? r.value : fallbackItem(batch[idx])));
       }
       return results;
     }
@@ -95,13 +113,13 @@ export async function GET(
 
     return NextResponse.json(response, {
       headers: {
-        "Cache-Control": "public, max-age=0, s-maxage=0",
+        ...noStoreHeaders,
       },
     });
   } catch (error) {
     return NextResponse.json(
       { error: "Failed to fetch collection" },
-      { status: 500 }
+      { status: 500, headers: noStoreHeaders }
     );
   }
 }

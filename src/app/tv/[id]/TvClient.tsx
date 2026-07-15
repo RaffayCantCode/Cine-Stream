@@ -264,9 +264,12 @@ export default function TvClient() {
 
   // ── Scroll queue to selected episode ──
   useEffect(() => {
-    if (!isPlaying || !selectedEpRef.current || playingSeason !== selectedSeason) return;
-    selectedEpRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [playingEpisode, playingSeason, selectedSeason, isPlaying]);
+    if (!isPlaying || seasonLoading || !selectedEpRef.current || playingSeason !== selectedSeason) return;
+    const timer = setTimeout(() => {
+      selectedEpRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [playingEpisode, playingSeason, selectedSeason, isPlaying, seasonLoading, seasonData?.episodes?.length]);
 
   if (isLoading) {
     return (
@@ -468,7 +471,7 @@ export default function TvClient() {
                 <span className="text-xs font-normal text-white/40">Season {selectedSeason}</span>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
+            <div ref={queueRef} className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
               {seasonLoading ? (
                 <div className="flex items-center justify-center py-8 text-white/30 text-xs">Loading episodes...</div>
               ) : !seasonData?.episodes?.length ? (

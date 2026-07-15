@@ -87,25 +87,25 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 453395, media_type: "movie" }, // Doctor Strange in the Multiverse of Madness
       { id: 88329, media_type: "tv" }, // Hawkeye
       { id: 92749, media_type: "tv" }, // Moon Knight
-      { id: 505642, media_type: "movie" }, // Black Panther: Wakanda Forever
-      { id: 122226, media_type: "tv" }, // Echo
-      { id: 92783, media_type: "tv" }, // She-Hulk: Attorney at Law
-      { id: 92782, media_type: "tv" }, // Ms. Marvel
-      { id: 616037, media_type: "movie" }, // Thor: Love and Thunder
-      { id: 114471, media_type: "tv" }, // Ironheart
-      { id: 894205, media_type: "movie" }, // Werewolf by Night
-      { id: 774752, media_type: "movie" }, // The Guardians of the Galaxy Holiday Special
-      { id: 640146, media_type: "movie" }, // Ant-Man and The Wasp: Quantumania
-      { id: 447365, media_type: "movie" }, // Guardians of the Galaxy Vol. 3
-      { id: 114472, media_type: "tv" }, // Secret Invasion
-      { id: 609681, media_type: "movie" }, // The Marvels
-      { id: 138501, media_type: "tv" }, // Agatha All Along
-      { id: 202555, media_type: "tv" }, // Daredevil: Born Again
-      { id: 822119, media_type: "movie" }, // Captain America: Brave New World
-      { id: 986056, media_type: "movie" }, // Thunderbolts*
-      { id: 617126, media_type: "movie" }, // The Fantastic Four: First Steps
-      { id: 198178, media_type: "tv" }, // Wonder Man
-      { id: 1439930, media_type: "movie" } // The Punisher: One Last Kill
+      { id: 505642, media_type: "movie", title: "Black Panther: Wakanda Forever" },
+      { id: 122226, media_type: "tv", title: "Echo" },
+      { id: 92783, media_type: "tv", title: "She-Hulk: Attorney at Law" },
+      { id: 92782, media_type: "tv", title: "Ms. Marvel" },
+      { id: 616037, media_type: "movie", title: "Thor: Love and Thunder" },
+      { id: 114471, media_type: "tv", title: "Ironheart" },
+      { id: 894205, media_type: "movie", title: "Werewolf by Night" },
+      { id: 774752, media_type: "movie", title: "The Guardians of the Galaxy Holiday Special" },
+      { id: 640146, media_type: "movie", title: "Ant-Man and The Wasp: Quantumania" },
+      { id: 447365, media_type: "movie", title: "Guardians of the Galaxy Vol. 3" },
+      { id: 114472, media_type: "tv", title: "Secret Invasion" },
+      { id: 609681, media_type: "movie", title: "The Marvels" },
+      { id: 138501, media_type: "tv", title: "Agatha All Along" },
+      { id: 202555, media_type: "tv", title: "Daredevil: Born Again" },
+      { id: 822119, media_type: "movie", title: "Captain America: Brave New World" },
+      { id: 986056, media_type: "movie", title: "Thunderbolts*" },
+      { id: 617126, media_type: "movie", title: "The Fantastic Four: First Steps" },
+      { id: 198178, media_type: "tv", title: "Wonder Man" },
+      { id: 1439930, media_type: "movie", title: "The Punisher: One Last Kill" }
     ],
   },
   {
