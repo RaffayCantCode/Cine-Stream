@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { CinematicHero } from "@/components/CinematicHero";
@@ -22,6 +22,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
   const [collection, setCollection] = useState<Collection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hydratedPosterIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -37,6 +38,80 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
     };
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (!collection) return;
+
+    const flatItems = [
+      ...(collection.parts || []),
+      ...(collection.groups || []).flatMap(group => group.parts || []),
+    ];
+    const missingPosterItems = flatItems.filter(item => {
+      const key = `${item.media_type || "movie"}-${item.id}`;
+      return item?.id && !item.poster_path && !hydratedPosterIds.current.has(key) && item.media_type !== "anime";
+    });
+
+    if (missingPosterItems.length === 0) return;
+
+    let cancelled = false;
+
+    const hydratePosters = async () => {
+      const updates = new Map<string, any>();
+
+      for (let i = 0; i < missingPosterItems.length; i += 6) {
+        const batch = missingPosterItems.slice(i, i + 6);
+        const results = await Promise.allSettled(
+          batch.map(async (item) => {
+            const mediaType = item.media_type === "tv" ? "tv" : "movie";
+            const key = `${mediaType}-${item.id}`;
+            hydratedPosterIds.current.add(key);
+
+            const detail = await fetchJson<any>(`/api/tmdb/${mediaType}/${item.id}`, {
+              skipCache: true,
+            });
+
+            return {
+              key,
+              id: item.id,
+              media_type: item.media_type,
+              title: item.title || detail.title || detail.name,
+              name: item.name || item.title || detail.title || detail.name,
+              overview: item.overview || detail.overview,
+              poster_path: detail.poster_path || item.poster_path || null,
+              backdrop_path: item.backdrop_path || detail.backdrop_path || null,
+              vote_average: item.vote_average ?? detail.vote_average,
+              release_date: item.release_date || detail.release_date || detail.first_air_date,
+              first_air_date: item.first_air_date || detail.first_air_date,
+            };
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === "fulfilled" && result.value.poster_path) {
+            updates.set(result.value.key, result.value);
+          }
+        }
+
+        if (cancelled || updates.size === 0) continue;
+
+        setCollection(prev => {
+          if (!prev) return prev;
+          const applyUpdate = (item: any) => updates.get(`${item.media_type || "movie"}-${item.id}`) || item;
+          return {
+            ...prev,
+            parts: (prev.parts || []).map(applyUpdate),
+            groups: prev.groups?.map(group => ({
+              ...group,
+              parts: (group.parts || []).map(applyUpdate),
+            })),
+          };
+        });
+      }
+    };
+
+    hydratePosters().catch(() => {});
+    return () => { cancelled = true; };
+  }, [collection]);
 
   if (isLoading) {
     return (
