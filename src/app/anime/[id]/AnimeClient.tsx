@@ -1134,18 +1134,18 @@ export default function AnimeClient() {
                   <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 select-none">
                     <div ref={playerRef} className="w-full min-w-0">
                       {!episodesLoading && (
-                        <AnimePlayer
-                          key={selectedEp.episodeId}
-                          animeId={streamingAnimeId}
-                          malId={streamingMalId}
-                          animeTitle={selectedEp.seasonName || anime.name}
-                          episode={selectedEp.episodeNum}
-                          rootAnimeId={rootSeason?.id || anime?.id}
-                          rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
-                          episodeOffset={currentEpisodeOffset}
-                          tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
-                          tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
-                          isMovie={anime?.format === 'MOVIE' || anime?.format === 'SPECIAL'}
+                          <AnimePlayer
+                            key={selectedEp.episodeId}
+                            animeId={streamingAnimeId}
+                            malId={streamingMalId}
+                            animeTitle={selectedEp.seasonName || anime.name}
+                            episode={selectedEp.episodeNum}
+                            rootAnimeId={rootSeason?.id || anime?.id}
+                            rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
+                            episodeOffset={currentEpisodeOffset}
+                            tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
+                            tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
+                            isMovie={anime?.format === 'MOVIE' || anime?.format === 'SPECIAL'}
                           startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
                           onAutoNext={handleAutoNext}
                         />

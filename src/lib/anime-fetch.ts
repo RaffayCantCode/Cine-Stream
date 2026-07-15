@@ -1404,10 +1404,17 @@ export async function fetchEpisodesFromJikan(
     const allEps: EpisodeDetail[] = [];
 
     // First request to get total pages
-    const firstRes = await fetch(
+    let firstRes = await fetch(
       `${JIKAN_BASE}/anime/${malId}/episodes?page=1`,
       { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
     );
+    if (firstRes.status === 429) {
+      await new Promise(r => setTimeout(r, 1500));
+      firstRes = await fetch(
+        `${JIKAN_BASE}/anime/${malId}/episodes?page=1`,
+        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
+      );
+    }
     if (!firstRes.ok) return null;
     
     const firstData = await firstRes.json();

@@ -303,6 +303,9 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
             </button>
           )}
         </div>
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <span className="text-[10px] text-amber-400 font-bold">Popup ads may open — close them and the video will play</span>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setError(null); setIsLoading(true); setRetryCount(c => c + 1); }}

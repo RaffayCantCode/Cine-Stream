@@ -7,7 +7,7 @@ import { Server, Maximize2, RotateCcw, SkipForward, ChevronRight, Check, Loader2
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animeplay" | "vidlink" | "123embed" | "vidlink-alt" | "anyembed";
+  provider: "vidnest" | "animeplay" | "vidlink" | "123embed";
   color: string;
 }
 
@@ -32,10 +32,8 @@ interface AnimePlayerProps {
 const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "vidnest", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
   { name: "Source 2", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
-  { name: "Source 3 (Saves Progress)", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
-  { name: "Source 4", provider: "123embed", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
-  { name: "Source 5", provider: "vidlink-alt", color: "from-[#8a2be2]/30 to-[#da70d6]/20" },
-  { name: "Source 6", provider: "anyembed", color: "from-[#ff8c00]/30 to-[#ffa500]/20" },
+  { name: "Source 3", provider: "123embed", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
+  { name: "Source 4", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
 ];
 
 function buildProviderUrl(
@@ -81,17 +79,6 @@ function buildProviderUrl(
         return isMovie
           ? `https://play2.123embed.net/movie/${tmdbId}`
           : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
-      }
-      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
-    case "vidlink-alt":
-      return malId_ || aniId
-        ? `https://vidlink.pro/anime/${malId_ || aniId}/${ep}/sub?primaryColor=4b5694&autoplay=true`
-        : `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
-    case "anyembed":
-      if (tmdbId) {
-        return isMovie
-          ? `https://anyembed.xyz/embed/tmdb-movie-${tmdbId}`
-          : `https://anyembed.xyz/embed/tmdb-tv-${tmdbId}-${tmdbSeason || 1}-${absEp}`;
       }
       return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
     default:
@@ -311,7 +298,7 @@ export function AnimePlayer({
   }, [animeId, episode, tmdbSeason, onProgress, onAutoNext]);
 
   // Handle seamless syncing via postMessage without reloading the iframe
-  // Only send for VidLink (Source 3) — other providers don't understand these messages
+  // Only send for VidLink (Source 4) — other providers don't understand these messages
   useEffect(() => {
     if (iframeReady && iframeRef.current?.contentWindow && startProgress !== undefined && currentSource.provider === "vidlink") {
       iframeRef.current.contentWindow.postMessage({ type: "player.seek", data: startProgress }, "*");
@@ -372,6 +359,9 @@ export function AnimePlayer({
             </button>
           )}
         </div>
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <span className="text-[10px] text-amber-400 font-bold">Popup ads may open — close them and the video will play</span>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={retrySource}
@@ -382,12 +372,6 @@ export function AnimePlayer({
           </button>
         </div>
       </div>
-
-      {currentSource.provider === "animeplay" && ( 
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-300/80 text-xs font-medium">
-          Not working? Use <strong className="mx-1">Source 1</strong> instead
-        </div>
-      )}
 
       {showSources && (
         <div

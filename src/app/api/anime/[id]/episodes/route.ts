@@ -117,7 +117,7 @@ export async function GET(
         data: { episodes: newEps, totalEpisodes: 0 },
       };
       if (newEps.length > 0) {
-        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
       }
       return Response.json(resPayload);
     }
@@ -466,7 +466,7 @@ export async function GET(
 
       // Don't cache empty results — allow retries to re-fetch
       if (seasonEps.length > 0) {
-        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
       } else {
         console.warn(`[Episodes API] Not caching empty episode result for seasonId=${seasonId}`);
       }
@@ -591,7 +591,7 @@ export async function GET(
         data: { episodes: seasonEps, totalEpisodes: meta.totalEpisodes },
       };
       if (seasonEps.length > 0) {
-        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
       }
       return Response.json(resPayload);
     }
@@ -671,6 +671,8 @@ export async function GET(
             seasonId: season.id,
             seasonName: season.name,
             seasonMalId: season.idMal || null,
+            tmdbSeasonNumber: tmdbSeason,
+            tmdbEpisodeNumber: tmdbEpisode,
           });
         }
       } else {
@@ -712,7 +714,7 @@ export async function GET(
       data: { episodes, totalEpisodes: episodes.length },
     };
     if (episodes.length > 0) {
-      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 1800000 });
+      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
     }
     const isDev = process.env.NODE_ENV === "development";
     return Response.json(resPayload, { 
