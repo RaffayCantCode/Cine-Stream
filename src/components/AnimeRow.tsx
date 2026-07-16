@@ -15,7 +15,7 @@ interface AnimeRowProps {
 function SkeletonCard({ index }: { index: number }) {
   return (
     <div
-      className="aspect-[2/3] w-[150px] sm:w-[180px] md:w-[210px] shrink-0 rounded-2xl shimmer"
+      className="aspect-[2/3] w-[136px] sm:w-[164px] md:w-[190px] shrink-0 rounded-xl shimmer"
       style={{ animationDelay: `${index * 80}ms` }}
     />
   );
@@ -69,13 +69,13 @@ export const AnimeRow = memo(function AnimeRow({ title, items, isLoading, seeAll
 
   return (
     <div
-      className="py-6 md:py-8 space-y-5 animate-fade-in-up"
-      style={{ animationDuration: "0.5s", contentVisibility: "auto", containIntrinsicSize: "auto 360px" }}
+      className="py-4 md:py-6 space-y-4 animate-fade-in-up"
+      style={{ animationDuration: "0.45s", contentVisibility: "auto", containIntrinsicSize: "auto 330px" }}
     >
-      <div className="flex items-center justify-between px-5 md:px-14">
+      <div className="flex items-center justify-between px-3 md:px-8 lg:px-10">
         <div className="flex items-center gap-3">
-          <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
-          <h2 className="text-lg md:text-2xl font-black text-white tracking-tight">{title}</h2>
+          <div className="w-1 h-5 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
+          <h2 className="text-base md:text-xl font-black text-white tracking-tight">{title}</h2>
         </div>
         <div className="flex items-center gap-3 md:gap-6">
           <div className="hidden md:flex items-center gap-2">
@@ -115,8 +115,8 @@ export const AnimeRow = memo(function AnimeRow({ title, items, isLoading, seeAll
       </div>
 
       <div className="relative group/row">
-        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-6 pt-2 hide-scrollbar will-change-transform touch-pan-x">
-          <div className={`flex gap-4 md:gap-5 px-5 md:px-14 w-max ${isTop10 ? "pl-8 md:pl-16" : ""}`}>
+        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-5 pt-1 hide-scrollbar will-change-transform touch-pan-x">
+          <div className={`flex px-3 md:px-8 lg:px-10 w-max ${isTop10 ? "gap-2 md:gap-3 pl-3 md:pl-6" : "gap-3 md:gap-4"}`}>
             {isLoading
               ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (
                   <SkeletonCard key={i} index={i} />

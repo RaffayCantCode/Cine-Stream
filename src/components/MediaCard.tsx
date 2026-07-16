@@ -52,26 +52,26 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
     >
       <Link
         href={link}
-        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.05] hover:z-10 focus:outline-none touch-pan-x ${
-          rank ? "w-[160px] sm:w-[190px] md:w-[220px]" : "w-[140px] sm:w-[170px] md:w-[200px]"
+        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-x ${
+          rank ? "w-[142px] sm:w-[168px] md:w-[196px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
         {rank && (
           <div 
-            className="absolute -left-6 bottom-[-20px] text-[140px] sm:text-[180px] md:text-[220px] font-black leading-none z-0 select-none pointer-events-none drop-shadow-2xl"
+            className="absolute -left-2 bottom-[-10px] text-[104px] sm:text-[132px] md:text-[164px] font-black leading-none z-0 select-none pointer-events-none"
             style={{ 
-              WebkitTextStroke: "2px rgba(255,255,255,0.8)", 
+              WebkitTextStroke: "1.5px rgba(255,255,255,0.72)", 
               WebkitTextFillColor: "transparent",
-              textShadow: "4px 4px 10px rgba(0,0,0,0.8)"
+              textShadow: "0 8px 18px rgba(0,0,0,0.75)"
             }}
           >
             {rank}
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-2xl bg-muted/50 hover:shadow-2xl hover:shadow-primary/40 hover:ring-2 hover:ring-primary/50 ${
-            rank ? "ml-12 w-[calc(100%-3rem)]" : "w-full"
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-muted/50 ring-1 ring-white/[0.07] shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition-all duration-300 group-hover:shadow-xl group-hover:shadow-primary/25 group-hover:ring-[#7288AE]/55 ${
+            rank ? "ml-8 w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}
         >
@@ -80,8 +80,8 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
             src={posterUrl}
             alt={title}
             fill
-            sizes="(max-width: 640px) 150px, (max-width: 768px) 180px, 200px"
-            className="object-cover transition-all duration-700 group-hover:scale-110"
+            sizes={rank ? "(max-width: 640px) 110px, (max-width: 768px) 136px, 164px" : "(max-width: 640px) 132px, (max-width: 768px) 158px, 186px"}
+            className="object-cover transition-all duration-500 group-hover:scale-105"
             priority={isPriority}
           />
         ) : (
@@ -90,10 +90,10 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-transparent opacity-60 group-hover:opacity-0 transition-opacity duration-500" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/35 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-transparent opacity-50 group-hover:opacity-0 transition-opacity duration-300" />
 
-        <div className="absolute inset-0 flex flex-col justify-between p-3.5 opacity-0 group-hover:opacity-100 transition-all duration-500">
+        <div className="absolute inset-0 flex flex-col justify-between p-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
           {!isPerson && item.vote_average && item.vote_count && item.vote_count > 20 ? (
             <div className="flex justify-end">
               <div className="flex items-center gap-1 bg-black/70 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">
@@ -107,14 +107,14 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
 
           {!isPerson && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#111844] to-[#4B5694] flex items-center justify-center translate-y-4 group-hover:translate-y-0 transition-all duration-500 group-hover:scale-110">
-                <Play className="w-6 h-6 fill-white text-white ml-0.5" />
+              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#111844] to-[#4B5694] flex items-center justify-center translate-y-3 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-105 shadow-lg shadow-black/30">
+                <Play className="w-5 h-5 fill-white text-white ml-0.5" />
               </div>
             </div>
           )}
 
-          <div className="relative z-10 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
-            <h3 className="text-white font-bold text-sm leading-tight mb-1.5 line-clamp-2 drop-shadow-lg">
+          <div className="relative z-10 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+            <h3 className="text-white font-bold text-[13px] leading-tight mb-1.5 line-clamp-2 drop-shadow-lg">
               {title}
             </h3>
             <div className="flex items-center gap-2">

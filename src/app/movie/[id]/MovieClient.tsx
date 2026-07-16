@@ -288,26 +288,41 @@ export default function MovieClient() {
           const similar = movie.similar?.results || [];
           const seen = new Set<number>();
           const merged: any[] = [];
+          const sourceGenres = movie.genres?.map((g: any) => g.id) || [];
+          const scoreItem = (item: any, source: "recommendation" | "similar") => {
+            const targetGenres = item.genre_ids || [];
+            const genreMatches = sourceGenres.filter((g: number) => targetGenres.includes(g)).length;
+            const rating = Number(item.vote_average || 0);
+            const votes = Math.min(Number(item.vote_count || 0), 2500) / 2500;
+            return genreMatches * 120 + rating * 10 + votes * 40 + (source === "recommendation" ? 35 : 0);
+          };
           for (const item of recs) {
             if (seen.has(item.id)) continue;
             seen.add(item.id);
-            item.reason = getRecommendationReason(movie.genres?.map((g: any) => g.id) || [], item.genre_ids || []);
-            merged.push(item);
+            item.reason = getRecommendationReason(sourceGenres, item.genre_ids || []);
+            item.relevanceScore = scoreItem(item, "recommendation");
+            merged.push({ ...item, media_type: item.media_type || "movie" });
           }
           for (const item of similar) {
             if (seen.has(item.id)) continue;
             seen.add(item.id);
-            item.reason = getRecommendationReason(movie.genres?.map((g: any) => g.id) || [], item.genre_ids || []);
-            merged.push(item);
+            item.reason = getRecommendationReason(sourceGenres, item.genre_ids || []);
+            item.relevanceScore = scoreItem(item, "similar");
+            merged.push({ ...item, media_type: item.media_type || "movie" });
             if (merged.length >= 20) break;
           }
-          const filtered = merged.filter(item => item.poster_path || item.backdrop_path);
+          const filtered = merged
+            .filter(item => item.poster_path || item.backdrop_path)
+            .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
           if (filtered.length >= 6) {
             return (
               <section className="pt-4">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-1 h-5 bg-primary rounded-full" />
-                  <h2 className="text-base font-bold text-white tracking-wide">You May Like</h2>
+                  <div>
+                    <h2 className="text-base font-bold text-white tracking-wide">More Like This</h2>
+                    <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
                   {filtered.slice(0, 18).map((item: any, i: number) => (

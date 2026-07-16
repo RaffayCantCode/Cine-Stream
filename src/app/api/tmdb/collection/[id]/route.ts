@@ -23,7 +23,17 @@ export async function GET(
       return NextResponse.json({ error: "Franchise not found" }, { status: 404, headers: noStoreHeaders });
     }
 
-    const fallbackItem = (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string; poster_path?: string }) => ({
+    type FranchiseRouteItem = {
+      id: number;
+      media_type: string;
+      tmdb_type?: string;
+      anilist_id?: number;
+      title?: string;
+      release_date?: string;
+      poster_path?: string;
+    };
+
+    const fallbackItem = (item: FranchiseRouteItem) => ({
       id: item.anilist_id || item.id,
       media_type: item.media_type,
       title: item.title || `${item.media_type === "tv" ? "TV" : item.media_type === "anime" ? "Anime" : "Movie"} ${item.id}`,
@@ -35,12 +45,47 @@ export async function GET(
       release_date: item.release_date || "",
     });
 
-    const fetchItem = async (item: { id: number; media_type: string; tmdb_type?: string; anilist_id?: number; title?: string; release_date?: string; poster_path?: string }) => {
+    const fetchSearchFallback = async (item: FranchiseRouteItem, tmdbType: string) => {
+      if (!item.title) return null;
+
+      try {
+        const searchPath = tmdbType === "tv" ? "/search/tv" : "/search/movie";
+        const searchData = await tmdbFetch(
+          searchPath,
+          {
+            query: item.title,
+            include_adult: "false",
+            page: "1",
+          },
+          { noCache: true }
+        ) as { results?: any[] };
+
+        const normalizedTitle = item.title.toLowerCase();
+        const results = searchData.results || [];
+        return (
+          results.find(result => (result.title || result.name || "").toLowerCase() === normalizedTitle && result.poster_path) ||
+          results.find(result => result.poster_path) ||
+          null
+        );
+      } catch {
+        return null;
+      }
+    };
+
+    const fetchItem = async (item: FranchiseRouteItem) => {
       try {
         const tmdbType = item.tmdb_type || (item.media_type === "movie" ? "movie" : "tv");
-        const data = await tmdbFetch(`/${tmdbType}/${item.id}?language=en-US`) as any;
+        const data = await tmdbFetch(
+          `/${tmdbType}/${item.id}`,
+          { language: "en-US" },
+          { noCache: true }
+        ) as any;
+        const searchFallback = !data.poster_path && !item.poster_path
+          ? await fetchSearchFallback(item, tmdbType)
+          : null;
 
-        let poster_path = item.poster_path || data.poster_path;
+        let poster_path = item.poster_path || data.poster_path || searchFallback?.poster_path || null;
+        const backdrop_path = data.backdrop_path || searchFallback?.backdrop_path || null;
 
         if (!item.poster_path && item.media_type === "anime" && item.anilist_id) {
           try {
@@ -64,16 +109,30 @@ export async function GET(
         return {
           id: item.anilist_id || data.id,
           media_type: item.media_type,
-          title: item.title || data.title || data.name,
-          name: item.title || data.title || data.name,
-          overview: data.overview,
+          title: item.title || data.title || data.name || searchFallback?.title || searchFallback?.name,
+          name: item.title || data.title || data.name || searchFallback?.title || searchFallback?.name,
+          overview: data.overview || searchFallback?.overview || "",
           poster_path: poster_path,
-          backdrop_path: data.backdrop_path,
-          vote_average: data.vote_average,
-          release_date: item.release_date || data.release_date || data.first_air_date,
+          backdrop_path,
+          vote_average: data.vote_average || searchFallback?.vote_average || null,
+          release_date: item.release_date || data.release_date || data.first_air_date || searchFallback?.release_date || searchFallback?.first_air_date || "",
         };
       } catch (err) {
-        return fallbackItem(item);
+        const tmdbType = item.tmdb_type || (item.media_type === "movie" ? "movie" : "tv");
+        const searchFallback = await fetchSearchFallback(item, tmdbType);
+        if (!searchFallback) return fallbackItem(item);
+
+        return {
+          ...fallbackItem(item),
+          id: item.anilist_id || searchFallback.id || item.id,
+          title: item.title || searchFallback.title || searchFallback.name,
+          name: item.title || searchFallback.title || searchFallback.name,
+          overview: searchFallback.overview || "",
+          poster_path: item.poster_path || searchFallback.poster_path || null,
+          backdrop_path: searchFallback.backdrop_path || null,
+          vote_average: searchFallback.vote_average || null,
+          release_date: item.release_date || searchFallback.release_date || searchFallback.first_air_date || "",
+        };
       }
     };
 

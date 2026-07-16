@@ -42,26 +42,26 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
     >
       <Link
         href={`/anime/${item.id}`}
-        className={`group relative block shrink-0 transition-all duration-500 hover:scale-[1.06] hover:z-10 focus:outline-none touch-pan-x ${
-          rank ? "w-[160px] sm:w-[190px] md:w-[220px]" : "w-[140px] sm:w-[170px] md:w-[200px]"
+        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-x ${
+          rank ? "w-[142px] sm:w-[168px] md:w-[196px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
         {rank && (
           <div 
-            className="absolute -left-6 bottom-[-20px] text-[140px] sm:text-[180px] md:text-[220px] font-black leading-none z-0 select-none pointer-events-none drop-shadow-2xl"
+            className="absolute -left-2 bottom-[-10px] text-[104px] sm:text-[132px] md:text-[164px] font-black leading-none z-0 select-none pointer-events-none"
             style={{ 
-              WebkitTextStroke: "2px rgba(255,255,255,0.8)", 
+              WebkitTextStroke: "1.5px rgba(255,255,255,0.72)", 
               WebkitTextFillColor: "transparent",
-              textShadow: "4px 4px 10px rgba(0,0,0,0.8)"
+              textShadow: "0 8px 18px rgba(0,0,0,0.75)"
             }}
           >
             {rank}
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-2xl bg-muted hover:shadow-2xl hover:shadow-primary/40 hover:ring-2 hover:ring-primary/50 ${
-            rank ? "ml-12 w-[calc(100%-3rem)]" : "w-full"
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-muted ring-1 ring-white/[0.07] shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition-all duration-300 group-hover:shadow-xl group-hover:shadow-primary/25 group-hover:ring-[#7288AE]/55 ${
+            rank ? "ml-8 w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}
         >
@@ -69,7 +69,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           <img
             src={item.poster}
             alt={item.name}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading={index < 6 ? "eager" : "lazy"}
           />
         ) : (
@@ -91,15 +91,15 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
 
         <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-black/85 to-transparent pointer-events-none" />
 
-        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 sm:p-3 pointer-events-none transition-transform duration-500 group-hover:-translate-y-1">
+        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 sm:p-3 pointer-events-none transition-transform duration-300 group-hover:-translate-y-1">
           <h3 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)]">
             {item.name}
           </h3>
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-3 sm:p-4 pb-[3.5rem] sm:pb-[4.5rem]">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-end p-3 sm:p-4 pb-[3.5rem] sm:pb-[4.5rem]">
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/90 backdrop-blur-xl flex items-center justify-center translate-y-4 group-hover:translate-y-0 transition-transform duration-500 shadow-[0_0_20px_rgba(213,82,163,0.4)]">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-primary/90 backdrop-blur-xl flex items-center justify-center translate-y-3 group-hover:translate-y-0 transition-transform duration-300 shadow-[0_0_20px_rgba(213,82,163,0.35)]">
               <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white text-white ml-0.5" />
             </div>
           </div>

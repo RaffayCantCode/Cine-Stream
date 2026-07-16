@@ -34,12 +34,18 @@ const ADULT_KEYWORDS = [
   "topless", "bottomless",
   "pornografia", "erotismo",
   "adulto", "adulta", "sexually",
-];function getAuthHeader(): string {
+];
+
+function getTmdbToken(): string {
   const token = process.env.TMDB_API_KEY;
   if (!token || token === "") {
     throw new Error("TMDB_API_KEY is not set");
   }
-  return `Bearer ${token}`;
+  return token;
+}
+
+function isTmdbReadAccessToken(token: string): boolean {
+  return token.startsWith("ey");
 }
 
 const tmdbApiCache = new Map<string, { data: any; expires: number }>();
@@ -50,8 +56,12 @@ export async function tmdbFetch(
   options?: { noCache?: boolean }
 ): Promise<unknown> {
   const isSearch = path.includes("/search/");
+  const token = getTmdbToken();
   const url = new URL(`${TMDB_BASE}${path}`);
   url.searchParams.set("include_adult", "false");
+  if (!isTmdbReadAccessToken(token)) {
+    url.searchParams.set("api_key", token);
+  }
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== "") {
@@ -82,7 +92,7 @@ export async function tmdbFetch(
 
   const fetchOptions: RequestInit = {
     headers: {
-      Authorization: getAuthHeader(),
+      ...(isTmdbReadAccessToken(token) ? { Authorization: `Bearer ${token}` } : {}),
       "Content-Type": "application/json",
     },
     // When noCache is requested, bypass Next.js fetch cache entirely

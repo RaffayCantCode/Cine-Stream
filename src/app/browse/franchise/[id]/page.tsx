@@ -26,9 +26,10 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    hydratedPosterIds.current.clear();
     const load = async () => {
       try {
-        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}?v=franchise-complete-v2`, { skipCache: true });
+        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}?v=franchise-complete-v3`, { skipCache: true });
         setCollection(data);
       } catch (err) {
         setError("Failed to load franchise");
@@ -58,36 +59,64 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
     const hydratePosters = async () => {
       const updates = new Map<string, any>();
 
+      const searchFallback = async (item: any, mediaType: "movie" | "tv") => {
+        const title = item.title || item.name;
+        if (!title) return null;
+
+        const search = await fetchJson<any>(
+          `/api/tmdb/search?query=${encodeURIComponent(title)}&type=${mediaType}&page=1`,
+          { skipCache: true }
+        );
+        const normalizedTitle = title.toLowerCase();
+        const results = search.results || [];
+        return (
+          results.find((result: any) => (result.title || result.name || "").toLowerCase() === normalizedTitle && result.poster_path) ||
+          results.find((result: any) => result.poster_path) ||
+          null
+        );
+      };
+
       for (let i = 0; i < missingPosterItems.length; i += 6) {
         const batch = missingPosterItems.slice(i, i + 6);
         const results = await Promise.allSettled(
           batch.map(async (item) => {
             const mediaType = item.media_type === "tv" ? "tv" : "movie";
             const key = `${mediaType}-${item.id}`;
-            hydratedPosterIds.current.add(key);
 
-            const detail = await fetchJson<any>(`/api/tmdb/${mediaType}/${item.id}`, {
-              skipCache: true,
-            });
+            let detail: any = null;
+            let fallback: any = null;
+
+            try {
+              detail = await fetchJson<any>(`/api/tmdb/${mediaType}/${item.id}`, {
+                skipCache: true,
+              });
+            } catch {}
+
+            if (!detail?.poster_path) {
+              try {
+                fallback = await searchFallback(item, mediaType);
+              } catch {}
+            }
 
             return {
               key,
               id: item.id,
               media_type: item.media_type,
-              title: item.title || detail.title || detail.name,
-              name: item.name || item.title || detail.title || detail.name,
-              overview: item.overview || detail.overview,
-              poster_path: detail.poster_path || item.poster_path || null,
-              backdrop_path: item.backdrop_path || detail.backdrop_path || null,
-              vote_average: item.vote_average ?? detail.vote_average,
-              release_date: item.release_date || detail.release_date || detail.first_air_date,
-              first_air_date: item.first_air_date || detail.first_air_date,
+              title: item.title || detail?.title || detail?.name || fallback?.title || fallback?.name,
+              name: item.name || item.title || detail?.title || detail?.name || fallback?.title || fallback?.name,
+              overview: item.overview || detail?.overview || fallback?.overview,
+              poster_path: detail?.poster_path || fallback?.poster_path || item.poster_path || null,
+              backdrop_path: item.backdrop_path || detail?.backdrop_path || fallback?.backdrop_path || null,
+              vote_average: item.vote_average ?? detail?.vote_average ?? fallback?.vote_average,
+              release_date: item.release_date || detail?.release_date || detail?.first_air_date || fallback?.release_date || fallback?.first_air_date,
+              first_air_date: item.first_air_date || detail?.first_air_date || fallback?.first_air_date,
             };
           })
         );
 
         for (const result of results) {
           if (result.status === "fulfilled" && result.value.poster_path) {
+            hydratedPosterIds.current.add(result.value.key);
             updates.set(result.value.key, result.value);
           }
         }

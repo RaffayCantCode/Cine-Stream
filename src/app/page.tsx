@@ -145,6 +145,7 @@ export default function Home() {
   const [collections, setCollections] = useState<any[]>([]);
   const [animeLoading, setAnimeLoading] = useState(true);
   const [revealedSections, setRevealedSections] = useState(0);
+  const [moodSeed, setMoodSeed] = useState("");
   useEffect(() => {
     if (isLoading) return;
     if (revealedSections >= 8) return;
@@ -154,6 +155,10 @@ export default function Home() {
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
   const heroPoolLengthRef = useRef(0);
+
+  useEffect(() => {
+    setMoodSeed(`${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`);
+  }, []);
 
   // Touch swipe gesture states for mobile Hero banner
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -428,9 +433,8 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen bg-[#070B14] text-[#EAE0CF] pb-20 overflow-hidden">
-      {/* Ambient glassmorphism glowing background */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#7288AE]/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-[40%] right-[-10%] w-[30%] h-[50%] bg-[#4B5694]/10 rounded-full blur-[150px] pointer-events-none" />
+      <div className="absolute inset-x-0 top-0 h-[520px] bg-[linear-gradient(180deg,rgba(114,136,174,0.10),rgba(7,11,20,0)_72%)] pointer-events-none" />
+      <div className="absolute inset-x-0 top-[42rem] h-px bg-gradient-to-r from-transparent via-[#7288AE]/20 to-transparent pointer-events-none" />
 
       <Sidebar />
       <main className="relative z-10 md:pl-56 lg:pl-64 bleed-header">
@@ -531,13 +535,13 @@ export default function Home() {
         {/* ─── Bottom-edge dissolve (sits right below hero, bleeds upward) ─── */}
         <div
           className="relative pointer-events-none z-20"
-          style={{ marginTop: "-10rem", height: "10rem", background: "linear-gradient(to bottom, transparent, var(--background))" }}
+          style={{ marginTop: "-8rem", height: "8rem", background: "linear-gradient(to bottom, transparent, var(--background))" }}
         />
 
         {/* ─── CONTINUE WATCHING ─── */}
         <ContinueWatching />
 
-        <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto py-8 space-y-10">
+        <div className="px-3 md:px-8 lg:px-10 max-w-screen-2xl mx-auto py-6 space-y-7">
 
           {/* ─── TOP 10 MOVIES TODAY ─── */}
           <LazySection show={revealedSections >= 1} placeholderHeight={380}>
@@ -608,14 +612,14 @@ export default function Home() {
                 title="Epic Franchises"
                 subtitle="Binge your favorite universes"
               />
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3 md:gap-4">
                 {collections.slice(0, 7).map((col) => {
                   const posterUrl = col.poster_path ? `https://image.tmdb.org/t/p/w342${col.poster_path}` : null;
                   return (
                     <Link
                       key={col.id}
                       href={`/browse/franchise/${col.id}`}
-                      className="group relative overflow-hidden rounded-2xl border border-white/[0.05] bg-[#4B5694]/5 aspect-[2/3] hover:border-white/20 hover:scale-[1.03] hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-[#4B5694]/5 aspect-[2/3] hover:border-[#7288AE]/45 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/25 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {posterUrl ? (
                         <>
@@ -664,7 +668,7 @@ export default function Home() {
           {/* ─── THEMATIC UNIVERSE ─── */}
           <LazySection show={revealedSections >= 5} placeholderHeight={220}>
             <SectionHeading title="Browse by Mood" subtitle="Pick your vibe" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3">
               {[
                 { id: 'k-dramas',        name: 'K-Dramas',       color: '#C4006E', icon: '🌸', iconBg: '#E91E8C' },
                 { id: 'superhero',       name: 'Superheroes',    color: '#1565C0', icon: '⚡', iconBg: '#2979FF' },
@@ -679,8 +683,8 @@ export default function Home() {
               ].map((g) => (
                 <Link
                   key={g.id}
-                  href={`/browse/theme/${g.id}`}
-                  className="group relative overflow-hidden rounded-xl flex flex-col justify-between p-3.5 h-[100px] transition-all duration-300 hover:brightness-110 hover:scale-[1.03] active:scale-[0.98]"
+                  href={`/browse/theme/${g.id}?shuffle=1${moodSeed ? `&seed=${encodeURIComponent(moodSeed)}` : ""}`}
+                  className="group relative overflow-hidden rounded-xl flex flex-col justify-between p-3.5 h-[92px] transition-all duration-300 hover:brightness-110 hover:scale-[1.02] active:scale-[0.98] ring-1 ring-white/[0.06] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
                   style={{ backgroundColor: g.color }}
                 >
                   {/* Title */}

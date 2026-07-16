@@ -310,7 +310,7 @@ export function CinematicHero({
   return (
     <div ref={heroRef} className="relative w-full flex flex-col">
       {/* ── Background layer (Fixed 85svh) ──────────────────────────────────────── */}
-      <div className={`absolute top-0 left-0 w-full ${height} min-h-[85svh] overflow-hidden z-0`}>
+      <div className={`absolute top-0 left-0 w-full ${height} min-h-[78svh] overflow-hidden z-0`}>
         {/* Backdrop image — always visible, fades out once trailer plays */}
         {backdropUrl && (
           <img
@@ -339,7 +339,7 @@ export function CinematicHero({
               <iframe
                 ref={iframeRef}
                 src={`https://www.youtube-nocookie.com/embed/${activeTrailerId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}&widgetid=1&loop=0&vq=hd1080&hd=1`}
-                className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[85svh] min-w-[151.11svh] -translate-x-1/2 -translate-y-1/2"
+                className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[78svh] min-w-[138.67svh] -translate-x-1/2 -translate-y-1/2"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen={false}
                 title={`${title} Trailer`}
@@ -361,7 +361,7 @@ export function CinematicHero({
       {/* ── Trailer Controls (shown only when trailer is playing) ────── */}
       {activeTrailerId && trailerVisible && (
         <>
-        <div className="absolute top-[calc(85svh-4rem)] md:top-[calc(85svh-4.5rem)] right-4 md:right-6 z-30 flex items-center gap-3">
+        <div className="absolute bottom-16 md:bottom-20 right-4 md:right-6 z-30 flex items-center gap-3">
           
           {/* Stop Trailer Button */}
           <button
@@ -407,7 +407,7 @@ export function CinematicHero({
         </div>
 
         {/* Playback Progress Slider */}
-        <div className="absolute top-[calc(85svh-1.5rem)] md:top-[calc(85svh-2rem)] left-1/2 -translate-x-1/2 w-[90%] md:w-1/2 z-30 flex items-center gap-3">
+        <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 w-[90%] md:w-1/2 z-30 flex items-center gap-3">
           <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3">
             <span className="text-white/90 text-xs md:text-sm font-black uppercase tracking-[0.2em] bg-black/60 backdrop-blur-md px-3 py-1 rounded-md border border-white/20 shadow-lg">Trailer</span>
           </div>
@@ -437,7 +437,7 @@ export function CinematicHero({
       )}
 
       {/* ── Content Wrapper ────── */}
-      <div className="relative z-20 w-full min-h-[85svh] flex items-end pt-[20svh]">
+      <div className="relative z-20 w-full min-h-[78svh] flex items-end pt-[20svh]">
         <div className={`w-full transition-opacity duration-1000 ${trailerVisible && isAtTop ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
           {children}
         </div>

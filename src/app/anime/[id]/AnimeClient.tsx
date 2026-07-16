@@ -375,6 +375,7 @@ export default function AnimeClient() {
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
 
   // Franchise node data for Season Guide
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
@@ -383,6 +384,7 @@ export default function AnimeClient() {
   const [hasRestoredState, setHasRestoredState] = useState(false);
 
   const tmdbIdRef = useRef<number | null>(null);
+  const animeStatusRef = useRef<string | null>(null);
   const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
@@ -406,10 +408,34 @@ export default function AnimeClient() {
   // Tracks which seasonIds we have already loaded episodes for
   const loadedSeasonIds = useRef<Set<string>>(new Set());
 
-  function isEpisodeReleased(releasedDate: string | null | undefined): boolean {
-    // Keep episodes always unlocked so users can attempt to stream them
-    // even if the release dates/times in the database are inaccurate.
-    return true;
+  function isAnimeOngoing(status: string | null | undefined): boolean {
+    const normalized = (status || "").toLowerCase();
+    return normalized.includes("airing") || normalized.includes("releasing") || normalized.includes("not_yet");
+  }
+
+  function isFutureDate(dateValue: string | null | undefined): boolean {
+    if (!dateValue) return false;
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return false;
+    return date.getTime() > Date.now() + 60 * 60 * 1000;
+  }
+
+  function isWithinNextDays(dateValue: string | null | undefined, days = 7): boolean {
+    if (!dateValue) return false;
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return false;
+    const now = Date.now();
+    return date.getTime() >= now && date.getTime() <= now + days * 24 * 60 * 60 * 1000;
+  }
+
+  function isEpisodeReleased(ep: Episode, status?: string | null): boolean {
+    if (!isAnimeOngoing(status)) return true;
+    if (!isFutureDate(ep.releasedDate)) return true;
+
+    // If episode metadata came from an actual episode source, prefer availability
+    // over a suspicious future date. This avoids locking already released anime.
+    const hasSourceBackedMetadata = Boolean(ep.malUrl || ep.thumbnail || ep.vote_count || ep.runtime);
+    return hasSourceBackedMetadata;
   }
 
   // ── Fetch episodes for a specific season by its AniList ID ─────────────
@@ -439,7 +465,7 @@ export default function AnimeClient() {
       if (epData.success && epData.data?.episodes?.length) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
         const withRelease = sorted.map(ep => ({
-          ...ep, isReleased: isEpisodeReleased(ep.releasedDate)
+          ...ep, isReleased: isEpisodeReleased(ep, animeStatusRef.current)
         }));
         setEpisodes(prev => {
           // Replace episodes for this season, keep others
@@ -491,6 +517,7 @@ export default function AnimeClient() {
         if (cancelled) return;
         if (data && data.success && data.data?.anime) {
           const a = data.data.anime;
+          animeStatusRef.current = a.status || null;
           setIsLoading(false); // Set false before setting anime to avoid cancelled effect skipping
           setAnime(a);
           if (data.data.franchiseNodes) setFranchiseNodes(data.data.franchiseNodes);
@@ -814,6 +841,7 @@ export default function AnimeClient() {
     setCurrentSeasonId(season.id);
     setIsPlaying(false);
     setSelectedEp(null);
+    setEpisodeNotice(null);
     loadSeasonEpisodes(
       season.id,
       false,
@@ -832,7 +860,11 @@ export default function AnimeClient() {
 
   // ── Watch episode handler ───────────────────────────────────────────────
   const handleWatchEpisode = useCallback((ep: Episode) => {
-    if (ep.isReleased === false) return;
+    if (ep.isReleased === false) {
+      setEpisodeNotice(`Episode ${ep.episodeNum} hasn't been released yet.`);
+      return;
+    }
+    setEpisodeNotice(null);
     setSelectedEp(ep);
     setIsPlaying(true);
 
@@ -886,6 +918,13 @@ export default function AnimeClient() {
   const currentSeasonEps = useMemo(
     () => (episodesBySeason[currentSeasonId] || []).sort((a, b) => a.episodeNum - b.episodeNum),
     [episodesBySeason, currentSeasonId]
+  );
+
+  const upcomingAnimeThisWeek = useMemo(
+    () => currentSeasonEps
+      .filter(ep => ep.isReleased === false && isWithinNextDays(ep.releasedDate, 7))
+      .sort((a, b) => new Date(a.releasedDate || "").getTime() - new Date(b.releasedDate || "").getTime())[0] || null,
+    [currentSeasonEps]
   );
 
   const [visibleCount, setVisibleCount] = useState(INITIAL_EPISODES_PER_PAGE);
@@ -1143,6 +1182,25 @@ export default function AnimeClient() {
               </Link>
 
               <div className="flex flex-col gap-6">
+                {episodeNotice && (
+                  <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">
+                    {episodeNotice}
+                  </div>
+                )}
+                {upcomingAnimeThisWeek && (
+                  <div className="rounded-2xl border border-sky-300/20 bg-gradient-to-r from-sky-400/10 to-[#7288AE]/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-black text-white">New episode this week</div>
+                      <div className="text-xs text-white/55 mt-0.5">
+                        Episode {upcomingAnimeThisWeek.episodeNum}
+                        {upcomingAnimeThisWeek.title ? ` - ${upcomingAnimeThisWeek.title}` : ""} is expected {new Date(upcomingAnimeThisWeek.releasedDate || "").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}.
+                      </div>
+                    </div>
+                    <span className="w-fit rounded-full border border-sky-300/25 bg-sky-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-sky-200">
+                      Weekly release
+                    </span>
+                  </div>
+                )}
                 {/* ── Player + Queue ── */}
                 {isPlaying && selectedEp && (
                   <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 select-none">
@@ -1230,13 +1288,13 @@ export default function AnimeClient() {
                                 key={ep.episodeId}
                                 ref={isSelected ? selectedQueueEpRef : undefined}
                                 onClick={() => {
-                                  if (ep.isReleased === false) return;
                                   handleWatchEpisode(ep);
                                 }}
-                                disabled={ep.isReleased === false}
                                 className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-3 ${
                                   isSelected
                                     ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
+                                    : ep.isReleased === false
+                                    ? "bg-white/[0.025] text-white/30 hover:bg-amber-400/10 hover:text-amber-200 border border-amber-400/10"
                                     : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
                                 }`}
                               >
@@ -1247,6 +1305,9 @@ export default function AnimeClient() {
                                 )}
                                 {ep.isFiller && (
                                   <span className="text-[9px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded shrink-0">Filler</span>
+                                )}
+                                {ep.isReleased === false && (
+                                  <span className="text-[9px] text-sky-300 font-extrabold uppercase bg-sky-300/10 border border-sky-300/20 px-1.5 py-0.5 rounded shrink-0">Upcoming</span>
                                 )}
                               </button>
                             );
@@ -1292,7 +1353,7 @@ export default function AnimeClient() {
 
               {/* ── Episodes Section ── */}
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
-                {/* ── Season Guide Section (franchise order reference) ── */}
+                {/* ── Watch Order Section (franchise order reference) ── */}
                 {(() => {
                   const visibleFranchiseNodes = franchiseNodes.filter(node => {
                     if (!node.title) return false;
@@ -1313,24 +1374,32 @@ export default function AnimeClient() {
                   });
                   if (visibleFranchiseNodes.length <= 1) return null;
                   return (
-                  <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden">
+                  <div className="bg-gradient-to-br from-white/[0.045] to-white/[0.015] border border-white/[0.08] rounded-2xl overflow-hidden shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
                     <button
                       onClick={() => setShowSeasonGuide(!showSeasonGuide)}
-                      className="flex items-center justify-between w-full text-left px-5 py-4 hover:bg-white/[0.02] transition-colors"
+                      className="flex items-center justify-between w-full text-left px-5 py-4 hover:bg-white/[0.035] transition-colors"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <BookOpen className="w-4 h-4 text-[#7288AE]" />
-                        <h3 className="text-base font-bold text-white">Season Guide</h3>
-                        <span className="text-[10px] text-white/30 font-medium">
-                          {visibleFranchiseNodes.length} {visibleFranchiseNodes.length === 1 ? "entry" : "entries"}
-                        </span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#7288AE]/15 border border-[#7288AE]/25 flex items-center justify-center shrink-0">
+                          <BookOpen className="w-4 h-4 text-[#9EB2D1]" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-black text-white">Watch Order</h3>
+                            <span className="text-[10px] text-[#9EB2D1] font-black uppercase tracking-wide bg-[#7288AE]/10 border border-[#7288AE]/20 px-2 py-0.5 rounded-full">
+                              {visibleFranchiseNodes.length} parts
+                            </span>
+                          </div>
+                          <p className="text-xs text-white/40 mt-0.5 truncate">Follow the franchise in the recommended order</p>
+                        </div>
                       </div>
                       <ChevronRight className={`w-4 h-4 text-white/40 transition-transform ${showSeasonGuide ? "rotate-90" : ""}`} />
                     </button>
 
                     {showSeasonGuide && (
-                      <div className="px-5 pb-5 space-y-2 border-t border-white/[0.06] pt-4">
-                        {visibleFranchiseNodes.map((node) => {
+                      <div className="px-4 sm:px-5 pb-5 border-t border-white/[0.06] pt-4">
+                        <div className="relative space-y-2">
+                        {visibleFranchiseNodes.map((node, orderIndex) => {
                           const nodeId = String(node.id);
                           const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
                           const formatLabel = node.format === "TV" ? "TV" : node.format || "";
@@ -1338,24 +1407,33 @@ export default function AnimeClient() {
                             <Link
                               key={node.id}
                               href={`/anime/${node.id}`}
-                              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                              className={`w-full grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 rounded-xl text-xs font-medium transition-all ${
                                 isActive
-                                  ? "bg-gradient-to-r from-[#111844]/30 to-[#7288AE]/20 border border-[#7288AE]/30 text-white"
-                                  : "bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-white/60 hover:text-white"
+                                  ? "bg-gradient-to-r from-[#111844]/45 to-[#7288AE]/25 border border-[#7288AE]/40 text-white shadow-lg shadow-[#111844]/20"
+                                  : "bg-white/[0.035] hover:bg-white/[0.075] border border-white/[0.06] text-white/60 hover:text-white"
                               }`}
                             >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <span className="text-[#7288AE] font-bold shrink-0 w-16 text-left uppercase">{formatLabel}</span>
-                                <span className="truncate">{node.title}</span>
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[11px] border ${
+                                isActive ? "bg-[#7288AE]/25 border-[#7288AE]/45 text-white" : "bg-white/[0.04] border-white/[0.07] text-white/35"
+                              }`}>
+                                {orderIndex + 1}
                               </div>
-                              <div className="flex items-center gap-2 shrink-0 ml-2">
-                                {node.seasonYear && <span className="text-white/30 text-[10px]">{node.seasonYear}</span>}
-                                <span className="text-white/40 text-[10px] bg-white/[0.06] px-2 py-0.5 rounded-md">{node.episodes || "?"} eps</span>
-                                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#7288AE] animate-pulse" />}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="truncate font-bold">{node.title}</span>
+                                  {isActive && <span className="shrink-0 text-[9px] uppercase tracking-wide bg-[#7288AE]/20 text-[#C7D4EA] border border-[#7288AE]/30 px-1.5 py-0.5 rounded">Current</span>}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 text-[10px] text-white/35">
+                                  <span className="uppercase font-black text-[#9EB2D1]">{formatLabel || "Entry"}</span>
+                                  {node.seasonYear && <span>{node.seasonYear}</span>}
+                                  <span>{node.episodes || "?"} eps</span>
+                                </div>
                               </div>
+                              <ChevronRight className="w-3.5 h-3.5 text-white/25" />
                             </Link>
                           );
                         })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1453,8 +1531,7 @@ export default function AnimeClient() {
                               return (
                                 <button
                                   key={ep.episodeId}
-                                  onClick={() => { if (isUnreleased) return; handleWatchEpisode(ep); }}
-                                  disabled={isUnreleased}
+                                  onClick={() => handleWatchEpisode(ep)}
                                   className={cn(
                                     "aspect-square rounded-lg text-xs font-bold transition-all flex items-center justify-center relative",
                                     isSelected
@@ -1471,6 +1548,11 @@ export default function AnimeClient() {
                                   )}
                                   {ep.isFiller && !isSelected && (
                                     <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-amber-400" />
+                                  )}
+                                  {isUnreleased && (
+                                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded bg-sky-400/90 px-1 text-[7px] font-black uppercase text-white">
+                                      Soon
+                                    </span>
                                   )}
                                   {ep.episodeNum}
                                 </button>
@@ -1515,7 +1597,6 @@ export default function AnimeClient() {
                               <div
                                 key={`${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`}
                                 onClick={() => {
-                                  if (isUnreleased) return;
                                   handleWatchEpisode(ep);
                                 }}
                                 className={cn(
@@ -1559,8 +1640,9 @@ export default function AnimeClient() {
                                     </div>
                                   )}
                                   {isUnreleased && (
-                                    <div className="absolute inset-0 z-20 bg-black/80 flex items-center justify-center">
-                                      <Lock className="w-5 h-5 text-white/30" />
+                                    <div className="absolute inset-0 z-20 bg-black/75 flex flex-col items-center justify-center gap-1">
+                                      <Lock className="w-5 h-5 text-sky-300" />
+                                      <span className="text-[9px] font-black uppercase tracking-wide text-sky-200">Upcoming</span>
                                     </div>
                                   )}
                                 </div>
@@ -1595,6 +1677,11 @@ export default function AnimeClient() {
 
                                   {ep.runtime && ep.runtime > 0 && (
                                     <p className="text-white/30 text-xs mt-1.5">{ep.runtime} min</p>
+                                  )}
+                                  {isUnreleased && (
+                                    <p className="mt-2 w-fit rounded-md border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">
+                                      Not released yet
+                                    </p>
                                   )}
                                 </div>
 

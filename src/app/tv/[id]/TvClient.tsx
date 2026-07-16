@@ -22,6 +22,7 @@ interface Episode {
   name: string;
   overview?: string;
   still_path?: string;
+  air_date?: string;
   vote_average?: number;
   vote_count?: number;
   runtime?: number;
@@ -47,6 +48,7 @@ interface TvShow {
   vote_average?: number;
   vote_count?: number;
   first_air_date?: string;
+  status?: string;
   number_of_seasons?: number;
   adult?: boolean;
   genres?: { id: number; name: string }[];
@@ -70,6 +72,7 @@ export default function TvClient() {
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [hasEverWatched, setHasEverWatched] = useState(false);
+  const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "loading" || isStateLoaded) return;
@@ -111,6 +114,31 @@ export default function TvClient() {
   const playerRef = useRef<HTMLDivElement>(null);
   const queueRef = useRef<HTMLDivElement>(null);
   const selectedEpRef = useRef<HTMLButtonElement>(null);
+
+  const isOngoingShow = (statusValue?: string | null) => {
+    const normalized = (statusValue || "").toLowerCase();
+    return Boolean(normalized) && !["ended", "canceled", "cancelled"].includes(normalized);
+  };
+
+  const isFutureDate = (dateValue?: string | null) => {
+    if (!dateValue) return false;
+    const date = new Date(`${dateValue}T23:59:59`);
+    if (Number.isNaN(date.getTime())) return false;
+    return date.getTime() > Date.now();
+  };
+
+  const isWithinNextDays = (dateValue?: string | null, days = 7) => {
+    if (!dateValue) return false;
+    const date = new Date(`${dateValue}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return false;
+    const now = Date.now();
+    return date.getTime() >= now && date.getTime() <= now + days * 24 * 60 * 60 * 1000;
+  };
+
+  const isUpcomingEpisode = (episode?: Episode | null) => {
+    if (!episode || !isOngoingShow(show?.status)) return false;
+    return isFutureDate(episode.air_date);
+  };
 
   useEffect(() => {
     const fetchShow = async () => {
@@ -216,6 +244,17 @@ export default function TvClient() {
   }, [id, selectedSeason]);
 
   const handleWatchEpisode = async (season: number, episodeNumber: number, episodeName?: string) => {
+    const targetEpisode = season === selectedSeason
+      ? seasonData?.episodes?.find((episode) => episode.episode_number === episodeNumber)
+      : null;
+
+    if (isUpcomingEpisode(targetEpisode)) {
+      setSelectedSeason(season);
+      setEpisodeNotice(`Episode ${episodeNumber} hasn't been released yet.`);
+      return;
+    }
+
+    setEpisodeNotice(null);
     setHasEverWatched(true);
     setSelectedSeason(season);
     setPlayingSeason(season);
@@ -271,6 +310,15 @@ export default function TvClient() {
     return () => clearTimeout(timer);
   }, [playingEpisode, playingSeason, selectedSeason, isPlaying, seasonLoading, seasonData?.episodes?.length]);
 
+  useEffect(() => {
+    if (!isPlaying || seasonLoading || playingSeason !== selectedSeason) return;
+    const activeEpisode = seasonData?.episodes?.find((episode) => episode.episode_number === playingEpisode);
+    if (!isUpcomingEpisode(activeEpisode)) return;
+
+    setIsPlaying(false);
+    setEpisodeNotice(`Episode ${playingEpisode} hasn't been released yet.`);
+  }, [isPlaying, seasonLoading, playingSeason, playingEpisode, selectedSeason, seasonData?.episodes, show?.status]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background text-foreground">
@@ -314,6 +362,9 @@ export default function TvClient() {
   const isPlayingSeasonLoaded = playingSeason === selectedSeason;
   const currentEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode) : null;
   const nextEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode + 1) : null;
+  const upcomingThisWeek = seasonData?.episodes
+    ?.filter((episode) => isUpcomingEpisode(episode) && isWithinNextDays(episode.air_date, 7))
+    ?.sort((a, b) => new Date(a.air_date || "").getTime() - new Date(b.air_date || "").getTime())?.[0] || null;
 
   const seasonTrailerId = seasonData?.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
   const mainTrailerId = show.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
@@ -435,6 +486,25 @@ export default function TvClient() {
       </CinematicHero>
 
       <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
+      {episodeNotice && (
+        <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">
+          {episodeNotice}
+        </div>
+      )}
+      {upcomingThisWeek && (
+        <div className="rounded-2xl border border-sky-300/20 bg-gradient-to-r from-sky-400/10 to-[#7288AE]/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <div className="text-sm font-black text-white">New episode this week</div>
+            <div className="text-xs text-white/55 mt-0.5">
+              Episode {upcomingThisWeek.episode_number}
+              {upcomingThisWeek.name ? ` - ${upcomingThisWeek.name}` : ""} airs {format(new Date(`${upcomingThisWeek.air_date}T12:00:00`), "EEE, MMM d")}.
+            </div>
+          </div>
+          <span className="w-fit rounded-full border border-sky-300/25 bg-sky-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-sky-200">
+            Weekly release
+          </span>
+        </div>
+      )}
       {isPlaying && (
         <div ref={playerRef} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start select-none">
           <div>
@@ -477,24 +547,33 @@ export default function TvClient() {
               ) : !seasonData?.episodes?.length ? (
                 <div className="flex items-center justify-center py-8 text-white/30 text-xs">No episodes found</div>
               ) : (
-                seasonData.episodes.map((episode) => (
-                  <button
-                    key={`queue-${episode.id}`}
-                    ref={playingSeason === selectedSeason && playingEpisode === episode.episode_number ? selectedEpRef : undefined}
-                    onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
-                      playingSeason === selectedSeason && playingEpisode === episode.episode_number
-                        ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
-                        : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
-                    }
-                  `}
-                  >
-                    <span className={`text-sm font-black w-10 shrink-0 ${playingSeason === selectedSeason && playingEpisode === episode.episode_number ? "text-white" : ""}`}>
-                      E{episode.episode_number}
-                    </span>
-                    <span className="text-xs truncate flex-1 line-clamp-1">{episode.name}</span>
-                  </button>
-                ))
+                seasonData.episodes.map((episode) => {
+                  const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+                  const isUpcoming = isUpcomingEpisode(episode);
+                  return (
+                    <button
+                      key={`queue-${episode.id}`}
+                      ref={isWatching ? selectedEpRef : undefined}
+                      onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
+                        isWatching
+                          ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
+                          : isUpcoming
+                          ? "bg-white/[0.025] text-white/30 hover:bg-amber-400/10 hover:text-amber-200 border border-amber-400/10"
+                          : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
+                      }
+                    `}
+                    >
+                      <span className={`text-sm font-black w-10 shrink-0 ${isWatching ? "text-white" : ""}`}>
+                        E{episode.episode_number}
+                      </span>
+                      <span className="text-xs truncate flex-1 line-clamp-1">{episode.name}</span>
+                      {isUpcoming && (
+                        <span className="text-[9px] text-sky-300 font-extrabold uppercase bg-sky-300/10 border border-sky-300/20 px-1.5 py-0.5 rounded shrink-0">Upcoming</span>
+                      )}
+                    </button>
+                  );
+                })
               )}
             </div>
           </aside>
@@ -543,6 +622,7 @@ export default function TvClient() {
                 <div className="space-y-3">
                   {seasonData.episodes?.map((episode, i) => {
                     const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+                    const isUpcoming = isUpcomingEpisode(episode);
                     return (
                     <div
                       key={episode.id}
@@ -551,6 +631,8 @@ export default function TvClient() {
                         "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
                         isWatching
                           ? "ring-2 ring-primary bg-gradient-to-br from-primary/15 to-primary/5 border-transparent shadow-lg shadow-primary/20"
+                          : isUpcoming
+                          ? "bg-white/[0.015] border-amber-400/10 hover:bg-amber-400/10 hover:border-amber-400/20"
                           : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
                       )}
                     >
@@ -577,6 +659,12 @@ export default function TvClient() {
                             <Play className="w-4 h-4 fill-white text-white ml-0.5" />
                           </div>
                         </div>
+                        {isUpcoming && (
+                          <div className="absolute inset-0 z-20 bg-black/75 flex flex-col items-center justify-center gap-1">
+                            <Calendar className="w-5 h-5 text-sky-300" />
+                            <span className="text-[9px] font-black uppercase tracking-wide text-sky-200">Upcoming</span>
+                          </div>
+                        )}
                         {isWatching && hasEverWatched && (
                           <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-primary/90 backdrop-blur-md text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
                             {isPlaying ? "Playing" : "Watching"}
@@ -600,6 +688,11 @@ export default function TvClient() {
                         {episode.overview && (
                           <p className="text-white/40 text-xs leading-relaxed line-clamp-2">{episode.overview}</p>
                         )}
+                        {isUpcoming && (
+                          <p className="mt-2 w-fit rounded-md border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">
+                            Not released yet
+                          </p>
+                        )}
                         {episode.runtime && <p className="text-white/30 text-xs mt-1.5">{episode.runtime} min</p>}
                       </div>
                     </div>
@@ -618,26 +711,41 @@ export default function TvClient() {
           const similar = show.similar?.results || [];
           const seen = new Set<number>();
           const merged: any[] = [];
+          const sourceGenres = show.genres?.map((g: any) => g.id) || [];
+          const scoreItem = (item: any, source: "recommendation" | "similar") => {
+            const targetGenres = item.genre_ids || [];
+            const genreMatches = sourceGenres.filter((g: number) => targetGenres.includes(g)).length;
+            const rating = Number(item.vote_average || 0);
+            const votes = Math.min(Number(item.vote_count || 0), 2500) / 2500;
+            return genreMatches * 120 + rating * 10 + votes * 40 + (source === "recommendation" ? 35 : 0);
+          };
           for (const item of recs) {
             if (seen.has(item.id)) continue;
             seen.add(item.id);
-            item.reason = getRecommendationReason(show.genres?.map((g: any) => g.id) || [], item.genre_ids || []);
-            merged.push(item);
+            item.reason = getRecommendationReason(sourceGenres, item.genre_ids || []);
+            item.relevanceScore = scoreItem(item, "recommendation");
+            merged.push({ ...item, media_type: item.media_type || "tv" });
           }
           for (const item of similar) {
             if (seen.has(item.id)) continue;
             seen.add(item.id);
-            item.reason = getRecommendationReason(show.genres?.map((g: any) => g.id) || [], item.genre_ids || []);
-            merged.push(item);
+            item.reason = getRecommendationReason(sourceGenres, item.genre_ids || []);
+            item.relevanceScore = scoreItem(item, "similar");
+            merged.push({ ...item, media_type: item.media_type || "tv" });
             if (merged.length >= 20) break;
           }
-          const filtered = merged.filter(item => item.poster_path || item.backdrop_path);
+          const filtered = merged
+            .filter(item => item.poster_path || item.backdrop_path)
+            .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
           if (filtered.length >= 6) {
             return (
               <section className="pt-4">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="w-1 h-5 bg-primary rounded-full" />
-                  <h2 className="text-base font-bold text-white tracking-wide">You May Like</h2>
+                  <div>
+                    <h2 className="text-base font-bold text-white tracking-wide">More Like This</h2>
+                    <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
                   {filtered.slice(0, 18).map((item: any, i: number) => (

@@ -96,15 +96,15 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
   };
 
   return (
-    <section className="px-5 md:px-10 lg:px-12 pt-6 pb-2">
+    <section className="px-3 md:px-8 lg:px-10 pt-4 pb-1">
       <div className="max-w-screen-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-1 h-5 bg-primary rounded-full" />
-          <h2 className="text-base font-bold text-white tracking-wide">Continue Watching</h2>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-1 h-5 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
+          <h2 className="text-base md:text-xl font-black text-white tracking-tight">Continue Watching</h2>
         </div>
 
         <div className="overflow-hidden pb-3" ref={emblaRef}>
-          <div className="flex gap-4">
+          <div className="flex gap-3 md:gap-4">
             {filteredItems.map((item: WatchHistoryItem, i: number) => {
             const posterUrl = item.posterPath
               ? item.mediaType === "anime"
@@ -116,10 +116,10 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
               <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 onClick={() => handlePlay(item)}
-                className="flex-[0_0_auto] w-[130px] sm:w-[150px] relative group cursor-pointer animate-fade-in-up"
+                className="flex-[0_0_auto] w-[122px] sm:w-[142px] md:w-[152px] relative group cursor-pointer animate-fade-in-up"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
-                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card ring-1 ring-white/[0.06] mb-2.5 relative">
+                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card ring-1 ring-white/[0.07] mb-2.5 relative shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition-all duration-300 group-hover:ring-[#7288AE]/50 group-hover:shadow-xl group-hover:shadow-black/25">
                   {posterUrl ? (
                     <img
                       src={posterUrl}
@@ -149,8 +149,8 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                   </div>
 
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <div className="w-11 h-11 rounded-full bg-primary/90 flex items-center justify-center shadow-xl">
-                      <Play className="w-5 h-5 fill-white text-white ml-0.5" />
+                    <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-xl">
+                      <Play className="w-4 h-4 fill-white text-white ml-0.5" />
                     </div>
                   </div>
 
