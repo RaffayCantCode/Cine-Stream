@@ -48,10 +48,8 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
     ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`
     : null;
 
-  // Determine if this is an anime for label display (already calculated above)
-
   return (
-    <section className="relative w-full h-[82svh] min-h-[480px] max-h-[700px] sm:h-[58vw] sm:max-h-[610px] md:h-[72vh] flex items-end bg-background">
+    <section className="relative w-full h-[82svh] min-h-[480px] max-h-[700px] sm:h-[58vw] sm:max-h-[610px] md:h-[72vh] flex items-end bg-background overflow-hidden">
       {backdropUrl ? (
         <>
           {/* Image clipped independently so gradients can bleed outside section */}
@@ -62,38 +60,70 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               fill
               sizes="100vw"
               className="object-cover object-center md:object-top"
-              style={{ transform: "scale(1.02)", animation: "fade-in-up 1s ease-out both" }}
+              style={{
+                transform: "scale(1.02)",
+                animation: "fade-in-up 1s ease-out both",
+                // Darken the raw art itself so bright/white backdrops (like
+                // high-key anime or action shots) never blow out the text
+                // sitting on top of them, no matter the gradient stack below.
+                filter: "brightness(0.82) saturate(1.05)",
+              }}
               priority
             />
           </div>
-          {/* Lighter overlays so backdrop art details show through */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/96 via-background/32 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/76 via-background/24 to-transparent" />
-          <div className="absolute top-0 inset-x-0 h-16 bg-gradient-to-b from-background/40 to-transparent" />
-          {/* Bottom blend — extends 5rem below section edge */}
-          <div className="absolute inset-x-0 bg-gradient-to-t from-background via-background/80 to-transparent" style={{ bottom: "0rem", height: "5rem" }} />
+
+          {/* Bottom -> top scrim (always full-bleed, strongest near the text) */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
+
+          {/* Left -> right scrim, desktop text column */}
+          <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-background/82 via-background/35 to-transparent" />
+
+          {/* Mobile: text is centered near the bottom, so widen the bottom scrim instead */}
+          <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
+
+          {/* Soft top edge so header/nav overlay never fights bright sky/highlights */}
+          <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/35 to-transparent" />
+
+          {/* Radial spotlight scrim centered on where the text block actually sits,
+              guarantees contrast even if the gradients above land on a bright patch */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(ellipse 65% 75% at 22% 78%, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 70%)",
+            }}
+          />
+
+          {/* Bottom blend — extends below the section edge into the page background */}
+          <div
+            className="absolute inset-x-0 bg-gradient-to-t from-background via-background/70 to-transparent"
+            style={{ bottom: "0rem", height: "5rem" }}
+          />
         </>
       ) : (
         <div className="absolute inset-0 bg-card" />
       )}
 
       <div className="relative z-10 w-full px-5 md:px-12 lg:px-16 xl:px-20 pb-8 sm:pb-9 md:pb-12 max-w-screen-2xl mx-auto">
-        <div className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0" style={SECTION_STYLE}>
+        <div
+          className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/12 md:backdrop-blur-0 px-4 py-5 md:p-0"
+          style={SECTION_STYLE}
+        >
           {/* Tags row */}
           <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 mb-2">
             {rating > 0 && item.vote_count && item.vote_count > 20 && (
-              <span className="flex items-center gap-1 bg-black/45 backdrop-blur-sm text-amber-400 text-xs font-extrabold px-2 py-1 rounded-md border border-white/10 shadow-sm">
+              <span className="flex items-center gap-1 bg-black/55 backdrop-blur-sm text-amber-400 text-xs font-extrabold px-2 py-1 rounded-md border border-white/10 shadow-sm">
                 <Star className="w-3 h-3 fill-current" />
                 {rating.toFixed(1)}
               </span>
             )}
             {year && (
-              <span className="flex items-center gap-1 bg-white/10 backdrop-blur-sm text-white/90 text-xs font-semibold px-2 py-1 rounded-md border border-white/10">
+              <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white/90 text-xs font-semibold px-2 py-1 rounded-md border border-white/10">
                 <Calendar className="w-3 h-3" />
                 {year}
               </span>
             )}
-            <span className="bg-white/10 backdrop-blur-sm text-white/80 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider border border-white/10">
+            <span className="bg-black/40 backdrop-blur-sm text-white/85 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider border border-white/10">
               {isAnime ? "Anime" : isMovie ? "Movie" : "TV Show"}
             </span>
           </div>
@@ -103,7 +133,8 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
             className="text-white font-black leading-none mb-3"
             style={{
               fontSize: "clamp(2rem, 5.4vw, 4.15rem)",
-              textShadow: "0 6px 28px rgba(0,0,0,0.48)",
+              textShadow:
+                "0 2px 6px rgba(0,0,0,0.7), 0 8px 26px rgba(0,0,0,0.5)",
               lineHeight: 1,
             }}
           >
@@ -112,7 +143,10 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
           {/* Overview */}
           {item.overview && (
-            <p className="text-white/72 text-sm sm:text-[15px] leading-relaxed mb-4 max-w-xl line-clamp-3">
+            <p
+              className="text-white/90 text-sm sm:text-[15px] leading-relaxed mb-4 max-w-xl line-clamp-3"
+              style={{ textShadow: "0 2px 6px rgba(0,0,0,0.8)" }}
+            >
               {item.overview}
             </p>
           )}
