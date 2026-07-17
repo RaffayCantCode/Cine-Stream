@@ -122,9 +122,13 @@ export default function TvClient() {
 
   const isFutureDate = (dateValue?: string | null) => {
     if (!dateValue) return false;
-    const date = new Date(`${dateValue}T23:59:59`);
-    if (Number.isNaN(date.getTime())) return false;
-    return date.getTime() > Date.now();
+    const dateOnlyStr = dateValue.split("T")[0];
+    const episodeDate = new Date(`${dateOnlyStr}T00:00:00`);
+    if (Number.isNaN(episodeDate.getTime())) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return episodeDate.getTime() > today.getTime();
   };
 
   const isWithinNextDays = (dateValue?: string | null, days = 7) => {
@@ -137,7 +141,17 @@ export default function TvClient() {
 
   const isUpcomingEpisode = (episode?: Episode | null) => {
     if (!episode || !isOngoingShow(show?.status)) return false;
-    return isFutureDate(episode.air_date);
+    if (isFutureDate(episode.air_date)) return true;
+    if (!seasonData?.episodes) return false;
+
+    const eps = seasonData.episodes;
+    const epIdx = eps.findIndex(e => e.id === episode.id || e.episode_number === episode.episode_number);
+    if (epIdx <= 0) return false;
+
+    for (let i = 0; i < epIdx; i++) {
+      if (isFutureDate(eps[i].air_date)) return true;
+    }
+    return false;
   };
 
   useEffect(() => {

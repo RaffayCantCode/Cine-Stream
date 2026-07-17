@@ -114,7 +114,32 @@ async function clientAnilistQuery(query: string, variables: Record<string, any>)
   return res.json();
 }
 
+const clientAnimeCache = new Map<string, { data: { items: AnimeItem[]; hasMore: boolean }; expires: number }>();
+const CLIENT_ANIME_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export async function fetchClientAnime(category: string, page = 1, genre = "", q = ""): Promise<{ items: AnimeItem[], hasMore: boolean }> {
+  const cacheKey = `anime_${category}_${page}_${genre}_${q}`;
+
+  // 1) In-memory cache check
+  const cachedMemory = clientAnimeCache.get(cacheKey);
+  if (cachedMemory && cachedMemory.expires > Date.now()) {
+    return cachedMemory.data;
+  }
+
+  // 2) sessionStorage check
+  if (typeof window !== "undefined") {
+    try {
+      const stored = sessionStorage.getItem(`sv_client_${cacheKey}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.expires > Date.now()) {
+          clientAnimeCache.set(cacheKey, parsed);
+          return parsed.data;
+        }
+      }
+    } catch {}
+  }
+
   try {
     let items: AnimeItem[] = [];
     if (category === "search" || q) {
@@ -133,7 +158,15 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     }
     
     items = filterUnreleased(deduplicateAnime(items));
-    return { items, hasMore: items.length > 0 };
+    const result = { items, hasMore: items.length > 0 };
+
+    clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+      } catch {}
+    }
+    return result;
   } catch (e) {
     console.warn("AniList direct fetch failed, falling back to Jikan:", e);
     // Fallback to Jikan directly from client
@@ -148,6 +181,10 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     const res = await fetch(url);
     const data = await res.json();
     const items = filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
-    return { items, hasMore: items.length > 0 };
+    const fallbackResult = { items, hasMore: items.length > 0 };
+    if (items.length > 0) {
+      clientAnimeCache.set(cacheKey, { data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+    }
+    return fallbackResult;
   }
 }

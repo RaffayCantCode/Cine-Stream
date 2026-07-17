@@ -23,6 +23,7 @@ export interface AnimeItem {
   format?: string | null;
   duration?: number | null;
   trailerId?: string | null;
+  nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
 }
 
 export interface SeasonInfo {
@@ -79,6 +80,7 @@ interface AniListMedia {
   seasonYear: number | null;
   duration: number | null;
   trailer?: { id: string; site: string } | null;
+  nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
 }
 
 // A node in the franchise graph
@@ -181,6 +183,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     format: media.format || null,
     duration: media.duration || null,
     trailerId: media.trailer?.site === "youtube" ? media.trailer.id : null,
+    nextAiringEpisode: media.nextAiringEpisode || null,
   };
 }
 
@@ -830,7 +833,7 @@ export async function getAnimeDetails(
       const q = `query ($id: Int) {
         Media(id: $id, type: ANIME, isAdult: false) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-      episodes genres averageScore description status type format season seasonYear duration trailer { id site }
+      episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
         }
       }`;
       const data = await anilistQuery(q, { id: numId });

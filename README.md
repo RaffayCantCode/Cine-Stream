@@ -12,7 +12,6 @@ CineStream is a full-featured streaming platform for movies, TV shows, anime, an
 - 🎬 **Movies** - Browse popular, top-rated, trending movies from TMDB
 - 📺 **TV Shows** - Stream TV series with episode selection
 - 🇯🇵 **Anime** - Japanese anime with sub/dub options
-- 📚 **Manga** - Read manga online via MangaDex
 
 ### User Experience
 - 🔍 **Search** - Find any movie, show, anime, or manga
@@ -117,7 +116,6 @@ stream-vault/
 │   │   │   ├── tmdb/          # Movie/TV API
 │   │   │   └── auth/          # Authentication
 │   │   ├── anime/             # Anime pages
-│   │   ├── manga/             # Manga pages
 │   │   ├── movie/             # Movie detail pages
 │   │   ├── tv/                # TV show pages
 │   │   └── ...
@@ -138,7 +136,6 @@ stream-vault/
 ## 📝 API Credits
 
 - **TMDB** - Movie and TV show data (themoviedb.org)
-- **MangaDex** - Manga metadata and covers (mangadex.org)
 - **Jikan** - Anime metadata (jikan.moe)
 - **Streaming Sources** - VidSrc, 2Embed, VidKing, VidSrc.in
 

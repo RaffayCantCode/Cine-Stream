@@ -415,9 +415,13 @@ export default function AnimeClient() {
 
   function isFutureDate(dateValue: string | null | undefined): boolean {
     if (!dateValue) return false;
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return false;
-    return date.getTime() > Date.now() + 60 * 60 * 1000;
+    const dateOnlyStr = dateValue.split("T")[0];
+    const episodeDate = new Date(`${dateOnlyStr}T00:00:00`);
+    if (Number.isNaN(episodeDate.getTime())) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return episodeDate.getTime() > today.getTime();
   }
 
   function isWithinNextDays(dateValue: string | null | undefined, days = 7): boolean {
@@ -459,13 +463,15 @@ export default function AnimeClient() {
 
     try {
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`,
-        { skipCache: true }
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
       );
       if (epData.success && epData.data?.episodes?.length) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
         const withRelease = sorted.map(ep => ({
-          ...ep, isReleased: isEpisodeReleased(ep, animeStatusRef.current)
+          ...ep,
+          isReleased: typeof ep.isReleased === "boolean"
+            ? ep.isReleased
+            : (ep.releasedDate ? new Date(ep.releasedDate).getTime() <= Date.now() : true)
         }));
         setEpisodes(prev => {
           // Replace episodes for this season, keep others
@@ -492,6 +498,20 @@ export default function AnimeClient() {
     loadedSeasonIds.current.clear();
     tmdbIdRef.current = null;
 
+    // Fire episodes pre-fetch in parallel with meta load
+    const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    let initSeasonId = searchParams.get("seasonId");
+    if (!initSeasonId) {
+      try {
+        const userId = session?.user?.id || "guest";
+        const saved = localStorage.getItem(`sv_anime_state_${userId}_${id}`);
+        if (saved) initSeasonId = JSON.parse(saved)?.seasonId || null;
+      } catch {}
+    }
+    const targetSeasonId = initSeasonId || id;
+    setCurrentSeasonId(targetSeasonId);
+    loadSeasonEpisodes(targetSeasonId, false);
+
     const loadMeta = async () => {
       setIsLoading(true);
       setError(null);
@@ -500,7 +520,7 @@ export default function AnimeClient() {
         try {
           data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
             `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
-            { signal: AbortSignal.timeout(15000), skipCache: true }
+            { signal: AbortSignal.timeout(15000) }
           );
         } catch (e) {
           console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
@@ -1685,14 +1705,19 @@ export default function AnimeClient() {
                                   )}
                                 </div>
 
-                                {/* Right side end of the episode card: Filler golden tag */}
-                                {ep.isFiller && (
-                                  <div className="flex items-center shrink-0 self-center pl-2">
+                                {/* Right side end of the episode card: Tags (Upcoming / Filler) */}
+                                <div className="flex items-center gap-1.5 shrink-0 self-center pl-2">
+                                  {isUnreleased && (
+                                    <span className="text-[10px] text-sky-400 font-extrabold uppercase bg-sky-400/10 border border-sky-400/20 px-2.5 py-1 rounded-xl shadow-lg shadow-sky-400/5">
+                                      Upcoming
+                                    </span>
+                                  )}
+                                  {ep.isFiller && (
                                     <span className="text-[10px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-xl shadow-lg shadow-amber-400/5">
                                       Filler
                                     </span>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
                               </div>
                             );
                           })}

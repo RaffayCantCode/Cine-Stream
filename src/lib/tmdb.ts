@@ -143,6 +143,7 @@ export interface TmdbEpisodeData {
   description: string | null;
   vote_average?: number;
   runtime?: number;
+  air_date?: string | null;
 }
 
 export interface TmdbSeason {
@@ -295,6 +296,7 @@ export async function fetchTmdbEpisodeData(
           still_path: string | null;
           vote_average?: number;
           runtime?: number;
+          air_date?: string | null;
         }[];
       };
       const eps = data?.episodes || [];
@@ -310,6 +312,7 @@ export async function fetchTmdbEpisodeData(
           description: ep.overview || null,
           vote_average: ep.vote_average,
           runtime: ep.runtime,
+          air_date: ep.air_date || null,
         };
         episodeMap.set(key, val);
         episodeMap.set(`${seasonNum}-rel-${index + 1}`, val);
