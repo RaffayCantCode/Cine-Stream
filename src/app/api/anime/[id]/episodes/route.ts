@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
-import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromKitsu, fetchFillerLookupFromAnimeFillerList } from "@/lib/anime-fetch";
+import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromTatakai, fetchEpisodesFromKitsu, fetchFillerLookupFromAnimeFillerList, DEFAULT_FETCH_USER_AGENT } from "@/lib/anime-fetch";
 import { tmdbFetch, fetchTmdbEpisodeData } from "@/lib/tmdb";
 
 interface TmdbSeasonMin {
@@ -83,7 +83,7 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any): any[] {
   });
 }
 
-// Robust helper to consolidate and enrich episode lists from AniZip, Jikan, and Kitsu
+// Robust helper to consolidate and enrich episode lists from AniZip, Jikan, Tatakai, and Kitsu
 async function getEnrichedEpisodesList(
   seasonId: string,
   seasonName: string,
@@ -92,35 +92,41 @@ async function getEnrichedEpisodesList(
 ): Promise<any[]> {
   let seasonEps: any[] = [];
 
-  // 1 & 2. Try AniZip and Jikan in parallel
-  const [aniZipEpsRes, jikanEpsRes, fillerLookupRes] = await Promise.allSettled([
+  // 1, 2 & 3. Try AniZip, Jikan, and Tatakai in parallel
+  const [aniZipEpsRes, jikanEpsRes, tatakaiEpsRes, fillerLookupRes] = await Promise.allSettled([
     fetchEpisodesFromAniZip(seasonId, totalEpisodes),
     idMal ? fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes) : Promise.resolve([]),
+    fetchEpisodesFromTatakai(seasonId, totalEpisodes),
     fetchFillerLookupFromAnimeFillerList(seasonName)
   ]);
 
   const aniZipEps = aniZipEpsRes.status === 'fulfilled' ? aniZipEpsRes.value : [];
   const jikanEps = jikanEpsRes.status === 'fulfilled' ? jikanEpsRes.value : [];
+  const tatakaiEps = tatakaiEpsRes.status === 'fulfilled' ? tatakaiEpsRes.value : [];
   const fillerLookup = fillerLookupRes.status === 'fulfilled' ? fillerLookupRes.value : null;
 
   if (aniZipEps && aniZipEps.length > 0) {
     seasonEps = aniZipEps;
+  } else if (jikanEps && jikanEps.length > 0) {
+    seasonEps = jikanEps;
+  } else if (tatakaiEps && tatakaiEps.length > 0) {
+    seasonEps = tatakaiEps;
   }
 
-  if (jikanEps && jikanEps.length > 0) {
-    if (seasonEps.length === 0) {
-      seasonEps = jikanEps;
-    } else {
-      seasonEps = seasonEps.map((ep) => {
-        const jEp = jikanEps.find(je => je.episodeNum === ep.episodeNum);
-        return {
-          ...ep,
-          thumbnail: ep.thumbnail || jEp?.thumbnail || null,
-          description: ep.description || jEp?.description || null,
-          isFiller: Boolean(jEp?.isFiller || fillerLookup?.filler.has(ep.episodeNum)),
-        };
-      });
-    }
+  // Cross-merge thumbnails, descriptions, and titles across sources
+  const secondarySources = [jikanEps, tatakaiEps, aniZipEps].filter((s): s is any[] => Array.isArray(s) && s.length > 0);
+  for (const src of secondarySources) {
+    seasonEps = seasonEps.map((ep) => {
+      const match = src.find(s => s && s.episodeNum === ep.episodeNum);
+      const isGenericTitle = !ep.title || ep.title === `Episode ${ep.episodeNum}`;
+      return {
+        ...ep,
+        title: isGenericTitle && match?.title ? match.title : ep.title,
+        thumbnail: ep.thumbnail || match?.thumbnail || null,
+        description: ep.description || match?.description || null,
+        isFiller: Boolean(ep.isFiller || match?.isFiller || fillerLookup?.filler.has(ep.episodeNum)),
+      };
+    });
   }
 
   if (!seasonEps || seasonEps.length === 0) {
@@ -395,7 +401,8 @@ export async function GET(
             if (overlayEps.length === 0 && !effectiveMalId) {
               try {
                 const azMapRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${season.id}`, {
-                  signal: AbortSignal.timeout(4000),
+                  signal: AbortSignal.timeout(6000),
+                  headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
                 });
                 if (azMapRes.ok) {
                   const azMap = await azMapRes.json();
@@ -411,6 +418,13 @@ export async function GET(
               try {
                 const jikanEps = await fetchEpisodesFromJikan(effectiveMalId, season.id, safeTotalEpisodes);
                 if (jikanEps && jikanEps.length > 0) overlayEps.push(...jikanEps);
+              } catch { /* ignore */ }
+            }
+
+            if (overlayEps.length === 0) {
+              try {
+                const tatakaiEps = await fetchEpisodesFromTatakai(season.id, safeTotalEpisodes);
+                if (tatakaiEps && tatakaiEps.length > 0) overlayEps.push(...tatakaiEps);
               } catch { /* ignore */ }
             }
           }

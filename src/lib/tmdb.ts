@@ -39,9 +39,9 @@ const ADULT_KEYWORDS = [
 function getTmdbToken(): string {
   const token = process.env.TMDB_API_KEY;
   if (!token || token === "") {
-    throw new Error("TMDB_API_KEY is not set");
+    return "";
   }
-  return token;
+  return token.trim();
 }
 
 function isTmdbReadAccessToken(token: string): boolean {
@@ -55,67 +55,76 @@ export async function tmdbFetch(
   params?: Record<string, string>,
   options?: { noCache?: boolean }
 ): Promise<unknown> {
-  const isSearch = path.includes("/search/");
-  const token = getTmdbToken();
-  const url = new URL(`${TMDB_BASE}${path}`);
-  url.searchParams.set("include_adult", "false");
-  if (!isTmdbReadAccessToken(token)) {
-    url.searchParams.set("api_key", token);
-  }
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== "") {
-        url.searchParams.set(key, value);
+  try {
+    const isSearch = path.includes("/search/");
+    const token = getTmdbToken();
+    if (!token) {
+      console.warn(`[TMDB] TMDB_API_KEY is not set`);
+      return null;
+    }
+
+    const url = new URL(`${TMDB_BASE}${path}`);
+    url.searchParams.set("include_adult", "false");
+    if (!isTmdbReadAccessToken(token)) {
+      url.searchParams.set("api_key", token);
+    }
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== "") {
+          url.searchParams.set(key, value);
+        }
       }
     }
-  }
 
-  // Dynamic cache times (in seconds) based on path type
-  let revalidate = 21600; // default 6 hours (discover, popular, trending)
-  if (path.includes("/movie/") || path.includes("/tv/")) {
-    revalidate = 86400 * 7; // 7 days for movies/TV details, seasons, episodes, cast
-  } else if (path.includes("/genre/") || path.includes("/configuration")) {
-    revalidate = 86400 * 14; // 14 days for configuration/genres list
-  } else if (path.includes("/search/")) {
-    revalidate = 86400; // 24 hours for search queries
-  }
-
-  const cacheKey = url.toString();
-
-  // Skip in-memory cache when caller requests fresh data (e.g. provider pages)
-  if (!options?.noCache) {
-    const cached = tmdbApiCache.get(cacheKey);
-    if (cached && cached.expires > Date.now()) {
-      return cached.data;
+    // Dynamic cache times (in seconds) based on path type
+    let revalidate = 21600; // default 6 hours
+    if (path.includes("/movie/") || path.includes("/tv/")) {
+      revalidate = 86400 * 7; // 7 days
+    } else if (path.includes("/genre/") || path.includes("/configuration")) {
+      revalidate = 86400 * 14;
+    } else if (path.includes("/search/")) {
+      revalidate = 86400;
     }
+
+    const cacheKey = url.toString();
+
+    if (!options?.noCache) {
+      const cached = tmdbApiCache.get(cacheKey);
+      if (cached && cached.expires > Date.now()) {
+        return cached.data;
+      }
+    }
+
+    const fetchOptions: RequestInit = {
+      headers: {
+        ...(isTmdbReadAccessToken(token) ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 CineStream/1.0",
+      },
+      ...(options?.noCache
+        ? { cache: "no-store" as RequestCache }
+        : { next: { revalidate } }),
+    };
+
+    const res = await fetch(url.toString(), { ...fetchOptions, signal: AbortSignal.timeout(12000) });
+
+    if (!res.ok) {
+      console.warn(`[TMDB] fetch failed (${res.status}): ${url.toString()}`);
+      return null;
+    }
+
+    const data = await res.json();
+    const filtered = filterTmdbResponse(data, isSearch);
+
+    if (!options?.noCache) {
+      tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + (revalidate * 1000) });
+      pruneTmdbCache(tmdbApiCache, TMDB_API_CACHE_MAX);
+    }
+    return filtered;
+  } catch (err) {
+    console.warn(`[TMDB] tmdbFetch failed for path ${path}:`, err);
+    return null;
   }
-
-  const fetchOptions: RequestInit = {
-    headers: {
-      ...(isTmdbReadAccessToken(token) ? { Authorization: `Bearer ${token}` } : {}),
-      "Content-Type": "application/json",
-    },
-    // When noCache is requested, bypass Next.js fetch cache entirely
-    ...(options?.noCache
-      ? { cache: "no-store" as RequestCache }
-      : { next: { revalidate } }),
-  };
-
-  const res = await fetch(url.toString(), { ...fetchOptions, signal: AbortSignal.timeout(10000) });
-
-  if (!res.ok) {
-    throw new Error(`TMDB fetch failed: ${res.status} ${res.statusText}`);
-  }
-
-  const data = await res.json();
-  const filtered = filterTmdbResponse(data, isSearch);
-
-  // Only store in in-memory cache when caching is enabled
-  if (!options?.noCache) {
-    tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + (revalidate * 1000) });
-    pruneTmdbCache(tmdbApiCache, TMDB_API_CACHE_MAX);
-  }
-  return filtered;
 }
 
 const TMDB_API_CACHE_MAX = 100;

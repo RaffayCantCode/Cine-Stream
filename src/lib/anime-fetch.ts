@@ -100,6 +100,7 @@ interface FranchiseNode {
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
 const ANIME_FILLER_LIST_BASE = "https://www.animefillerlist.com/shows";
+export const DEFAULT_FETCH_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 CineStream/1.0";
 const anilistCache = new Map<string, { data: any; expires: number }>();
 const ANILIST_CACHE_TTL = 300000; // 5 minutes
 
@@ -818,7 +819,8 @@ export async function getAnimeDetails(
   let aniZipMapping: any = null;
   try {
     const aniZipRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${id}`, {
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
       next: { revalidate: 86400 } // Cache mappings for 24h
     });
     if (aniZipRes.ok) {
@@ -841,7 +843,10 @@ export async function getAnimeDetails(
     } catch {
       // AniList failed — try Tatakai fallback
       try {
-        const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, { signal: AbortSignal.timeout(6000) });
+        const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, {
+          signal: AbortSignal.timeout(8000),
+          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }
+        });
         if (tRes.ok) {
           const tData = await tRes.json();
           if (tData) {
@@ -1098,7 +1103,8 @@ export async function getAnimeDetails(
         } else {
           try {
             const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.timeout(6000),
+              headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
               next: { revalidate: 86400 }
             });
             if (azRes.ok) {
@@ -1358,7 +1364,8 @@ export async function fetchEpisodesFromAniZip(
 ): Promise<EpisodeDetail[] | null> {
   try {
     const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
       next: { revalidate: 86400 } as any,
     });
     if (!res.ok) return null;
@@ -1824,6 +1831,45 @@ export async function fetchAnimeApi(
   return result;
 }
 
+// Fetch real episode metadata (titles, thumbnails, descriptions) from Tatakai / Zoro API
+export async function fetchEpisodesFromTatakai(
+  anilistId: string,
+  seasonCap: number
+): Promise<EpisodeDetail[] | null> {
+  try {
+    const res = await fetch(`https://api.tatakai.me/meta/anilist/info/${anilistId}?provider=gogoanime`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+      next: { revalidate: 86400 } as any,
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.episodes || !Array.isArray(json.episodes)) return null;
+
+    const eps: EpisodeDetail[] = [];
+    for (const ep of json.episodes) {
+      const epNum = typeof ep.number === "number" ? ep.number : parseInt(String(ep.number), 10);
+      if (isNaN(epNum) || epNum > seasonCap) continue;
+
+      eps.push({
+        episodeId: `${anilistId}-${epNum}`,
+        episodeNum: epNum,
+        title: ep.title || `Episode ${epNum}`,
+        description: ep.description || null,
+        thumbnail: ep.image || ep.thumbnail || null,
+        releasedDate: ep.airDate || null,
+        isFiller: Boolean(ep.isFiller),
+        isRecap: false,
+      });
+    }
+
+    return eps.sort((a, b) => a.episodeNum - b.episodeNum);
+  } catch (error) {
+    console.error("[AnimeFetch] Tatakai fetch failed:", error);
+    return null;
+  }
+}
+
 // Fetch real episode metadata (titles, thumbnails, descriptions) from Kitsu as a fallback
 export async function fetchEpisodesFromKitsu(
   animeName: string,
@@ -1832,7 +1878,7 @@ export async function fetchEpisodesFromKitsu(
   try {
     const searchRes = await fetch(
       `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(animeName)}&page[limit]=1`,
-      { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } }
+      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } }
     );
     if (!searchRes.ok) return null;
     const searchJson = await searchRes.json();
@@ -1842,7 +1888,7 @@ export async function fetchEpisodesFromKitsu(
     const kitsuId = anime.id;
     const epRes = await fetch(
       `https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=${seasonCap}`,
-      { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } }
+      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } }
     );
     if (!epRes.ok) return null;
     const epJson = await epRes.json();
