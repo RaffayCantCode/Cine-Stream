@@ -123,15 +123,25 @@ async function getEnrichedEpisodesList(
     }
   }
 
-  if (fillerLookup && seasonEps.length > 0) {
-    seasonEps = seasonEps.map((ep) => ({
-      ...ep,
-      isFiller: Boolean(ep.isFiller || fillerLookup.filler.has(ep.episodeNum)),
-    }));
+  if (!seasonEps || seasonEps.length === 0) {
+    const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => seasonName?.includes(t));
+    const count = isSpecialFormat ? 1 : Math.max(totalEpisodes || 12, 1);
+    for (let i = 1; i <= count; i++) {
+      seasonEps.push({
+        episodeId: `${seasonId}-${i}`,
+        episodeNum: i,
+        title: i === 1 && isSpecialFormat ? seasonName : `Episode ${i}`,
+        description: null,
+        thumbnail: null,
+        malUrl: null,
+        isFiller: false,
+        releasedDate: null,
+        seasonId: seasonId,
+        seasonName: seasonName,
+        seasonMalId: idMal || null,
+      });
+    }
   }
-
-  // Kitsu fallback and retries have been moved to be lazily evaluated only if TMDB fails
-  // to prevent unnecessarily blocking the API for 2-3 seconds on 99% of requests.
 
   return seasonEps;
 }
@@ -160,6 +170,10 @@ export async function GET(
   }
 
   try {
+    let season: any = null;
+    let meta: any = null;
+    let seasonNumFromList = 1;
+
     // ── Lazy-load more episodes for a season (pagination) ──────────────────
     if (seasonMalId && page > 1) {
       const newEps = await fetchEpisodesFromJikanPage(seasonMalId, seasonId || id, page, batchSize);
@@ -189,10 +203,6 @@ export async function GET(
       const allParamsProvided = clientTmdbId != null && !isNaN(clientTmdbId) &&
                                 clientTmdbSeasonNum != null && !isNaN(clientTmdbSeasonNum) &&
                                 clientEpisodeOffset != null && !isNaN(clientEpisodeOffset);
-
-      let season: any = null;
-      let meta: any = null;
-      let seasonNumFromList = 1;
 
       if (allParamsProvided) {
         // Fast path: trust client params, fetch meta only for supplementary data (name, idMal, totalEpisodes)
@@ -650,7 +660,7 @@ export async function GET(
     }
 
     // ── Default: fetch ALL seasons' episodes ───────────────────────────────
-      let meta = await getAnimeDetails(id, 100, true);
+      if (!meta) meta = await getAnimeDetails(id, 100, true);
       if (!meta) throw new Error("Anime not found");
 
     let episodes: any[] = [];
@@ -720,7 +730,7 @@ export async function GET(
             vote_average: tmdbEp?.vote_average,
               vote_count: tmdbEp?.vote_count,
             runtime: tmdbEp?.runtime,
-            seasonNum: seasonIdx,
+            seasonNum: seasonNumFromList,
             seasonId: season.id,
             seasonName: season.name,
             seasonMalId: season.idMal || null,
@@ -734,14 +744,14 @@ export async function GET(
         let seasonEps: any[] = enrichedEps.map((ep) => ({
           ...ep,
           episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-          seasonNum: seasonIdx,
+          seasonNum: seasonNumFromList,
           seasonId: season.id,
           seasonName: season.name,
           seasonMalId: season.idMal || null,
         }));
 
         if (!seasonEps || seasonEps.length === 0) {
-          const metaEpsForSeason = meta.episodes.filter(e => e.seasonId === season.id);
+          const metaEpsForSeason = (meta?.episodes || []).filter((e: any) => e.seasonId === season.id);
           seasonEps = metaEpsForSeason.map((ep: any) => ({
             episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
             episodeNum: Number(ep.episodeNum || 1),
@@ -758,7 +768,49 @@ export async function GET(
             seasonMalId: season.idMal || null,
           }));
         }
+
+        if (!seasonEps || seasonEps.length === 0) {
+          const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t));
+          const epCount = isSpecialFormat ? 1 : safeTotalEpisodes;
+          for (let i = 1; i <= epCount; i++) {
+            seasonEps.push({
+              episodeId: `${season.id}-${i}`,
+              episodeNum: i,
+              title: i === 1 && isSpecialFormat ? season.name : `Episode ${i}`,
+              description: null,
+              thumbnail: isSpecialFormat ? meta?.anime?.poster || null : null,
+              malUrl: null,
+              isFiller: false,
+              releasedDate: null,
+              seasonNum: seasonNumFromList,
+              seasonId: season.id,
+              seasonName: season.name,
+              seasonMalId: season.idMal || null,
+            });
+          }
+        }
         episodes.push(...seasonEps);
+      }
+
+      if (episodes.length === 0 && season) {
+        const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t));
+        const epCount = isSpecialFormat ? 1 : Math.max(season.totalEpisodes || 12, 1);
+        for (let i = 1; i <= epCount; i++) {
+          episodes.push({
+            episodeId: `${season.id}-${i}`,
+            episodeNum: i,
+            title: i === 1 && isSpecialFormat ? season.name : `Episode ${i}`,
+            description: null,
+            thumbnail: null,
+            malUrl: null,
+            isFiller: false,
+            releasedDate: null,
+            seasonNum: seasonNumFromList,
+            seasonId: season.id,
+            seasonName: season.name,
+            seasonMalId: season.idMal || null,
+          });
+        }
       }
     }
 

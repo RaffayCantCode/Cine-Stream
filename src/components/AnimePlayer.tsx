@@ -7,7 +7,7 @@ import { Server, Maximize2, RotateCcw, SkipForward, ChevronRight, Check, Loader2
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animeplay" | "vidlink" | "123embed";
+  provider: "vidnest" | "animeplay" | "123embed" | "vidlink" | "autoembed";
   color: string;
 }
 
@@ -34,6 +34,7 @@ const PROVIDERS: ProviderSource[] = [
   { name: "Source 2", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
   { name: "Source 3", provider: "123embed", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
   { name: "Source 4", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
+  { name: "Source 5", provider: "autoembed", color: "from-[#f43f5e]/30 to-[#fb7185]/20" },
 ];
 
 function buildProviderUrl(
@@ -79,6 +80,13 @@ function buildProviderUrl(
         return isMovie
           ? `https://play2.123embed.net/movie/${tmdbId}`
           : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
+      }
+      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
+    case "autoembed":
+      if (tmdbId) {
+        return isMovie
+          ? `https://player.autoembed.co/embed/movie/${tmdbId}`
+          : `https://player.autoembed.co/embed/tv/${tmdbId}/${tmdbSeason || 1}-${absEp}`;
       }
       return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
     default:

@@ -15,8 +15,24 @@ import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
 
+interface FranchiseNode {
+  id: number;
+  idMal: number | null;
+  title: string;
+  episodes: number | null;
+  season: string | null;
+  seasonYear: number | null;
+  format: string | null;
+  duration: number | null;
+  coverImage?: string | null;
+  bannerImage?: string | null;
+  tmdbId?: number | null;
+  tmdbSeasonNumber?: number | null;
+  episodeOffset?: number;
+}
+
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "anime-filler-fix-v7";
+const ANIME_API_VERSION = "anime-v9-fresh-start";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -230,6 +246,51 @@ async function fetchFranchiseClientSide(startId: number) {
   });
 }
 
+function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): SeasonInfo[] {
+  const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
+  const sorted = [...clientNodes].sort((a, b) => {
+    const yearA = a.seasonYear || 9999;
+    const yearB = b.seasonYear || 9999;
+    if (yearA !== yearB) return yearA - yearB;
+    const formatOrder = { TV: 0, TV_SHORT: 1, ONA: 2, OVA: 3, SPECIAL: 4, MOVIE: 5 };
+    const fA = (formatOrder as any)[a.format || "TV"] ?? 6;
+    const fB = (formatOrder as any)[b.format || "TV"] ?? 6;
+    if (fA !== fB) return fA - fB;
+    const sA = seasonOrder.indexOf(a.season || "FALL");
+    const sB = seasonOrder.indexOf(b.season || "FALL");
+    return sA - sB;
+  });
+
+  let tvCount = 0;
+  let movieCount = 0;
+  let ovaCount = 0;
+  let specialCount = 0;
+
+  return sorted.map((node) => {
+    const isMovie = node.format === "MOVIE";
+    const isSpecial = node.format === "SPECIAL";
+    const isOva = node.format === "OVA" || (node.format === "ONA" && (node.episodes || 0) < 8);
+    let label: string;
+    if (isMovie) { movieCount++; label = `Movie ${movieCount}`; }
+    else if (isOva) { ovaCount++; label = `OVA ${ovaCount}`; }
+    else if (isSpecial) { specialCount++; label = `Special ${specialCount}`; }
+    else { tvCount++; label = `Season ${tvCount}`; }
+
+    return {
+      id: String(node.id),
+      idMal: node.idMal || null,
+      name: node.title,
+      totalEpisodes: node.episodes || 12,
+      seasonLabel: label,
+      episodeOffset: node.episodeOffset || 0,
+      isCurrent: String(node.id) === String(currentId),
+      seasonYear: node.seasonYear || null,
+      tmdbId: node.tmdbId || null,
+      tmdbSeasonNumber: node.tmdbSeasonNumber || null,
+    } as any;
+  });
+}
+
 async function fetchAnimeMetaClientSide(idStr: string) {
   if (!idStr) return null;
   const isMal = idStr.startsWith("mal-");
@@ -289,21 +350,7 @@ async function fetchAnimeMetaClientSide(idStr: string) {
 
     // Get franchise nodes
     const clientNodes = await fetchFranchiseClientSide(media.id);
-    const finalSeasons = clientNodes.map(node => {
-      const isCurrent = node.id === media.id;
-      return {
-        id: String(node.id),
-        idMal: node.idMal || null,
-        name: node.title,
-        totalEpisodes: node.episodes || 12,
-        seasonLabel: `${node.season || ""} ${node.seasonYear || ""}`.trim() || node.format || "Unknown",
-        episodeOffset: 0,
-        isCurrent,
-        seasonYear: node.seasonYear || null,
-        tmdbId: null,
-        tmdbSeasonNumber: null,
-      } as any;
-    });
+    const finalSeasons = mapNodesToSeasons(clientNodes, media.id);
     anime.seasons = finalSeasons;
 
     return {
@@ -484,8 +531,50 @@ export default function AnimeClient() {
         });
         setSeasonOverview(epData.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
+      } else {
+        // Client-side fallback: ensure episodes are ALWAYS available even if server or edge API returns empty
+        const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
+        const epCount = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 12;
+        const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => ({
+          episodeId: `${seasonId}-${i + 1}`,
+          episodeNum: i + 1,
+          title: `Episode ${i + 1}`,
+          description: undefined,
+          thumbnail: undefined,
+          malUrl: undefined,
+          isFiller: false,
+          isReleased: true,
+          seasonId: seasonId,
+          seasonNum: 1,
+        }));
+        setEpisodes(prev => {
+          const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
+          return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
+        });
+        loadedSeasonIds.current.add(seasonId);
       }
-    } catch { /* silent */ }
+    } catch {
+      // Client-side fallback on network failure or edge timeout
+      const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
+      const epCount = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 12;
+      const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => ({
+        episodeId: `${seasonId}-${i + 1}`,
+        episodeNum: i + 1,
+        title: `Episode ${i + 1}`,
+        description: undefined,
+        thumbnail: undefined,
+        malUrl: undefined,
+        isFiller: false,
+        isReleased: true,
+        seasonId: seasonId,
+        seasonNum: 1,
+      }));
+      setEpisodes(prev => {
+        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
+        return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
+      });
+      loadedSeasonIds.current.add(seasonId);
+    }
     finally { setEpisodesLoading(false); }
   }, [id]);
 
@@ -569,24 +658,9 @@ export default function AnimeClient() {
             // Full BFS fallback: server had no franchise data at all
             const clientNodes = await fetchFranchiseClientSide(Number(id));
             if (clientNodes.length > 1) {
-              // Map nodes to seasons
-              finalSeasons = clientNodes.map(node => {
-                const isCurrent = node.id === Number(id);
-                if (isCurrent) urlSeasonId = String(node.id);
-                const res = {
-                  id: String(node.id),
-                  idMal: node.idMal || null,
-                  name: node.title,
-                  totalEpisodes: node.episodes || 12,
-                  seasonLabel: `${node.season || ""} ${node.seasonYear || ""}`.trim() || node.format || "Unknown",
-                  episodeOffset: node.episodeOffset || 0,
-                  isCurrent,
-                  seasonYear: node.seasonYear || null,
-                  tmdbId: node.tmdbId || null,
-                  tmdbSeasonNumber: node.tmdbSeasonNumber || null,
-                } as any;
-                return res;
-              });
+              finalSeasons = mapNodesToSeasons(clientNodes, Number(id));
+              const currentSeasonNode = finalSeasons.find((s: SeasonInfo) => s.isCurrent);
+              if (currentSeasonNode) urlSeasonId = String(currentSeasonNode.id);
               setFranchiseNodes(clientNodes);
               setAnime(prev => prev ? { ...prev, seasons: finalSeasons } : prev);
             }
@@ -631,7 +705,7 @@ export default function AnimeClient() {
           // Load the active season's episodes immediately with exact mapping parameters
           loadSeasonEpisodes(
             activeSeasonId,
-            false,
+            true,
             activeSeason?.tmdbId,
             activeSeason?.tmdbSeasonNumber,
             activeSeason?.episodeOffset
@@ -1154,7 +1228,7 @@ export default function AnimeClient() {
                   {seasons.length > 1 && (
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs font-bold text-[#7288AE] bg-[#4B5694]/15 border border-[#7288AE]/20 px-2.5 py-0.5 rounded-full">
-                        {seasons.filter(s => s.seasonLabel?.startsWith("Season")).length} Seasons
+                        {Math.max(seasons.filter(s => s.seasonLabel?.startsWith("Season")).length, 1)} Seasons
                         {seasons.filter(s => !s.seasonLabel?.startsWith("Season")).length > 0 && ` + ${seasons.filter(s => !s.seasonLabel?.startsWith("Season")).length} More`}
                       </span>
                     </div>
