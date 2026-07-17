@@ -32,6 +32,8 @@ interface MediaItem {
   backdrop_path?: string;
   media_type?: string;
   vote_average?: number;
+  vote_count?: number;
+  overview?: string;
   release_date?: string;
   first_air_date?: string;
   original_language?: string;
@@ -42,8 +44,6 @@ interface Genre {
   id: number;
   name: string;
 }
-
-
 
 // ─── Session-stable shuffle ───────────────────────────────────────────────────
 // We want different results every SESSION (new tab / new browser open) but
@@ -136,6 +136,9 @@ export default function Home() {
   const [recent, setRecent] = useState<MediaItem[]>([]);
   const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>([]);
   const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>([]);
+  const [heroTrendingFeed, setHeroTrendingFeed] = useState<MediaItem[]>([]);
+  const [heroPopularFeed, setHeroPopularFeed] = useState<MediaItem[]>([]);
+  const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>([]);
   const [heroFeed, setHeroFeed] = useState<MediaItem[]>([]);
   const [recommended, setRecommended] = useState<MediaItem[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -250,10 +253,10 @@ export default function Home() {
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const animeMovieSafe = filterReleasedSafeContent(heroData.animeMovies?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
+          (i) => ({ ...i, media_type: "movie" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const animeTvSafe = filterReleasedSafeContent(heroData.animeTv?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const })
+          (i) => ({ ...i, media_type: "tv" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
         const trendingMoviesTodaySafe = filterReleasedSafeContent(heroData.trendingMoviesToday?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
@@ -268,7 +271,12 @@ export default function Home() {
         setRecent(heroRecentSafe);
         setTrendingMoviesToday(trendingMoviesTodaySafe);
         setTrendingTvToday(trendingTvTodaySafe);
-        setHeroFeed(sessionShuffle([
+
+        setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
+        setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
+        setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
+
+        setHeroFeed([
           ...trendingSafe,
           ...popularSafe,
           ...heroTopSafe,
@@ -278,7 +286,7 @@ export default function Home() {
           ...onTheAirSafe,
           ...animeMovieSafe,
           ...animeTvSafe,
-        ], "hero"));
+        ]);
         setIsLoading(false);
 
         // ── Full rows data arrives (more TMDB pages) ────────────────────
@@ -366,16 +374,64 @@ export default function Home() {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  // ─── Hero pool: exactly 1 movie, 1 TV show, 1 anime ──────────────────────
+  // ─── Hero pool: 3 cards — 1 Movie, 1 TV Show, 1 Anime ──────────────────
   const heroPool = useMemo(() => {
-    const eligible = heroFeed.filter((i) => i.backdrop_path);
-    const movies = eligible.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
-    const shows = eligible.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
-    const animeItems = eligible.filter((i) => isTmdbAnime(i));
+    const isQualityItem = (i: MediaItem) => {
+      if (!i.backdrop_path || !i.poster_path) return false;
+      if (!i.overview || i.overview.trim().length < 25) return false;
+      const rating = i.vote_average ?? 0;
+      const votes = i.vote_count ?? 0;
+      // Filter out obscure, low-rated, or unreviewed noise
+      if (rating < 6.2) return false;
+      if (votes < 30) return false;
+      return true;
+    };
 
-    const m = pickRandom(movies);
-    const s = pickRandom(shows);
-    const a = pickRandom(animeItems);
+    const qualityFeed = heroFeed.filter(isQualityItem);
+
+    // Card 1: Movie (non-anime)
+    const movies = qualityFeed.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
+    // Card 2: TV Show (non-anime)
+    const shows = qualityFeed.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
+    // Card 3: Anime (movies or TV)
+    const animeItems = qualityFeed.filter((i) => isTmdbAnime(i));
+
+    // Track recently seen hero IDs in sessionStorage to prevent repetitions across page visits
+    const seenIds = new Set<number>();
+    try {
+      if (typeof window !== "undefined") {
+        const raw = sessionStorage.getItem("sv_seen_hero_ids");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((id: number) => seenIds.add(id));
+          }
+        }
+      }
+    } catch {}
+
+    const pickFresh = (candidates: MediaItem[]): MediaItem | null => {
+      if (candidates.length === 0) return null;
+      // Prefer items that haven't been shown in recent session visits
+      const unseen = candidates.filter((c) => !seenIds.has(c.id));
+      const pool = unseen.length > 0 ? unseen : candidates;
+      const picked = pool[Math.floor(Math.random() * pool.length)];
+      if (picked) {
+        seenIds.add(picked.id);
+      }
+      return picked || null;
+    };
+
+    const m = pickFresh(movies);
+    const s = pickFresh(shows);
+    const a = pickFresh(animeItems);
+
+    try {
+      if (typeof window !== "undefined") {
+        const arr = Array.from(seenIds).slice(-50);
+        sessionStorage.setItem("sv_seen_hero_ids", JSON.stringify(arr));
+      }
+    } catch {}
 
     return [m, s, a].filter(Boolean) as MediaItem[];
   }, [heroFeed]);

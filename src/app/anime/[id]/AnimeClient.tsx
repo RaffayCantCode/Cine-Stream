@@ -410,14 +410,21 @@ interface Episode {
   seasonMalId?: number | null;
 }
 
-export default function AnimeClient() {
+export default function AnimeClient({ initialData }: { initialData?: any | null } = {}) {
   const params = useParams();
   const id = params?.id as string;
   const { data: session, status: authStatus } = useSession();
 
-  const [anime, setAnime] = useState<AnimeDetail | null>(null);
+  const [anime, setAnime] = useState<AnimeDetail | null>(() => {
+    // Hydrate from server-passed initial data immediately on first render.
+    // This eliminates the blank skeleton — the poster/title/description/genres
+    // are visible the instant the page hydrates, before any client fetch fires.
+    if (initialData && initialData.id) return initialData as AnimeDetail;
+    return null;
+  });
   const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // If we already have initialData, skip the blank skeleton entirely.
+  const [isLoading, setIsLoading] = useState(!initialData);
   const [episodesLoading, setEpisodesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
@@ -551,7 +558,9 @@ export default function AnimeClient() {
           const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
           return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
         });
-        loadedSeasonIds.current.add(seasonId);
+        // NOTE: Do NOT add to loadedSeasonIds here — these are placeholder episodes.
+        // A subsequent call with real TMDB params (from meta load or user click) must
+        // be allowed to re-fetch and replace them with real metadata.
       }
     } catch {
       // Client-side fallback on network failure or edge timeout
@@ -573,36 +582,51 @@ export default function AnimeClient() {
         const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
         return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
       });
-      loadedSeasonIds.current.add(seasonId);
+      // NOTE: Do NOT add to loadedSeasonIds here — these are placeholder episodes.
+      // A subsequent call with real TMDB params must be allowed to replace them.
     }
     finally { setEpisodesLoading(false); }
   }, [id]);
 
+  // Ref to ensure the episode pre-fetch only fires once per anime ID (even when
+  // authStatus transitions cause the effect to re-run).
+  const prefetchFiredForRef = useRef<string | null>(null);
+
   // ── Load meta (fast, skipEpisodes) ─────────────────────────────────────
   useEffect(() => {
-    if (!id || authStatus === "loading") return;
-    if (anime && anime.id === id) return; // Prevent re-fetching and flickering when session/authStatus changes
+    if (!id) return;
+    if (anime && anime.id === id && anime.seasons && anime.seasons.length > 0) return; // Fully loaded already
 
     let cancelled = false;
     loadedSeasonIds.current.clear();
     tmdbIdRef.current = null;
 
-    // Fire episodes pre-fetch in parallel with meta load
-    const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-    let initSeasonId = searchParams.get("seasonId");
-    if (!initSeasonId) {
-      try {
-        const userId = session?.user?.id || "guest";
-        const saved = localStorage.getItem(`sv_anime_state_${userId}_${id}`);
-        if (saved) initSeasonId = JSON.parse(saved)?.seasonId || null;
-      } catch {}
+    // Fire episodes pre-fetch immediately — auth state is NOT required for
+    // fetching episode metadata (only for writing watch history later).
+    // Use a ref guard so this only fires once per anime ID even when the effect
+    // re-runs due to authStatus / session changes.
+    if (prefetchFiredForRef.current !== id) {
+      prefetchFiredForRef.current = id;
+      const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+      let initSeasonId = searchParams.get("seasonId");
+      if (!initSeasonId) {
+        try {
+          const userId = session?.user?.id || "guest";
+          const saved = localStorage.getItem(`sv_anime_state_${userId}_${id}`);
+          if (saved) initSeasonId = JSON.parse(saved)?.seasonId || null;
+        } catch {}
+      }
+      const targetSeasonId = initSeasonId || id;
+      setCurrentSeasonId(targetSeasonId);
+      loadSeasonEpisodes(targetSeasonId, false);
     }
-    const targetSeasonId = initSeasonId || id;
-    setCurrentSeasonId(targetSeasonId);
-    loadSeasonEpisodes(targetSeasonId, false);
+
+    // Meta fetch waits for auth to avoid unnecessary re-runs when session changes.
+    if (authStatus === "loading") return;
 
     const loadMeta = async () => {
-      setIsLoading(true);
+      // Don't show the skeleton if we already have initial data rendered
+      if (!initialData) setIsLoading(true);
       setError(null);
       try {
         let data: any = null;
@@ -936,9 +960,13 @@ export default function AnimeClient() {
     setIsPlaying(false);
     setSelectedEp(null);
     setEpisodeNotice(null);
+    // Always force-reload when the user explicitly clicks a season tab.
+    // This ensures placeholder episodes (loaded without TMDB params during
+    // the initial pre-fetch race) are replaced with real metadata now that
+    // the client has the correct tmdbId / tmdbSeason / episodeOffset from meta.
     loadSeasonEpisodes(
       season.id,
-      false,
+      true,
       (season as any).tmdbId,
       season.tmdbSeasonNumber,
       (season as any).episodeOffset

@@ -387,9 +387,29 @@ export async function GET(
               const aniZipEps = await fetchEpisodesFromAniZip(season.id, safeTotalEpisodes);
               if (aniZipEps && aniZipEps.length > 0) overlayEps.push(...aniZipEps);
             } catch { /* ignore */ }
-            if (overlayEps.length === 0 && season.idMal) {
+
+            // Resolve the MAL ID for Jikan — season.idMal can be null when getAnimeDetails
+            // timed out during a Cloudflare Edge cold start (AniZip 3s timeout fires).
+            // In that case, fetch the AniZip mapping directly here to recover mal_id.
+            let effectiveMalId: number | string | null = season.idMal;
+            if (overlayEps.length === 0 && !effectiveMalId) {
               try {
-                const jikanEps = await fetchEpisodesFromJikan(season.idMal, season.id, safeTotalEpisodes);
+                const azMapRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${season.id}`, {
+                  signal: AbortSignal.timeout(4000),
+                });
+                if (azMapRes.ok) {
+                  const azMap = await azMapRes.json();
+                  if (azMap?.mappings?.mal_id) {
+                    effectiveMalId = azMap.mappings.mal_id;
+                    console.log(`[Episodes API] Recovered mal_id=${effectiveMalId} from AniZip for seasonId=${season.id}`);
+                  }
+                }
+              } catch { /* ignore */ }
+            }
+
+            if (overlayEps.length === 0 && effectiveMalId) {
+              try {
+                const jikanEps = await fetchEpisodesFromJikan(effectiveMalId, season.id, safeTotalEpisodes);
                 if (jikanEps && jikanEps.length > 0) overlayEps.push(...jikanEps);
               } catch { /* ignore */ }
             }
