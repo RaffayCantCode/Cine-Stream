@@ -1,8 +1,7 @@
 // CineStream Service Worker
-// Strategy: Network-first for API/auth/html, Cache-first for static + images
-// CACHE_VERSION is injected at build time by next.config.ts using a build ID.
-// Changing this string busts ALL caches on the next deploy automatically.
-const CACHE_VERSION = 'v3';
+// Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
+// CACHE_VERSION is updated to bust previous worker cache.
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
@@ -14,7 +13,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS))
   );
-  self.skipWaiting(); // Force the waiting service worker to become the active service worker
+  self.skipWaiting();
 });
 
 // Activate — clean ALL old caches (anything not matching current CACHE_VERSION)
@@ -28,7 +27,7 @@ self.addEventListener('activate', (event) => {
       )
     )
   );
-  self.clients.claim(); // Claim clients immediately so the new SW takes control
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -47,17 +46,56 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // FORCE NETWORK AND BYPASS HTTP CACHE FOR HTML NAVIGATIONS
-  // This guarantees the user ALWAYS gets the newest Next.js build HTML
+  // FAST NETWORK-FIRST WITH 2.5S TIMEOUT & AUTOMATIC HTML CACHING FOR NAVIGATIONS
+  // Prevents mobile tabs from hanging when reopening on sleeping/reconnecting mobile networks
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request.url, { cache: 'no-store' }).catch(() => caches.match(request))
+      (async () => {
+        const cache = await caches.open(STATIC_CACHE);
+        const cachedResponse = (await cache.match(request)) || (await cache.match('/'));
+
+        // 2.5s timeout for slow/reconnecting mobile networks
+        const timeoutPromise = new Promise((resolve) => {
+          setTimeout(() => resolve(null), 2500);
+        });
+
+        const fetchPromise = fetch(request)
+          .then((response) => {
+            if (response && response.status === 200 && response.type === 'basic') {
+              cache.put(request, response.clone());
+            }
+            return response;
+          })
+          .catch(() => null);
+
+        const response = await Promise.race([fetchPromise, timeoutPromise]);
+
+        if (response && response.ok) {
+          return response;
+        }
+
+        // Return cached page or cached root shell instantly if network is slow/offline
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+
+        const fallback = await fetchPromise;
+        return fallback || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+      })()
     );
     return;
   }
 
-  // Cache-first for TMDB images (they never change for a given path)
-  if (url.hostname === 'image.tmdb.org') {
+  // Cache-first for media images (TMDB, AniList, MAL, HiAnime, AniPub, Tatakai)
+  const isImageDomain =
+    url.hostname === 'image.tmdb.org' ||
+    url.hostname === 's4.anilist.co' ||
+    url.hostname.includes('myanimelist.net') ||
+    url.hostname.includes('hianime') ||
+    url.hostname.includes('anipub') ||
+    url.hostname.includes('tatakai');
+
+  if (isImageDomain) {
     event.respondWith(
       caches.open(IMAGE_CACHE).then(async (cache) => {
         const cached = await cache.match(request);
@@ -71,7 +109,6 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Cache-first for Next.js static assets (_next/static)
-  // These are content-hashed by Next.js at build time so cache-busting is automatic.
   if (url.pathname.startsWith('/_next/static')) {
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
@@ -86,7 +123,6 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Never cache API responses in the service worker — let the CDN/server handle it.
-  // This prevents stale API data from being served from the SW cache.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request));
     return;
@@ -97,3 +133,4 @@ self.addEventListener('fetch', (event) => {
     fetch(request).catch(() => caches.match(request))
   );
 });
+

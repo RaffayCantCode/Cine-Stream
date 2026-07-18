@@ -31,7 +31,8 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
   const router = useRouter();
   const { data, isLoading } = useSWR(
     status === "authenticated" ? "/api/watch-history" : null,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false, revalidateIfStale: false }
   );
 
   const [emblaRef] = useEmblaCarousel({
