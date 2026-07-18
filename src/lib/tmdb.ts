@@ -106,7 +106,7 @@ export async function tmdbFetch(
         : { next: { revalidate } }),
     };
 
-    const res = await fetch(url.toString(), { ...fetchOptions, signal: AbortSignal.timeout(12000) });
+    const res = await fetch(url.toString(), { ...fetchOptions, signal: AbortSignal.timeout(8000) });
 
     if (!res.ok) {
       console.warn(`[TMDB] fetch failed (${res.status}): ${url.toString()}`);

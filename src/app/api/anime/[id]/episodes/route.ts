@@ -154,7 +154,9 @@ async function getEnrichedEpisodesList(
 
 const episodesCache = new Map<string, { data: any; expires: number }>();
 const animeCacheHeaders = {
-  "Cache-Control": "public, max-age=300, s-maxage=600, stale-while-revalidate=1800",
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Cloudflare-CDN-Cache-Control": "no-store",
 } as const;
 
 export async function GET(

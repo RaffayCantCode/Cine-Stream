@@ -3,10 +3,6 @@ export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { getAnimeDetails } from "@/lib/anime-fetch";
 
-const animeCacheHeaders = {
-  "Cache-Control": "public, max-age=300, s-maxage=600, stale-while-revalidate=1800",
-} as const;
-
 const animeNoCacheHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
   "CDN-Cache-Control": "no-store",
@@ -43,7 +39,7 @@ export async function GET(
         franchiseNodes,
         tmdbSeasonMap,
       },
-    }, { headers: animeCacheHeaders });
+    }, { headers: animeNoCacheHeaders });
   } catch (error) {
     console.error("[Anime Meta Error]:", error);
     return Response.json(

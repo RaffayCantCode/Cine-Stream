@@ -601,10 +601,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     loadedSeasonIds.current.clear();
     tmdbIdRef.current = null;
 
-    // Fire episodes pre-fetch immediately — auth state is NOT required for
-    // fetching episode metadata (only for writing watch history later).
-    // Use a ref guard so this only fires once per anime ID even when the effect
-    // re-runs due to authStatus / session changes.
+    // NOTE: Pre-fetch deliberately skipped. Loading episodes without TMDB params
+    // forces the server into the slow path (full BFS franchise graph + AniZip per
+    // season + TMDB), which easily exceeds Cloudflare Free's 10s CPU limit.
+    // Episodes are loaded AFTER meta data provides TMDB mapping params below.
     if (prefetchFiredForRef.current !== id) {
       prefetchFiredForRef.current = id;
       const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
@@ -618,7 +618,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
       const targetSeasonId = initSeasonId || id;
       setCurrentSeasonId(targetSeasonId);
-      loadSeasonEpisodes(targetSeasonId, false);
     }
 
     // Meta fetch waits for auth to avoid unnecessary re-runs when session changes.

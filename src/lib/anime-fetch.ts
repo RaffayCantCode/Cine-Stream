@@ -343,7 +343,7 @@ export async function searchAnime(q: string, page = 1, genre?: string): Promise<
   }
   
   // Jikan fallback
-  const res = await fetch(`${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`);
+  const res = await fetch(`${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`, { signal: AbortSignal.timeout(8000) });
   const data = await res.json();
   return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
@@ -358,7 +358,7 @@ export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeIt
     console.warn("AniList popular failed, falling back to Jikan:", e);
   }
 
-  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`);
+  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`, { signal: AbortSignal.timeout(8000) });
   const data = await res.json();
   return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
@@ -373,7 +373,7 @@ export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeI
     console.warn("AniList trending failed, falling back to Jikan:", e);
   }
 
-  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`);
+  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`, { signal: AbortSignal.timeout(8000) });
   const data = await res.json();
   return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
@@ -389,7 +389,7 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
     console.warn("AniList airing failed, falling back to Jikan:", e);
   }
 
-  const res = await fetch(`${JIKAN_BASE}/seasons/now?page=${page}`);
+  const res = await fetch(`${JIKAN_BASE}/seasons/now?page=${page}`, { signal: AbortSignal.timeout(8000) });
   const data = await res.json();
   return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
 }
@@ -415,12 +415,15 @@ const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
   const visited = new Map<number, FranchiseNode>(); // id → node
   const queue: number[] = [startId];
-  const MAX_NODES = 150; // Increased safety cap for large franchises like MHA
-  const MAX_HOPS = 15; // Increased max hops for deep franchises like AOT and MHA
+  const MAX_NODES = 150;
+  const MAX_HOPS = 15;
+  const FRANCHISE_TIMEOUT = 7000; // Global abortion timeout for Cloudflare Free (10s CPU limit)
   let hops = 0;
+  let timedOut = false;
+  const timeoutId = setTimeout(() => { timedOut = true; }, FRANCHISE_TIMEOUT);
 
-  while (queue.length > 0 && visited.size < MAX_NODES && hops < MAX_HOPS) {
-    // Process all queued nodes in one single bulk request!
+  try {
+  while (queue.length > 0 && visited.size < MAX_NODES && hops < MAX_HOPS && !timedOut) {
     const batch = queue.splice(0, queue.length);
     hops++;
     try {
@@ -496,6 +499,10 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
     if (queue.length > 0 && hops > 1) {
       await new Promise(r => setTimeout(r, 300));
     }
+  }
+
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   // Filter out nodes with no title (partial/failed AniList responses)
@@ -1177,31 +1184,15 @@ export async function getAnimeDetails(
         mappedEpisodesCount[key] = Math.max(mappedEpisodesCount[key] || 0, episodeOffset + s.totalEpisodes);
         tmdbSeasonMap[s.id] = tmdbSeasonNum as number;
       } else {
-        // Find the best TMDB season to map to
-        let tmdbSeason = tmdbSeasons.find(ts => ts.season_number === parsedSeasonNum);
-        if (!tmdbSeason) {
-          const candidates = tmdbSeasons.filter(ts => ts.season_number <= parsedSeasonNum && ts.season_number > 0);
-          if (candidates.length > 0) {
-            tmdbSeason = candidates.sort((a, b) => b.season_number - a.season_number)[0];
-          }
-        }
-        if (!tmdbSeason) {
-          tmdbSeason = tmdbSeasons.find(ts => ts.season_number > 0);
-        }
-        if (!tmdbSeason && tmdbSeasons.length > 0) {
-          tmdbSeason = tmdbSeasons[0];
-        }
-
-        if (tmdbSeason) {
-          tmdbSeasonNum = tmdbSeason.season_number;
-          // Calculate offset by looking at franchise node accumulation
-          const key = `${tid}-${tmdbSeasonNum}`;
-          episodeOffset = mappedEpisodesCount[key] || 0;
-          mappedEpisodesCount[key] = episodeOffset + s.totalEpisodes;
-          
-          // Also populate tmdbSeasonMap for backward compatibility
-          tmdbSeasonMap[s.id] = tmdbSeasonNum;
-        }
+        // AniZip unavailable (timeout on Cloudflare). Do NOT guess TMDB
+        // season/offset via label or title heuristics — they are unreliable when
+        // franchise TV-count labels don't match TMDB's season numbering (e.g.
+        // AoT S3P2 labelled "Season 4" by buildSeasonList but TMDB season 3).
+        // Instead leave tmdbSeasonNum null so the caller uses overlay-only mode
+        // (AniZip/Jikan/Tatakai) which returns correct episode data without
+        // TMDB enrichment.
+        tmdbSeasonNum = null;
+        episodeOffset = 0;
       }
     }
 
@@ -1515,13 +1506,13 @@ export async function fetchEpisodesFromJikan(
     // First request to get total pages
     let firstRes = await fetch(
       `${JIKAN_BASE}/anime/${malId}/episodes?page=1`,
-      { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
+      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
     );
     if (firstRes.status === 429) {
       await new Promise(r => setTimeout(r, 1500));
       firstRes = await fetch(
         `${JIKAN_BASE}/anime/${malId}/episodes?page=1`,
-        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
+        { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
       );
     }
     if (!firstRes.ok) return null;
@@ -1557,7 +1548,7 @@ export async function fetchEpisodesFromJikan(
           (async () => {
             try {
               const url = `${JIKAN_BASE}/anime/${malId}/episodes?page=${p}`;
-              const options = { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } };
+              const options = { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } };
               const res = await fetch(url, options as any);
               
               if (res.status === 429) {
@@ -1620,7 +1611,7 @@ export async function fetchEpisodesFromJikanPage(
     while (hasMore && allEps.length < limit) {
       const res = await fetch(
         `${JIKAN_BASE}/anime/${malId}/episodes?page=${page}`,
-        { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
+        { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
       );
       if (res.status === 429 && retries < 3) {
         retries++;
