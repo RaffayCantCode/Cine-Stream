@@ -218,7 +218,7 @@ function SearchContent() {
                 {tab === "all" && "All"}
                 {tab === "movies" && "Movies"}
                 {tab === "tv" && "TV Shows"}
-                {tab === "anime" && "Anime"}
+                {tab === "anime" && "Anime (JP Dub)"}
                 {tab === "people" && "People"}
               </button>
             ))}

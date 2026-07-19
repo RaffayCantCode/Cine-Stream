@@ -1,11 +1,21 @@
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
-import { fetchAnimeApi, searchViaJikan } from "@/lib/anime-fetch";
+import { searchAnime, searchViaJikan } from "@/lib/anime-fetch";
 import { generateVariants, editDistance } from "@/lib/fuzzy-search";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function dedupAnime(items: any[]): any[] {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const key = String(item.id || item.idMal || item.name);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function findAnimeSuggestion(query: string, animeResults: any[]): string | null {
@@ -32,36 +42,37 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const data = await fetchAnimeApi(
-      `/api/search?keyword=${encodeURIComponent(rawQuery)}`
-    );
-    let animes = data.data || [];
+    const [anilistItems, jikanItems] = await Promise.all([
+      searchAnime(rawQuery, 1).catch(() => []),
+      searchViaJikan(rawQuery).catch(() => []),
+    ]);
+
+    let animes = dedupAnime([...anilistItems, ...jikanItems]);
     let didYouMean: string | null = null;
 
     if (animes.length < 3) {
       const fuzzyVariants = generateVariants(rawQuery, 6);
-      const fuzzyResults: any[] = [];
-      const seenIds = new Set(animes.map((a: any) => a.id));
+      const seenIds = new Set(animes.map((a: any) => String(a.id || a.idMal)));
       let bestVariant = "";
       let bestCount = 0;
 
       for (const variant of fuzzyVariants) {
         try {
-          const variantData = await fetchAnimeApi(`/api/search?keyword=${encodeURIComponent(variant)}`);
-          const items = (variantData.data || []).filter((a: any) => !seenIds.has(a.id));
-          if (items.length > bestCount) {
-            bestCount = items.length;
+          const [variantAnilist, variantJikan] = await Promise.all([
+            searchAnime(variant, 1).catch(() => []),
+            searchViaJikan(variant).catch(() => []),
+          ]);
+          const items = dedupAnime([...variantAnilist, ...variantJikan]);
+          const newItems = items.filter((a: any) => !seenIds.has(String(a.id || a.idMal)));
+          if (newItems.length > bestCount) {
+            bestCount = newItems.length;
             bestVariant = variant;
           }
-          for (const item of items) {
-            seenIds.add(item.id);
-            fuzzyResults.push(item);
+          for (const item of newItems) {
+            seenIds.add(String(item.id || item.idMal));
+            animes.push(item);
           }
         } catch {}
-      }
-
-      if (fuzzyResults.length > 0) {
-        animes = [...animes, ...fuzzyResults];
       }
 
       if (bestCount > 0 && bestVariant) {
@@ -71,18 +82,6 @@ export async function GET(request: NextRequest) {
           didYouMean = bestVariant;
         }
       }
-    }
-
-    if (animes.length < 3) {
-      try {
-        const jikanItems = await searchViaJikan(rawQuery);
-        const existingIds = new Set(animes.map((a: any) => a.id));
-        for (const item of jikanItems) {
-          if (!existingIds.has(item.id)) {
-            animes.push(item);
-          }
-        }
-      } catch {}
     }
 
     const suggestion = findAnimeSuggestion(rawQuery, animes);
