@@ -41,10 +41,18 @@ export default function AnimeBrowsePage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState<number | null>(null);
 
-  // Set random starting page client-side on mount
+  // Set session-stable starting page client-side on mount
   useEffect(() => {
-    const randomPage = Math.floor(Math.random() * 50) + 1;
-    setPage(randomPage);
+    try {
+      let s = sessionStorage.getItem("sv_anime_browse_page");
+      if (!s) {
+        s = String(Math.floor(Math.random() * 50) + 1);
+        sessionStorage.setItem("sv_anime_browse_page", s);
+      }
+      setPage(parseInt(s, 10) || 1);
+    } catch {
+      setPage(1);
+    }
   }, []);
   const [hasMore, setHasMore] = useState(true);
   const [loadKey, setLoadKey] = useState(0);

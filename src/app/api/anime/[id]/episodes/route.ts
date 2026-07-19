@@ -539,8 +539,42 @@ export async function GET(
       } else {
         // ── No TMDB mapping: use enriched episodes ────────────────────────────
         // getEnrichedEpisodesList already tries AniZip → Jikan → Tatakai → Kitsu in order.
-        // Placeholders are only generated inside it as an absolute last resort.
-        const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
+        let enrichedEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
+        const lacksRealEpisodes = !enrichedEps || enrichedEps.length === 0 || enrichedEps.every((e: any) => e.isPlaceholder);
+
+        // Fallback: If primary sources failed/placeholders on edge, search TMDB by title!
+        if (lacksRealEpisodes && season.name) {
+          try {
+            const cleanName = season.name.replace(/\b(season|part|2nd|3rd|4th|5th|final)\b.*$/i, "").trim() || season.name;
+            const searchData = await tmdbFetch(`/search/tv?query=${encodeURIComponent(cleanName)}&include_adult=false`).catch(() => null) as any;
+            if (searchData?.results && searchData.results.length > 0) {
+              const match = searchData.results[0];
+              if (match?.id) {
+                const searchedTmdbId = match.id;
+                console.log(`[Episodes API] TMDB Title Search found tmdbId=${searchedTmdbId} for "${season.name}"`);
+                const tmdbSeasonData = await tmdbFetch(`/tv/${searchedTmdbId}/season/1`).catch(() => null) as any;
+                if (tmdbSeasonData?.episodes && tmdbSeasonData.episodes.length > 0) {
+                  enrichedEps = tmdbSeasonData.episodes.map((ep: any, idx: number) => ({
+                    episodeId: `${season.id}-${ep.episode_number || idx + 1}`,
+                    episodeNum: ep.episode_number || idx + 1,
+                    title: ep.name || `Episode ${ep.episode_number || idx + 1}`,
+                    thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : null,
+                    description: ep.overview || null,
+                    releasedDate: ep.air_date || null,
+                    isFiller: false,
+                    isReleased: true,
+                    seasonNum: seasonNumFromList,
+                    seasonId: season.id,
+                    seasonName: season.name,
+                    seasonMalId: season.idMal || null,
+                  }));
+                  seasonOverview = tmdbSeasonData.overview || null;
+                }
+              }
+            }
+          } catch { /* ignore */ }
+        }
+
         seasonEps = enrichedEps.map((ep) => ({
           ...ep,
           episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
@@ -578,6 +612,29 @@ export async function GET(
           }
         }
       } // end else (no TMDB)
+
+      // Absolute last resort: if all real sources failed and seasonEps is empty, generate placeholders
+      if (seasonEps.length === 0 && safeTotalEpisodes > 0) {
+        console.warn(`[Episodes API] All sources returned 0 episodes for seasonId=${seasonId}. Generating fallback placeholders as last resort.`);
+        const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t));
+        const count = isSpecialFormat ? 1 : safeTotalEpisodes;
+        for (let i = 1; i <= count; i++) {
+          seasonEps.push({
+            episodeId: `${season.id}-${i}`,
+            episodeNum: i,
+            title: isSpecialFormat ? season.name : `Episode ${i}`,
+            thumbnail: isSpecialFormat ? meta?.anime?.poster || null : null,
+            malUrl: null,
+            isFiller: false,
+            releasedDate: null,
+            isPlaceholder: true,
+            seasonNum: seasonNumFromList,
+            seasonId: season.id,
+            seasonName: season.name,
+            seasonMalId: season.idMal || null,
+          });
+        }
+      }
 
       seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
       seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta);

@@ -25,6 +25,28 @@ interface Person {
   };
 }
 
+function BiographyText({ text }: { text: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isLong = text.length > 250;
+
+  return (
+    <div className="max-w-3xl">
+      <h3 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Biography</h3>
+      <p className={`text-white/70 text-sm leading-relaxed ${!isExpanded ? "line-clamp-4" : ""}`}>
+        {text}
+      </p>
+      {isLong && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="mt-2 text-xs font-bold text-primary hover:text-primary/80 transition-colors focus:outline-none"
+        >
+          {isExpanded ? "Show Less" : "Read More"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function PersonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { mode } = useContentMode();
@@ -164,12 +186,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               </div>
               
               {person.biography && (
-                <div className="max-w-3xl">
-                  <h3 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Biography</h3>
-                  <p className="text-white/70 text-sm leading-relaxed line-clamp-4 hover:line-clamp-none transition-all cursor-pointer">
-                    {person.biography}
-                  </p>
-                </div>
+                <BiographyText text={person.biography} />
               )}
             </div>
 

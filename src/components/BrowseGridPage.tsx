@@ -66,11 +66,20 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
 
           if (totalPages > 1) {
             const maxPage = Math.min(totalPages, 20);
-            const randomPage = Math.floor(Math.random() * maxPage) + 1;
-            if (randomPage !== 1) {
+            let seedPage = 1;
+            try {
+              let s = sessionStorage.getItem(`sv_browse_page_${title}`);
+              if (!s) {
+                s = String(Math.floor(Math.random() * maxPage) + 1);
+                sessionStorage.setItem(`sv_browse_page_${title}`, s);
+              }
+              seedPage = parseInt(s, 10) || 1;
+            } catch { seedPage = 1; }
+
+            if (seedPage !== 1 && seedPage <= maxPage) {
               try {
                 const randData = await fetchJson<{ results: any[] }>(
-                  `${endpoint}${sep}page=${randomPage}`,
+                  `${endpoint}${sep}page=${seedPage}`,
                   { cacheTtlMs: 120000 }
                 );
                 results = [...results, ...randData.results];
@@ -79,8 +88,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
               }
             }
           }
-          // Shuffle the initial results to randomize them on every refresh
-          merged = shuffleArray(results);
+          merged = results;
         }
 
         const filtered = filterReleasedSafeContent(merged);

@@ -45,11 +45,39 @@ interface Genre {
   name: string;
 }
 
+// ─── Global Home Cache (persists in memory across client-side page navigations) ──
+let globalHomeCache: {
+  trending: MediaItem[];
+  popular: MediaItem[];
+  topRated: MediaItem[];
+  recent: MediaItem[];
+  trendingMoviesToday: MediaItem[];
+  trendingTvToday: MediaItem[];
+  heroTrendingFeed: MediaItem[];
+  heroPopularFeed: MediaItem[];
+  heroTopRatedFeed: MediaItem[];
+  heroFeed: MediaItem[];
+  recommended: MediaItem[];
+  genres: Genre[];
+  animeList: AnimeItem[];
+  collections: any[];
+} | null = null;
+
 // ─── Session-stable shuffle ───────────────────────────────────────────────────
 // We want different results every SESSION (new tab / new browser open) but
 // stable within the same session (so a page reload within a tab keeps the same order).
 function getSessionSeed(): number {
-  return Math.floor(Math.random() * 1_000_000);
+  if (typeof window === "undefined") return 42;
+  try {
+    let seedStr = sessionStorage.getItem("sv_session_seed");
+    if (!seedStr) {
+      seedStr = String(Math.floor(Math.random() * 1_000_000));
+      sessionStorage.setItem("sv_session_seed", seedStr);
+    }
+    return parseInt(seedStr, 10) || 42;
+  } catch {
+    return 42;
+  }
 }
 
 // Seeded pseudo-random number generator (mulberry32)
@@ -130,24 +158,24 @@ function SectionHeading({
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
   const [heroIndex, setHeroIndex] = useState(0);
-  const [trending, setTrending] = useState<MediaItem[]>([]);
-  const [popular, setPopular] = useState<MediaItem[]>([]);
-  const [topRated, setTopRated] = useState<MediaItem[]>([]);
-  const [recent, setRecent] = useState<MediaItem[]>([]);
-  const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>([]);
-  const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>([]);
-  const [heroTrendingFeed, setHeroTrendingFeed] = useState<MediaItem[]>([]);
-  const [heroPopularFeed, setHeroPopularFeed] = useState<MediaItem[]>([]);
-  const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>([]);
-  const [heroFeed, setHeroFeed] = useState<MediaItem[]>([]);
-  const [recommended, setRecommended] = useState<MediaItem[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [trending, setTrending] = useState<MediaItem[]>(() => globalHomeCache?.trending || []);
+  const [popular, setPopular] = useState<MediaItem[]>(() => globalHomeCache?.popular || []);
+  const [topRated, setTopRated] = useState<MediaItem[]>(() => globalHomeCache?.topRated || []);
+  const [recent, setRecent] = useState<MediaItem[]>(() => globalHomeCache?.recent || []);
+  const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingMoviesToday || []);
+  const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingTvToday || []);
+  const [heroTrendingFeed, setHeroTrendingFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTrendingFeed || []);
+  const [heroPopularFeed, setHeroPopularFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroPopularFeed || []);
+  const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTopRatedFeed || []);
+  const [heroFeed, setHeroFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroFeed || []);
+  const [recommended, setRecommended] = useState<MediaItem[]>(() => globalHomeCache?.recommended || []);
+  const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || []);
+  const [isLoading, setIsLoading] = useState(() => !globalHomeCache);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [animeList, setAnimeList] = useState<AnimeItem[]>([]);
-  const [collections, setCollections] = useState<any[]>([]);
-  const [animeLoading, setAnimeLoading] = useState(true);
-  const [revealedSections, setRevealedSections] = useState(0);
+  const [animeList, setAnimeList] = useState<AnimeItem[]>(() => globalHomeCache?.animeList || []);
+  const [collections, setCollections] = useState<any[]>(() => globalHomeCache?.collections || []);
+  const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
+  const [revealedSections, setRevealedSections] = useState(() => globalHomeCache ? 8 : 0);
   const [moodSeed, setMoodSeed] = useState("");
   useEffect(() => {
     if (isLoading) return;
@@ -191,6 +219,8 @@ export default function Home() {
   const heroPreloadLinksRef = useRef<HTMLLinkElement[]>([]);
 
   useEffect(() => {
+    if (globalHomeCache) return; // Use in-memory globalHomeCache on back navigation
+
     let cancelled = false;
     heroPreloadLinksRef.current.forEach(link => link.remove());
     heroPreloadLinksRef.current = [];
@@ -347,12 +377,34 @@ export default function Home() {
           setCollections(collectionsData.collections);
         }
 
-        if (animeResponse && animeResponse.items) {
-          // Keep AniList TRENDING_DESC order — do NOT shuffle
-          setAnimeList(animeResponse.items.slice(0, 10));
-        }
         setAnimeLoading(false);
 
+        globalHomeCache = {
+          trending: fullTrending,
+          popular: sessionShuffle(fullPopular, "popular"),
+          topRated: sessionShuffle(topSafe, "toprated"),
+          recent: recentSafe,
+          trendingMoviesToday: trendingMoviesTodaySafe,
+          trendingTvToday: trendingTvTodaySafe,
+          heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
+          heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
+          heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
+          heroFeed: [
+            ...trendingSafe,
+            ...popularSafe,
+            ...heroTopSafe,
+            ...heroRecentSafe,
+            ...topRatedMovieSafe,
+            ...popularTvSafe,
+            ...onTheAirSafe,
+            ...animeMovieSafe,
+            ...animeTvSafe,
+          ],
+          recommended: recPool,
+          genres: (rowsData.genres?.genres || []).slice(0, 18),
+          animeList: animeResponse?.items?.slice(0, 10) || [],
+          collections: collectionsData?.collections || [],
+        };
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Failed to load content");

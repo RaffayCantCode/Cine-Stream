@@ -7,10 +7,24 @@ import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { Play, Star, Calendar, CheckCircle2, Loader2, Users } from "lucide-react";
+import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
-import { CinematicHero } from "@/components/CinematicHero";
+import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+
+function TvHeroTrailerButton() {
+  const { playTrailer, hasTrailer } = useCinematicHero();
+  if (!hasTrailer) return null;
+  return (
+    <button
+      onClick={playTrailer}
+      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold px-6 py-4 rounded-xl text-sm transition-all border border-white/15 backdrop-blur-md shadow-lg"
+    >
+      <Film className="w-4 h-4 text-emerald-400 shrink-0" />
+      <span>Trailer</span>
+    </button>
+  );
+}
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { format } from "date-fns";
@@ -222,7 +236,7 @@ export default function TvClient() {
       }
       setIsPlaying(true);
     }
-  }, [show, status]);
+  }, [show]);
 
   // Persist state
   useEffect(() => {
@@ -494,6 +508,8 @@ export default function TvClient() {
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch S{playingSeason} E{playingEpisode}
               </button>
+
+              <TvHeroTrailerButton />
             </div>
           </div>
         </div>

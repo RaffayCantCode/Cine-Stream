@@ -8,7 +8,7 @@ import { signIn } from "next-auth/react";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { Input } from "@/components/ui/Input";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function LoginPage() {
@@ -51,7 +51,16 @@ export default function LoginPage() {
           className="max-w-md mx-auto premium-glass p-8 rounded-2xl"
         >
           <h1 className="text-3xl font-bold text-white mb-2 text-center">Welcome back</h1>
-          <p className="text-white/40 text-center mb-8">Sign in to continue watching</p>
+          <p className="text-white/40 text-center mb-6">Sign in to continue watching</p>
+
+          <div className="flex items-center gap-3 bg-[#4B5694]/15 border border-[#7288AE]/25 rounded-xl p-3.5 mb-6 shadow-sm">
+            <div className="w-9 h-9 rounded-lg bg-[#4B5694]/30 flex items-center justify-center text-primary shrink-0 border border-[#7288AE]/20">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <p className="text-xs text-white/75 leading-relaxed">
+              Create an account to unlock <span className="text-white font-bold">Continue Watching</span> and automatically save your watch progress across devices!
+            </p>
+          </div>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm">

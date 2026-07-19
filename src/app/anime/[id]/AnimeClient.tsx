@@ -10,10 +10,24 @@ import { AnimePlayer } from "@/components/AnimePlayer";
 import { AnimeRow } from "@/components/AnimeRow";
 import { AnimeCard } from "@/components/AnimeCard";
 import { CastRow } from "@/components/CastRow";
-import { CinematicHero } from "@/components/CinematicHero";
+import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+
+function AnimeHeroTrailerButton() {
+  const { playTrailer, hasTrailer } = useCinematicHero();
+  if (!hasTrailer) return null;
+  return (
+    <button
+      onClick={playTrailer}
+      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold px-6 py-4 rounded-xl text-sm transition-all border border-white/15 backdrop-blur-md shadow-lg"
+    >
+      <Film className="w-4 h-4 text-fuchsia-400 shrink-0" />
+      <span>Trailer</span>
+    </button>
+  );
+}
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users, Film } from "lucide-react";
 
 interface FranchiseNode {
   id: number;
@@ -151,6 +165,161 @@ async function getAniZipMappingClientSide(anilistId: number) {
     console.warn(`[AniZip Client] Failed to fetch mappings for ${anilistId}`, e);
   }
   return null;
+}
+
+async function fetchEpisodesClientSide(
+  seasonId: string,
+  seasonName: string,
+  totalEpisodes: number,
+  tmdbId?: number | null,
+  tmdbSeasonNum?: number | null,
+  episodeOffset?: number | null
+): Promise<Episode[]> {
+  try {
+    // 1. Try AniZip directly from browser
+    const aniZipRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${seasonId}`, {
+      signal: AbortSignal.timeout(4000)
+    }).catch(() => null);
+
+    let aniZipEps: Episode[] = [];
+    let mappedTmdbId = tmdbId;
+    let mappedTmdbSeason = tmdbSeasonNum;
+    let mappedOffset = episodeOffset ?? 0;
+
+    if (aniZipRes?.ok) {
+      const azData = await aniZipRes.json();
+      if (azData?.mappings?.themoviedb_id) {
+        mappedTmdbId = parseInt(azData.mappings.themoviedb_id, 10) || tmdbId;
+      }
+      const ep1 = azData?.episodes?.["1"];
+      if (typeof ep1?.seasonNumber === "number") {
+        mappedTmdbSeason = ep1.seasonNumber;
+      }
+      if (typeof ep1?.episodeNumber === "number") {
+        mappedOffset = ep1.episodeNumber - 1;
+      }
+
+      if (azData?.episodes) {
+        for (const k of Object.keys(azData.episodes)) {
+          const num = parseInt(k, 10);
+          if (isNaN(num) || num > totalEpisodes) continue;
+          const ep = azData.episodes[k];
+          aniZipEps.push({
+            episodeId: `${seasonId}-${num}`,
+            episodeNum: num,
+            title: ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${num}`,
+            description: ep.overview || ep.summary || null,
+            thumbnail: ep.image || null,
+            releasedDate: ep.airDate || ep.airdate || null,
+            isFiller: false,
+            isReleased: true,
+            seasonId,
+            seasonNum: 1,
+          });
+        }
+      }
+    }
+
+    // 2. If TMDB mapping is known, fetch rich metadata via TMDB proxy route
+    let activeTmdbId = mappedTmdbId;
+    let activeTmdbSeason = mappedTmdbSeason;
+
+    // Fallback: If TMDB ID is missing, search TMDB for the anime title directly from browser!
+    if (!activeTmdbId && seasonName) {
+      try {
+        const cleanName = seasonName.replace(/\b(season|part|2nd|3rd|4th|5th|final)\b.*$/i, "").trim() || seasonName;
+        const searchRes = await fetch(`/api/tmdb/search?query=${encodeURIComponent(cleanName)}&type=tv`, {
+          signal: AbortSignal.timeout(3000)
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const firstTv = searchData?.results?.[0];
+          if (firstTv?.id) {
+            activeTmdbId = firstTv.id;
+            activeTmdbSeason = 1;
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (activeTmdbId && activeTmdbSeason != null) {
+      try {
+        const tmdbRes = await fetch(`/api/tmdb/tv/${activeTmdbId}/season/${activeTmdbSeason}`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (tmdbRes.ok) {
+          const tmdbData = await tmdbRes.json();
+          const epsList = tmdbData?.episodes || [];
+          if (epsList.length > 0) {
+            const result: Episode[] = [];
+            const count = Math.min(totalEpisodes || epsList.length, 1500);
+            for (let i = 1; i <= count; i++) {
+              const azMatch = aniZipEps.find(e => e.episodeNum === i);
+              const tmdbIdx = mappedOffset + i - 1;
+              const tmdbEp = epsList[tmdbIdx] || epsList.find((e: any) => e.episode_number === (mappedOffset + i));
+
+              result.push({
+                episodeId: azMatch?.episodeId || `${seasonId}-${i}`,
+                episodeNum: i,
+                title: tmdbEp?.name || azMatch?.title || `Episode ${i}`,
+                description: tmdbEp?.overview || azMatch?.description || null,
+                thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w300${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
+                releasedDate: tmdbEp?.air_date || azMatch?.releasedDate || null,
+                isFiller: false,
+                isReleased: true,
+                seasonId,
+                seasonNum: 1,
+              });
+            }
+            if (result.length > 0) return result.sort((a, b) => a.episodeNum - b.episodeNum);
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    // 3. If AniZip returned episodes, return them
+    if (aniZipEps.length > 0) {
+      return aniZipEps.sort((a, b) => a.episodeNum - b.episodeNum);
+    }
+
+    // 4. Try Kitsu directly from browser
+    try {
+      const kSearch = await fetch(`https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(seasonName)}&page[limit]=1`, { signal: AbortSignal.timeout(3000) });
+      if (kSearch.ok) {
+        const kJson = await kSearch.json();
+        const kId = kJson.data?.[0]?.id;
+        if (kId) {
+          const kEpsRes = await fetch(`https://kitsu.io/api/edge/anime/${kId}/episodes?page[limit]=${totalEpisodes}`, { signal: AbortSignal.timeout(4000) });
+          if (kEpsRes.ok) {
+            const kEpsJson = await kEpsRes.json();
+            const kData = kEpsJson.data || [];
+            const kEps: Episode[] = [];
+            for (const ep of kData) {
+              const num = ep.attributes?.number;
+              if (!num || num > totalEpisodes) continue;
+              kEps.push({
+                episodeId: `kitsu-${kId}-${num}`,
+                episodeNum: num,
+                title: ep.attributes?.canonicalTitle || ep.attributes?.title || `Episode ${num}`,
+                description: ep.attributes?.synopsis || null,
+                thumbnail: ep.attributes?.thumbnail?.original || null,
+                releasedDate: ep.attributes?.airdate || null,
+                isFiller: false,
+                isReleased: true,
+                seasonId,
+                seasonNum: 1,
+              });
+            }
+            if (kEps.length > 0) return kEps.sort((a, b) => a.episodeNum - b.episodeNum);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  } catch (e) {
+    console.warn(`[Client Episode Fetch] Error for ${seasonId}`, e);
+  }
+
+  return [];
 }
 
 async function fetchFranchiseClientSide(startId: number) {
@@ -519,7 +688,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
       );
-      if (epData.success && epData.data?.episodes?.length) {
+      const isRealEpisodes = epData.success && epData.data?.episodes?.length && !epData.data.episodes.every(e => (e as any).isPlaceholder);
+      if (isRealEpisodes) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
         const withRelease = sorted.map(ep => ({
           ...ep,
@@ -528,7 +698,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             : (ep.releasedDate ? new Date(ep.releasedDate).getTime() <= Date.now() : true)
         }));
         setEpisodes(prev => {
-          // Replace episodes for this season, keep others
           const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
           const merged = [...otherSeasons, ...withRelease].sort((a, b) => {
             if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
@@ -538,33 +707,64 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         });
         setSeasonOverview(epData.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
-      } else {
-        // Server returned empty/failed — do NOT generate client-side placeholders.
-        // The server already tried every real source (AniZip, Jikan, Tatakai, Kitsu)
-        // and will return isPlaceholder-flagged episodes only as a last resort.
-        // If the response was empty it likely means a transient error; leave
-        // whatever episodes are already shown and let the user retry by clicking
-        // the season tab (which will forceReload=true).
-        console.warn(`[AnimeClient] Episode API returned empty for seasonId=${seasonId}. Will retry on next season click.`);
-        // Do NOT add to loadedSeasonIds — the next forceReload call must be allowed through.
+        return;
       }
     } catch (err) {
-      // Network failure or edge timeout — do NOT generate client-side placeholders.
-      // Leave whatever episodes are currently visible and allow a retry.
-      console.warn(`[AnimeClient] Episode API request failed for seasonId=${seasonId}:`, err);
+      console.warn(`[AnimeClient] Server episode API failed for seasonId=${seasonId}, attempting client-side fallback...`, err);
     }
-    finally { setEpisodesLoading(false); }
+
+    // Client-side fallback: fetch directly from browser APIs (AniZip, TMDB proxy, Kitsu)
+    const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
+    const epCount = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 12;
+    const clientEps = await fetchEpisodesClientSide(
+      seasonId,
+      matchingSeason?.name || anime?.name || "",
+      epCount,
+      clientTmdbId ?? matchingSeason?.tmdbId,
+      clientTmdbSeason ?? matchingSeason?.tmdbSeasonNumber,
+      clientEpisodeOffset ?? matchingSeason?.episodeOffset
+    );
+
+    if (clientEps.length > 0) {
+      setEpisodes(prev => {
+        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
+        return [...otherSeasons, ...clientEps].sort((a, b) => a.episodeNum - b.episodeNum);
+      });
+      loadedSeasonIds.current.add(seasonId);
+    } else {
+      // Final fallback: generate basic cards if browser also couldn't reach APIs
+      const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => ({
+        episodeId: `${seasonId}-${i + 1}`,
+        episodeNum: i + 1,
+        title: `Episode ${i + 1}`,
+        description: undefined,
+        thumbnail: undefined,
+        malUrl: undefined,
+        isFiller: false,
+        isReleased: true,
+        seasonId: seasonId,
+        seasonNum: 1,
+      }));
+      setEpisodes(prev => {
+        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
+        return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
+      });
+    }
+    setEpisodesLoading(false);
   }, [id]);
 
-  // Ref to ensure the episode pre-fetch only fires once per anime ID (even when
-  // authStatus transitions cause the effect to re-run).
+  // Ref to ensure loadMeta only runs ONCE per anime ID (prevents NextAuth session focus re-runs from wiping state).
+  const metaLoadedIdRef = useRef<string | null>(null);
+
+  // Ref to ensure the episode pre-fetch only fires once per anime ID
   const prefetchFiredForRef = useRef<string | null>(null);
 
   // ── Load meta (fast, skipEpisodes) ─────────────────────────────────────
   useEffect(() => {
     if (!id) return;
-    if (anime && anime.id === id && anime.seasons && anime.seasons.length > 0) return; // Fully loaded already
+    if (metaLoadedIdRef.current === id && anime && anime.id === id) return; // Already loaded for this ID
 
+    metaLoadedIdRef.current = id;
     let cancelled = false;
     loadedSeasonIds.current.clear();
     tmdbIdRef.current = null;
@@ -714,7 +914,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
     loadMeta();
     return () => { cancelled = true; };
-  }, [id, loadSeasonEpisodes, authStatus, session]);
+  }, [id, loadSeasonEpisodes]);
 
   // ── Fetch You May Like recommendations (client-side AniList) ────────────
   useEffect(() => {
@@ -884,7 +1084,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if (!hasRestoredState) {
       setHasRestoredState(true);
     }
-  }, [episodes, id, selectedEp, session?.user?.id, authStatus, anime, hasRestoredState]);
+  }, [episodes, id, anime, hasRestoredState]);
 
   // Persist State
   useEffect(() => {
@@ -1237,29 +1437,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     </div>
                   )}
 
-                  <div>
-                    {!episodesLoading && currentSeasonEps.length > 0 ? (
-                      <div className="flex items-center flex-wrap gap-4 w-full">
-                        <button
-                          onClick={() => {
-                            const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
-                            handleWatchEpisode(first);
-                          }}
-                          className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
-                        >
-                          <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
-                          {isSingleItem
-                            ? `Watch ${anime.type === "MOVIE" ? "Movie" : "Anime"}`
-                            : `Watch S${currentSeasonInfo ? seasons.findIndex(s => s.id === currentSeasonId) + 1 : 1} E${currentSeasonEps[0]?.episodeNum || 1}`
-                          }
+                    <div>
+                      {!episodesLoading && currentSeasonEps.length > 0 ? (
+                        <div className="flex items-center flex-wrap gap-4 w-full">
+                          <button
+                            onClick={() => {
+                              const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
+                              handleWatchEpisode(first);
+                            }}
+                            className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+                          >
+                            <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
+                            {isSingleItem
+                              ? `Watch ${anime.type === "MOVIE" ? "Movie" : "Anime"}`
+                              : `Watch S${currentSeasonInfo ? seasons.findIndex(s => s.id === currentSeasonId) + 1 : 1} E${currentSeasonEps[0]?.episodeNum || 1}`
+                            }
+                          </button>
+
+                          <AnimeHeroTrailerButton />
+                        </div>
+                      ) : !episodesLoading ? (
+                        <button disabled className="flex items-center gap-2.5 bg-white/10 text-white/30 font-bold px-8 py-4 rounded-xl text-sm cursor-not-allowed">
+                          No Episodes Available
                         </button>
-                      </div>
-                    ) : !episodesLoading ? (
-                      <button disabled className="flex items-center gap-2.5 bg-white/10 text-white/30 font-bold px-8 py-4 rounded-xl text-sm cursor-not-allowed">
-                        No Episodes Available
-                      </button>
-                    ) : null}
-                  </div>
+                      ) : null}
+                    </div>
                 </div>
               </div>
             </CinematicHero>

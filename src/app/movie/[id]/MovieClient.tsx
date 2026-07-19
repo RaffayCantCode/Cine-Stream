@@ -7,10 +7,24 @@ import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { Play, Star, Clock, Calendar } from "lucide-react";
+import { Play, Star, Clock, Calendar, Film } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
-import { CinematicHero } from "@/components/CinematicHero";
+import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+
+function MovieHeroTrailerButton() {
+  const { playTrailer, hasTrailer } = useCinematicHero();
+  if (!hasTrailer) return null;
+  return (
+    <button
+      onClick={playTrailer}
+      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold px-6 py-4 rounded-xl text-sm transition-all border border-white/15 backdrop-blur-md shadow-lg"
+    >
+      <Film className="w-4 h-4 text-[#7288AE] shrink-0" />
+      <span>Trailer</span>
+    </button>
+  );
+}
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { format } from "date-fns";
 import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
@@ -95,7 +109,7 @@ export default function MovieClient() {
       }
       setIsPlaying(true);
     }
-  }, [movie, status]);
+  }, [movie]);
 
   const handleWatch = async () => {
     if (status === "authenticated" && movie) {
@@ -267,6 +281,8 @@ export default function MovieClient() {
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch Now
               </button>
+
+              <MovieHeroTrailerButton />
             </div>
           </div>
           </div>
