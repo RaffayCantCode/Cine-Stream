@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Server, Maximize2, RotateCcw, SkipForward, ChevronRight, Check, Loader2 } from "lucide-react";
+import { Server, Maximize2, RotateCcw, SkipForward, ChevronRight, Check, Loader2, AlertTriangle } from "lucide-react";
 
 interface ProviderSource {
   name: string;
@@ -380,6 +380,13 @@ export function AnimePlayer({
           </button>
         </div>
       </div>
+
+      {(currentSource.name === "Source 2" || currentSource.provider === "animeplay") && (
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold shadow-sm animate-fade-in">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+          <span>If Source 2 shows a black screen, click <strong>Reload</strong> or switch to another source.</span>
+        </div>
+      )}
 
       {showSources && (
         <div
