@@ -1,7 +1,7 @@
 "use client";
 export const runtime = 'edge';
 
-import { useState, useRef, useEffect, Suspense } from "react";
+import { useState, useRef, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
@@ -12,8 +12,10 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { Search as SearchIcon, MonitorPlay, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
+import { fetchClientAnime } from "@/lib/anilist-client";
 import { motion } from "framer-motion";
 import { useContentMode } from "@/context/ContentModeContext";
+import { editDistance, computeWordOverlap } from "@/lib/fuzzy-search";
 
 interface MediaItem {
   id: number;
@@ -27,6 +29,28 @@ interface MediaItem {
   adult?: boolean;
   profile_path?: string;
   known_for_department?: string;
+}
+
+function useDidYouMean(query: string, allItems: string[]): string | null {
+  return useMemo(() => {
+    if (!query || query.length < 2) return null;
+    const normalizedQuery = query.toLowerCase().trim();
+    if (!allItems.length) {
+      if (query.split(" ").length > 2) {
+        const fewerWords = query.split(" ").slice(0, -1).join(" ");
+        if (fewerWords.length >= 2) return fewerWords;
+      }
+      return null;
+    }
+    for (const item of allItems) {
+      const normalizedTitle = item.toLowerCase().trim();
+      const dist = editDistance(normalizedQuery.split(" ")[0], normalizedTitle.split(" ")[0]);
+      if (dist <= 2) return null;
+      const overlap = computeWordOverlap(normalizedQuery, normalizedTitle);
+      if (overlap >= 0.5) return null;
+    }
+    return null;
+  }, [query, allItems]);
 }
 
 function SearchContent() {
@@ -43,7 +67,6 @@ function SearchContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [animeLoading, setAnimeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const { mode, setMode } = useContentMode();
 
   useEffect(() => {
@@ -78,14 +101,12 @@ function SearchContent() {
         setResults([]);
         setAnimeResults([]);
         setError(null);
-        setDidYouMean(null);
         return;
       }
 
       setIsLoading(true);
       setAnimeLoading(true);
       setError(null);
-      setDidYouMean(null);
 
       const fetchTmdb = mode === "all" || mode === "movies" || mode === "tv" || mode === "people";
       const fetchAnime = mode === "all" || mode === "anime";
@@ -93,22 +114,18 @@ function SearchContent() {
       try {
         const [tmdbResult, animeResult] = await Promise.allSettled([
           fetchTmdb
-            ? fetchJson<{ results: MediaItem[]; did_you_mean?: string }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
-            : Promise.resolve({ results: [], did_you_mean: null }),
+            ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
+            : Promise.resolve({ results: [] }),
           fetchAnime
-            ? fetchJson<{ success: boolean; data: { animes: AnimeItem[] }; did_you_mean?: string }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`, { signal })
-            : Promise.resolve({ success: true, data: { animes: [] }, did_you_mean: null }),
+            ? fetchClientAnime("search", 1, "", debouncedQuery).then(res => ({ success: true, data: { animes: res.items } })).catch(() => ({ success: false, data: { animes: [] } }))
+            : Promise.resolve({ success: true, data: { animes: [] } }),
         ]);
 
         if (signal.aborted) return;
 
-        let tmdbDidYouMean: string | null = null;
-
         if (tmdbResult.status === "fulfilled") {
-          const value = tmdbResult.value as any;
-          tmdbDidYouMean = value.did_you_mean || null;
-          const filtered = filterReleasedSafeContent((value.results || [])
-            .filter((r: any) => (r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"))
+          const filtered = filterReleasedSafeContent((tmdbResult.value.results || [])
+            .filter((r: MediaItem) => (r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"))
             , true) as MediaItem[];
           setResults(filtered);
         } else {
@@ -116,15 +133,8 @@ function SearchContent() {
         }
         setIsLoading(false);
 
-        let animeDidYouMean: string | null = null;
-        if (animeResult.status === "fulfilled") {
-          const value = animeResult.value as any;
-          if (value.success) {
-            animeDidYouMean = value.did_you_mean || null;
-            setAnimeResults(value.data?.animes || []);
-          } else {
-            setAnimeResults([]);
-          }
+        if (animeResult.status === "fulfilled" && animeResult.value.success) {
+          setAnimeResults(animeResult.value.data?.animes || []);
         } else {
           setAnimeResults([]);
         }
@@ -134,13 +144,6 @@ function SearchContent() {
           setError("Search failed");
         } else {
           setError(null);
-        }
-
-        const totalResults = results.length + animeResults.length;
-        if (totalResults < 3) {
-          setDidYouMean(tmdbDidYouMean || animeDidYouMean || null);
-        } else {
-          setDidYouMean(null);
         }
       } catch (err: any) {
         if (err.name === 'AbortError') return;
@@ -176,6 +179,16 @@ function SearchContent() {
   const totalCount = filteredResults.length + (activeTab === "all" || activeTab === "anime" ? animeResults.length : 0);
   const hasAnime = animeResults.length > 0;
   const hasResults = filteredResults.length > 0 || hasAnime;
+
+  const allResultTitles = useMemo(() => {
+    const titles: string[] = [];
+    for (const r of results) titles.push(r.title || r.name || "");
+    for (const a of animeResults) titles.push(a.name || "");
+    return titles.filter(Boolean);
+  }, [results, animeResults]);
+
+  const isLowResults = totalCount < 3 && debouncedQuery.length >= 2;
+  const didYouMean = useDidYouMean(isLowResults ? debouncedQuery : "", allResultTitles);
 
   const handleDidYouMeanClick = (suggestion: string) => {
     setQuery(suggestion);
