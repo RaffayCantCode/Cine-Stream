@@ -295,12 +295,25 @@ export default function Home() {
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
 
+        const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].slice(0, 10).map((item) => ({
+          id: String(item.id),
+          name: item.name || item.title || "Anime",
+          poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "",
+          type: item.media_type === "movie" ? "MOVIE" : "TV",
+          rating: item.vote_average ? String(item.vote_average.toFixed(1)) : null,
+          description: item.overview || "",
+          genres: ["Animation", "Anime"],
+          episodes: { sub: null, dub: null },
+        }));
+
         setTrending(trendingSafe);
         setPopular(sessionShuffle(popularSafe, "popular"));
         setTopRated(sessionShuffle(heroTopSafe, "toprated"));
         setRecent(heroRecentSafe);
         setTrendingMoviesToday(trendingMoviesTodaySafe);
         setTrendingTvToday(trendingTvTodaySafe);
+        setAnimeList(initialAnimeItems);
+        setAnimeLoading(false);
 
         setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
         setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
@@ -373,10 +386,11 @@ export default function Home() {
           setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
         }
         setGenres((rowsData.genres?.genres || []).slice(0, 18));
-        if (collectionsData?.collections) {
-          setCollections(collectionsData.collections);
-        }
+        const finalAnimeList = (animeResponse?.items && animeResponse.items.length > 0)
+          ? animeResponse.items.slice(0, 10)
+          : initialAnimeItems;
 
+        setAnimeList(finalAnimeList);
         setAnimeLoading(false);
 
         globalHomeCache = {
@@ -402,7 +416,7 @@ export default function Home() {
           ],
           recommended: recPool,
           genres: (rowsData.genres?.genres || []).slice(0, 18),
-          animeList: animeResponse?.items?.slice(0, 10) || [],
+          animeList: finalAnimeList,
           collections: collectionsData?.collections || [],
         };
       } catch (e) {
