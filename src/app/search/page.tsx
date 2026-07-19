@@ -9,10 +9,9 @@ import { MediaCard } from "@/components/MediaCard";
 import { PersonCard } from "@/components/PersonCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { useDebounce } from "@/hooks/useDebounce";
-import { Search as SearchIcon, MonitorPlay } from "lucide-react";
+import { Search as SearchIcon, MonitorPlay, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
-import { fetchClientAnime } from "@/lib/anilist-client";
 import { motion } from "framer-motion";
 import { useContentMode } from "@/context/ContentModeContext";
 
@@ -35,7 +34,7 @@ function SearchContent() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const initialMode = searchParams.get("mode") || "";
-  
+
   const [query, setQuery] = useState(initialQuery);
   const debouncedQuery = useDebounce(query, 500);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,29 +43,27 @@ function SearchContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [animeLoading, setAnimeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const { mode, setMode } = useContentMode();
-  
-  // Initialize mode from URL once
+
   useEffect(() => {
     if (initialMode && ["all", "movies", "tv", "anime", "people"].includes(initialMode)) {
       setMode(initialMode as any);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const activeTab = mode;
 
-  // Sync state to URL
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams();
       if (query) params.set("q", query);
       if (mode !== "all") params.set("mode", mode);
-      
+
       const searchString = params.toString() ? `?${params.toString()}` : '';
       router.replace(`/search${searchString}`, { scroll: false });
     }
   }, [query, mode, router]);
-
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -81,55 +78,69 @@ function SearchContent() {
         setResults([]);
         setAnimeResults([]);
         setError(null);
+        setDidYouMean(null);
         return;
       }
 
-      // Search TMDB
       setIsLoading(true);
       setAnimeLoading(true);
       setError(null);
+      setDidYouMean(null);
 
-      // Determine which APIs to call based on mode
       const fetchTmdb = mode === "all" || mode === "movies" || mode === "tv" || mode === "people";
       const fetchAnime = mode === "all" || mode === "anime";
 
       try {
-        // Run searches in parallel only if needed
         const [tmdbResult, animeResult] = await Promise.allSettled([
           fetchTmdb
-            ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
-            : Promise.resolve({ results: [] }),
+            ? fetchJson<{ results: MediaItem[]; did_you_mean?: string }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
+            : Promise.resolve({ results: [], did_you_mean: null }),
           fetchAnime
-            ? fetchClientAnime("search", 1, "", debouncedQuery).then(res => ({ success: true, data: { animes: res.items } })).catch(() => ({ success: false, data: { animes: [] } }))
-            : Promise.resolve({ success: true, data: { animes: [] } }),
+            ? fetchJson<{ success: boolean; data: { animes: AnimeItem[] }; did_you_mean?: string }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`, { signal })
+            : Promise.resolve({ success: true, data: { animes: [] }, did_you_mean: null }),
         ]);
 
         if (signal.aborted) return;
 
-        // Handle TMDB results
+        let tmdbDidYouMean: string | null = null;
+
         if (tmdbResult.status === "fulfilled") {
-          const filtered = filterReleasedSafeContent(tmdbResult.value.results
-            ?.filter((r) => (r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"))
-            || [], true);
+          const value = tmdbResult.value as any;
+          tmdbDidYouMean = value.did_you_mean || null;
+          const filtered = filterReleasedSafeContent((value.results || [])
+            .filter((r: any) => (r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"))
+            , true) as MediaItem[];
           setResults(filtered);
         } else {
           setResults([]);
         }
         setIsLoading(false);
 
-        // Handle Anime results
-        if (animeResult.status === "fulfilled" && animeResult.value.success) {
-          setAnimeResults(animeResult.value.data?.animes || []);
+        let animeDidYouMean: string | null = null;
+        if (animeResult.status === "fulfilled") {
+          const value = animeResult.value as any;
+          if (value.success) {
+            animeDidYouMean = value.did_you_mean || null;
+            setAnimeResults(value.data?.animes || []);
+          } else {
+            setAnimeResults([]);
+          }
         } else {
           setAnimeResults([]);
         }
         setAnimeLoading(false);
 
-        // Only show error if BOTH APIs failed
         if (tmdbResult.status !== "fulfilled" && animeResult.status !== "fulfilled") {
           setError("Search failed");
         } else {
           setError(null);
+        }
+
+        const totalResults = results.length + animeResults.length;
+        if (totalResults < 3) {
+          setDidYouMean(tmdbDidYouMean || animeDidYouMean || null);
+        } else {
+          setDidYouMean(null);
         }
       } catch (err: any) {
         if (err.name === 'AbortError') return;
@@ -143,7 +154,6 @@ function SearchContent() {
     };
   }, [debouncedQuery, mode]);
 
-  // Build unified results ordered: movies → TV shows → people → anime
   const filteredResults = activeTab === "movies"
     ? results.filter((r) => r.media_type === "movie")
     : activeTab === "tv"
@@ -166,6 +176,10 @@ function SearchContent() {
   const totalCount = filteredResults.length + (activeTab === "all" || activeTab === "anime" ? animeResults.length : 0);
   const hasAnime = animeResults.length > 0;
   const hasResults = filteredResults.length > 0 || hasAnime;
+
+  const handleDidYouMeanClick = (suggestion: string) => {
+    setQuery(suggestion);
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -201,11 +215,11 @@ function SearchContent() {
                     : "bg-white/[0.05] text-white/50 hover:bg-white/[0.09] hover:text-white"
                 }`}
               >
-                {tab === "all" && "🎬 All"}
-                {tab === "movies" && "🎥 Movies"}
-                {tab === "tv" && "📺 TV Shows"}
-                {tab === "anime" && "🇯🇵 Anime (JP)"}
-                {tab === "people" && "👥 People"}
+                {tab === "all" && "All"}
+                {tab === "movies" && "Movies"}
+                {tab === "tv" && "TV Shows"}
+                {tab === "anime" && "Anime"}
+                {tab === "people" && "People"}
               </button>
             ))}
             {!isLoading && !animeLoading && totalCount > 0 && (
@@ -237,8 +251,21 @@ function SearchContent() {
           </div>
         ) : hasResults ? (
           <div className="space-y-10">
+            {didYouMean && (
+              <div className="max-w-3xl mx-auto flex items-center gap-3 px-4 py-3 bg-[#7288AE]/10 border border-[#7288AE]/25 rounded-xl">
+                <Sparkles className="w-4 h-4 text-[#9EB2D1] shrink-0" />
+                <span className="text-sm text-white/60">Did you mean</span>
+                <button
+                  onClick={() => handleDidYouMeanClick(didYouMean)}
+                  className="text-sm font-semibold text-[#9EB2D1] hover:text-white underline underline-offset-2 transition-colors"
+                >
+                  &ldquo;{didYouMean}&rdquo;
+                </button>
+                <span className="text-xs text-white/30 ml-auto">Showing broader results</span>
+              </div>
+            )}
+
             {activeTab === "all" ? (
-              /* Unified grid: movies → TV shows → anime */
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                   {unifiedResults.map((r) => (
@@ -257,7 +284,6 @@ function SearchContent() {
                 </div>
               </motion.div>
             ) : activeTab === "anime" ? (
-              /* Anime-only tab */
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                   {animeResults.map((item, i) => (
@@ -268,7 +294,6 @@ function SearchContent() {
                 </div>
               </motion.div>
             ) : (
-              /* Movies/TV tab */
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                   {filteredResults.map((item) => (
@@ -285,9 +310,34 @@ function SearchContent() {
             )}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
-            <h3 className="text-xl font-medium text-white mb-2">No results found</h3>
-            <p>We couldn&apos;t find anything matching &quot;{debouncedQuery}&quot;. Try another search term.</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            {didYouMean ? (
+              <div className="max-w-md premium-glass p-8 rounded-2xl">
+                <Sparkles className="w-10 h-10 text-[#9EB2D1] mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white mb-2">No exact matches</h3>
+                <p className="text-sm text-white/50 mb-4">
+                  We couldn&apos;t find anything for &ldquo;{debouncedQuery}&rdquo;.
+                </p>
+                <p className="text-sm text-white/40 mb-3">Did you mean</p>
+                <button
+                  onClick={() => handleDidYouMeanClick(didYouMean)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#7288AE]/20 hover:bg-[#7288AE]/30 border border-[#7288AE]/40 rounded-xl text-sm font-semibold text-[#9EB2D1] hover:text-white transition-all"
+                >
+                  <SearchIcon className="w-4 h-4" />
+                  &ldquo;{didYouMean}&rdquo;
+                </button>
+              </div>
+            ) : (
+              <div className="max-w-md">
+                <h3 className="text-xl font-medium text-white mb-2">No results found</h3>
+                <p className="text-sm text-white/40">
+                  We couldn&apos;t find anything matching &quot;{debouncedQuery}&quot;.
+                </p>
+                <p className="text-xs text-white/30 mt-3">
+                  Try checking the spelling, using fewer words, or a different search term.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

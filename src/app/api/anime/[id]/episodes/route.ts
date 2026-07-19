@@ -41,7 +41,52 @@ function mapRelativeToTmdb(
     const last = tmdbSeasonsList[tmdbSeasonsList.length - 1];
     return { seasonNumber: last.season_number, episodeNumber: remaining + (last.episode_count || 0) };
   }
+
   return { seasonNumber: startSeasonNum, episodeNumber: relativeEpNum };
+}
+
+function parseSeasonAndOffsetFromTitle(title: string): { tmdbSeason: number; episodeOffset: number } {
+  if (!title) return { tmdbSeason: 1, episodeOffset: 0 };
+  const lower = title.toLowerCase();
+
+  // Attack on Titan & General "Final Season" rules
+  if (lower.includes("final season") || lower.includes("season 4") || lower.includes("4th season")) {
+    if (lower.includes("part 3") || lower.includes("final chapters") || lower.includes("kanketsu-hen")) {
+      return { tmdbSeason: 4, episodeOffset: 28 };
+    }
+    if (lower.includes("part 2") || lower.includes("2nd part")) {
+      return { tmdbSeason: 4, episodeOffset: 16 };
+    }
+    return { tmdbSeason: 4, episodeOffset: 0 };
+  }
+
+  if (lower.includes("season 3") || lower.includes("3rd season")) {
+    if (lower.includes("part 2") || lower.includes("2nd part")) {
+      return { tmdbSeason: 3, episodeOffset: 12 };
+    }
+    return { tmdbSeason: 3, episodeOffset: 0 };
+  }
+
+  if (lower.includes("season 2") || lower.includes("2nd season")) {
+    if (lower.includes("part 2") || lower.includes("cour 2")) {
+      return { tmdbSeason: 2, episodeOffset: 12 };
+    }
+    return { tmdbSeason: 2, episodeOffset: 0 };
+  }
+
+  // Explicit Season number regex fallback (e.g. "Season 5", "5th Season", "S5")
+  const seasonMatch = lower.match(/(?:season|s)\s*(\d+)/i) || lower.match(/(\d+)(?:st|nd|rd|th)\s*season/i);
+  if (seasonMatch && seasonMatch[1]) {
+    const sNum = parseInt(seasonMatch[1], 10);
+    if (!isNaN(sNum) && sNum > 0) {
+      const offsetMatch = lower.match(/(?:part|cour)\s*(\d+)/i);
+      const partNum = offsetMatch ? parseInt(offsetMatch[1], 10) : 1;
+      const episodeOffset = partNum > 1 ? 12 : 0;
+      return { tmdbSeason: sNum, episodeOffset };
+    }
+  }
+
+  return { tmdbSeason: 1, episodeOffset: 0 };
 }
 
 function enrichEpisodeReleaseStatus(episodes: any[], meta: any): any[] {
@@ -305,9 +350,20 @@ export async function GET(
       }
 
       // Client params always win over server-derived values
-      const tmdbId = clientTmdbId ?? (season as any).tmdbId;
-      const tmdbSeasonNum = clientTmdbSeasonNum ?? season.tmdbSeasonNumber;
-      const episodeOffset = clientEpisodeOffset ?? (season as any).episodeOffset ?? 0;
+      let tmdbId = clientTmdbId ?? (season as any).tmdbId;
+      let tmdbSeasonNum = clientTmdbSeasonNum ?? season.tmdbSeasonNumber;
+      let episodeOffset = clientEpisodeOffset ?? (season as any).episodeOffset ?? 0;
+
+      // Smart season & offset title parsing override — fixes season mismatching
+      if ((!tmdbSeasonNum || tmdbSeasonNum === 1) && (season.name || meta?.anime?.name)) {
+        const titleToParse = season.name || meta?.anime?.name || "";
+        const parsed = parseSeasonAndOffsetFromTitle(titleToParse);
+        if (parsed.tmdbSeason > 1 || parsed.episodeOffset > 0) {
+          tmdbSeasonNum = parsed.tmdbSeason;
+          episodeOffset = parsed.episodeOffset;
+          console.log(`[Episodes API] Overrode TMDB mapping from title "${titleToParse}": tmdbSeason=${tmdbSeasonNum}, offset=${episodeOffset}`);
+        }
+      }
 
       console.log(`[Episodes API] Using mapping details: tmdbId=${tmdbId}, tmdbSeasonNum=${tmdbSeasonNum}, episodeOffset=${episodeOffset}`);
 
@@ -545,30 +601,37 @@ export async function GET(
         // Fallback: If primary sources failed/placeholders on edge, search TMDB by title!
         if (lacksRealEpisodes && season.name) {
           try {
-            const cleanName = season.name.replace(/\b(season|part|2nd|3rd|4th|5th|final)\b.*$/i, "").trim() || season.name;
+            const parsed = parseSeasonAndOffsetFromTitle(season.name);
+            const targetTmdbSeason = parsed.tmdbSeason || 1;
+            const targetOffset = parsed.episodeOffset || 0;
+
+            const cleanName = season.name.replace(/\b(season\s*\d+|part\s*\d+|cour\s*\d+|\d+(st|nd|rd|th)\s*season|final season)\b.*/gi, "").replace(/[:\-\–]/g, " ").trim() || season.name;
             const searchData = await tmdbFetch(`/search/tv?query=${encodeURIComponent(cleanName)}&include_adult=false`).catch(() => null) as any;
             if (searchData?.results && searchData.results.length > 0) {
               const match = searchData.results[0];
               if (match?.id) {
                 const searchedTmdbId = match.id;
-                console.log(`[Episodes API] TMDB Title Search found tmdbId=${searchedTmdbId} for "${season.name}"`);
-                const tmdbSeasonData = await tmdbFetch(`/tv/${searchedTmdbId}/season/1`).catch(() => null) as any;
+                console.log(`[Episodes API] TMDB Title Search found tmdbId=${searchedTmdbId} for "${season.name}". Fetching TMDB Season ${targetTmdbSeason}, offset ${targetOffset}`);
+                const tmdbSeasonData = await tmdbFetch(`/tv/${searchedTmdbId}/season/${targetTmdbSeason}`).catch(() => null) as any;
                 if (tmdbSeasonData?.episodes && tmdbSeasonData.episodes.length > 0) {
-                  enrichedEps = tmdbSeasonData.episodes.map((ep: any, idx: number) => ({
-                    episodeId: `${season.id}-${ep.episode_number || idx + 1}`,
-                    episodeNum: ep.episode_number || idx + 1,
-                    title: ep.name || `Episode ${ep.episode_number || idx + 1}`,
-                    thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : null,
-                    description: ep.overview || null,
-                    releasedDate: ep.air_date || null,
-                    isFiller: false,
-                    isReleased: true,
-                    seasonNum: seasonNumFromList,
-                    seasonId: season.id,
-                    seasonName: season.name,
-                    seasonMalId: season.idMal || null,
-                  }));
-                  seasonOverview = tmdbSeasonData.overview || null;
+                  const rawEps = tmdbSeasonData.episodes.slice(targetOffset);
+                  if (rawEps.length > 0) {
+                    enrichedEps = rawEps.map((ep: any, idx: number) => ({
+                      episodeId: `${season.id}-${idx + 1}`,
+                      episodeNum: idx + 1,
+                      title: ep.name || `Episode ${idx + 1}`,
+                      thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : null,
+                      description: ep.overview || null,
+                      releasedDate: ep.air_date || null,
+                      isFiller: false,
+                      isReleased: true,
+                      seasonNum: seasonNumFromList,
+                      seasonId: season.id,
+                      seasonName: season.name,
+                      seasonMalId: season.idMal || null,
+                    }));
+                    seasonOverview = tmdbSeasonData.overview || null;
+                  }
                 }
               }
             }
@@ -876,7 +939,7 @@ export async function GET(
             releasedDate: ep.releasedDate || null,
             description: ep.description || null,
             runtime: ep.runtime || (["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) ? meta.anime.duration || null : null),
-            seasonNum: seasonIdx,
+            seasonNum: seasonNumFromList,
             seasonId: season.id,
             seasonName: season.name,
             seasonMalId: season.idMal || null,
@@ -905,26 +968,26 @@ export async function GET(
         }
         episodes.push(...seasonEps);
       }
+    }
 
-      if (episodes.length === 0 && season) {
-        const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t));
-        const epCount = isSpecialFormat ? 1 : Math.max(season.totalEpisodes || 12, 1);
-        for (let i = 1; i <= epCount; i++) {
-          episodes.push({
-            episodeId: `${season.id}-${i}`,
-            episodeNum: i,
-            title: i === 1 && isSpecialFormat ? season.name : `Episode ${i}`,
-            description: null,
-            thumbnail: null,
-            malUrl: null,
-            isFiller: false,
-            releasedDate: null,
-            seasonNum: seasonNumFromList,
-            seasonId: season.id,
-            seasonName: season.name,
-            seasonMalId: season.idMal || null,
-          });
-        }
+    if (episodes.length === 0 && meta?.anime) {
+      const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => meta.anime.format?.includes(t));
+      const epCount = isSpecialFormat ? 1 : Math.max(meta.anime.totalEpisodes || 12, 1);
+      for (let i = 1; i <= epCount; i++) {
+        episodes.push({
+          episodeId: `${id}-${i}`,
+          episodeNum: i,
+          title: i === 1 && isSpecialFormat ? meta.anime.name : `Episode ${i}`,
+          description: null,
+          thumbnail: null,
+          malUrl: null,
+          isFiller: false,
+          releasedDate: null,
+          seasonNum: 1,
+          seasonId: id,
+          seasonName: meta.anime.name,
+          seasonMalId: meta.anime.idMal || null,
+        });
       }
     }
 

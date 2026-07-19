@@ -46,7 +46,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "anime-v10-fresh-deploy";
+const ANIME_API_VERSION = "anime-v11-season-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -815,9 +815,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           animeStatusRef.current = a.status || null;
           setIsLoading(false);
           setAnime(prev => prev ? { ...prev, ...a, seasons: a.seasons?.length ? a.seasons : prev.seasons } : a);
-          if (data.data.franchiseNodes && data.data.franchiseNodes.length > 0) {
-            setFranchiseNodes(data.data.franchiseNodes);
-          }
+          // Only use server franchise nodes if the client has none yet.
+          // The client-side BFS (15-hop) is more thorough than the server-side
+          // 2-level BFS, so we don't want to overwrite richer client data.
+          setFranchiseNodes(prev => prev.length > 0 ? prev : (data.data.franchiseNodes || []));
           tmdbIdRef.current = a.tmdbId || null;
 
           const seasons = a.seasons || [];

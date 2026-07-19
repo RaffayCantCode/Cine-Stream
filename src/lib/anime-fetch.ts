@@ -988,16 +988,6 @@ export async function getAnimeDetails(
       return sA - sB;
     });
 
-    franchiseNodes = franchiseNodes.filter(node => {
-      if (node.id === numId) return true;
-      if (node.format === "TV" || node.format === "MOVIE" || node.format === "ONA") return true;
-      
-      const lowerName = (node.title || "").toLowerCase();
-      const plotKeywords = ["final", "part", "chapter", "season", "arc", "prologue", "epilogue", "movie"];
-      if (plotKeywords.some(kw => lowerName.includes(kw))) return true;
-      
-      return false;
-    });
   }
   
   if (!franchiseNodes || franchiseNodes.length === 0) {
