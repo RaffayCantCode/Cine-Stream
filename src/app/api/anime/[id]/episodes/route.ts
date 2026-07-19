@@ -92,18 +92,22 @@ async function getEnrichedEpisodesList(
 ): Promise<any[]> {
   let seasonEps: any[] = [];
 
-  // 1, 2 & 3. Try AniZip, Jikan, and Tatakai in parallel
-  const [aniZipEpsRes, jikanEpsRes, tatakaiEpsRes, fillerLookupRes] = await Promise.allSettled([
+  // 1, 2 & 3. Try AniZip, Jikan, and Tatakai in parallel.
+  // Filler lookup is deliberately NOT awaited here — it scrapes a 3rd party website
+  // (animefillerlist.com) which is slow and unreliable. Running it in parallel with
+  // a strict timeout and merging results after ensures it never blocks episode delivery.
+  const fillerTimeout = new Promise<null>(r => setTimeout(() => r(null), 3500));
+  const fillerFetchPromise = fetchFillerLookupFromAnimeFillerList(seasonName);
+
+  const [aniZipEpsRes, jikanEpsRes, tatakaiEpsRes] = await Promise.allSettled([
     fetchEpisodesFromAniZip(seasonId, totalEpisodes),
     idMal ? fetchEpisodesFromJikan(idMal, seasonId, totalEpisodes) : Promise.resolve([]),
     fetchEpisodesFromTatakai(seasonId, totalEpisodes),
-    fetchFillerLookupFromAnimeFillerList(seasonName)
   ]);
 
   const aniZipEps = aniZipEpsRes.status === 'fulfilled' ? aniZipEpsRes.value : [];
   const jikanEps = jikanEpsRes.status === 'fulfilled' ? jikanEpsRes.value : [];
   const tatakaiEps = tatakaiEpsRes.status === 'fulfilled' ? tatakaiEpsRes.value : [];
-  const fillerLookup = fillerLookupRes.status === 'fulfilled' ? fillerLookupRes.value : null;
 
   if (aniZipEps && aniZipEps.length > 0) {
     seasonEps = aniZipEps;
@@ -113,23 +117,47 @@ async function getEnrichedEpisodesList(
     seasonEps = tatakaiEps;
   }
 
-  // Cross-merge thumbnails, descriptions, and titles across sources
-  const secondarySources = [jikanEps, tatakaiEps, aniZipEps].filter((s): s is any[] => Array.isArray(s) && s.length > 0);
-  for (const src of secondarySources) {
-    seasonEps = seasonEps.map((ep) => {
-      const match = src.find(s => s && s.episodeNum === ep.episodeNum);
-      const isGenericTitle = !ep.title || ep.title === `Episode ${ep.episodeNum}`;
-      return {
-        ...ep,
-        title: isGenericTitle && match?.title ? match.title : ep.title,
-        thumbnail: ep.thumbnail || match?.thumbnail || null,
-        description: ep.description || match?.description || null,
-        isFiller: Boolean(ep.isFiller || match?.isFiller || fillerLookup?.filler.has(ep.episodeNum)),
-      };
-    });
+  // Kitsu fallback — only if primary sources failed
+  if (seasonEps.length === 0) {
+    try {
+      const kitsuEps = await fetchEpisodesFromKitsu(seasonName, totalEpisodes);
+      if (kitsuEps && kitsuEps.length > 0) {
+        seasonEps = kitsuEps;
+        console.log(`[EpisodesList] Kitsu fallback succeeded for "${seasonName}" with ${kitsuEps.length} episodes`);
+      }
+    } catch { /* kitsu failed too */ }
   }
 
+  // Collect the filler result (race against timeout so we don't block)
+  const fillerLookup = await Promise.race([fillerFetchPromise, fillerTimeout]);
+
+  // Cross-merge thumbnails, descriptions, and titles across sources
+  const secondarySources = [jikanEps, tatakaiEps, aniZipEps].filter((s): s is any[] => Array.isArray(s) && s.length > 0);
+  if (seasonEps.length > 0) {
+    for (const src of secondarySources) {
+      seasonEps = seasonEps.map((ep) => {
+        const match = src.find(s => s && s.episodeNum === ep.episodeNum);
+        const isGenericTitle = !ep.title || ep.title === `Episode ${ep.episodeNum}`;
+        // Only apply isFiller when the fillerLookup plausibly covers this show.
+        // Heuristic: the lookup must have at least half as many episodes as totalEpisodes
+        // to be considered a valid match. This prevents false-positive filler tags from
+        // a wrong show page (e.g., animefillerlist returning a different series).
+        const fillerLookupValid = fillerLookup != null &&
+          (fillerLookup.filler.size + fillerLookup.mixed.size + (totalEpisodes * 0.3)) >= totalEpisodes * 0.4;
+        return {
+          ...ep,
+          title: isGenericTitle && match?.title ? match.title : ep.title,
+          thumbnail: ep.thumbnail || match?.thumbnail || null,
+          description: ep.description || match?.description || null,
+          isFiller: Boolean(ep.isFiller || match?.isFiller || (fillerLookupValid && fillerLookup?.filler.has(ep.episodeNum))),
+        };
+      });
+    }
+  }
+
+  // LAST RESORT: only generate placeholder episodes if every real source failed
   if (!seasonEps || seasonEps.length === 0) {
+    console.warn(`[EpisodesList] All sources failed for "${seasonName}" (id=${seasonId}). Using placeholder episodes as last resort.`);
     const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => seasonName?.includes(t));
     const count = isSpecialFormat ? 1 : Math.max(totalEpisodes || 12, 1);
     for (let i = 1; i <= count; i++) {
@@ -142,6 +170,7 @@ async function getEnrichedEpisodesList(
         malUrl: null,
         isFiller: false,
         releasedDate: null,
+        isPlaceholder: true, // Flag so client knows this is fallback data
         seasonId: seasonId,
         seasonName: seasonName,
         seasonMalId: idMal || null,
@@ -152,7 +181,9 @@ async function getEnrichedEpisodesList(
   return seasonEps;
 }
 
-const episodesCache = new Map<string, { data: any; expires: number }>();
+// NOTE: No module-level episodesCache Map — it is wiped on every Cloudflare
+// Pages cold start. Cache-control headers and next: { revalidate } on upstream
+// fetch calls handle CDN-level caching instead.
 const animeCacheHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
   "CDN-Cache-Control": "no-store",
@@ -171,12 +202,6 @@ export async function GET(
   const seasonNumParam = parseInt(searchParams.get("seasonNum") || "", 10);
   const batchSize = 100;
 
-  const cacheKey = `${id}:${searchParams.toString()}`;
-  const cached = episodesCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) {
-    return Response.json(cached.data, { headers: animeCacheHeaders });
-  }
-
   try {
     let season: any = null;
     let meta: any = null;
@@ -189,11 +214,9 @@ export async function GET(
         success: true,
         data: { episodes: newEps, totalEpisodes: 0 },
       };
-      if (newEps.length > 0) {
-        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
-      }
       return Response.json(resPayload, { headers: animeCacheHeaders });
     }
+
 
     // ── Fetch a specific season's episodes by its AniList ID ───────────────
     if (seasonId) {
@@ -238,39 +261,39 @@ export async function GET(
           seasonNumFromList = idx >= 0 ? idx + 1 : 1;
         }
       } else {
-        // Slow path: derive mapping data from full meta lookup
+        // Slow path: derive mapping data from meta lookup.
+        // KEY FIX: When seasonId is provided AND differs from the page id,
+        // fetch the season's OWN details directly (avoids full franchise BFS
+        // traversal from the parent id and prevents wrong-season mapping on
+        // Cloudflare cold starts).
         console.log(`[Episodes API] Slow path: fetching full meta for seasonId=${seasonId}, anime id=${id}`);
-        meta = await getAnimeDetails(id, 1500, true);
+        
+        // First try to get the season's own metadata directly
+        let directSeasonMeta: any = null;
+        if (seasonId && seasonId !== id) {
+          console.log(`[Episodes API] Fetching direct season meta for seasonId=${seasonId}`);
+          directSeasonMeta = await getAnimeDetails(seasonId, 1500, true).catch(() => null);
+        }
+
+        meta = directSeasonMeta || await getAnimeDetails(id, 1500, true);
         if (!meta) {
           console.error(`[Episodes API] getAnimeDetails returned null for id=${id}`);
           throw new Error("Anime not found");
         }
 
-        season = meta.seasons.find((s: any) => s.id === seasonId);
-        console.log(`[Episodes API] Season lookup: found=${!!season}, seasons:`, meta.seasons.map((s: any) => ({ id: s.id, label: s.seasonLabel, tmdbSeason: s.tmdbSeasonNumber, offset: s.episodeOffset })));
-
-        if (!season && (clientTmdbId != null || clientTmdbSeasonNum != null)) {
-          season = {
-            id: seasonId,
-            name: meta.anime.name,
-            seasonLabel: "Episodes",
-            totalEpisodes: meta.totalEpisodes || 12,
-            isCurrent: seasonId === id,
-            idMal: meta.anime.idMal ? parseInt(meta.anime.idMal, 10) : null,
-            tmdbId: clientTmdbId,
-            tmdbSeasonNumber: clientTmdbSeasonNum,
-            episodeOffset: clientEpisodeOffset ?? 0,
-          };
+        // Look for the season in the meta — prefer direct season meta first
+        season = meta.seasons?.find((s: any) => s.id === seasonId);
+        
+        // If still not found and we have a direct season meta, use its first season
+        if (!season && directSeasonMeta) {
+          const directSeason = directSeasonMeta.seasons?.find((s: any) => s.id === seasonId)
+            || directSeasonMeta.seasons?.[0];
+          if (directSeason) season = directSeason;
         }
+        
+        console.log(`[Episodes API] Season lookup: found=${!!season}, seasons:`, meta.seasons?.map((s: any) => ({ id: s.id, label: s.seasonLabel, tmdbSeason: s.tmdbSeasonNumber, offset: s.episodeOffset })));
 
-        if (!season) {
-          console.log(`[Episodes API] Season not found, forcing fresh fetch`);
-          const freshMeta = await getAnimeDetails(id, 1500, true);
-          if (freshMeta) {
-            meta = freshMeta;
-            season = meta.seasons.find((s: any) => s.id === seasonId);
-          }
-        }
+
 
         if (!season) {
           console.warn(`[Episodes API] Season ${seasonId} not found in any meta result`);
@@ -389,8 +412,8 @@ export async function GET(
           
           // Fallback retry block (only runs when TMDB fails)
           if (overlayEps.length === 0 && safeTotalEpisodes > 0) {
-            console.log(`[Episodes API] Overlay also empty! Retrying AniZip/Jikan and falling back to Kitsu...`);
-            await new Promise(r => setTimeout(r, 2000)); // The 2-second sleep to handle Cloudflare/AniZip transient errors
+            console.log(`[Episodes API] Overlay also empty! Retrying AniZip/Jikan...`);
+            // NOTE: No sleep here — 2-second sleeps waste Cloudflare edge time budget.
             try {
               const aniZipEps = await fetchEpisodesFromAniZip(season.id, safeTotalEpisodes);
               if (aniZipEps && aniZipEps.length > 0) overlayEps.push(...aniZipEps);
@@ -514,7 +537,9 @@ export async function GET(
           } catch { /* no overview */ }
         }
       } else {
-        // ── No TMDB: use enriched episodes ────────────────────────────────────
+        // ── No TMDB mapping: use enriched episodes ────────────────────────────
+        // getEnrichedEpisodesList already tries AniZip → Jikan → Tatakai → Kitsu in order.
+        // Placeholders are only generated inside it as an absolute last resort.
         const enrichedEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
         seasonEps = enrichedEps.map((ep) => ({
           ...ep,
@@ -525,28 +550,34 @@ export async function GET(
           seasonMalId: season.idMal || null,
         }));
 
-        const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
-        const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel.startsWith(t));
-        const count = isSpecialFormat ? 1 : safeTotalEpisodes;
-        for (let i = 1; i <= count; i++) {
-          if (!covered.has(i)) {
-            seasonEps.push({
-              episodeId: `${season.id}-${i}`,
-              episodeNum: i,
-              title: isSpecialFormat ? season.name : `Episode ${i}`,
-              thumbnail: isSpecialFormat ? meta.anime.poster || null : null,
-              malUrl: null, isFiller: false,
-              releasedDate: null,
-              description: isSpecialFormat ? meta.anime.description || null : null,
-              runtime: isSpecialFormat ? meta.anime.duration || null : null,
-              seasonNum: seasonNumFromList,
-              seasonId: season.id,
-              seasonName: season.name,
-              seasonMalId: season.idMal || null,
-            });
+        // Gap-fill: add missing episode numbers that no source returned.
+        // Only do this if we got at least SOME real episodes — otherwise we'd
+        // just be duplicating the placeholders already generated above.
+        const hasRealEpisodes = seasonEps.some((e: any) => !e.isPlaceholder);
+        if (hasRealEpisodes) {
+          const covered = new Set(seasonEps.map((e: any) => e.episodeNum));
+          const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => season.seasonLabel.startsWith(t));
+          const count = isSpecialFormat ? 1 : safeTotalEpisodes;
+          for (let i = 1; i <= count; i++) {
+            if (!covered.has(i)) {
+              seasonEps.push({
+                episodeId: `${season.id}-${i}`,
+                episodeNum: i,
+                title: isSpecialFormat ? season.name : `Episode ${i}`,
+                thumbnail: isSpecialFormat ? meta.anime.poster || null : null,
+                malUrl: null, isFiller: false,
+                releasedDate: null,
+                description: isSpecialFormat ? meta.anime.description || null : null,
+                runtime: isSpecialFormat ? meta.anime.duration || null : null,
+                seasonNum: seasonNumFromList,
+                seasonId: season.id,
+                seasonName: season.name,
+                seasonMalId: season.idMal || null,
+              });
+            }
           }
         }
-      }
+      } // end else (no TMDB)
 
       seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
       seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta);
@@ -562,15 +593,9 @@ export async function GET(
         },
       };
 
-      // Don't cache empty results — allow retries to re-fetch
-      if (seasonEps.length > 0) {
-        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
-      } else {
-        console.warn(`[Episodes API] Not caching empty episode result for seasonId=${seasonId}`);
-      }
-
       return Response.json(resPayload, { headers: animeCacheHeaders });
     }
+
 
     // ── Fallback: fetch by season index (backward compat) ──────────────────
     if (!isNaN(seasonNumParam) && seasonNumParam > 0) {
@@ -685,14 +710,10 @@ export async function GET(
         seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta);
       }
 
-      const resPayload = {
+      return Response.json({
         success: true,
         data: { episodes: seasonEps, totalEpisodes: meta.totalEpisodes },
-      };
-      if (seasonEps.length > 0) {
-        episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
-      }
-      return Response.json(resPayload, { headers: animeCacheHeaders });
+      }, { headers: animeCacheHeaders });
     }
 
     // ── Default: fetch ALL seasons' episodes ───────────────────────────────
@@ -852,14 +873,10 @@ export async function GET(
 
     episodes = enrichEpisodeReleaseStatus(episodes, meta);
 
-    const resPayload = {
+    return Response.json({
       success: true,
       data: { episodes, totalEpisodes: episodes.length },
-    };
-    if (episodes.length > 0) {
-      episodesCache.set(cacheKey, { data: resPayload, expires: Date.now() + 60000 });
-    }
-    return Response.json(resPayload, { headers: animeCacheHeaders });
+    }, { headers: animeCacheHeaders });
   } catch (error) {
     console.error("[Anime Episodes Error]:", error);
     return Response.json(

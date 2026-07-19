@@ -539,51 +539,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         setSeasonOverview(epData.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
       } else {
-        // Client-side fallback: ensure episodes are ALWAYS available even if server or edge API returns empty
-        const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
-        const epCount = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 12;
-        const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => ({
-          episodeId: `${seasonId}-${i + 1}`,
-          episodeNum: i + 1,
-          title: `Episode ${i + 1}`,
-          description: undefined,
-          thumbnail: undefined,
-          malUrl: undefined,
-          isFiller: false,
-          isReleased: true,
-          seasonId: seasonId,
-          seasonNum: 1,
-        }));
-        setEpisodes(prev => {
-          const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
-          return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
-        });
-        // NOTE: Do NOT add to loadedSeasonIds here — these are placeholder episodes.
-        // A subsequent call with real TMDB params (from meta load or user click) must
-        // be allowed to re-fetch and replace them with real metadata.
+        // Server returned empty/failed — do NOT generate client-side placeholders.
+        // The server already tried every real source (AniZip, Jikan, Tatakai, Kitsu)
+        // and will return isPlaceholder-flagged episodes only as a last resort.
+        // If the response was empty it likely means a transient error; leave
+        // whatever episodes are already shown and let the user retry by clicking
+        // the season tab (which will forceReload=true).
+        console.warn(`[AnimeClient] Episode API returned empty for seasonId=${seasonId}. Will retry on next season click.`);
+        // Do NOT add to loadedSeasonIds — the next forceReload call must be allowed through.
       }
-    } catch {
-      // Client-side fallback on network failure or edge timeout
-      const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
-      const epCount = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 12;
-      const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => ({
-        episodeId: `${seasonId}-${i + 1}`,
-        episodeNum: i + 1,
-        title: `Episode ${i + 1}`,
-        description: undefined,
-        thumbnail: undefined,
-        malUrl: undefined,
-        isFiller: false,
-        isReleased: true,
-        seasonId: seasonId,
-        seasonNum: 1,
-      }));
-      setEpisodes(prev => {
-        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
-        return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
-      });
-      // NOTE: Do NOT add to loadedSeasonIds here — these are placeholder episodes.
-      // A subsequent call with real TMDB params must be allowed to replace them.
+    } catch (err) {
+      // Network failure or edge timeout — do NOT generate client-side placeholders.
+      // Leave whatever episodes are currently visible and allow a retry.
+      console.warn(`[AnimeClient] Episode API request failed for seasonId=${seasonId}:`, err);
     }
     finally { setEpisodesLoading(false); }
   }, [id]);

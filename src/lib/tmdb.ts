@@ -48,7 +48,8 @@ function isTmdbReadAccessToken(token: string): boolean {
   return token.startsWith("ey");
 }
 
-const tmdbApiCache = new Map<string, { data: any; expires: number }>();
+// NOTE: No module-level Map cache here — it is wiped on every Cloudflare Pages
+// cold start. CDN caching is handled by `next: { revalidate }` on fetch calls.
 
 export async function tmdbFetch(
   path: string,
@@ -86,15 +87,6 @@ export async function tmdbFetch(
       revalidate = 86400;
     }
 
-    const cacheKey = url.toString();
-
-    if (!options?.noCache) {
-      const cached = tmdbApiCache.get(cacheKey);
-      if (cached && cached.expires > Date.now()) {
-        return cached.data;
-      }
-    }
-
     const fetchOptions: RequestInit = {
       headers: {
         ...(isTmdbReadAccessToken(token) ? { Authorization: `Bearer ${token}` } : {}),
@@ -114,35 +106,14 @@ export async function tmdbFetch(
     }
 
     const data = await res.json();
-    const filtered = filterTmdbResponse(data, isSearch);
-
-    if (!options?.noCache) {
-      tmdbApiCache.set(cacheKey, { data: filtered, expires: Date.now() + (revalidate * 1000) });
-      pruneTmdbCache(tmdbApiCache, TMDB_API_CACHE_MAX);
-    }
-    return filtered;
+    return filterTmdbResponse(data, isSearch);
   } catch (err) {
     console.warn(`[TMDB] tmdbFetch failed for path ${path}:`, err);
     return null;
   }
 }
 
-const TMDB_API_CACHE_MAX = 100;
-const TMDB_SHOW_CACHE_MAX = 200;
 
-function pruneTmdbCache<V>(cache: Map<string, V>, max: number): void {
-  if (cache.size <= max) return;
-  const toDelete = cache.size - max;
-  const iter = cache.keys();
-  for (let i = 0; i < toDelete; i++) {
-    const k = iter.next();
-    if (k.done) break;
-    cache.delete(k.value);
-  }
-}
-
-// In-memory cache for TMDB anime show lookups (keyed by anime name + year)
-const tmdbShowCache = new Map<string, { id: number; expires: number }>();
 
 export interface TmdbEpisodeData {
   seasonNum: number;
@@ -208,10 +179,6 @@ function nameMatches(searchName: string, tmdbName: string): boolean {
 }
 
 export async function searchTmdbShow(name: string, year?: number): Promise<number | null> {
-  const cacheKey = `${name}:${year || ""}`;
-  const cached = tmdbShowCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return cached.id;
-
   try {
     const baseTitle = getCleanBaseTitle(name);
     const queries = [baseTitle, name];
@@ -248,13 +215,9 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
       if (year) {
         const showYear = show.first_air_date ? parseInt(show.first_air_date.slice(0, 4), 10) : 0;
         if (showYear && Math.abs(showYear - year) <= 1) {
-          tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
-          pruneTmdbCache(tmdbShowCache, TMDB_SHOW_CACHE_MAX);
           return show.id;
         }
       } else {
-        tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
-        pruneTmdbCache(tmdbShowCache, TMDB_SHOW_CACHE_MAX);
         return show.id;
       }
     }
@@ -262,8 +225,6 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
     // Second pass: Japanese name match only (relax year)
     for (const show of candidatePool) {
       if (nameMatches(queryUsed, show.name)) {
-        tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
-        pruneTmdbCache(tmdbShowCache, TMDB_SHOW_CACHE_MAX);
         return show.id;
       }
     }
@@ -272,8 +233,6 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
     if (japaneseResults.length === 0) {
       for (const show of results) {
         if (nameMatches(queryUsed, show.name)) {
-          tmdbShowCache.set(cacheKey, { id: show.id, expires: Date.now() + 86400000 });
-          pruneTmdbCache(tmdbShowCache, TMDB_SHOW_CACHE_MAX);
           return show.id;
         }
       }

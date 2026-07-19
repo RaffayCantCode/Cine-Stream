@@ -101,21 +101,13 @@ const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
 const ANIME_FILLER_LIST_BASE = "https://www.animefillerlist.com/shows";
 export const DEFAULT_FETCH_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 CineStream/1.0";
-const anilistCache = new Map<string, { data: any; expires: number }>();
-const ANILIST_CACHE_TTL = 300000; // 5 minutes
+// NOTE: No module-level Map caches here — they are wiped on every Cloudflare
+// Pages cold start (each isolate is fresh). CDN-level caching is handled by
+// passing `next: { revalidate: N }` on each individual fetch call instead.
 
-async function anilistQuery(query: string, variables: Record<string, any>, retries = 2): Promise<any> {
-  const cacheKey = JSON.stringify({ query, variables });
-  const cached = anilistCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) {
-    return cached.data;
-  }
-
+async function anilistQuery(query: string, variables: Record<string, any>, retries = 2, revalidate = 3600): Promise<any> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
       const res = await fetch(ANILIST_API, {
         method: "POST",
         headers: { 
@@ -124,11 +116,9 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
           "User-Agent": "CineStream/1.0 (https://github.com/RaffayCantCode/Cine-Stream)"
         },
         body: JSON.stringify({ query, variables }),
-        signal: controller.signal,
-        next: { revalidate: 86400 } as any,
+        signal: AbortSignal.timeout(8000),
+        next: { revalidate } as any,
       });
-      
-      clearTimeout(timeoutId);
 
       if (res.status === 429 && attempt < retries) {
         const retryAfter = res.headers.get("retry-after");
@@ -144,16 +134,7 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
         throw new Error(`AniList returned ${res.status}`);
       }
 
-      const data = await res.json();
-      
-      // Keep cache size manageable
-      if (anilistCache.size > 200) {
-        const oldest = anilistCache.keys().next().value;
-        if (oldest) anilistCache.delete(oldest);
-      }
-      anilistCache.set(cacheKey, { data, expires: Date.now() + ANILIST_CACHE_TTL });
-      
-      return data;
+      return await res.json();
     } catch (e) {
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
@@ -395,7 +376,7 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FRANCHISE GRAPH TRAVERSAL
+// FRANCHISE GRAPH — FAST 2-LEVEL QUERY
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Relation types that constitute the same franchise
@@ -403,6 +384,10 @@ const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL", "ALTERNATIVE", "P
 // These formats get included in the season list
 const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "MOVIE"]);
 
+// Single AniList query that retrieves the node AND its 1-hop relations in one request.
+// We then do ONE follow-up batch for any new IDs discovered — 2 API calls total
+// instead of the old 10–30 call BFS. This reliably completes within the
+// Cloudflare edge time budget.
 const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   Media(id: $id, type: ANIME) {
     id idMal title { romaji english native } episodes season seasonYear format duration bannerImage coverImage { large extraLarge }
@@ -412,100 +397,95 @@ const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   }
 }`;
 
+// Batch query for up to 20 IDs in a single AniList request
+const BATCH_RELATIONS_QUERY = `query ($ids: [Int]) {
+  Page(page: 1, perPage: 50) {
+    media(id_in: $ids, type: ANIME) {
+      id idMal title { romaji english native } episodes season seasonYear format duration bannerImage coverImage { large extraLarge }
+      relations {
+        edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge } } }
+      }
+    }
+  }
+}`;
+
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
-  const visited = new Map<number, FranchiseNode>(); // id → node
-  const queue: number[] = [startId];
-  const MAX_NODES = 150;
-  const MAX_HOPS = 15;
-  const FRANCHISE_TIMEOUT = 7000; // Global abortion timeout for Cloudflare Free (10s CPU limit)
-  let hops = 0;
-  let timedOut = false;
-  const timeoutId = setTimeout(() => { timedOut = true; }, FRANCHISE_TIMEOUT);
+  const visited = new Map<number, FranchiseNode>();
+
+  function addNode(data: any) {
+    const id = data.id as number;
+    if (!visited.has(id)) {
+      visited.set(id, {
+        id,
+        idMal: data.idMal || null,
+        title: data.title?.english || data.title?.romaji || data.title?.native || "",
+        episodes: data.episodes || null,
+        season: data.season || null,
+        seasonYear: data.seasonYear || null,
+        format: data.format || null,
+        duration: data.duration || null,
+        coverImage: data.coverImage?.extraLarge || data.coverImage?.large || null,
+        bannerImage: data.bannerImage || null,
+      });
+    }
+  }
+
+  function collectRelationIds(media: any): number[] {
+    const ids: number[] = [];
+    const edges = media?.relations?.edges || [];
+    for (const edge of edges) {
+      const node = edge.node;
+      const relType: string = edge.relationType || "";
+      if (!FRANCHISE_RELATION_TYPES.has(relType)) continue;
+      if (node?.type !== "ANIME" || node?.isAdult) continue;
+      const nid = node.id as number;
+      if (!visited.has(nid)) {
+        ids.push(nid);
+        // Pre-add from relation data so we have info even if the batch call fails
+        visited.set(nid, {
+          id: nid,
+          idMal: node.idMal || null,
+          title: node.title?.english || node.title?.romaji || node.title?.native || "",
+          episodes: node.episodes || null,
+          season: node.season || null,
+          seasonYear: node.seasonYear || null,
+          format: node.format || null,
+          duration: node.duration || null,
+          coverImage: node.coverImage?.extraLarge || node.coverImage?.large || null,
+          bannerImage: node.bannerImage || null,
+        });
+      }
+    }
+    return ids;
+  }
 
   try {
-  while (queue.length > 0 && visited.size < MAX_NODES && hops < MAX_HOPS && !timedOut) {
-    const batch = queue.splice(0, queue.length);
-    hops++;
-    try {
-      const medias = (await Promise.all(
-        batch.map(async (nodeId) => {
-          try {
-            const result = await anilistQuery(RELATIONS_SINGLE_QUERY, { id: nodeId });
-            return result?.data?.Media || null;
-          } catch (e) {
-            console.warn(`Failed to fetch relations for ${nodeId}`, e);
-            return null;
-          }
-        })
-      )).filter(Boolean);
+    // Level 1: fetch the start node and its direct relations
+    const level1 = await anilistQuery(RELATIONS_SINGLE_QUERY, { id: startId }, 1, 3600);
+    const rootMedia = level1?.data?.Media;
+    if (!rootMedia) return [];
 
-      for (const data of medias) {
-        if (!data) continue;
+    addNode(rootMedia);
+    const level2Ids = collectRelationIds(rootMedia);
 
-        const nodeId = data.id as number;
-        if (!visited.has(nodeId)) {
-          visited.set(nodeId, {
-            id: nodeId,
-            idMal: data.idMal || null,
-            title: data.title?.english || data.title?.romaji || data.title?.native || "",
-            episodes: data.episodes || null,
-            season: data.season || null,
-            seasonYear: data.seasonYear || null,
-            format: data.format || null,
-            duration: data.duration || null,
-            coverImage: data.coverImage?.extraLarge || data.coverImage?.large || null,
-            bannerImage: data.bannerImage || null,
-          });
+    // Level 2: batch-fetch all discovered relation IDs in one request
+    if (level2Ids.length > 0) {
+      try {
+        const level2 = await anilistQuery(BATCH_RELATIONS_QUERY, { ids: level2Ids.slice(0, 50) }, 1, 3600);
+        const medias = level2?.data?.Page?.media || [];
+        for (const media of medias) {
+          addNode(media);
+          // Collect level-3 IDs (one more hop for long franchises like Fate, Naruto)
+          collectRelationIds(media);
         }
-
-        // Traverse edges
-        const edges = data.relations?.edges || [];
-        for (const edge of edges) {
-          const node = edge.node;
-          const relType: string = edge.relationType || "";
-          if (
-            !FRANCHISE_RELATION_TYPES.has(relType) ||
-            node.type !== "ANIME" ||
-            node.isAdult
-          ) continue;
-
-          const neighborId = node.id as number;
-          if (!visited.has(neighborId)) {
-            // Pre-add to visited immediately (with data we already have) to prevent duplicates
-            visited.set(neighborId, {
-              id: neighborId,
-              idMal: node.idMal || null,
-              title: node.title?.english || node.title?.romaji || node.title?.native || "",
-              episodes: node.episodes || null,
-              season: node.season || null,
-              seasonYear: node.seasonYear || null,
-              format: node.format || null,
-              duration: node.duration || null,
-              coverImage: node.coverImage?.extraLarge || node.coverImage?.large || null,
-              bannerImage: node.bannerImage || null,
-            });
-            // Also queue it so we fetch its own relations (to continue the chain)
-            if (visited.size < MAX_NODES) {
-              queue.push(neighborId);
-            }
-          }
-        }
+      } catch (e) {
+        console.warn("[Franchise] Level 2 batch fetch failed:", e);
       }
-    } catch (e) {
-      console.warn("Bulk query failed:", e);
     }
-
-    // Small delay between hops to be nice to AniList rate limits
-    if (queue.length > 0 && hops > 1) {
-      await new Promise(r => setTimeout(r, 300));
-    }
+  } catch (e) {
+    console.warn("[Franchise] Level 1 fetch failed for", startId, e);
   }
 
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  // Filter out nodes with no title (partial/failed AniList responses)
   return [...visited.values()].filter(n => n.title);
 }
 
@@ -679,34 +659,10 @@ function parseSeasonNumberFromTitle(title: string): number {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SERVER-SIDE CACHE
+// NOTE: No server-side in-memory cache here.
+// Module-level Map caches are destroyed on every Cloudflare Pages cold start.
+// CDN caching is handled via `next: { revalidate: N }` on each fetch() call.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const animeDetailCache = new Map<string, { data: any; expires: number }>();
-const ANIME_CACHE_MAX = 100;
-
-function getCachedDetail(key: string) {
-  const cached = animeDetailCache.get(key);
-  if (cached && cached.expires > Date.now()) return cached.data;
-  animeDetailCache.delete(key);
-  return null;
-}
-function setCachedDetail(key: string, data: any, isDegradedOverride?: boolean) {
-  if (animeDetailCache.size >= ANIME_CACHE_MAX) {
-    const oldest = animeDetailCache.keys().next();
-    if (!oldest.done) animeDetailCache.delete(oldest.value);
-  }
-  const isDev = process.env.NODE_ENV === "development";
-  
-  // If data lacks franchise nodes or has explicit override, cache for 1 minute to allow quick recovery
-  const isDegraded = isDegradedOverride || !data?.franchiseNodes || data.franchiseNodes.length === 0;
-  
-  let ttl = 1800000; // 30 min TTL
-  if (isDev) ttl = 5000; // 5 sec TTL in dev
-  else if (isDegraded) ttl = 60000; // 1 min TTL if degraded
-  
-  animeDetailCache.set(key, { data, expires: Date.now() + ttl });
-}
 
 const INITIAL_EP_LIMIT = 100;
 
@@ -818,9 +774,7 @@ export async function getAnimeDetails(
   const numId = parseInt(id, 10);
   if (isNaN(numId)) return null;
 
-  const cacheKey = `independent:${id}:${epLimit}:${skipEpisodes}`;
-  const cached = getCachedDetail(cacheKey);
-  if (cached) return cached;
+  // No local cache — rely on Cloudflare CDN via next: { revalidate } on fetch calls.
 
   // Step 0: Fetch AniZip mappings for IDs (TMDB & MAL) first
   let aniZipMapping: any = null;
@@ -986,15 +940,13 @@ export async function getAnimeDetails(
           if (val.warnings.length > 0) {
             console.warn(`[Validation] Jikan fallback season warnings for ${id}:`, val.warnings);
           }
-          const jikanResult = {
+          return {
             anime: animeItem, episodes, totalEpisodes: totalEps,
             seasons: seasonsList, openedSeasonId: id,
             franchiseNodes: [] as FranchiseNode[],
             tmdbId,
             tmdbSeasonMap,
           };
-          setCachedDetail(cacheKey, jikanResult);
-          return jikanResult;
         }
       }
     } catch { /* no fallback */ }
@@ -1184,14 +1136,12 @@ export async function getAnimeDetails(
         mappedEpisodesCount[key] = Math.max(mappedEpisodesCount[key] || 0, episodeOffset + s.totalEpisodes);
         tmdbSeasonMap[s.id] = tmdbSeasonNum as number;
       } else {
-        // AniZip unavailable (timeout on Cloudflare). Do NOT guess TMDB
-        // season/offset via label or title heuristics — they are unreliable when
-        // franchise TV-count labels don't match TMDB's season numbering (e.g.
-        // AoT S3P2 labelled "Season 4" by buildSeasonList but TMDB season 3).
-        // Instead leave tmdbSeasonNum null so the caller uses overlay-only mode
-        // (AniZip/Jikan/Tatakai) which returns correct episode data without
-        // TMDB enrichment.
-        tmdbSeasonNum = null;
+        // AniZip unavailable — use label-number heuristic as fallback.
+        // e.g. "Season 2" → TMDB season 2. This is the best we can do without
+        // AniZip, and is correct for the vast majority of anime series where
+        // AniList and TMDB use the same season numbering.
+        const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
+        tmdbSeasonNum = labelNumMatch ? parseInt(labelNumMatch[1], 10) : parseSeasonNumberFromTitle(s.name);
         episodeOffset = 0;
       }
     }
@@ -1238,7 +1188,7 @@ export async function getAnimeDetails(
         seasonMalId: openedSeason.idMal || null,
       });
     }
-    const skipResult = {
+    return {
       anime,
       episodes: basicEpisodes,
       totalEpisodes: openedSeason.totalEpisodes,
@@ -1248,8 +1198,6 @@ export async function getAnimeDetails(
       tmdbId,
       tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
     };
-    setCachedDetail(cacheKey, skipResult, hasFailedAniZip);
-    return skipResult;
   }
 
   // Step 6: Fetch real episodes for the active season
@@ -1303,7 +1251,7 @@ export async function getAnimeDetails(
 
   allCombinedEpisodes.push(...seasonEps);
 
-  const fullResult = {
+  return {
     anime,
     episodes: allCombinedEpisodes,
     totalEpisodes: allCombinedEpisodes.length,
@@ -1313,8 +1261,6 @@ export async function getAnimeDetails(
     tmdbId,
     tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
   };
-  setCachedDetail(cacheKey, fullResult, hasFailedAniZip);
-  return fullResult;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1402,8 +1348,6 @@ export async function fetchEpisodesFromAniZip(
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Fetch real episode metadata (titles, thumbnails, airdates) from Jikan
-const fillerLookupCache = new Map<string, { data: FillerLookup | null; expires: number }>();
-const FILLER_LOOKUP_TTL = 86400000; // 24 hours
 
 function normalizeFillerSlugPart(value: string): string {
   return value
@@ -1468,14 +1412,10 @@ function parseAnimeFillerListRows(html: string): FillerLookup {
 export async function fetchFillerLookupFromAnimeFillerList(
   animeName: string
 ): Promise<FillerLookup | null> {
-  const cacheKey = normalizeFillerSlugPart(animeName);
-  const cached = fillerLookupCache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return cached.data;
-
   for (const slug of buildAnimeFillerListSlugCandidates(animeName)) {
     try {
       const res = await fetch(`${ANIME_FILLER_LIST_BASE}/${slug}`, {
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(4000),
         headers: { "User-Agent": "CineStream/1.0" },
         next: { revalidate: 86400 } as any,
       });
@@ -1483,15 +1423,12 @@ export async function fetchFillerLookupFromAnimeFillerList(
 
       const lookup = parseAnimeFillerListRows(await res.text());
       if (lookup.filler.size > 0 || lookup.mixed.size > 0) {
-        fillerLookupCache.set(cacheKey, { data: lookup, expires: Date.now() + FILLER_LOOKUP_TTL });
         return lookup;
       }
     } catch {
       // Try the next slug candidate.
     }
   }
-
-  fillerLookupCache.set(cacheKey, { data: null, expires: Date.now() + 3600000 });
   return null;
 }
 
@@ -1657,10 +1594,6 @@ export async function fetchEpisodesFromJikanPage(
 // THUMBNAIL FETCHING
 // ─────────────────────────────────────────────────────────────────────────────
 
-// In-memory thumbnail cache (keyed by MAL episode URL) - limited to prevent memory leak
-const thumbnailCache = new Map<string, string>();
-const THUMBNAIL_CACHE_MAX = 200;
-
 // Scrape a single MAL episode page for an episode screenshot
 async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
   try {
@@ -1689,46 +1622,14 @@ async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
   }
 }
 
-// Exported: fetch a single episode thumbnail with cache
+// Exported: fetch a single episode thumbnail (no local cache — too small a benefit for edge)
 export async function fetchEpisodeThumbnail(malUrl: string): Promise<string | null> {
-  if (thumbnailCache.has(malUrl)) return thumbnailCache.get(malUrl)!;
-  const thumb = await scrapeEpisodeThumbnail(malUrl);
-  if (thumb) {
-    if (thumbnailCache.size >= THUMBNAIL_CACHE_MAX) {
-      const oldest = thumbnailCache.keys().next();
-      if (!oldest.done) thumbnailCache.delete(oldest.value);
-    }
-    thumbnailCache.set(malUrl, thumb);
-  }
-  return thumb;
+  return scrapeEpisodeThumbnail(malUrl);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LEGACY fetchAnimeApi (used by main API route)
 // ─────────────────────────────────────────────────────────────────────────────
-
-const detailCache = new Map<string, { data: any; expires: number }>();
-const listCache = new Map<string, { data: any; expires: number }>();
-const API_CACHE_MAX = 150;
-
-function pruneApiCache(cache: Map<string, { data: any; expires: number }>, max: number) {
-  if (cache.size <= max) return;
-  const now = Date.now();
-  for (const [key, entry] of cache) {
-    if (entry.expires <= now) {
-      cache.delete(key);
-      if (cache.size <= max) break;
-    }
-  }
-  if (cache.size > max) {
-    const iter = cache.keys();
-    for (let i = 0; i < cache.size - max; i++) {
-      const k = iter.next();
-      if (k.done) break;
-      cache.delete(k.value);
-    }
-  }
-}
 
 export async function fetchAnimeApi(
   endpoint: string,
@@ -1748,13 +1649,9 @@ export async function fetchAnimeApi(
 
   if (isDetail || isSeries) {
     const id = path.replace("/series/", "").split("?")[0];
-    const cacheKeyDetail = `api:detail:${id}`;
-    const cached = detailCache.get(cacheKeyDetail);
-    if (cached && cached.expires > Date.now()) return cached.data;
-
     const result = await getAnimeDetails(id);
     if (result) {
-      const response = {
+      return {
         success: true,
         data: {
           ...result.anime,
@@ -1767,17 +1664,8 @@ export async function fetchAnimeApi(
           tmdbSeasonMap: result.tmdbSeasonMap,
         },
       };
-      detailCache.set(cacheKeyDetail, { data: response, expires: Date.now() + 300000 });
-      pruneApiCache(detailCache, API_CACHE_MAX);
-      return response;
     }
     throw new Error("Anime not found");
-  }
-
-  // Check list cache for non-search queries
-  if (!isSearch) {
-    const cached = listCache.get(cacheKey);
-    if (cached && cached.expires > Date.now()) return cached.data;
   }
 
   let result: any;
@@ -1812,11 +1700,6 @@ export async function fetchAnimeApi(
     // default: popular
     const items = await getPopularAnime(page, genre);
     result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
-  }
-
-  if (!isSearch) {
-    listCache.set(cacheKey, { data: result, expires: Date.now() + 300000 }); // Cache for 5 minutes
-    pruneApiCache(listCache, API_CACHE_MAX);
   }
 
   return result;
