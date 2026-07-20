@@ -113,16 +113,29 @@ export function AnimePlayer({
 }: AnimePlayerProps) {
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
-  const sourcePrefKey = `sv_src_anime_${userId}_${animeId}`;
+  const effectiveAnimeId = rootAnimeId || animeId;
+  const sourcePrefKey = `sv_src_anime_${userId}_${effectiveAnimeId}`;
+  const globalPrefKey = `sv_src_global_${userId}_anime`;
 
-  const [sourceIndex, setSourceIndex] = useState(0);
+  const [sourceIndex, setSourceIndex] = useState(() => {
+    try {
+      const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
+      if (saved !== null && !forcedSource) {
+        const byName = PROVIDERS.findIndex(p => p.name === saved);
+        if (byName >= 0) return byName;
+        const idx = parseInt(saved, 10);
+        if (!isNaN(idx) && idx >= 0 && idx < PROVIDERS.length) return idx;
+      }
+    } catch {}
+    return 0;
+  });
   const [isSourceLoaded, setIsSourceLoaded] = useState(false);
   const [showSources, setShowSources] = useState(false);
 
   useEffect(() => {
     if (status === "loading" || isSourceLoaded) return;
     try {
-      const saved = localStorage.getItem(sourcePrefKey);
+      const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
       if (saved !== null && !forcedSource) {
         // Support both name-based (new) and index-based (legacy) saved values
         const byName = PROVIDERS.findIndex(p => p.name === saved);
@@ -134,7 +147,7 @@ export function AnimePlayer({
       }
     } catch {}
     setIsSourceLoaded(true);
-  }, [status, sourcePrefKey, isSourceLoaded, forcedSource]);
+  }, [status, sourcePrefKey, globalPrefKey, isSourceLoaded, forcedSource]);
 
   useEffect(() => {
     if (forcedSource) {
@@ -155,7 +168,10 @@ export function AnimePlayer({
     setShowSources(false);
     setRetryCount(0);
     setIframeReady(false);
-    try { localStorage.setItem(sourcePrefKey, name); } catch {}
+    try {
+      localStorage.setItem(sourcePrefKey, name);
+      localStorage.setItem(globalPrefKey, name);
+    } catch {}
   };
 
   const [currentUrl, setCurrentUrl] = useState("");
@@ -317,12 +333,15 @@ export function AnimePlayer({
   const switchSource = useCallback(() => {
     setSourceIndex(prev => {
       const next = (prev + 1) % PROVIDERS.length;
-      try { localStorage.setItem(sourcePrefKey, PROVIDERS[next].name); } catch {}
+      try {
+        localStorage.setItem(sourcePrefKey, PROVIDERS[next].name);
+        localStorage.setItem(globalPrefKey, PROVIDERS[next].name);
+      } catch {}
       return next;
     });
     setRetryCount(0);
     setIframeReady(false);
-  }, [sourcePrefKey]);
+  }, [sourcePrefKey, globalPrefKey]);
 
 
   const retrySource = useCallback(() => {

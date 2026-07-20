@@ -46,7 +46,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "anime-v11-season-fix";
+const ANIME_API_VERSION = "anime-v13-dynamic-limit";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -212,7 +212,6 @@ async function fetchEpisodesClientSide(
             thumbnail: ep.image || null,
             releasedDate: ep.airDate || ep.airdate || null,
             isFiller: false,
-            isReleased: true,
             seasonId,
             seasonNum: 1,
           });
@@ -266,7 +265,6 @@ async function fetchEpisodesClientSide(
                 thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w300${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
                 releasedDate: tmdbEp?.air_date || azMatch?.releasedDate || null,
                 isFiller: false,
-                isReleased: true,
                 seasonId,
                 seasonNum: 1,
               });
@@ -305,7 +303,6 @@ async function fetchEpisodesClientSide(
                 thumbnail: ep.attributes?.thumbnail?.original || null,
                 releasedDate: ep.attributes?.airdate || null,
                 isFiller: false,
-                isReleased: true,
                 seasonId,
                 seasonNum: 1,
               });
@@ -345,7 +342,7 @@ async function fetchFranchiseClientSide(startId: number) {
           method: "POST",
           headers: { "Content-Type": "application/json", "Accept": "application/json" },
           body: JSON.stringify({ query: RELATIONS_QUERY, variables: { id: nodeId } }),
-          signal: AbortSignal.timeout(3000)
+          signal: AbortSignal.timeout(8000)
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -363,12 +360,12 @@ async function fetchFranchiseClientSide(startId: number) {
           });
         }
         
-        // Traverse SEQUEL, PREQUEL, ALTERNATIVE, PARENT relations
+        // Traverse SEQUEL, PREQUEL, ALTERNATIVE, PARENT, SIDE_STORY, SPIN_OFF relations
         const edges = media.relations?.edges || [];
         for (const edge of edges) {
           if (!edge.node) continue;
           const rType = edge.relationType;
-          if (!["PREQUEL", "SEQUEL", "ALTERNATIVE", "PARENT"].includes(rType)) continue;
+          if (!["PREQUEL", "SEQUEL", "ALTERNATIVE", "PARENT", "SIDE_STORY", "SPIN_OFF"].includes(rType)) continue;
           if (edge.node.type !== "ANIME" || edge.node.isAdult) continue;
           const relId = edge.node.id;
           if (!visited.has(relId) && !queue.includes(relId)) {
@@ -558,6 +555,7 @@ interface AnimeDetail {
   tmdbId?: number | null;
   duration?: number | null;
   trailerId?: string | null;
+  nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
 }
 
 interface Episode {
@@ -691,12 +689,39 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const isRealEpisodes = epData.success && epData.data?.episodes?.length && !epData.data.episodes.every(e => (e as any).isPlaceholder);
       if (isRealEpisodes) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
-        const withRelease = sorted.map(ep => ({
-          ...ep,
-          isReleased: typeof ep.isReleased === "boolean"
-            ? ep.isReleased
-            : (ep.releasedDate ? new Date(ep.releasedDate).getTime() <= Date.now() : true)
-        }));
+        const nextEpNum = anime?.nextAiringEpisode?.episode || null;
+        const isNotYet = anime?.status === "NOT_YET_RELEASED";
+
+        let encounteredUnreleased = false;
+        const nowMs = Date.now();
+        const withRelease: Episode[] = sorted.map((ep) => {
+          let released = ep.isReleased !== false;
+
+          if (isNotYet) {
+            released = false;
+          } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextEpNum) {
+            released = false;
+          } else if (ep.releasedDate) {
+            const epDateMs = new Date(ep.releasedDate).getTime();
+            if (!isNaN(epDateMs) && epDateMs > nowMs) {
+              released = false;
+            }
+          }
+
+          if (encounteredUnreleased) {
+            released = false;
+          }
+
+          if (!released) {
+            encounteredUnreleased = true;
+          }
+
+          return {
+            ...ep,
+            isReleased: released,
+          };
+        });
+
         setEpisodes(prev => {
           const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
           const merged = [...otherSeasons, ...withRelease].sort((a, b) => {
@@ -716,7 +741,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     // Client-side fallback: fetch directly from browser APIs (AniZip, TMDB proxy, Kitsu)
     const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
     const epCount = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 12;
-    const clientEps = await fetchEpisodesClientSide(
+    const clientEpsRaw = await fetchEpisodesClientSide(
       seasonId,
       matchingSeason?.name || anime?.name || "",
       epCount,
@@ -724,6 +749,39 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       clientTmdbSeason ?? matchingSeason?.tmdbSeasonNumber,
       clientEpisodeOffset ?? matchingSeason?.episodeOffset
     );
+
+    const nextEpNum = anime?.nextAiringEpisode?.episode || null;
+    const isNotYet = anime?.status === "NOT_YET_RELEASED";
+    const nowMs = Date.now();
+
+    let clientEncounteredUnreleased = false;
+    const clientEps: Episode[] = clientEpsRaw.map((ep) => {
+      let released = ep.isReleased !== false;
+
+      if (isNotYet) {
+        released = false;
+      } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextEpNum) {
+        released = false;
+      } else if (ep.releasedDate) {
+        const epDateMs = new Date(ep.releasedDate).getTime();
+        if (!isNaN(epDateMs) && epDateMs > nowMs) {
+          released = false;
+        }
+      }
+
+      if (clientEncounteredUnreleased) {
+        released = false;
+      }
+
+      if (!released) {
+        clientEncounteredUnreleased = true;
+      }
+
+      return {
+        ...ep,
+        isReleased: released,
+      };
+    });
 
     if (clientEps.length > 0) {
       setEpisodes(prev => {
@@ -733,18 +791,38 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       loadedSeasonIds.current.add(seasonId);
     } else {
       // Final fallback: generate basic cards if browser also couldn't reach APIs
-      const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => ({
-        episodeId: `${seasonId}-${i + 1}`,
-        episodeNum: i + 1,
-        title: `Episode ${i + 1}`,
-        description: undefined,
-        thumbnail: undefined,
-        malUrl: undefined,
-        isFiller: false,
-        isReleased: true,
-        seasonId: seasonId,
-        seasonNum: 1,
-      }));
+      let fallbackEncounteredUnreleased = false;
+      const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => {
+        const epNum = i + 1;
+        let released = true;
+
+        if (isNotYet) {
+          released = false;
+        } else if (nextEpNum && epNum >= nextEpNum) {
+          released = false;
+        }
+
+        if (fallbackEncounteredUnreleased) {
+          released = false;
+        }
+
+        if (!released) {
+          fallbackEncounteredUnreleased = true;
+        }
+
+        return {
+          episodeId: `${seasonId}-${epNum}`,
+          episodeNum: epNum,
+          title: `Episode ${epNum}`,
+          description: undefined,
+          thumbnail: undefined,
+          malUrl: undefined,
+          isFiller: false,
+          isReleased: released,
+          seasonId: seasonId,
+          seasonNum: 1,
+        };
+      });
       setEpisodes(prev => {
         const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
         return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
@@ -770,9 +848,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     fetchFranchiseClientSide(Number(id))
       .then((clientNodes) => {
         if (clientNodes && clientNodes.length > 0) {
-          setFranchiseNodes(clientNodes);
+          setFranchiseNodes((prev) => (clientNodes.length >= prev.length ? clientNodes : prev));
           const mappedSeasons = mapNodesToSeasons(clientNodes, Number(id));
-          setAnime((prev) => (prev ? { ...prev, seasons: mappedSeasons } : prev));
+          setAnime((prev) => {
+            if (!prev) return prev;
+            const currentSeasons = prev.seasons || [];
+            return {
+              ...prev,
+              seasons: mappedSeasons.length >= currentSeasons.length ? mappedSeasons : currentSeasons,
+            };
+          });
         }
       })
       .catch(() => {});
@@ -814,11 +899,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
           setIsLoading(false);
-          setAnime(prev => prev ? { ...prev, ...a, seasons: a.seasons?.length ? a.seasons : prev.seasons } : a);
-          // Only use server franchise nodes if the client has none yet.
-          // The client-side BFS (15-hop) is more thorough than the server-side
-          // 2-level BFS, so we don't want to overwrite richer client data.
-          setFranchiseNodes(prev => prev.length > 0 ? prev : (data.data.franchiseNodes || []));
+          setAnime(prev => {
+            if (!prev) return a;
+            const prevCount = prev.seasons?.length || 0;
+            const newCount = a.seasons?.length || 0;
+            return {
+              ...prev,
+              ...a,
+              seasons: newCount >= prevCount ? a.seasons : prev.seasons,
+            };
+          });
+          setFranchiseNodes(prev => {
+            const serverNodes = data.data.franchiseNodes || [];
+            if (serverNodes.length >= prev.length) return serverNodes;
+            return prev;
+          });
           tmdbIdRef.current = a.tmdbId || null;
 
           const seasons = a.seasons || [];
@@ -1579,12 +1674,28 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
                 {/* ── Watch Order Section (franchise order reference) ── */}
                 {(() => {
-                  const visibleFranchiseNodes = franchiseNodes.filter(node => {
+                  const nodesToUse: FranchiseNode[] = (franchiseNodes && franchiseNodes.length > 1)
+                    ? franchiseNodes
+                    : (anime?.seasons && anime.seasons.length > 1)
+                      ? anime.seasons.map(s => ({
+                          id: Number(s.id) || Number(id),
+                          idMal: s.idMal || null,
+                          title: s.name,
+                          episodes: s.totalEpisodes,
+                          season: null,
+                          seasonLabel: s.seasonLabel,
+                          totalEpisodes: s.totalEpisodes,
+                          seasonYear: s.seasonYear || null,
+                          format: "TV",
+                        }))
+                      : franchiseNodes;
+
+                  const visibleFranchiseNodes = nodesToUse.filter(node => {
                     if (!node.title) return false;
                     if (String(node.id) === anime?.id) return true;
                     
                     const format = node.format;
-                    if (format === "TV" || format === "TV_SHORT" || format === "ONA" || format === "MOVIE") {
+                    if (!format || format === "TV" || format === "TV_SHORT" || format === "ONA" || format === "MOVIE") {
                       return true;
                     }
                     
@@ -1594,7 +1705,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       return plotKeywords.some(kw => lowerTitle.includes(kw));
                     }
                     
-                    return false;
+                    return true;
                   });
                   if (visibleFranchiseNodes.length <= 1) return null;
                   return (

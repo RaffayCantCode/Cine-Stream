@@ -45,21 +45,31 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const initialProgressRef = useRef(startProgress);
   const sources = useMemo(() => getStreamingSources(type, id, season, episode, initialProgressRef.current), [type, id, season, episode]);
   const sourcePrefKey = getSourcePrefKey(type, id, userId);
+  const globalPrefKey = `sv_src_global_${userId}_${type}`;
 
-  const [currentSource, setCurrentSource] = useState<StreamingSource>(sources[0]);
+  const [currentSource, setCurrentSource] = useState<StreamingSource>(() => {
+    try {
+      const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
+      if (saved && !forcedSource) {
+        const found = sources.find((s: StreamingSource) => s.name === saved);
+        if (found) return found;
+      }
+    } catch {}
+    return sources[0];
+  });
   const [isSourceLoaded, setIsSourceLoaded] = useState(false);
 
   useEffect(() => {
     if (status === "loading" || isSourceLoaded) return;
     try {
-      const saved = localStorage.getItem(sourcePrefKey);
+      const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
       if (saved && !forcedSource) {
         const found = sources.find(s => s.name === saved);
         if (found) setCurrentSource(found);
       }
     } catch {}
     setIsSourceLoaded(true);
-  }, [status, sourcePrefKey, sources, isSourceLoaded, forcedSource]);
+  }, [status, sourcePrefKey, globalPrefKey, sources, isSourceLoaded, forcedSource]);
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +81,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vixsrc;
   const lastSaveTimeRef = useRef<number>(0);
 
-  // Manual fallback: switch to the next source in the list
+  // Manual fallback: switch to the next source in the list (user initiated)
   const switchToNext = useCallback(() => {
     const currentIndex = sources.findIndex((s) => s.name === currentSource?.name);
     const nextIndex = (currentIndex + 1) % sources.length;
@@ -85,33 +95,21 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     setError(null);
     setIsLoading(true);
     setRetryCount(0);
-    try { localStorage.setItem(sourcePrefKey, nextSource.name); } catch {}
-  }, [sources, currentSource, sourcePrefKey]);
+    try {
+      localStorage.setItem(sourcePrefKey, nextSource.name);
+      localStorage.setItem(globalPrefKey, nextSource.name);
+    } catch {}
+  }, [sources, currentSource, sourcePrefKey, globalPrefKey]);
 
-  // Auto-dismiss spinner and handle timeout fallback
+  // Auto-dismiss spinner after timeout without forced source switching
   useEffect(() => {
     setShowSpinner(true);
-    let isLoaded = false;
-    
-    // Listen for iframe load externally or via state
-    const loadHandler = () => { isLoaded = true; };
-    iframeRef.current?.addEventListener('load', loadHandler);
-
     const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
-    
-    // 8 second aggressive fallback for heavy load times
-    const fallbackTimer = setTimeout(() => {
-      if (isLoading && !isLoaded) {
-        switchToNext();
-      }
-    }, 8000);
 
     return () => {
       clearTimeout(spinnerTimer);
-      clearTimeout(fallbackTimer);
-      iframeRef.current?.removeEventListener('load', loadHandler);
     };
-  }, [currentSource?.url, isLoading, switchToNext]);
+  }, [currentSource?.url, isLoading]);
 
   // Sources are all shown always — if an embed fails the user sees the error and can pick another
 
@@ -216,20 +214,18 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     return () => window.removeEventListener('message', handleMessage);
   }, [id, type, season, episode, onProgress]);
 
-
-
   useEffect(() => {
     setCurrentSource(prev => {
       let targetName = forcedSource || prev?.name;
       try {
-        const saved = localStorage.getItem(sourcePrefKey);
+        const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
         if (!forcedSource && saved) targetName = saved;
       } catch {}
       return sources.find(s => s.name === targetName) || sources[0];
     });
     setError(null);
     setIsLoading(true);
-  }, [sources, sourcePrefKey, forcedSource]);
+  }, [sources, sourcePrefKey, globalPrefKey, forcedSource]);
 
   const prevForceReloadRef = useRef(forceReloadCount);
   useEffect(() => {
@@ -245,7 +241,10 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     setIsLoading(true);
     setShowSources(false);
     setRetryCount(0);
-    try { localStorage.setItem(sourcePrefKey, source.name); } catch {}
+    try {
+      localStorage.setItem(sourcePrefKey, source.name);
+      localStorage.setItem(globalPrefKey, source.name);
+    } catch {}
   };
 
   const handleIframeError = useCallback(() => {

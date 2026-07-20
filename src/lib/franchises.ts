@@ -565,7 +565,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 635302, media_type: "anime", anilist_id: 112151, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png" },
       { id: 85937, media_type: "anime", anilist_id: 129874, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg" },
       { id: 85937, media_type: "anime", anilist_id: 142329, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg" },
-      { id: 85937, media_type: "anime", anilist_id: 145117, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx145117-Ifr7hYCRldjr.jpg" },
+      { id: 85937, media_type: "anime", anilist_id: 145139, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png" },
       { id: 85937, media_type: "anime", anilist_id: 166240, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png" },
     ]
   },

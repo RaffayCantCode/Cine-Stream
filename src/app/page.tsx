@@ -4,7 +4,7 @@ export const runtime = 'edge';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent, isTmdbAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import type { AnimeItem } from "@/components/AnimeCard";
@@ -20,6 +20,15 @@ const ContinueWatching = dynamic(
 );
 import { Sidebar } from "@/components/Sidebar";
 import { TrendingProvidersHub } from "@/components/TrendingProvidersHub";
+import { FRANCHISES } from "@/lib/franchises";
+
+const INITIAL_COLLECTIONS = FRANCHISES.map(f => ({
+  id: f.id,
+  name: f.name,
+  overview: f.overview,
+  poster_path: f.poster_path,
+  backdrop_path: f.backdrop_path,
+}));
 
 // Languages to exclude from home page (Indian content — most don't have working sources)
 const EXCLUDED_LANGS = new Set(["hi", "te", "ta", "ml", "kn", "bn", "mr", "gu", "pa", "ur"]);
@@ -173,7 +182,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(() => !globalHomeCache);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [animeList, setAnimeList] = useState<AnimeItem[]>(() => globalHomeCache?.animeList || []);
-  const [collections, setCollections] = useState<any[]>(() => globalHomeCache?.collections || []);
+  const [collections, setCollections] = useState<any[]>(() =>
+    (globalHomeCache?.collections && globalHomeCache.collections.length > 0)
+      ? globalHomeCache.collections
+      : INITIAL_COLLECTIONS
+  );
   const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
   const [revealedSections, setRevealedSections] = useState(() => globalHomeCache ? 8 : 0);
   const [moodSeed, setMoodSeed] = useState("");
@@ -390,7 +403,12 @@ export default function Home() {
           ? animeResponse.items.slice(0, 10)
           : initialAnimeItems;
 
+        const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
+          ? collectionsData.collections
+          : INITIAL_COLLECTIONS;
+
         setAnimeList(finalAnimeList);
+        setCollections(validCollections);
         setAnimeLoading(false);
 
         globalHomeCache = {
@@ -417,7 +435,7 @@ export default function Home() {
           recommended: recPool,
           genres: (rowsData.genres?.genres || []).slice(0, 18),
           animeList: finalAnimeList,
-          collections: collectionsData?.collections || [],
+          collections: validCollections,
         };
       } catch (e) {
         if (!cancelled) {
@@ -727,12 +745,52 @@ export default function Home() {
             <TrendingProvidersHub />
           </LazySection>
 
+          {/* ─── THEMATIC UNIVERSE ─── */}
+          <LazySection show={revealedSections >= 5} placeholderHeight={220}>
+            <SectionHeading title="Browse by Mood" subtitle="Pick your vibe" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3">
+              {[
+                { id: 'k-dramas',        name: 'K-Dramas',       color: '#C4006E', icon: '🌸', iconBg: '#E91E8C' },
+                { id: 'superhero',       name: 'Superheroes',    color: '#1565C0', icon: '⚡', iconBg: '#2979FF' },
+                { id: 'action-packed',   name: 'Adrenaline',     color: '#B74300', icon: '💥', iconBg: '#F4511E' },
+                { id: 'horror-thriller', name: 'Horror',         color: '#6A0000', icon: '👁️', iconBg: '#B71C1C' },
+                { id: 'sci-fi-fantasy',  name: 'Sci-Fi',         color: '#00607A', icon: '🛸', iconBg: '#0097A7' },
+                { id: 'rom-com',         name: 'Romance',        color: '#880037', icon: '💋', iconBg: '#E91E63' },
+                { id: 'fantasy-magic',   name: 'Fantasy',        color: '#1B5E20', icon: '🧙', iconBg: '#2E7D32' },
+                { id: 'feel-good-comedy',name: 'Comedy',         color: '#E65100', icon: '😂', iconBg: '#FF9800' },
+                { id: 'true-crime',      name: 'True Crime',     color: '#1A237E', icon: '🔪', iconBg: '#283593' },
+                { id: 'documentary',     name: 'Documentary',    color: '#4E342E', icon: '🎥', iconBg: '#6D4C41' },
+              ].map((g) => (
+                <Link
+                  key={g.id}
+                  href={`/browse/theme/${g.id}?shuffle=1${moodSeed ? `&seed=${encodeURIComponent(moodSeed)}` : ""}`}
+                  className="group relative overflow-hidden rounded-xl flex flex-col justify-between p-3.5 h-[92px] transition-all duration-300 hover:brightness-110 hover:scale-[1.02] active:scale-[0.98] ring-1 ring-white/[0.06] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
+                  style={{ backgroundColor: g.color }}
+                >
+                  {/* Title */}
+                  <span className="text-white font-black text-base leading-tight tracking-tight drop-shadow-sm z-10 relative">
+                    {g.name}
+                  </span>
+
+                  {/* Rotated poster-card element — Spotify style */}
+                  <div
+                    className="absolute bottom-[-8px] right-[-8px] w-[62px] h-[62px] rounded-lg shadow-2xl flex items-center justify-center text-3xl rotate-[20deg] group-hover:rotate-[15deg] group-hover:scale-110 transition-all duration-500"
+                    style={{ backgroundColor: g.iconBg, boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}
+                  >
+                    {g.icon}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </LazySection>
+
           {/* ─── EPIC FRANCHISES ─── */}
           {collections.length > 0 && (
-            <LazySection show={revealedSections >= 4} placeholderHeight={260}>
+            <LazySection show={revealedSections >= 6} placeholderHeight={300}>
               <SectionHeading
                 title="Epic Franchises"
-                subtitle="Binge your favorite universes"
+                subtitle="Binge your favorite universes in order"
+                href="/browse/franchises"
               />
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3 md:gap-4">
                 {collections.slice(0, 7).map((col) => {
@@ -773,59 +831,21 @@ export default function Home() {
                   );
                 })}
               </div>
-              {collections.length > 7 && (
-                <div className="mt-6 flex justify-center">
+              {collections.length > 0 && (
+                <div className="mt-8 flex justify-center">
                   <Link
                     href="/browse/franchises"
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/30 text-sm font-semibold transition-all duration-300 group"
+                    className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-gradient-to-r from-[#4B5694] via-[#5c6bb0] to-[#7288AE] text-white text-sm font-extrabold tracking-wide shadow-xl shadow-[#4B5694]/30 hover:shadow-2xl hover:shadow-[#4B5694]/50 ring-1 ring-white/20 hover:ring-white/40 hover:scale-[1.04] active:scale-95 transition-all duration-300 backdrop-blur-md overflow-hidden"
                   >
-                    View More Franchises
-                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                    <Layers className="w-4 h-4 text-white/90 group-hover:rotate-12 transition-transform duration-300" />
+                    <span>View More Franchises</span>
+                    <ChevronRight className="w-4 h-4 text-white/90 group-hover:translate-x-1 transition-transform duration-300" />
                   </Link>
                 </div>
               )}
             </LazySection>
           )}
-
-          {/* ─── THEMATIC UNIVERSE ─── */}
-          <LazySection show={revealedSections >= 5} placeholderHeight={220}>
-            <SectionHeading title="Browse by Mood" subtitle="Pick your vibe" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3">
-              {[
-                { id: 'k-dramas',        name: 'K-Dramas',       color: '#C4006E', icon: '🌸', iconBg: '#E91E8C' },
-                { id: 'superhero',       name: 'Superheroes',    color: '#1565C0', icon: '⚡', iconBg: '#2979FF' },
-                { id: 'action-packed',   name: 'Adrenaline',     color: '#B74300', icon: '💥', iconBg: '#F4511E' },
-                { id: 'horror-thriller', name: 'Horror',         color: '#6A0000', icon: '👁️', iconBg: '#B71C1C' },
-                { id: 'sci-fi-fantasy',  name: 'Sci-Fi',         color: '#00607A', icon: '🛸', iconBg: '#0097A7' },
-                { id: 'rom-com',         name: 'Romance',        color: '#880037', icon: '💋', iconBg: '#E91E63' },
-                { id: 'fantasy-magic',   name: 'Fantasy',        color: '#1B5E20', icon: '🧙', iconBg: '#2E7D32' },
-                { id: 'feel-good-comedy',name: 'Comedy',         color: '#E65100', icon: '😂', iconBg: '#FF9800' },
-                { id: 'true-crime',      name: 'True Crime',     color: '#1A237E', icon: '🔪', iconBg: '#283593' },
-                { id: 'documentary',     name: 'Documentary',    color: '#4E342E', icon: '🎥', iconBg: '#6D4C41' },
-              ].map((g) => (
-                <Link
-                  key={g.id}
-                  href={`/browse/theme/${g.id}?shuffle=1${moodSeed ? `&seed=${encodeURIComponent(moodSeed)}` : ""}`}
-                  className="group relative overflow-hidden rounded-xl flex flex-col justify-between p-3.5 h-[92px] transition-all duration-300 hover:brightness-110 hover:scale-[1.02] active:scale-[0.98] ring-1 ring-white/[0.06] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
-                  style={{ backgroundColor: g.color }}
-                >
-                  {/* Title */}
-                  <span className="text-white font-black text-base leading-tight tracking-tight drop-shadow-sm z-10 relative">
-                    {g.name}
-                  </span>
-
-                  {/* Rotated poster-card element — Spotify style */}
-                  <div
-                    className="absolute bottom-[-8px] right-[-8px] w-[62px] h-[62px] rounded-lg shadow-2xl flex items-center justify-center text-3xl rotate-[20deg] group-hover:rotate-[15deg] group-hover:scale-110 transition-all duration-500"
-                    style={{ backgroundColor: g.iconBg, boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}
-                  >
-                    {g.icon}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </LazySection>
-
 
           {/* ─── RECENTLY ADDED ─── */}
           <LazySection show={revealedSections >= 7} placeholderHeight={360}>

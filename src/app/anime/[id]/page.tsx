@@ -55,8 +55,8 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ query: INITIAL_QUERY, variables: { id: numId } }),
-      // Cache for 1 hour — same TTL as the old generateMetadata fetch
-      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3500),
+      next: { revalidate: 86400 },
     });
 
     if (!res.ok) throw new Error("AniList fetch failed");
@@ -80,7 +80,7 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       },
     };
 
-    const initialData: InitialAnimeData = {
+    const initialData: any = {
       id: String(anime.id),
       idMal: anime.idMal ? String(anime.idMal) : null,
       name: title,
@@ -92,7 +92,15 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       status: anime.status || null,
       genres: anime.genres || [],
       totalEpisodes: anime.episodes || 12,
-      seasons: [],
+      seasons: [{
+        id: String(anime.id),
+        name: title,
+        seasonLabel: "Season 1",
+        totalEpisodes: anime.episodes || 12,
+        isCurrent: true,
+        idMal: anime.idMal ? Number(anime.idMal) : null,
+        seasonYear: anime.seasonYear || null,
+      }],
       season: anime.season || null,
       seasonYear: anime.seasonYear || null,
       format: anime.format || null,
@@ -101,6 +109,7 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       duration: anime.duration || null,
       trailerId: (anime.trailer?.site === "youtube" ? anime.trailer.id : null) ?? null,
       bannerImage: anime.bannerImage || null,
+      nextAiringEpisode: anime.nextAiringEpisode || null,
     };
 
     return { meta, initialData };

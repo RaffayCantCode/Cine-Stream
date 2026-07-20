@@ -380,14 +380,11 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Relation types that constitute the same franchise
-const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL", "ALTERNATIVE", "PARENT"]);
+const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL", "ALTERNATIVE", "PARENT", "SIDE_STORY", "SPIN_OFF"]);
 // These formats get included in the season list
 const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "MOVIE"]);
 
 // Single AniList query that retrieves the node AND its 1-hop relations in one request.
-// We then do ONE follow-up batch for any new IDs discovered — 2 API calls total
-// instead of the old 10–30 call BFS. This reliably completes within the
-// Cloudflare edge time budget.
 const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   Media(id: $id, type: ANIME) {
     id idMal title { romaji english native } episodes season seasonYear format duration bannerImage coverImage { large extraLarge }
@@ -397,7 +394,7 @@ const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   }
 }`;
 
-// Batch query for up to 20 IDs in a single AniList request
+// Batch query for up to 50 IDs in a single AniList request
 const BATCH_RELATIONS_QUERY = `query ($ids: [Int]) {
   Page(page: 1, perPage: 50) {
     media(id_in: $ids, type: ANIME) {
@@ -441,7 +438,6 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
       const nid = node.id as number;
       if (!visited.has(nid)) {
         ids.push(nid);
-        // Pre-add from relation data so we have info even if the batch call fails
         visited.set(nid, {
           id: nid,
           idMal: node.idMal || null,
@@ -460,26 +456,30 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
   }
 
   try {
-    // Level 1: fetch the start node and its direct relations
+    // Level 1: fetch start node
     const level1 = await anilistQuery(RELATIONS_SINGLE_QUERY, { id: startId }, 1, 3600);
     const rootMedia = level1?.data?.Media;
     if (!rootMedia) return [];
 
     addNode(rootMedia);
-    const level2Ids = collectRelationIds(rootMedia);
+    let toFetch = collectRelationIds(rootMedia);
+    let depth = 0;
 
-    // Level 2: batch-fetch all discovered relation IDs in one request
-    if (level2Ids.length > 0) {
+    // Multi-level batch traversal (up to 6 levels deep, max 120 nodes)
+    while (toFetch.length > 0 && depth < 6 && visited.size < 120) {
+      depth++;
+      const batchIds = toFetch.splice(0, 50);
       try {
-        const level2 = await anilistQuery(BATCH_RELATIONS_QUERY, { ids: level2Ids.slice(0, 50) }, 1, 3600);
-        const medias = level2?.data?.Page?.media || [];
+        const batchRes = await anilistQuery(BATCH_RELATIONS_QUERY, { ids: batchIds }, 1, 3600);
+        const medias = batchRes?.data?.Page?.media || [];
         for (const media of medias) {
           addNode(media);
-          // Collect level-3 IDs (one more hop for long franchises like Fate, Naruto)
-          collectRelationIds(media);
+          const newIds = collectRelationIds(media);
+          toFetch.push(...newIds);
         }
       } catch (e) {
-        console.warn("[Franchise] Level 2 batch fetch failed:", e);
+        console.warn(`[Franchise] Level ${depth + 1} batch fetch failed:`, e);
+        break;
       }
     }
   } catch (e) {
@@ -776,72 +776,71 @@ export async function getAnimeDetails(
 
   // No local cache — rely on Cloudflare CDN via next: { revalidate } on fetch calls.
 
-  // Step 0: Fetch AniZip mappings for IDs (TMDB & MAL) first
+  // Step 0 & Step 1: Fetch AniZip mappings and main media metadata in parallel
   let aniZipMapping: any = null;
-  try {
-    const aniZipRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${id}`, {
-      signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-      next: { revalidate: 86400 } // Cache mappings for 24h
-    });
-    if (aniZipRes.ok) {
-      aniZipMapping = await aniZipRes.json();
-    }
-  } catch { /* ignore */ }
-
-  // Step 1: Fetch main media metadata for the requested ID
   let media: any = null;
-  if (!isMalInput || resolvedFromMal) {
-    try {
-      const q = `query ($id: Int) {
-        Media(id: $id, type: ANIME, isAdult: false) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-      episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
+
+  const aniZipPromise = fetch(`https://api.ani.zip/mappings?anilist_id=${id}`, {
+    signal: AbortSignal.timeout(3000),
+    headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+    next: { revalidate: 86400 } // Cache mappings for 24h
+  }).then(async res => res.ok ? res.json() : null).catch(() => null);
+
+  const mediaPromise = (!isMalInput || resolvedFromMal)
+    ? (async () => {
+        try {
+          const q = `query ($id: Int) {
+            Media(id: $id, type: ANIME, isAdult: false) {
+              id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+              episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
+            }
+          }`;
+          const data = await anilistQuery(q, { id: numId }, 1, 86400);
+          return data?.data?.Media || null;
+        } catch {
+          try {
+            const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, {
+              signal: AbortSignal.timeout(4000),
+              headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }
+            });
+            if (tRes.ok) {
+              const tData = await tRes.json();
+              if (tData) {
+                return {
+                  id: tData.id,
+                  idMal: tData.malId || null,
+                  isAdult: false,
+                  title: {
+                    romaji: tData.title?.romaji,
+                    english: tData.title?.english,
+                    native: tData.title?.native,
+                  },
+                  coverImage: {
+                    large: tData.image,
+                    extraLarge: tData.cover || tData.image,
+                  },
+                  episodes: tData.totalEpisodes,
+                  genres: tData.genres || [],
+                  averageScore: tData.rating || null,
+                  description: tData.description || "",
+                  status: tData.status || null,
+                  type: tData.type || "TV",
+                  format: tData.type || "TV",
+                  season: tData.season || null,
+                  seasonYear: tData.releaseDate || null,
+                  duration: tData.duration || null,
+                };
+              }
+            }
+          } catch { /* ignore */ }
+          return null;
         }
-      }`;
-      const data = await anilistQuery(q, { id: numId });
-      media = data?.data?.Media;
-    } catch {
-      // AniList failed — try Tatakai fallback
-      try {
-        const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, {
-          signal: AbortSignal.timeout(8000),
-          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }
-        });
-        if (tRes.ok) {
-          const tData = await tRes.json();
-          if (tData) {
-            media = {
-              id: tData.id,
-              idMal: tData.malId || null,
-              isAdult: false,
-              title: {
-                romaji: tData.title?.romaji,
-                english: tData.title?.english,
-                native: tData.title?.native,
-              },
-              coverImage: {
-                large: tData.image,
-                extraLarge: tData.cover || tData.image,
-              },
-              episodes: tData.totalEpisodes,
-              genres: tData.genres || [],
-              averageScore: tData.rating || null,
-              description: tData.description || "",
-              status: tData.status || null,
-              type: tData.type || "TV",
-              format: tData.type || "TV",
-              season: tData.season || null,
-              seasonYear: tData.releaseDate || null,
-              duration: tData.duration || null,
-            };
-          }
-        }
-      } catch {
-        // Fallthrough to Jikan
-      }
-    }
-  }
+      })()
+    : Promise.resolve(null);
+
+  const [aniZipResData, fetchedMedia] = await Promise.all([aniZipPromise, mediaPromise]);
+  aniZipMapping = aniZipResData;
+  media = fetchedMedia;
 
   // Jikan fallback for the main metadata (use ONLY if we have valid MAL ID)
   if (!media) {
@@ -956,22 +955,43 @@ export async function getAnimeDetails(
   const anime = transformAniList(media);
   if (!anime) return null;
 
-  // Step 2: Build the franchise graph to find all related entries (for the Season Guide dropdown)
-  let franchiseNodes: FranchiseNode[] = await buildFranchiseGraph(numId);
-  
+  // Step 2 & 2.5: Build franchise graph and resolve TMDB ID in parallel
+  let [rawFranchiseNodes, searchedTmdbId] = await Promise.all([
+    buildFranchiseGraph(numId).catch(() => []),
+    (async () => {
+      let tId: number | null = null;
+      if (aniZipMapping?.mappings?.themoviedb_id) {
+        tId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
+        if (isNaN(tId)) tId = null;
+      }
+      if (!tId) {
+        try {
+          tId = await searchTmdbShow(anime.name, anime.seasonYear || undefined);
+          if (!tId && anime.jname) {
+            tId = await searchTmdbShow(anime.jname, anime.seasonYear || undefined);
+          }
+        } catch {
+          tId = null;
+        }
+      }
+      return tId;
+    })()
+  ]);
+
+  let franchiseNodes: FranchiseNode[] = rawFranchiseNodes || [];
+  let tmdbId: number | null = searchedTmdbId;
+  let tmdbSeasonMap: Record<string, number> = {};
+
   if (franchiseNodes && franchiseNodes.length > 0) {
     const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-    
-    // Filter out the 3 unrelated/redundant Fate movies/OVAs
     const EXCLUDED_IDS = new Set([6922, 19165, 12565]);
     franchiseNodes = franchiseNodes.filter(n => !EXCLUDED_IDS.has(Number(n.id)));
 
     franchiseNodes.sort((a, b) => {
-      // Custom chronological order for the Fate series
       const FATE_ORDER = [10087, 11741, 356, 19603, 20792, 20791, 21718, 21719];
       const idxA = FATE_ORDER.indexOf(Number(a.id));
       const idxB = FATE_ORDER.indexOf(Number(b.id));
-      
+
       if (idxA !== -1 && idxB !== -1) return idxA - idxB;
       if (idxA !== -1) return -1;
       if (idxB !== -1) return 1;
@@ -987,9 +1007,8 @@ export async function getAnimeDetails(
       const sB = seasonOrder.indexOf(b.season || "FALL");
       return sA - sB;
     });
-
   }
-  
+
   if (!franchiseNodes || franchiseNodes.length === 0) {
     let aniZipCount = null;
     if (aniZipMapping?.episodes) {
@@ -1008,39 +1027,16 @@ export async function getAnimeDetails(
     }];
   }
 
-  // Step 2.5: Search TMDB for the anime to use as primary season structure
-  let tmdbId: number | null = null;
-  let tmdbSeasonMap: Record<string, number> = {};
-
-  if (aniZipMapping?.mappings?.themoviedb_id) {
-    tmdbId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
-    if (isNaN(tmdbId)) tmdbId = null;
-  }
-
-  if (!tmdbId) {
-    try {
-      tmdbId = await searchTmdbShow(anime.name, anime.seasonYear || undefined);
-      if (!tmdbId && anime.jname) {
-        tmdbId = await searchTmdbShow(anime.jname, anime.seasonYear || undefined);
-      }
-    } catch {
-      tmdbId = null;
-    }
-  }
-
   // Step 3: Build season list from the AniList franchise graph
   const baseSeasons = buildSeasonList(franchiseNodes, numId);
   const mappedSeasons: SeasonInfo[] = [];
   const uniqueTmdbIds = new Set<number>();
-  
-  // Also, add ALL franchise nodes as independent seasons in the Season Guide.
-  // We don't map them here to episodes, we just use them for navigation.
-  
+
   // Resolve TMDB show IDs for each AniList season in parallel
   const tmdbIds: Record<string, number | null> = {};
   const allAniZipMappings: Record<string, any> = {};
   let hasFailedAniZip = false;
-  
+
   await Promise.all(
     baseSeasons.map(async (s) => {
       try {
@@ -1052,7 +1048,7 @@ export async function getAnimeDetails(
         } else {
           try {
             const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
-              signal: AbortSignal.timeout(6000),
+              signal: AbortSignal.timeout(2000),
               headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
               next: { revalidate: 86400 }
             });
