@@ -99,7 +99,7 @@ export const Sidebar = memo(function Sidebar() {
                         <p className="text-sm font-semibold text-white truncate">{user.name}</p>
                       </div>
                       <button
-                        onClick={() => { signOut(); setProfileOpen(false); }}
+                        onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors"
                       >
                         <LogOut className="w-4 h-4" />
@@ -265,7 +265,7 @@ export const Sidebar = memo(function Sidebar() {
                         )}
                       </div>
                       <button
-                        onClick={() => { signOut(); setProfileOpen(false); }}
+                        onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors"
                       >
                         <LogOut className="w-4 h-4" />

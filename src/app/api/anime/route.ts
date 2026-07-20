@@ -35,6 +35,17 @@ export async function GET(request: NextRequest) {
       items = await getPopularAnime(page, genre);
     }
 
+    if (items.length === 0) {
+      return Response.json({
+        success: true,
+        data: { items },
+      }, { 
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        }
+      });
+    }
+
     return Response.json({
       success: true,
       data: { items },

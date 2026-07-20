@@ -117,7 +117,12 @@ function SearchContent() {
             ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
             : Promise.resolve({ results: [] }),
           fetchAnime
-            ? fetchClientAnime("search", 1, "", debouncedQuery).then(res => ({ success: true, data: { animes: res.items } })).catch(() => ({ success: false, data: { animes: [] } }))
+            ? fetchJson<{ success: boolean; data?: { animes: AnimeItem[] } }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`, { signal })
+                .then(res => (res.success && res.data?.animes?.length ? res : fetchClientAnime("search", 1, "", debouncedQuery).then(c => ({ success: true, data: { animes: c.items } }))))
+                .catch(async () => {
+                  const clientRes = await fetchClientAnime("search", 1, "", debouncedQuery).catch(() => ({ items: [] }));
+                  return { success: true, data: { animes: clientRes.items } };
+                })
             : Promise.resolve({ success: true, data: { animes: [] } }),
         ]);
 

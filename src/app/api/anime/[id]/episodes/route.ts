@@ -405,8 +405,10 @@ export async function GET(
 
         // Calculate needed TMDB seasons early based on mapRelativeToTmdb
         let dynamicTotalEpisodes = safeTotalEpisodes;
-        // True episode count from AniList (null if unknown/airing)
+        // True episode count from AniList (null if unknown/airing with no count)
         const knownEpisodeCount = season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
+        // Is this season finished (FINISHED status)?
+        const isSeasonFinished = season.status === "FINISHED" || (meta?.anime?.status === "FINISHED");
         if (tmdbSeasonsList.length > 0) {
           const currentTmdbSeason = tmdbSeasonsList.find((s: any) => s.season_number === (tmdbSeasonNum || 1));
           const nextSeasonInTMDB = (meta?.seasons || []).find((s: any) => 
@@ -422,8 +424,18 @@ export async function GET(
             const futureSeasons = tmdbSeasonsList.filter((s: any) => s.season_number >= (tmdbSeasonNum || 1));
             const totalTmdbAvailable = Math.max(futureSeasons.reduce((acc: number, s: any) => acc + s.episode_count, 0) - episodeOffset, 0);
 
-            // If TMDB or AniList has a higher episode count, use the maximum so no episodes are cut short!
-            dynamicTotalEpisodes = Math.max(knownEpisodeCount || 0, currentTmdbEpCount, totalTmdbAvailable, safeTotalEpisodes);
+            if (knownEpisodeCount) {
+              // AniList has a definitive count — use it as the ceiling.
+              // Only allow TMDB to expand beyond AniList if TMDB count is higher AND the season is still airing.
+              if (isSeasonFinished) {
+                dynamicTotalEpisodes = knownEpisodeCount;
+              } else {
+                dynamicTotalEpisodes = Math.max(knownEpisodeCount, Math.min(currentTmdbEpCount, totalTmdbAvailable));
+              }
+            } else {
+              // AniList episode count unknown — trust TMDB
+              dynamicTotalEpisodes = Math.max(currentTmdbEpCount, totalTmdbAvailable, safeTotalEpisodes);
+            }
           }
           // Absolute safety cap: never return more than 1500 episodes at once
           dynamicTotalEpisodes = Math.min(Math.max(dynamicTotalEpisodes, 1), 1500);

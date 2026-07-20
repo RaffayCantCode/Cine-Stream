@@ -89,8 +89,7 @@ function filterUnreleased(items: AnimeItem[]): AnimeItem[] {
   return items.filter(item => {
     const s = (item as any).status;
     if (!s) return true;
-    if (s === "NOT_YET_RELEASED" || s === "CANCELLED") return false;
-    if (s === "Not yet aired" || s === "Cancelled") return false;
+    if (s === "CANCELLED" || s === "Cancelled") return false;
     return true;
   });
 }
@@ -120,19 +119,19 @@ const CLIENT_ANIME_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 export async function fetchClientAnime(category: string, page = 1, genre = "", q = ""): Promise<{ items: AnimeItem[], hasMore: boolean }> {
   const cacheKey = `anime_${category}_${page}_${genre}_${q}`;
 
-  // 1) In-memory cache check
+  // 1) In-memory cache check (only if items exist!)
   const cachedMemory = clientAnimeCache.get(cacheKey);
-  if (cachedMemory && cachedMemory.expires > Date.now()) {
+  if (cachedMemory && cachedMemory.expires > Date.now() && cachedMemory.data.items?.length > 0) {
     return cachedMemory.data;
   }
 
-  // 2) sessionStorage check
+  // 2) sessionStorage check (only if items exist!)
   if (typeof window !== "undefined") {
     try {
       const stored = sessionStorage.getItem(`sv_client_${cacheKey}`);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed && parsed.expires > Date.now()) {
+        if (parsed && parsed.expires > Date.now() && parsed.data?.items?.length > 0) {
           clientAnimeCache.set(cacheKey, parsed);
           return parsed.data;
         }
@@ -140,6 +139,26 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     } catch {}
   }
 
+  // 3) Server API proxy fetch first (runs reliably on Cloudflare server Edge)
+  try {
+    const serverUrl = `/api/anime?category=${encodeURIComponent(category)}&page=${page}&genre=${encodeURIComponent(genre)}&q=${encodeURIComponent(q)}`;
+    const serverRes = await fetch(serverUrl, { signal: AbortSignal.timeout(6000) });
+    if (serverRes.ok) {
+      const serverData = await serverRes.json();
+      if (serverData.success && Array.isArray(serverData.data?.items) && serverData.data.items.length > 0) {
+        const result = { items: serverData.data.items, hasMore: serverData.data.items.length > 0 };
+        clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+          } catch {}
+        }
+        return result;
+      }
+    }
+  } catch { /* ignore server proxy error and try direct client query */ }
+
+  // 4) Direct browser query fallback (AniList / Jikan)
   try {
     let items: AnimeItem[] = [];
     if (category === "search" || q) {
@@ -160,16 +179,17 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     items = filterUnreleased(deduplicateAnime(items));
     const result = { items, hasMore: items.length > 0 };
 
-    clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
-    if (typeof window !== "undefined") {
-      try {
-        sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
-      } catch {}
+    if (items.length > 0) {
+      clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+        } catch {}
+      }
     }
     return result;
   } catch (e) {
     console.warn("AniList direct fetch failed, falling back to Jikan:", e);
-    // Fallback to Jikan directly from client
     let url = `${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`;
     if (category === "search" || q) {
       url = `${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`;

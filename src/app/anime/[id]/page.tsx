@@ -45,7 +45,38 @@ interface InitialAnimeData {
 }
 
 const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: string): Promise<{ meta: Metadata; initialData: InitialAnimeData | null }> {
-  const numId = parseInt(id, 10);
+  let targetId = id;
+  if (id.startsWith("mal-")) {
+    const malIdNum = parseInt(id.replace("mal-", ""), 10);
+    if (!isNaN(malIdNum)) {
+      try {
+        const q = `query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { id } }`;
+        const r = await fetch('https://graphql.anilist.co', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ query: q, variables: { idMal: malIdNum } }),
+          signal: AbortSignal.timeout(2000),
+        }).then(res => res.json()).catch(() => null);
+        if (r?.data?.Media?.id) targetId = String(r.data.Media.id);
+        else targetId = String(malIdNum);
+      } catch { targetId = String(malIdNum); }
+    }
+  } else if (id.startsWith("tmdb-")) {
+    const parts = id.split("-");
+    if (parts.length >= 2) {
+      const tmdbIdNum = parseInt(parts[1], 10);
+      if (!isNaN(tmdbIdNum)) {
+        try {
+          const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${tmdbIdNum}`, {
+            signal: AbortSignal.timeout(2000),
+          }).then(res => res.json()).catch(() => null);
+          if (azRes?.mappings?.anilist_id) targetId = String(azRes.mappings.anilist_id);
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
+  const numId = parseInt(targetId, 10);
   if (isNaN(numId)) {
     return { meta: { title: "Anime - CineStream" }, initialData: null };
   }

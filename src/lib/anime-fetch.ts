@@ -246,10 +246,7 @@ function filterUnreleased(items: AnimeItem[]): AnimeItem[] {
   return items.filter(item => {
     const s = item.status;
     if (!s) return true;
-    // AniList statuses
-    if (s === "NOT_YET_RELEASED" || s === "CANCELLED") return false;
-    // Jikan statuses
-    if (s === "Not yet aired" || s === "Cancelled") return false;
+    if (s === "CANCELLED" || s === "Cancelled") return false;
     return true;
   });
 }
@@ -771,6 +768,30 @@ export async function getAnimeDetails(
     }
   }
 
+  let resolvedFromTmdb = false;
+  if (id.startsWith("tmdb-")) {
+    const parts = id.split("-");
+    if (parts.length >= 2) {
+      const tmdbIdNum = parseInt(parts[1], 10);
+      if (!isNaN(tmdbIdNum)) {
+        try {
+          const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${tmdbIdNum}`, {
+            signal: AbortSignal.timeout(3000),
+            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+            next: { revalidate: 86400 },
+          });
+          if (azRes.ok) {
+            const azData = await azRes.json();
+            if (azData?.mappings?.anilist_id) {
+              id = String(azData.mappings.anilist_id);
+              resolvedFromTmdb = true;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
   const numId = parseInt(id, 10);
   if (isNaN(numId)) return null;
 
@@ -1007,6 +1028,16 @@ export async function getAnimeDetails(
       const sB = seasonOrder.indexOf(b.season || "FALL");
       return sA - sB;
     });
+
+    const targetNode = franchiseNodes.find(n => String(n.id) === String(numId));
+    if (targetNode) {
+      let realCount = media.episodes || null;
+      if (aniZipMapping?.episodes) {
+        const keys = Object.keys(aniZipMapping.episodes).map(Number).filter(k => !isNaN(k));
+        if (keys.length > 0) realCount = Math.max(...keys, realCount || 0);
+      }
+      if (realCount) targetNode.episodes = Math.max(targetNode.episodes || 0, realCount);
+    }
   }
 
   if (!franchiseNodes || franchiseNodes.length === 0) {

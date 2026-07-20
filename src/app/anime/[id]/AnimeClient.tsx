@@ -46,7 +46,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "anime-v13-dynamic-limit";
+const ANIME_API_VERSION = "anime-v14-fix-caches";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -1738,6 +1738,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           const nodeId = String(node.id);
                           const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
                           const formatLabel = node.format === "TV" ? "TV" : node.format || "";
+                          const nodeEpCount = (isActive && currentSeasonEps.length > 0) ? currentSeasonEps.length : (node.episodes || "?");
                           return (
                             <Link
                               key={node.id}
@@ -1761,7 +1762,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                                 <div className="flex items-center gap-2 mt-1 text-[10px] text-white/35">
                                   <span className="uppercase font-black text-[#9EB2D1]">{formatLabel || "Entry"}</span>
                                   {node.seasonYear && <span>{node.seasonYear}</span>}
-                                  <span>{node.episodes || "?"} eps</span>
+                                  <span>{nodeEpCount} eps</span>
                                 </div>
                               </div>
                               <ChevronRight className="w-3.5 h-3.5 text-white/25" />

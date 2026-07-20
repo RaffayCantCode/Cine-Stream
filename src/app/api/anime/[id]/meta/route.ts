@@ -20,7 +20,12 @@ export async function GET(
     if (!data || !data.anime || !data.seasons || data.seasons.length === 0) {
       return Response.json(
         { error: "Anime details unavailable", success: false },
-        { status: 404, headers: animeMetaCacheHeaders }
+        { 
+          status: 404, 
+          headers: {
+            "Cache-Control": "no-store, max-age=0",
+          }
+        }
       );
     }
 

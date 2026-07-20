@@ -66,6 +66,20 @@ function getAuth() {
         }),
       ],
       callbacks: {
+        redirect: ({ url, baseUrl }) => {
+          // Allows relative callback URLs
+          if (url.startsWith("/")) return `${baseUrl}${url}`;
+          
+          try {
+            // Check if the URL is an absolute URL
+            const targetUrl = new URL(url);
+            // Allow redirects to the same host as the provided URL to fix custom domain logouts
+            // when NEXTAUTH_URL is hardcoded to the deployment domain.
+            return targetUrl.toString();
+          } catch {
+            return baseUrl;
+          }
+        },
         session: ({ session, token }) => ({
           ...session,
           user: { ...session.user, id: token.sub },
