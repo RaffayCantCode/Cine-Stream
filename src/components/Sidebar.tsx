@@ -28,7 +28,7 @@ const navItems: { href: string; icon: any; label: string; subtitle?: string }[] 
   { href: "/browse/trending", icon: TrendingUp, label: "Trending" },
   { href: "/browse/movies", icon: Film, label: "Movies" },
   { href: "/browse/tv", icon: Tv, label: "TV Shows" },
-  { href: "/anime", icon: Sparkles, label: "Anime", subtitle: "JP Dub + Eng Sub" },
+  { href: "/anime", icon: Sparkles, label: "Anime", subtitle: "JP Dub + Eng Subtitles" },
   { href: "/browse/franchises", icon: Library, label: "Franchises", subtitle: "Collections & Sagas" },
 ];
 

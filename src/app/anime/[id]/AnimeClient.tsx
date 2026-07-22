@@ -1924,10 +1924,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           {sliceEps.map((ep, i) => {
                             const isSelected = selectedEp?.episodeId === ep.episodeId;
                             const isUnreleased = ep.isReleased === false;
-                            const thumbSrc = ep.thumbnail
-                              || (isSingleItem && displayPoster)
-                              || displayPoster
-                              || null;
+                            const thumbSrc = isUnreleased
+                              ? (ep.thumbnail || null)
+                              : (ep.thumbnail || (isSingleItem && displayPoster) || displayPoster || null);
                             const displayEpTitle = ep.title || (isSingleItem ? displayTitle : `Episode ${ep.episodeNum}`);
                             return (
                               <div

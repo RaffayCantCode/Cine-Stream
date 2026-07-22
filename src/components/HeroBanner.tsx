@@ -4,7 +4,7 @@ import { memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Play, Info, Star, Calendar } from "lucide-react";
-import { isTmdbAnime } from "@/lib/utils";
+import { isTmdbAnime, cn } from "@/lib/utils";
 
 interface MediaItem {
   id: number;
@@ -63,29 +63,25 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               style={{
                 transform: "scale(1.02)",
                 animation: "fade-in-up 1s ease-out both",
-                // Darken the raw art itself so bright/white backdrops (like
-                // high-key anime or action shots) never blow out the text
-                // sitting on top of them, no matter the gradient stack below.
                 filter: "brightness(0.82) saturate(1.05)",
               }}
               priority
             />
           </div>
 
-          {/* Bottom -> top scrim (always full-bleed, strongest near the text) */}
+          {/* Bottom -> top scrim */}
           <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
 
-          {/* Left -> right scrim, desktop text column */}
+          {/* Left -> right scrim */}
           <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-background/82 via-background/35 to-transparent" />
 
-          {/* Mobile: text is centered near the bottom, so widen the bottom scrim instead */}
+          {/* Mobile scrim */}
           <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
 
-          {/* Soft top edge so header/nav overlay never fights bright sky/highlights */}
+          {/* Soft top edge */}
           <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/35 to-transparent" />
 
-          {/* Radial spotlight scrim centered on where the text block actually sits,
-              guarantees contrast even if the gradients above land on a bright patch */}
+          {/* Radial spotlight scrim */}
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
@@ -94,7 +90,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
             }}
           />
 
-          {/* Bottom blend — extends below the section edge into the page background */}
+          {/* Bottom blend */}
           <div
             className="absolute inset-x-0 bg-gradient-to-t from-background via-background/70 to-transparent"
             style={{ bottom: "0rem", height: "5rem" }}
@@ -110,20 +106,29 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           style={SECTION_STYLE}
         >
           {/* Tags row */}
-          <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 mb-2">
+          <div className="flex flex-wrap justify-center md:justify-start items-center gap-2.5 mb-2.5">
             {rating > 0 && item.vote_count && item.vote_count > 20 && (
-              <span className="flex items-center gap-1 bg-black/55 backdrop-blur-sm text-amber-400 text-xs font-extrabold px-2 py-1 rounded-md border border-white/10 shadow-sm">
-                <Star className="w-3 h-3 fill-current" />
+              <span className="flex items-center gap-1 bg-black/55 backdrop-blur-sm text-amber-400 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-white/10 shadow-sm">
+                <Star className="w-3.5 h-3.5 fill-current" />
                 {rating.toFixed(1)}
               </span>
             )}
             {year && (
-              <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white/90 text-xs font-semibold px-2 py-1 rounded-md border border-white/10">
-                <Calendar className="w-3 h-3" />
+              <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white/90 text-xs font-semibold px-2.5 py-1 rounded-lg border border-white/10">
+                <Calendar className="w-3.5 h-3.5" />
                 {year}
               </span>
             )}
-            <span className="bg-black/40 backdrop-blur-sm text-white/85 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider border border-white/10">
+            <span
+              className={cn(
+                "flex items-center gap-1 text-xs font-extrabold px-2.5 py-1 rounded-lg uppercase tracking-wider backdrop-blur-md border transition-all shadow-sm",
+                isAnime
+                  ? "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/30 shadow-fuchsia-500/10"
+                  : isMovie
+                  ? "bg-blue-500/20 text-blue-300 border-blue-400/30 shadow-blue-500/10"
+                  : "bg-emerald-500/20 text-emerald-300 border-emerald-400/30 shadow-emerald-500/10"
+              )}
+            >
               {isAnime ? "Anime" : isMovie ? "Movie" : "TV Show"}
             </span>
           </div>

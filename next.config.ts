@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   reactStrictMode: true,
+  generateBuildId: async () => `build-${Date.now()}`,
   images: {
     minimumCacheTTL: 86400,
     formats: ["image/webp", "image/avif"],
@@ -73,15 +74,15 @@ const nextConfig: NextConfig = {
   experimental: {
     scrollRestoration: true,
     staleTimes: {
-      dynamic: 30,
-      static: 300,
+      dynamic: 0,
+      static: 60,
     },
   },
-  // Security headers
+  // Security & Cache control headers
   async headers() {
     return [
       {
-        source: "/(.*)",
+        source: "/:path*",
         headers: [
           {
             key: "X-Content-Type-Options",
@@ -106,6 +107,19 @@ const nextConfig: NextConfig = {
           {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+          },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
           },
         ],
       },

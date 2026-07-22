@@ -5,7 +5,7 @@ import { useState, useEffect, use, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { GridMediaCard } from "@/components/GridMediaCard";
-import { Loader2, User } from "lucide-react";
+import { Loader2, User, ChevronDown, ChevronUp } from "lucide-react";
 import { fetchJson } from "@/lib/utils";
 import { useContentMode } from "@/context/ContentModeContext";
 import { ScrollableGridRow } from "@/components/ScrollableGridRow";
@@ -17,12 +17,28 @@ interface Person {
   biography: string;
   profile_path: string | null;
   known_for_department: string;
+  gender?: number;
   birthday: string | null;
+  deathday?: string | null;
   place_of_birth: string | null;
   combined_credits: {
     cast: any[];
     crew: any[];
   };
+}
+
+function getAge(birthday: string, deathday?: string | null): number | null {
+  if (!birthday) return null;
+  const birth = new Date(birthday);
+  if (isNaN(birth.getTime())) return null;
+  const end = deathday ? new Date(deathday) : new Date();
+  if (isNaN(end.getTime())) return null;
+  let age = end.getFullYear() - birth.getFullYear();
+  const m = end.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && end.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age >= 0 ? age : null;
 }
 
 function BiographyText({ text }: { text: string }) {
@@ -44,6 +60,64 @@ function BiographyText({ text }: { text: string }) {
         </button>
       )}
     </div>
+  );
+}
+
+function CareerTimeline({ sortedByDate, department }: { sortedByDate: any[]; department: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const INITIAL_COUNT = 8;
+  const isLong = sortedByDate.length > INITIAL_COUNT;
+  const itemsToDisplay = isExpanded ? sortedByDate : sortedByDate.slice(0, INITIAL_COUNT);
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-6 max-w-4xl">
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-5 bg-primary rounded-full" />
+          <h2 className="text-xl font-bold tracking-tight text-white">Career Timeline</h2>
+        </div>
+        <span className="text-xs font-semibold text-white/40 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+          {sortedByDate.length} {sortedByDate.length === 1 ? "Credit" : "Credits"}
+        </span>
+      </div>
+
+      <div className="max-w-4xl relative border border-white/10 rounded-2xl bg-white/[0.02] overflow-hidden transition-all duration-300">
+        <div className="divide-y divide-white/5">
+          {itemsToDisplay.map((item, index) => {
+            const date = item.release_date || item.first_air_date;
+            const year = date ? new Date(date).getFullYear() : "TBA";
+            const link = item.media_type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
+            return (
+              <div key={`timeline-${item.id}-${index}`} className="flex items-center gap-4 p-4 hover:bg-white/[0.04] transition-colors">
+                <span className="text-white/40 font-mono text-sm w-12 shrink-0">{year}</span>
+                <a href={link} className="flex-1 font-bold text-white hover:text-primary transition-colors line-clamp-1">
+                  {item.title || item.name}
+                </a>
+                <span className="text-xs text-white/30 hidden sm:block">
+                  {department === "Directing" ? "Director" : (item.character || "Self")}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Expand / Collapse Button Bar */}
+        {isLong && (
+          <div className="relative">
+            {!isExpanded && (
+              <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-t from-[#0d1027] via-[#0d1027]/70 to-transparent pointer-events-none" />
+            )}
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-full py-3.5 px-4 bg-white/[0.03] hover:bg-white/[0.07] border-t border-white/10 text-xs font-bold text-primary hover:text-white flex items-center justify-center gap-2 transition-all duration-200 focus:outline-none"
+            >
+              <span>{isExpanded ? "Show Less" : `Show Full Career Timeline (${sortedByDate.length} items)`}</span>
+              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -176,6 +250,11 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 {person.birthday && (
                   <span className="flex items-center before:content-['•'] before:mr-4 before:text-white/20">
                     {new Date(person.birthday).toLocaleDateString()}
+                    {(() => {
+                      const age = getAge(person.birthday, person.deathday);
+                      if (age === null) return "";
+                      return person.deathday ? ` (aged ${age})` : ` (age ${age})`;
+                    })()}
                   </span>
                 )}
                 {person.place_of_birth && (
@@ -203,33 +282,10 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
 
           {/* Career Timeline */}
           {sortedByDate.length > 0 && (
-            <section>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-1 h-5 bg-primary rounded-full" />
-                <h2 className="text-xl font-bold tracking-tight text-white">Career Timeline</h2>
-              </div>
-              <div className="max-w-4xl border border-white/10 rounded-2xl bg-white/[0.02] overflow-hidden">
-                {sortedByDate.map((item, index) => {
-                  const date = item.release_date || item.first_air_date;
-                  const year = date ? new Date(date).getFullYear() : "TBA";
-                  const link = item.media_type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
-                  return (
-                    <div key={`timeline-${item.id}-${index}`} className="flex items-center gap-4 p-4 border-b border-white/5 hover:bg-white/[0.04] transition-colors">
-                      <span className="text-white/40 font-mono text-sm w-12 shrink-0">{year}</span>
-                      <a href={link} className="flex-1 font-bold text-white hover:text-primary transition-colors line-clamp-1">
-                        {item.title || item.name}
-                      </a>
-                      <span className="text-xs text-white/30 hidden sm:block">
-                        {person.known_for_department === "Directing" ? "Director" : (item.character || "Self")}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+            <CareerTimeline sortedByDate={sortedByDate} department={person.known_for_department || "Acting"} />
           )}
 
-          <SimilarPeople id={person.id} department={person.known_for_department || "Acting"} />
+          <SimilarPeople id={person.id} department={person.known_for_department || "Acting"} gender={person.gender} />
 
         </div>
       </main>

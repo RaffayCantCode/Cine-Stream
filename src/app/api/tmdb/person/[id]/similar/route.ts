@@ -27,24 +27,26 @@ export async function GET(
       return NextResponse.json({ results: [] });
     }
 
-    const isDirector = person.known_for_department === "Directing";
+    const isDirector = person.known_for_department === "Directing" || (person.known_for_department !== "Acting" && person.known_for_department !== "Production");
+    const personGender = person.gender; // 1 = female, 2 = male
     const credits = isDirector ? person.combined_credits.crew : person.combined_credits.cast;
 
     if (!credits || credits.length === 0) {
       return NextResponse.json({ results: [] });
     }
 
-    // 2. Get top 3 works (mix of popular and highly rated)
+    // 2. Get top 4 works (mix of popular and highly rated)
     const topWorks = credits
-      .filter((c: any) => (isDirector ? (c.job === "Director" || c.job === "Series Director") : true) && c.vote_count > 100)
+      .filter((c: any) => (isDirector ? (c.job === "Director" || c.job === "Series Director") : true) && c.vote_count > 50)
       .sort((a: any, b: any) => (b.popularity + (b.vote_average * 10)) - (a.popularity + (a.vote_average * 10)))
-      .slice(0, 3);
+      .slice(0, 4);
 
     if (topWorks.length === 0) {
       return NextResponse.json({ results: [] });
     }
 
     const similarPeopleMap = new Map<number, any>();
+    const fallbackPeopleMap = new Map<number, any>();
 
     // 3 & 4. For each top work, fetch similar items and their credits
     await Promise.all(
@@ -67,10 +69,17 @@ export async function GET(
                     }
                   });
                 } else if (!isDirector && creditsData?.cast) {
-                  const topCast = creditsData.cast.slice(0, 5);
-                  topCast.forEach((c: any) => {
+                  creditsData.cast.forEach((c: any) => {
                     if (c.id !== Number(id) && c.profile_path) {
-                      similarPeopleMap.set(c.id, c);
+                      fallbackPeopleMap.set(c.id, c);
+                      // Smart gender matching
+                      if (personGender === 1 && c.gender === 1) {
+                        similarPeopleMap.set(c.id, c);
+                      } else if (personGender === 2 && c.gender === 2) {
+                        similarPeopleMap.set(c.id, c);
+                      } else if (personGender !== 1 && personGender !== 2) {
+                        similarPeopleMap.set(c.id, c);
+                      }
                     }
                   });
                 }
@@ -84,6 +93,15 @@ export async function GET(
         }
       })
     );
+
+    // If matching gender map is small (< 5), supplement with fallback actors
+    if (!isDirector && similarPeopleMap.size < 5) {
+      fallbackPeopleMap.forEach((p, pId) => {
+        if (!similarPeopleMap.has(pId)) {
+          similarPeopleMap.set(pId, p);
+        }
+      });
+    }
 
     // 6. Return top 10 similar people
     const similarPeople = Array.from(similarPeopleMap.values())

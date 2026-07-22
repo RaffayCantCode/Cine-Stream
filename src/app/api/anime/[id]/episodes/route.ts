@@ -89,17 +89,34 @@ function parseSeasonAndOffsetFromTitle(title: string): { tmdbSeason: number; epi
   return { tmdbSeason: 1, episodeOffset: 0 };
 }
 
-function enrichEpisodeReleaseStatus(episodes: any[], meta: any): any[] {
+function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): any[] {
   const nowMs = Date.now();
+  const currentYear = new Date().getFullYear();
 
   const nextAiringEpNum = meta?.anime?.nextAiringEpisode?.episode || null;
-  const isNotYetReleased = meta?.anime?.status === "NOT_YET_RELEASED";
+  const isNotYetReleased = meta?.anime?.status === "NOT_YET_RELEASED" || season?.status === "NOT_YET_RELEASED";
+
+  // Detect if the entire season is upcoming (not yet released or Episode 1 in future)
+  let seasonIsUpcoming = isNotYetReleased || Boolean(season?.seasonYear && season.seasonYear > currentYear);
+
+  if (!seasonIsUpcoming && episodes.length > 0) {
+    const firstEp = episodes[0];
+    if (firstEp.releasedDate) {
+      const firstEpDateMs = new Date(firstEp.releasedDate).getTime();
+      if (!isNaN(firstEpDateMs) && firstEpDateMs > nowMs) {
+        seasonIsUpcoming = true;
+      }
+    }
+    if (nextAiringEpNum === 1) {
+      seasonIsUpcoming = true;
+    }
+  }
 
   let encounteredUnreleased = false;
   return episodes.map((ep: any) => {
     let isReleased = ep.isReleased !== false;
 
-    if (isNotYetReleased) {
+    if (seasonIsUpcoming) {
       isReleased = false;
     } else if (nextAiringEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextAiringEpNum) {
       isReleased = false;
@@ -116,6 +133,20 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any): any[] {
 
     if (!isReleased) {
       encounteredUnreleased = true;
+    }
+
+    // For upcoming episodes/seasons: strip inherited Season 1 metadata (titles/thumbnails/descriptions)
+    if (seasonIsUpcoming) {
+      return {
+        ...ep,
+        isReleased: false,
+        title: `Episode ${ep.episodeNum}`,
+        thumbnail: null,
+        description: null,
+        vote_average: undefined,
+        vote_count: undefined,
+        isPlaceholder: true,
+      };
     }
 
     return {
@@ -743,7 +774,7 @@ export async function GET(
       }
 
       seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
-      seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta);
+      seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta, season);
 
       const knownTotal = season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
       const nextAiring = meta?.anime?.nextAiringEpisode?.episode || null;

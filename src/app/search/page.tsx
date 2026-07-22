@@ -112,17 +112,54 @@ function SearchContent() {
       const fetchAnime = mode === "all" || mode === "anime";
 
       try {
+        const fetchAnimeWithFallback = async () => {
+          try {
+            const res = await fetchJson<{ success: boolean; data?: { animes: AnimeItem[] } }>(
+              `/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`,
+              { signal }
+            );
+            if (res?.success && res.data?.animes && res.data.animes.length > 0) {
+              return res;
+            }
+          } catch {}
+
+          // Fallback 1: Direct client AniList/Jikan query
+          try {
+            const clientRes = await fetchClientAnime("search", 1, "", debouncedQuery);
+            if (clientRes?.items && clientRes.items.length > 0) {
+              return { success: true, data: { animes: clientRes.items } };
+            }
+          } catch {}
+
+          // Fallback 2: Cleaned punctuation query retry
+          const cleaned = debouncedQuery.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
+          if (cleaned && cleaned !== debouncedQuery) {
+            try {
+              const res2 = await fetchJson<{ success: boolean; data?: { animes: AnimeItem[] } }>(
+                `/api/anime/search?q=${encodeURIComponent(cleaned)}`,
+                { signal }
+              );
+              if (res2?.success && res2.data?.animes && res2.data.animes.length > 0) {
+                return res2;
+              }
+            } catch {}
+            try {
+              const clientRes2 = await fetchClientAnime("search", 1, "", cleaned);
+              if (clientRes2?.items && clientRes2.items.length > 0) {
+                return { success: true, data: { animes: clientRes2.items } };
+              }
+            } catch {}
+          }
+
+          return { success: true, data: { animes: [] } };
+        };
+
         const [tmdbResult, animeResult] = await Promise.allSettled([
           fetchTmdb
             ? fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { signal })
             : Promise.resolve({ results: [] }),
           fetchAnime
-            ? fetchJson<{ success: boolean; data?: { animes: AnimeItem[] } }>(`/api/anime/search?q=${encodeURIComponent(debouncedQuery)}`, { signal })
-                .then(res => (res.success && res.data?.animes?.length ? res : fetchClientAnime("search", 1, "", debouncedQuery).then(c => ({ success: true, data: { animes: c.items } }))))
-                .catch(async () => {
-                  const clientRes = await fetchClientAnime("search", 1, "", debouncedQuery).catch(() => ({ items: [] }));
-                  return { success: true, data: { animes: clientRes.items } };
-                })
+            ? fetchAnimeWithFallback()
             : Promise.resolve({ success: true, data: { animes: [] } }),
         ]);
 

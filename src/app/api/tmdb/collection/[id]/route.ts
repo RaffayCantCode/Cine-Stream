@@ -73,6 +73,47 @@ export async function GET(
     };
 
     const fetchItem = async (item: FranchiseRouteItem) => {
+      // ── Anime item handling ─────────────────────────────────────────
+      if (item.media_type === "anime") {
+        let poster_path = item.poster_path || null;
+        let title = item.title || `Anime ${item.anilist_id || item.id}`;
+
+        if (!poster_path && (item.anilist_id || item.id)) {
+          try {
+            const query = `query ($id: Int) { Media(id: $id, type: ANIME) { title { romaji english } coverImage { extraLarge large } bannerImage } }`;
+            const alRes = await fetch("https://graphql.anilist.co", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query, variables: { id: item.anilist_id || item.id } }),
+              next: { revalidate: 86400 }
+            });
+            if (alRes.ok) {
+              const alJson = await alRes.json();
+              const media = alJson.data?.Media;
+              if (media?.coverImage?.extraLarge || media?.coverImage?.large) {
+                poster_path = media.coverImage.extraLarge || media.coverImage.large;
+              }
+              if (!item.title && (media?.title?.english || media?.title?.romaji)) {
+                title = media.title.english || media.title.romaji;
+              }
+            }
+          } catch (e) {}
+        }
+
+        return {
+          id: item.anilist_id || item.id,
+          media_type: "anime",
+          title: title,
+          name: title,
+          overview: "",
+          poster_path: poster_path,
+          backdrop_path: null,
+          vote_average: null,
+          release_date: item.release_date || "",
+        };
+      }
+
+      // ── Standard TMDB movie/TV handling ────────────────────────────
       try {
         const tmdbType = item.tmdb_type || (item.media_type === "movie" ? "movie" : "tv");
         const data = await tmdbFetch(
@@ -84,27 +125,8 @@ export async function GET(
           ? await fetchSearchFallback(item, tmdbType)
           : null;
 
-        let poster_path = item.poster_path || data.poster_path || searchFallback?.poster_path || null;
+        const poster_path = item.poster_path || data.poster_path || searchFallback?.poster_path || null;
         const backdrop_path = data.backdrop_path || searchFallback?.backdrop_path || null;
-
-        if (!item.poster_path && item.media_type === "anime" && item.anilist_id) {
-          try {
-            const query = `query ($id: Int) { Media(id: $id, type: ANIME) { coverImage { extraLarge large } } }`;
-            const alRes = await fetch("https://graphql.anilist.co", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query, variables: { id: item.anilist_id } }),
-              next: { revalidate: 86400 }
-            });
-            if (alRes.ok) {
-              const alJson = await alRes.json();
-              const cover = alJson.data?.Media?.coverImage;
-              if (cover?.extraLarge || cover?.large) {
-                poster_path = cover.extraLarge || cover.large;
-              }
-            }
-          } catch (e) {}
-        }
 
         return {
           id: item.anilist_id || data.id,

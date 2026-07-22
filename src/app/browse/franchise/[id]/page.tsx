@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, use, useRef } from "react";
+export const runtime = 'edge';
+import { useState, useEffect, use, useRef, useMemo } from "react";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { CinematicHero } from "@/components/CinematicHero";
@@ -15,6 +16,86 @@ interface Collection {
   backdrop_path: string | null;
   parts: any[];
   groups?: { name: string; parts: any[] }[];
+}
+
+function DoomsdayCountdown() {
+  const targetDate = useMemo(() => new Date("2026-12-16T00:00:00Z").getTime(), []);
+  const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  });
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = Date.now();
+      const diff = Math.max(0, targetDate - now);
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      setTimeLeft({ days, hours, minutes, seconds });
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate]);
+
+  return (
+    <div className="flex flex-col gap-3 items-start md:items-end">
+      {/* Tagline Badge */}
+      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 backdrop-blur-md">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+        </span>
+        <span className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+          Doom is coming in
+        </span>
+      </div>
+
+      {/* Box-Free Typography Countdown */}
+      <div className="flex items-center gap-3.5 sm:gap-5 text-emerald-400">
+        <div className="flex flex-col items-center">
+          <span className="text-3xl md:text-4xl font-extrabold font-mono text-emerald-300 drop-shadow-[0_0_12px_rgba(52,211,153,0.5)]">
+            {String(timeLeft.days).padStart(2, "0")}
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/70 mt-1">Days</span>
+        </div>
+
+        <span className="text-emerald-500/40 text-xl font-bold pb-4">:</span>
+
+        <div className="flex flex-col items-center">
+          <span className="text-3xl md:text-4xl font-extrabold font-mono text-emerald-300 drop-shadow-[0_0_12px_rgba(52,211,153,0.5)]">
+            {String(timeLeft.hours).padStart(2, "0")}
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/70 mt-1">Hours</span>
+        </div>
+
+        <span className="text-emerald-500/40 text-xl font-bold pb-4">:</span>
+
+        <div className="flex flex-col items-center">
+          <span className="text-3xl md:text-4xl font-extrabold font-mono text-emerald-300 drop-shadow-[0_0_12px_rgba(52,211,153,0.5)]">
+            {String(timeLeft.minutes).padStart(2, "0")}
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/70 mt-1">Mins</span>
+        </div>
+
+        <span className="text-emerald-500/40 text-xl font-bold pb-4">:</span>
+
+        <div className="flex flex-col items-center">
+          <span className="text-3xl md:text-4xl font-extrabold font-mono text-emerald-300 drop-shadow-[0_0_12px_rgba(52,211,153,0.5)]">
+            {String(timeLeft.seconds).padStart(2, "0")}
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/70 mt-1">Secs</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function FranchisePage({ params }: { params: Promise<{ id: string }> }) {
@@ -169,24 +250,38 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
           title={collection.name}
           theme="movie"
         >
-          <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto">
-            <Link 
-              href="/browse/franchises"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white/80 hover:text-white rounded-full text-sm font-medium transition-all mb-6 border border-white/10 hover:border-white/20 w-fit"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Franchises
-            </Link>
-            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4">
-              {collection.name}
-            </h1>
-            {collection.overview && (
-              <p className="text-white/70 max-w-2xl text-sm md:text-base leading-relaxed">
-                {collection.overview}
-              </p>
+          <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="max-w-2xl">
+              <Link 
+                href="/browse/franchises"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white/80 hover:text-white rounded-full text-sm font-medium transition-all mb-6 border border-white/10 hover:border-white/20 w-fit"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Franchises
+              </Link>
+              <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4">
+                {collection.name}
+              </h1>
+              {collection.overview && (
+                <p className="text-white/70 max-w-2xl text-sm md:text-base leading-relaxed">
+                  {collection.overview}
+                </p>
+              )}
+            </div>
+
+            {id === "marvel" && (
+              <div className="hidden md:block shrink-0 pb-2">
+                <DoomsdayCountdown />
+              </div>
             )}
           </div>
         </CinematicHero>
+
+        {id === "marvel" && (
+          <div className="md:hidden max-w-screen-2xl mx-auto px-5 pt-6 pb-2">
+            <DoomsdayCountdown />
+          </div>
+        )}
 
         <div className="max-w-screen-2xl mx-auto px-5 md:px-10 pb-10 pt-8">
           {collection.groups && collection.groups.length > 0 ? (

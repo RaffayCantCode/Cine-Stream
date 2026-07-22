@@ -28,7 +28,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
     id: "marvel",
     name: "Marvel Cinematic Universe",
     overview: "The complete chronological timeline of the Marvel Cinematic Universe, spanning from the origins of the first Avenger to the multiverse saga.",
-    backdrop_path: "/2UNUv4NJdC36E5myDHACBJ99EwL.jpg", // Avengers Collection banner
+    backdrop_path: "/6KDDoTq8Vq3HuQHULzuvPiCJbMI.jpg", // Avengers: Doomsday backdrop
     poster_path: "/yFSIUVTCvgYrpalUktulvk3Gi5Y.jpg", // Avengers Collection poster
     items: [
       { id: 241388, media_type: "tv" }, // Eyes of Wakanda
@@ -68,7 +68,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 284053, media_type: "movie" }, // Thor: Ragnarok
 
       { id: 68716, media_type: "tv" }, // Inhumans
-      { id: 67178, media_type: "tv" }, // The Punisher
+      { id: 67178, media_type: "tv", title: "The Punisher", poster_path: "/tM6xqRKXoloH9UchaJEyyRE9O1w.jpg" },
       { id: 67466, media_type: "tv" }, // Runaways
       { id: 66190, media_type: "tv" }, // Cloak & Dagger
       { id: 363088, media_type: "movie" }, // Ant-Man and the Wasp
@@ -99,13 +99,13 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 447365, media_type: "movie", title: "Guardians of the Galaxy Vol. 3" },
       { id: 114472, media_type: "tv", title: "Secret Invasion" },
       { id: 609681, media_type: "movie", title: "The Marvels" },
-      { id: 138501, media_type: "tv", title: "Agatha All Along" },
-      { id: 202555, media_type: "tv", title: "Daredevil: Born Again" },
-      { id: 822119, media_type: "movie", title: "Captain America: Brave New World" },
-      { id: 986056, media_type: "movie", title: "Thunderbolts*" },
-      { id: 617126, media_type: "movie", title: "The Fantastic Four: First Steps" },
-      { id: 198178, media_type: "tv", title: "Wonder Man" },
-      { id: 1439930, media_type: "movie", title: "The Punisher: One Last Kill" }
+      { id: 138501, media_type: "tv", title: "Agatha All Along", poster_path: "/mGsxKwXUjojitRv2E9qMTbxbBRd.jpg" },
+      { id: 202555, media_type: "tv", title: "Daredevil: Born Again", poster_path: "/xDUoAsU8lQHOOoRkFiBuarmACDN.jpg" },
+      { id: 822119, media_type: "movie", title: "Captain America: Brave New World", poster_path: "/pzIddUEMWhWzfvLI3TwxUG2wGoi.jpg" },
+      { id: 986056, media_type: "movie", title: "Thunderbolts*", poster_path: "/hqcexYHbiTBfDIdDWxrxPtVndBX.jpg" },
+      { id: 617126, media_type: "movie", title: "The Fantastic Four: First Steps", poster_path: "/nf5qaSEvyYSNeFH0YhSs5EsBLX9.jpg" },
+      { id: 198178, media_type: "tv", title: "Wonder Man", poster_path: "/6yy9nQlFt2l6UVWzrfhszFCaZ5C.jpg" },
+      { id: 1439930, media_type: "movie", title: "The Punisher: One Last Kill", poster_path: "/qQclTgLMDvGBuUBFGHRipxkEwWR.jpg" }
     ],
   },
   {
@@ -149,6 +149,23 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 121, media_type: "movie" }, // LOTR 2
       { id: 122, media_type: "movie" }, // LOTR 3
     ],
+  },
+  {
+    id: "my-hero-academia",
+    name: "My Hero Academia Collection (Japanese Dub)",
+    overview: "The complete journey of Izuku Midoriya and his classmates at U.A. High School as they train to become Pro Heroes in a world of Quirks.",
+    backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/21459-yeVkolGKdGUV.jpg",
+    poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg",
+    items: [
+      { id: 21459, media_type: "anime", anilist_id: 21459, title: "My Hero Academia Season 1", release_date: "2016-04-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg" },
+      { id: 21856, media_type: "anime", anilist_id: 21856, title: "My Hero Academia Season 2", release_date: "2017-03-25", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21856-gutauxhWAwn6.png" },
+      { id: 100166, media_type: "anime", anilist_id: 100166, title: "My Hero Academia Season 3", release_date: "2018-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100166-jUCZYbzn2XLw.jpg" },
+      { id: 104276, media_type: "anime", anilist_id: 104276, title: "My Hero Academia Season 4", release_date: "2019-10-12", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104276-SnEowMvesWIE.png" },
+      { id: 117193, media_type: "anime", anilist_id: 117193, title: "My Hero Academia Season 5", release_date: "2021-03-27", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx117193-E75BlZmDh1aB.jpg" },
+      { id: 139630, media_type: "anime", anilist_id: 139630, title: "My Hero Academia Season 6", release_date: "2022-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx139630-3v4gxWtNZxLV.jpg" },
+      { id: 163139, media_type: "anime", anilist_id: 163139, title: "My Hero Academia Season 7", release_date: "2024-05-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx163139-JchZhUFlNTWU.jpg" },
+      { id: 182896, media_type: "anime", anilist_id: 182896, title: "My Hero Academia Final Season", release_date: "2025-10-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx182896-mvxTVHGdDB4q.jpg" },
+    ]
   },
   {
     id: "godfather",
@@ -218,6 +235,22 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 31910, media_type: "anime", anilist_id: 1735 }, // Naruto Shippuden
       { id: 70881, media_type: "anime", anilist_id: 97938 }, // Boruto
     ],
+  },
+  {
+    id: "dragon-ball",
+    name: "Dragon Ball Collection (Japanese Dub)",
+    overview: "The complete chronological watch order of Son Goku's journey from a child with a monkey tail to a god-like warrior defending the universe.",
+    backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/21175-bXEDZ4sk6jTJ.png",
+    poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg",
+    items: [
+      { id: 223, media_type: "anime", anilist_id: 223, title: "Dragon Ball", release_date: "1986-02-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx223-scE5uJfXqqj8.png" },
+      { id: 813, media_type: "anime", anilist_id: 813, title: "Dragon Ball Z", release_date: "1989-04-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx813-ZhnFNOeCU5dQ.png" },
+      { id: 225, media_type: "anime", anilist_id: 225, title: "Dragon Ball GT", release_date: "1996-02-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx225-pzkDUVy7tKxH.png" },
+      { id: 21175, media_type: "anime", anilist_id: 21175, title: "Dragon Ball Super", release_date: "2015-07-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg" },
+      { id: 101302, media_type: "anime", tmdb_type: "movie", anilist_id: 101302, title: "Dragon Ball Super: Broly (Movie)", release_date: "2018-12-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101302-7L0lcwYeFQQM.jpg" },
+      { id: 133898, media_type: "anime", tmdb_type: "movie", anilist_id: 133898, title: "Dragon Ball Super: Super Hero (Movie)", release_date: "2022-06-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx133898-KdQ7fWTG06n4.png" },
+      { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png" },
+    ]
   },
   {
     id: "mission-impossible",
@@ -312,6 +345,20 @@ export const FRANCHISES: FranchiseDefinition[] = [
     ]
   },
   {
+    id: "bleach",
+    name: "Bleach Collection (Japanese Dub)",
+    overview: "High school student Ichigo Kurosaki gains Soul Reaper powers and defends humanity against evil spirits in Karakura Town and the Soul Society.",
+    backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/116674-l2YlIyJzvGSV.jpg",
+    poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg",
+    items: [
+      { id: 269, media_type: "anime", anilist_id: 269, title: "Bleach (Original Series)", release_date: "2004-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx269-d2GmRkJbMopq.png" },
+      { id: 116674, media_type: "anime", anilist_id: 116674, title: "Bleach: Thousand-Year Blood War (Part 1)", release_date: "2022-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg" },
+      { id: 159322, media_type: "anime", anilist_id: 159322, title: "Bleach: Thousand-Year Blood War - The Separation (Part 2)", release_date: "2023-07-08", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx159322-Sp1GflRhE6Po.jpg" },
+      { id: 169755, media_type: "anime", anilist_id: 169755, title: "Bleach: Thousand-Year Blood War - The Conflict (Part 3)", release_date: "2024-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx169755-Rqb7MjnzdTc6.jpg" },
+      { id: 185874, media_type: "anime", anilist_id: 185874, title: "Bleach: Thousand-Year Blood War - Part 4", release_date: "2025-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx185874-aU3e6tBT6wwA.jpg" },
+    ]
+  },
+  {
     id: "incredibles",
     name: "The Incredibles Collection",
     overview: "The adventures of a family of former superheroes rediscovering their powers and saving the world.",
@@ -352,6 +399,29 @@ export const FRANCHISES: FranchiseDefinition[] = [
           { id: 414906, media_type: "movie" }, // The Batman
         ]
       }
+    ]
+  },
+  {
+    id: "x-men",
+    name: "X-Men Movie Collection",
+    overview: "The complete cinematic timeline of mutantkind and the X-Men, arranged in official universe timeline order.",
+    backdrop_path: "/tYfijzolzgoMOtegh1Y7j2Enorg.jpg",
+    poster_path: "/hNEokmUke0dazoBhttFN0o3L7Xv.jpg",
+    items: [
+      { id: 49538, media_type: "movie", title: "X-Men: First Class (1962 Timeline)" },
+      { id: 127585, media_type: "movie", title: "X-Men: Days of Future Past (1973 Timeline)" },
+      { id: 2080, media_type: "movie", title: "X-Men Origins: Wolverine (1979 Timeline)" },
+      { id: 246655, media_type: "movie", title: "X-Men: Apocalypse (1983 Timeline)" },
+      { id: 320288, media_type: "movie", title: "Dark Phoenix (1992 Timeline)" },
+      { id: 36657, media_type: "movie", title: "X-Men (2000)" },
+      { id: 36658, media_type: "movie", title: "X2 (2003)" },
+      { id: 36668, media_type: "movie", title: "X-Men: The Last Stand (2006)" },
+      { id: 76170, media_type: "movie", title: "The Wolverine (2013)" },
+      { id: 293660, media_type: "movie", title: "Deadpool (2016)" },
+      { id: 340102, media_type: "movie", title: "The New Mutants (2020)" },
+      { id: 383498, media_type: "movie", title: "Deadpool 2 (2018)" },
+      { id: 263115, media_type: "movie", title: "Logan (2029 Timeline)" },
+      { id: 533535, media_type: "movie", title: "Deadpool & Wolverine (2024)" },
     ]
   },
   {

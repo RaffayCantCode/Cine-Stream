@@ -12,7 +12,7 @@ interface Person {
   known_for_department?: string;
 }
 
-export function SimilarPeople({ id, department }: { id: number; department: string }) {
+export function SimilarPeople({ id, department, gender }: { id: number; department: string; gender?: number }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -74,7 +74,14 @@ export function SimilarPeople({ id, department }: { id: number; department: stri
 
   if (isLoading || people.length === 0) return null;
 
-  const isDirector = department === "Directing";
+  const isDirector = department === "Directing" || (department !== "Acting" && department !== "Production");
+  const isFemale = gender === 1;
+
+  const sectionTitle = isDirector
+    ? "Similar Directors"
+    : isFemale
+    ? "Similar Actresses"
+    : "Similar Actors";
 
   return (
     <section>
@@ -82,7 +89,7 @@ export function SimilarPeople({ id, department }: { id: number; department: stri
         <div className="flex items-center gap-3">
           <div className="w-1 h-5 bg-primary rounded-full" />
           <h2 className="text-xl font-bold tracking-tight text-white">
-            {isDirector ? "Filmmakers with Similar Styles" : "Frequent Collaborators & Similar Actors"}
+            {sectionTitle}
           </h2>
         </div>
         <div className="hidden md:flex items-center gap-2">

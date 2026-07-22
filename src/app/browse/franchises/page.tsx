@@ -44,7 +44,11 @@ export default function BrowseFranchisesPage() {
 
           <div className="mt-4 md:mt-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 md:gap-6 pb-24">
             {filteredFranchises.map((col) => {
-              const posterUrl = col.poster_path ? `https://image.tmdb.org/t/p/w500${col.poster_path}` : null;
+              const posterUrl = col.poster_path
+                ? col.poster_path.startsWith("http")
+                  ? col.poster_path
+                  : `https://image.tmdb.org/t/p/w500${col.poster_path}`
+                : null;
               return (
                 <Link
                   key={col.id}
@@ -53,12 +57,11 @@ export default function BrowseFranchisesPage() {
                 >
                   {posterUrl ? (
                     <>
-                      <Image
+                      <img
                         src={posterUrl}
                         alt={col.name}
-                        fill
-                        className="object-cover opacity-90 group-hover:opacity-100 transition-transform duration-700 group-hover:scale-105"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 16vw"
+                        className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-transform duration-700 group-hover:scale-105"
+                        loading="lazy"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300" />
                     </>

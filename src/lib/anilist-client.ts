@@ -12,6 +12,15 @@ const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
   }
 }`;
 
+const SEARCH_QUERY = `query ($page: Int, $genre: String, $q: String) {
+  Page(page: $page, perPage: 50) {
+    media(type: ANIME, isAdult: false, genre: $genre, search: $q) {
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      episodes genres averageScore description status type format season seasonYear
+    }
+  }
+}`;
+
 const TRENDING_QUERY = `query ($page: Int, $genre: String) {
   Page(page: $page, perPage: 20) {
     media(type: ANIME, isAdult: false, sort: [TRENDING_DESC, POPULARITY_DESC], genre: $genre) {
@@ -162,7 +171,7 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
   try {
     let items: AnimeItem[] = [];
     if (category === "search" || q) {
-      const data = await clientAnilistQuery(LIST_QUERY, { page, q, genre: genre || null });
+      const data = await clientAnilistQuery(SEARCH_QUERY, { page, q, genre: genre || null });
       items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
     } else if (category === "airing") {
       const { season, year } = getCurrentSeason();

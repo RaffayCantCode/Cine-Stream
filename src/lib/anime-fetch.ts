@@ -310,20 +310,58 @@ function transformJikan(a: any): AnimeItem {
   };
 }
 
+const SEARCH_QUERY = `query ($page: Int, $genre: String, $q: String) {
+  Page(page: $page, perPage: 50) {
+    media(
+      type: ANIME,
+      isAdult: false,
+      genre: $genre,
+      search: $q
+    ) {
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      episodes genres averageScore description status type format season seasonYear trailer { id site }
+    }
+  }
+}`;
+
 export async function searchAnime(q: string, page = 1, genre?: string): Promise<AnimeItem[]> {
+  const cleanQ = q.trim();
+  if (!cleanQ) return [];
+
+  // Primary: AniList relevance search
   try {
-    const data = await anilistQuery(LIST_QUERY, { page, q, genre: genre || null });
-    if (data?.data?.Page?.media) {
+    const data = await anilistQuery(SEARCH_QUERY, { page, q: cleanQ, genre: genre || null });
+    if (data?.data?.Page?.media && data.data.Page.media.length > 0) {
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
-    console.warn("AniList search failed, falling back to Jikan:", e);
+    console.warn("AniList search failed, falling back to Jikan/alternative queries:", e);
   }
-  
-  // Jikan fallback
-  const res = await fetch(`${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`, { signal: AbortSignal.timeout(8000) });
-  const data = await res.json();
-  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
+
+  // Fallback 1: Jikan search
+  try {
+    const jResults = await searchViaJikan(cleanQ);
+    if (jResults && jResults.length > 0) {
+      return filterUnreleased(deduplicateAnime(jResults));
+    }
+  } catch (e) {
+    console.warn("Jikan search failed:", e);
+  }
+
+  // Fallback 2: Clean punctuation / special chars search on AniList
+  if (cleanQ.includes("-") || cleanQ.includes("_") || cleanQ.includes(":") || cleanQ.includes("'")) {
+    try {
+      const altQ = cleanQ.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
+      if (altQ && altQ !== cleanQ) {
+        const data = await anilistQuery(SEARCH_QUERY, { page, q: altQ, genre: genre || null });
+        if (data?.data?.Page?.media && data.data.Page.media.length > 0) {
+          return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
+        }
+      }
+    } catch {}
+  }
+
+  return [];
 }
 
 export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
@@ -745,26 +783,26 @@ export async function getAnimeDetails(
   tmdbSeasonMap?: Record<string, number>;
 } | null> {
   const isMalInput = id.startsWith("mal-");
-  const malIdNum = parseInt(id.replace("mal-", ""), 10);
-  if (isNaN(malIdNum)) return null;
-
   let resolvedFromMal = false;
   if (isMalInput) {
-    try {
-      const q = `query ($idMal: Int) {
-        Media(idMal: $idMal, type: ANIME) {
-          id
+    const malIdNum = parseInt(id.replace("mal-", ""), 10);
+    if (!isNaN(malIdNum)) {
+      try {
+        const q = `query ($idMal: Int) {
+          Media(idMal: $idMal, type: ANIME) {
+            id
+          }
+        }`;
+        const res = await anilistQuery(q, { idMal: malIdNum });
+        if (res?.data?.Media?.id) {
+          id = String(res.data.Media.id);
+          resolvedFromMal = true;
+        } else {
+          id = String(malIdNum);
         }
-      }`;
-      const res = await anilistQuery(q, { idMal: malIdNum });
-      if (res?.data?.Media?.id) {
-        id = String(res.data.Media.id);
-        resolvedFromMal = true;
-      } else {
+      } catch {
         id = String(malIdNum);
       }
-    } catch {
-      id = String(malIdNum);
     }
   }
 
@@ -792,7 +830,23 @@ export async function getAnimeDetails(
     }
   }
 
-  const numId = parseInt(id, 10);
+  let numId = parseInt(id, 10);
+  if (isNaN(numId)) {
+    try {
+      const cleanTitle = id.replace(/[-_]/g, " ").trim();
+      const q = `query ($search: String) {
+        Media(search: $search, type: ANIME, isAdult: false) {
+          id
+        }
+      }`;
+      const searchRes = await anilistQuery(q, { search: cleanTitle });
+      if (searchRes?.data?.Media?.id) {
+        id = String(searchRes.data.Media.id);
+        numId = searchRes.data.Media.id;
+      }
+    } catch {}
+  }
+
   if (isNaN(numId)) return null;
 
   // No local cache — rely on Cloudflare CDN via next: { revalidate } on fetch calls.
@@ -862,6 +916,23 @@ export async function getAnimeDetails(
   const [aniZipResData, fetchedMedia] = await Promise.all([aniZipPromise, mediaPromise]);
   aniZipMapping = aniZipResData;
   media = fetchedMedia;
+
+  // Fallback: If numId was actually a TMDB ID or unknown ID that failed AniList direct lookup, try AniZip TMDB mapping
+  if (!media && !isNaN(numId)) {
+    try {
+      const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
+        signal: AbortSignal.timeout(3000),
+        headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+        next: { revalidate: 86400 }
+      });
+      if (azRes.ok) {
+        const azData = await azRes.json();
+        if (azData?.mappings?.anilist_id) {
+          return getAnimeDetails(String(azData.mappings.anilist_id), epLimit, skipEpisodes);
+        }
+      }
+    } catch {}
+  }
 
   // Jikan fallback for the main metadata (use ONLY if we have valid MAL ID)
   if (!media) {

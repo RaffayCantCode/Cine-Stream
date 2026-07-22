@@ -38,9 +38,9 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.profile_path 
-    ? `https://image.tmdb.org/t/p/w342${item.profile_path}`
+    ? (item.profile_path.startsWith("http") ? item.profile_path : `https://image.tmdb.org/t/p/w342${item.profile_path}`)
     : item.poster_path
-    ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+    ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w342${item.poster_path}`)
     : null;
 
   const isPriority = index < 6;
