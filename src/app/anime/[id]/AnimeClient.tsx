@@ -480,13 +480,64 @@ async function fetchAnimeMetaClientSide(idStr: string) {
   const variables = isMal ? { idMal: parsedId } : { id: parsedId };
 
   try {
-      const res = await fetch("https://graphql.anilist.co", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ query, variables }),
-        signal: AbortSignal.timeout(4000)
-      });
-    if (!res.ok) return null;
+    const res = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (!res.ok) {
+      try {
+        const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${parsedId}`, { signal: AbortSignal.timeout(4000) });
+        if (azRes.ok) {
+          const azData = await azRes.json();
+          const malId = azData.mappings?.mal_id;
+          if (malId) {
+            const jRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}`, { signal: AbortSignal.timeout(6000) });
+            if (jRes.ok) {
+              const jData = await jRes.json();
+              const a = jData.data;
+              if (a) {
+                const jAnime: AnimeDetail = {
+                  id: String(parsedId),
+                  idMal: String(a.mal_id),
+                  name: a.title_english || a.title || "Unknown",
+                  jname: a.title_japanese || null,
+                  poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
+                  description: a.synopsis || "",
+                  type: a.type || "TV",
+                  rating: a.score ? String(a.score) : null,
+                  score: a.score ? String(a.score) : null,
+                  status: a.status || null,
+                  genres: (a.genres || []).map((g: any) => g.name),
+                  totalEpisodes: a.episodes || 12,
+                  seasons: [{
+                    id: String(parsedId),
+                    name: a.title_english || a.title || "Unknown",
+                    seasonLabel: "Season 1",
+                    totalEpisodes: a.episodes || 12,
+                    isCurrent: true,
+                    idMal: a.mal_id,
+                    seasonYear: a.year || null,
+                  }],
+                  season: a.season || null,
+                  seasonYear: a.year || null,
+                  format: a.type || null,
+                  openedSeasonId: String(parsedId),
+                  tmdbId: null,
+                  duration: a.duration || null,
+                  trailerId: a.trailer?.youtube_id || null,
+                };
+                return { success: true, data: { anime: jAnime, franchiseNodes: [] } };
+              }
+            }
+          }
+        }
+      } catch {}
+      return null;
+    }
+
     const json = await res.json();
     const media = json?.data?.Media;
     if (!media) return null;
@@ -673,6 +724,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     clientEpisodeOffset?: number | null
   ) => {
     if (!forceReload && loadedSeasonIds.current.has(seasonId)) return;
+
+    const isUnreleasedSeason = anime?.status === "NOT_YET_RELEASED" || anime?.status === "NOT_YET_AIRED" || anime?.status === "Not Yet Aired";
+    if (isUnreleasedSeason) {
+      setEpisodes([]);
+      setEpisodesLoading(false);
+      loadedSeasonIds.current.add(seasonId);
+      return;
+    }
 
     setEpisodesLoading(true);
     setSeasonOverview(null);
@@ -946,7 +1005,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load anime");
+          if (!anime) {
+            setError(e instanceof Error ? e.message : "Failed to load anime");
+          }
           setIsLoading(false);
         }
       }
@@ -1839,9 +1900,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   }
 
                   if (currentSeasonEps.length === 0) {
+                    const isNotYet = anime?.status === "NOT_YET_RELEASED" || anime?.status === "NOT_YET_AIRED" || anime?.status === "Not Yet Aired";
                     return (
-                      <div className="p-8 text-center text-white/30 text-sm">
-                        No episodes available
+                      <div className="p-10 text-center rounded-2xl border border-emerald-500/25 bg-emerald-950/20 backdrop-blur-md my-4">
+                        <div className="text-4xl mb-3">📅</div>
+                        <h3 className="text-lg font-black text-emerald-300 mb-1">
+                          {isNotYet ? "Not Yet Released" : "No Episodes Available"}
+                        </h3>
+                        <p className="text-xs text-zinc-300/80 max-w-md mx-auto leading-relaxed">
+                          {isNotYet
+                            ? `This anime season (${anime?.seasonYear || "Upcoming"}) has not started broadcasting yet. Episodes will become available as soon as it begins airing!`
+                            : "No episodes are currently available for this season."}
+                        </p>
                       </div>
                     );
                   }

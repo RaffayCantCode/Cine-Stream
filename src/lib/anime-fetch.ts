@@ -937,107 +937,92 @@ export async function getAnimeDetails(
   // Jikan fallback for the main metadata (use ONLY if we have valid MAL ID)
   if (!media) {
     try {
-      const resolvedMalId = aniZipMapping?.mappings?.mal_id
+      let resolvedMalId = aniZipMapping?.mappings?.mal_id
         ? String(aniZipMapping.mappings.mal_id)
-        : null;
-      const targetMalId = resolvedMalId || numId;
+        : isMalInput ? String(numId) : null;
 
-      const jikanRes = await fetch(
-        `${JIKAN_BASE}/anime/${targetMalId}`,
-        { signal: AbortSignal.timeout(6000) }
-      );
-      if (jikanRes.ok) {
-        const jData = await jikanRes.json();
-        const a = jData.data;
-        if (a && a.rating !== "rx") {
-          const totalEps = Math.max(a.episodes || (a.status?.includes("Airing") ? 1500 : 12), 1);
-          let episodes: EpisodeDetail[] = [];
-          if (!skipEpisodes) {
-            const realEps = await fetchEpisodesFromJikan(a.mal_id, String(id), Math.min(totalEps, epLimit));
-            if (realEps) episodes = realEps;
-          }
-          const existingNums = new Set(episodes.map(e => e.episodeNum));
-          for (let i = 1; i <= Math.min(totalEps, epLimit); i++) {
-            if (!existingNums.has(i)) {
-              episodes.push({
-                episodeId: `${id}-${i}`, episodeNum: i, title: `Episode ${i}`,
-                description: null, thumbnail: null, malUrl: null,
-                releasedDate: null, isFiller: false, isRecap: false,
-                seasonNum: 1, seasonId: id, seasonName: a.title_english || a.title,
-                seasonMalId: a.mal_id,
-              });
+      if (!resolvedMalId && !isNaN(numId)) {
+        try {
+          const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${numId}`, {
+            signal: AbortSignal.timeout(3000),
+            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+            next: { revalidate: 86400 }
+          });
+          if (azRes.ok) {
+            const azData = await azRes.json();
+            if (azData?.mappings?.mal_id) {
+              resolvedMalId = String(azData.mappings.mal_id);
             }
           }
-          episodes.sort((a, b) => a.episodeNum - b.episodeNum);
-          const animeItem: AnimeItem = {
-            id: String(id),
-            idMal: String(a.mal_id),
-            name: a.title_english || a.title || "Unknown",
-            jname: a.title_japanese || null,
-            poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
-            type: a.type || "TV", episodes: { sub: a.episodes || null, dub: null },
-            rating: a.score ? String(a.score) : null, description: a.synopsis || "",
-            genres: a.genres?.map((g: any) => g.name) || [],
-            status: a.status || null, season: a.season || null,
-            seasonYear: a.year || null, format: a.type || null,
-          };
-          const jikanSeason: SeasonInfo = {
-            id: String(id), name: animeItem.name,
-            seasonLabel: "Episodes", totalEpisodes: totalEps,
-            isCurrent: true, idMal: a.mal_id,
-          };
+        } catch {}
+      }
 
-          // Try to get TMDB ID via AniZip or fallback search
-          let tmdbId: number | null = null;
-          if (aniZipMapping?.mappings?.themoviedb_id) {
-            tmdbId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
-            if (isNaN(tmdbId)) tmdbId = null;
-          }
-          if (!tmdbId) {
-            try {
-              tmdbId = await searchTmdbShow(animeItem.name, animeItem.seasonYear || undefined);
-            } catch {
-              tmdbId = null;
+      const targetMalId = resolvedMalId;
+      if (targetMalId) {
+        const jikanRes = await fetch(
+          `${JIKAN_BASE}/anime/${targetMalId}`,
+          { signal: AbortSignal.timeout(8000) }
+        );
+        if (jikanRes.ok) {
+          const jData = await jikanRes.json();
+          const a = jData.data;
+          if (a && a.rating !== "rx") {
+            const isUnreleasedJikan = a.status?.includes("Not yet aired") || a.status?.includes("Not Yet Aired");
+            const totalEps = isUnreleasedJikan ? 0 : Math.max(a.episodes || (a.status?.includes("Airing") ? 1500 : 12), 1);
+            let episodes: EpisodeDetail[] = [];
+            if (!isUnreleasedJikan && !skipEpisodes) {
+              const realEps = await fetchEpisodesFromJikan(a.mal_id, String(id), Math.min(totalEps, epLimit));
+              if (realEps) episodes = realEps;
             }
-          }
-
-          let tmdbSeasonMap: Record<string, number> | undefined = undefined;
-          let seasonsList: SeasonInfo[] = [jikanSeason];
-
-          if (tmdbId) {
-            try {
-              const tmdbData = await tmdbFetch(`/tv/${tmdbId}`) as { seasons?: { season_number: number }[] };
-              const tmdbSeasons = tmdbData?.seasons || [];
-              let tmdbSeasonNum = 1;
-              
-              if (aniZipMapping?.episodes?.["1"]?.tmdbSeason) {
-                tmdbSeasonNum = aniZipMapping.episodes["1"].tmdbSeason;
-              } else {
-                const matched = tmdbSeasons.find((s: any) => {
-                  if (!s.air_date) return false;
-                  const year = animeItem.seasonYear?.toString();
-                  return year ? s.air_date.startsWith(year) : false;
-                }) || tmdbSeasons.find((s: any) => s.season_number > 0);
-                tmdbSeasonNum = matched?.season_number || 1;
+            if (!isUnreleasedJikan) {
+              const existingNums = new Set(episodes.map(e => e.episodeNum));
+              for (let i = 1; i <= Math.min(totalEps, epLimit); i++) {
+                if (!existingNums.has(i)) {
+                  episodes.push({
+                    episodeId: `${id}-${i}`, episodeNum: i, title: `Episode ${i}`,
+                    description: null, thumbnail: null, malUrl: null,
+                    releasedDate: null, isFiller: false, isRecap: false,
+                    seasonNum: 1, seasonId: id, seasonName: a.title_english || a.title,
+                    seasonMalId: a.mal_id,
+                  });
+                }
               }
-              
-              jikanSeason.tmdbSeasonNumber = tmdbSeasonNum;
-              jikanSeason.tmdbId = tmdbId;
-              tmdbSeasonMap = { [String(id)]: tmdbSeasonNum };
-            } catch { /* ignore */ }
-          }
+            }
+            episodes.sort((a, b) => a.episodeNum - b.episodeNum);
+            const animeItem: AnimeItem = {
+              id: String(id),
+              idMal: String(a.mal_id),
+              name: a.title_english || a.title || "Unknown",
+              jname: a.title_japanese || null,
+              poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
+              type: a.type || "TV", episodes: { sub: a.episodes || null, dub: null },
+              rating: a.score ? String(a.score) : null, description: a.synopsis || "",
+              genres: a.genres?.map((g: any) => g.name) || [],
+              status: a.status || null, season: a.season || null,
+              seasonYear: a.year || null, format: a.type || null,
+            };
+            const jikanSeason: SeasonInfo = {
+              id: String(id), name: animeItem.name,
+              seasonLabel: "Episodes", totalEpisodes: totalEps,
+              isCurrent: true, idMal: a.mal_id,
+            };
 
-          const val = validateSeason(seasonsList.find(s => s.id === String(id)) || seasonsList[0] || jikanSeason, animeItem.name, []);
-          if (val.warnings.length > 0) {
-            console.warn(`[Validation] Jikan fallback season warnings for ${id}:`, val.warnings);
+            let tmdbId: number | null = null;
+            if (aniZipMapping?.mappings?.themoviedb_id) {
+              tmdbId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
+              if (isNaN(tmdbId)) tmdbId = null;
+            }
+            let tmdbSeasonMap: Record<string, number> | undefined = undefined;
+            let seasonsList: SeasonInfo[] = [jikanSeason];
+
+            return {
+              anime: animeItem, episodes, totalEpisodes: totalEps,
+              seasons: seasonsList, openedSeasonId: id,
+              franchiseNodes: [] as FranchiseNode[],
+              tmdbId,
+              tmdbSeasonMap,
+            };
           }
-          return {
-            anime: animeItem, episodes, totalEpisodes: totalEps,
-            seasons: seasonsList, openedSeasonId: id,
-            franchiseNodes: [] as FranchiseNode[],
-            tmdbId,
-            tmdbSeasonMap,
-          };
         }
       }
     } catch { /* no fallback */ }
@@ -1288,7 +1273,22 @@ export async function getAnimeDetails(
     };
   }
 
-  // Step 6: Fetch real episodes for the active season
+  // Step 6: Check if anime season is unreleased
+  const isUnreleased = anime.status === "NOT_YET_RELEASED" || anime.status === "NOT_YET_AIRED" || media?.status === "NOT_YET_RELEASED" || media?.status === "NOT_YET_AIRED";
+  if (isUnreleased) {
+    return {
+      anime,
+      episodes: [],
+      totalEpisodes: 0,
+      seasons: mappedSeasons,
+      openedSeasonId: activeSeasonId,
+      franchiseNodes,
+      tmdbId,
+      tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
+    };
+  }
+
+  // Fetch real episodes for the active season
   const allCombinedEpisodes: EpisodeDetail[] = [];
   const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel.startsWith(t));
   const maxEp = isSpecialFormat ? Math.max(openedSeason.totalEpisodes, 1) : Math.max(openedSeason.totalEpisodes, 1);
