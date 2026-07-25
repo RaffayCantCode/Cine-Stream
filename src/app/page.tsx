@@ -794,7 +794,11 @@ export default function Home() {
               />
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3 md:gap-4">
                 {collections.slice(0, 7).map((col) => {
-                  const posterUrl = col.poster_path ? `https://image.tmdb.org/t/p/w342${col.poster_path}` : null;
+                  const posterUrl = col.poster_path
+                    ? col.poster_path.startsWith("http")
+                      ? col.poster_path
+                      : `https://image.tmdb.org/t/p/w342${col.poster_path}`
+                    : null;
                   return (
                     <Link
                       key={col.id}

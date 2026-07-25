@@ -78,15 +78,24 @@
     @apply border-border;
   }
   html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
     scroll-padding-top: 32px;
+  }
+  @media (pointer: fine) {
+    html {
+      scroll-behavior: smooth;
+    }
   }
   body {
     @apply bg-background text-foreground transition-colors duration-700 ease-in-out;
     margin: 0;
     padding: 0;
-    min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
   }
   ::selection {
     background: hsl(218 27% 56% / 0.3);
@@ -185,10 +194,12 @@ textarea,
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Optimized click feedback - squish effect */
-button:active,
-a:active,
-[role="button"]:active {
-  transform: scale(0.97);
-  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1) !important;
+/* Optimized click feedback - squish effect (restricted to pointer devices to avoid touch scroll jitter) */
+@media (hover: hover) and (pointer: fine) {
+  button:active,
+  a:active,
+  [role="button"]:active {
+    transform: scale(0.97);
+    transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
 }

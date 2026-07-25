@@ -44,7 +44,7 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <>
       {/* Mobile Top Header */}
-      <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-4">
+      <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-4 transform-gpu will-change-transform">
         <Link href="/" className="flex items-center gap-2">
           <img src="/logo-icon.svg" alt="CineStream" className="w-8 h-8 drop-shadow-lg" />
           <span className="font-bold text-lg tracking-wider">
@@ -123,7 +123,7 @@ export const Sidebar = memo(function Sidebar() {
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 premium-glass z-40 flex items-center justify-around pb-[env(safe-area-inset-bottom)] px-2">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 premium-glass z-40 flex items-center justify-around pb-[env(safe-area-inset-bottom)] px-2 transform-gpu will-change-transform">
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
           
@@ -139,10 +139,8 @@ export const Sidebar = memo(function Sidebar() {
               )}
             >
               {isActive && (
-                <motion.div
-                  layoutId="mobile-nav-indicator"
-                  className="absolute top-0 w-8 h-1 rounded-full bg-white"
-                  transition={{ type: "spring", stiffness: 380, damping: 35 }}
+                <div
+                  className="absolute top-0 w-8 h-1 rounded-full bg-white transition-all duration-300"
                 />
               )}
               <Icon className="w-5 h-5 mb-0.5" />

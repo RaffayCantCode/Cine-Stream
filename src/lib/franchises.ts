@@ -157,14 +157,18 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/21459-yeVkolGKdGUV.jpg",
     poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg",
     items: [
-      { id: 21459, media_type: "anime", anilist_id: 21459, title: "My Hero Academia Season 1", release_date: "2016-04-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg" },
-      { id: 21856, media_type: "anime", anilist_id: 21856, title: "My Hero Academia Season 2", release_date: "2017-03-25", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21856-gutauxhWAwn6.png" },
-      { id: 100166, media_type: "anime", anilist_id: 100166, title: "My Hero Academia Season 3", release_date: "2018-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100166-jUCZYbzn2XLw.jpg" },
-      { id: 104276, media_type: "anime", anilist_id: 104276, title: "My Hero Academia Season 4", release_date: "2019-10-12", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104276-SnEowMvesWIE.png" },
-      { id: 117193, media_type: "anime", anilist_id: 117193, title: "My Hero Academia Season 5", release_date: "2021-03-27", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx117193-E75BlZmDh1aB.jpg" },
-      { id: 139630, media_type: "anime", anilist_id: 139630, title: "My Hero Academia Season 6", release_date: "2022-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx139630-3v4gxWtNZxLV.jpg" },
-      { id: 163139, media_type: "anime", anilist_id: 163139, title: "My Hero Academia Season 7", release_date: "2024-05-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx163139-JchZhUFlNTWU.jpg" },
-      { id: 182896, media_type: "anime", anilist_id: 182896, title: "My Hero Academia Final Season", release_date: "2025-10-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx182896-mvxTVHGdDB4q.jpg" },
+      { id: 65930, media_type: "anime", anilist_id: 21459, title: "My Hero Academia (Season 1)", release_date: "2016-04-03" },
+      { id: 65930, media_type: "anime", anilist_id: 21856, title: "My Hero Academia (Season 2)", release_date: "2017-03-25" },
+      { id: 65930, media_type: "anime", anilist_id: 100166, title: "My Hero Academia (Season 3)", release_date: "2018-04-07" },
+      { id: 512200, media_type: "anime", tmdb_type: "movie", anilist_id: 100573, title: "My Hero Academia: Two Heroes", release_date: "2018-08-03" },
+      { id: 65930, media_type: "anime", anilist_id: 104276, title: "My Hero Academia (Season 4)", release_date: "2019-10-12" },
+      { id: 592350, media_type: "anime", tmdb_type: "movie", anilist_id: 109303, title: "My Hero Academia: Heroes Rising", release_date: "2019-12-20" },
+      { id: 65930, media_type: "anime", anilist_id: 117193, title: "My Hero Academia (Season 5)", release_date: "2021-03-27" },
+      { id: 768744, media_type: "anime", tmdb_type: "movie", anilist_id: 126284, title: "My Hero Academia: World Heroes' Mission", release_date: "2021-08-06" },
+      { id: 65930, media_type: "anime", anilist_id: 139630, title: "My Hero Academia (Season 6)", release_date: "2022-10-01" },
+      { id: 65930, media_type: "anime", anilist_id: 163139, title: "My Hero Academia (Season 7)", release_date: "2024-05-04" },
+      { id: 1241320, media_type: "anime", tmdb_type: "movie", anilist_id: 172960, title: "My Hero Academia: You're Next", release_date: "2024-08-02" },
+      { id: 65930, media_type: "anime", anilist_id: 182896, title: "My Hero Academia Final Season", release_date: "2025-10-04" },
     ]
   },
   {
@@ -873,3 +877,30 @@ export const FRANCHISES: FranchiseDefinition[] = [
     ]
   }
 ];
+
+export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string): any[] | null {
+  const normTitle = (title || "").toLowerCase();
+  
+  for (const franchise of FRANCHISES) {
+    const animeItems = (franchise.items || []).filter(i => i.media_type === "anime" && i.anilist_id);
+    if (animeItems.length <= 1) continue;
+
+    const matchesId = animeItems.some(i => i.anilist_id === anilistId);
+    const matchesTitle = normTitle && franchise.name.toLowerCase().includes(normTitle.replace(/\s*(season|part|\dth|\dnd|\drd|\dst).*/i, "").trim());
+
+    if (matchesId || matchesTitle) {
+      return animeItems.map(item => ({
+        id: item.anilist_id!,
+        idMal: null,
+        title: item.title || franchise.name,
+        episodes: item.tmdb_type === "movie" ? 1 : 24,
+        season: null,
+        seasonYear: item.release_date ? parseInt(item.release_date.substring(0, 4), 10) : null,
+        format: item.tmdb_type === "movie" ? "MOVIE" : "TV",
+        coverImage: item.poster_path || franchise.poster_path,
+        bannerImage: franchise.backdrop_path,
+      }));
+    }
+  }
+  return null;
+}

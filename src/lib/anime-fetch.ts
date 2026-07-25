@@ -4,6 +4,7 @@
 
 import { isAdultContent } from "./content-filter";
 import { tmdbFetch, searchTmdbShow, fetchTmdbEpisodeData, getCleanBaseTitle } from "./tmdb";
+import { getCuratedAnimeFranchiseNodes } from "./franchises";
 
 export interface AnimeItem {
   id: string;
@@ -442,6 +443,11 @@ const BATCH_RELATIONS_QUERY = `query ($ids: [Int]) {
 }`;
 
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
+  const curated = getCuratedAnimeFranchiseNodes(startId);
+  if (curated && curated.length > 1) {
+    return curated as FranchiseNode[];
+  }
+
   const visited = new Map<number, FranchiseNode>();
 
   function addNode(data: any) {
@@ -1026,6 +1032,15 @@ export async function getAnimeDetails(
         }
       }
     } catch { /* no fallback */ }
+
+    try {
+      const searchResults = await searchAnime(id.replace(/[-_]/g, " ").trim());
+      const firstMatch = searchResults?.[0];
+      if (firstMatch && firstMatch.id && firstMatch.id !== id) {
+        return getAnimeDetails(firstMatch.id, epLimit, skipEpisodes);
+      }
+    } catch {}
+
     return null;
   }
 

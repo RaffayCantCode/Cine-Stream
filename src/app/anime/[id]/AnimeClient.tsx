@@ -27,6 +27,7 @@ function AnimeHeroTrailerButton() {
 }
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
+import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users, Film } from "lucide-react";
 
 interface FranchiseNode {
@@ -80,7 +81,7 @@ function transformRecItem(media: any): any {
   };
 }
 
-async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<string>, minItems = 12): Promise<any[]> {
+async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<string>, minItems = 12, animeGenres: string[] = []): Promise<any[]> {
   let items: any[] = [];
 
   try {
@@ -114,6 +115,9 @@ async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<st
       const existingIds = new Set(items.map((i: any) => i.id));
       const seenGenres = new Set<string>();
       items.forEach((i: any) => i.genres?.forEach((g: string) => seenGenres.add(g)));
+      if (seenGenres.size === 0 && animeGenres.length > 0) {
+        animeGenres.forEach((g: string) => seenGenres.add(g));
+      }
       const genreList = [...seenGenres].slice(0, 3);
       if (genreList.length > 0) {
         const padData = await anilistQuery(`
@@ -135,6 +139,30 @@ async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<st
         items = [...items, ...padItems];
       }
     } catch { /* padding failed */ }
+  }
+
+  // Fallback: If still under minItems, query top popular anime
+  if (items.length < minItems) {
+    try {
+      const existingIds = new Set(items.map((i: any) => i.id));
+      const popData = await anilistQuery(`
+        query {
+          Page(page: 1, perPage: 25) {
+            media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC]) {
+              id idMal isAdult title { romaji english native }
+              coverImage { large extraLarge }
+              episodes genres averageScore description status type format season seasonYear
+            }
+          }
+        }
+      `, {});
+
+      const popItems = (popData?.data?.Page?.media || [])
+        .map(transformRecItem)
+        .filter(Boolean)
+        .filter((item: any) => !existingIds.has(item.id) && !excludeIds.has(item.id) && item.id !== String(anilistId));
+      items = [...items, ...popItems];
+    } catch { /* popular fallback failed */ }
   }
 
   const seen = new Set<string>();
@@ -202,7 +230,7 @@ async function fetchEpisodesClientSide(
       if (azData?.episodes) {
         for (const k of Object.keys(azData.episodes)) {
           const num = parseInt(k, 10);
-          if (isNaN(num) || num > totalEpisodes) continue;
+          if (isNaN(num)) continue;
           const ep = azData.episodes[k];
           aniZipEps.push({
             episodeId: `${seasonId}-${num}`,
@@ -251,7 +279,12 @@ async function fetchEpisodesClientSide(
           const epsList = tmdbData?.episodes || [];
           if (epsList.length > 0) {
             const result: Episode[] = [];
-            const count = Math.min(totalEpisodes || epsList.length, 1500);
+            const maxEpCount = Math.max(
+              (totalEpisodes && totalEpisodes < 1499) ? totalEpisodes : 0,
+              epsList.length,
+              aniZipEps.length
+            );
+            const count = Math.min(maxEpCount || epsList.length, 1500);
             for (let i = 1; i <= count; i++) {
               const azMatch = aniZipEps.find(e => e.episodeNum === i);
               const tmdbIdx = mappedOffset + i - 1;
@@ -287,14 +320,15 @@ async function fetchEpisodesClientSide(
         const kJson = await kSearch.json();
         const kId = kJson.data?.[0]?.id;
         if (kId) {
-          const kEpsRes = await fetch(`https://kitsu.io/api/edge/anime/${kId}/episodes?page[limit]=${totalEpisodes}`, { signal: AbortSignal.timeout(4000) });
+          const kitsuLimit = Math.max((totalEpisodes && totalEpisodes < 1499) ? totalEpisodes : 50, 50);
+          const kEpsRes = await fetch(`https://kitsu.io/api/edge/anime/${kId}/episodes?page[limit]=${kitsuLimit}`, { signal: AbortSignal.timeout(4000) });
           if (kEpsRes.ok) {
             const kEpsJson = await kEpsRes.json();
             const kData = kEpsJson.data || [];
             const kEps: Episode[] = [];
             for (const ep of kData) {
               const num = ep.attributes?.number;
-              if (!num || num > totalEpisodes) continue;
+              if (!num) continue;
               kEps.push({
                 episodeId: `kitsu-${kId}-${num}`,
                 episodeNum: num,
@@ -320,6 +354,11 @@ async function fetchEpisodesClientSide(
 }
 
 async function fetchFranchiseClientSide(startId: number) {
+  const curated = getCuratedAnimeFranchiseNodes(startId);
+  if (curated && curated.length > 1) {
+    return curated as FranchiseNode[];
+  }
+
   // Query fetches the node's OWN metadata AND its relation edges
   const RELATIONS_QUERY = `query ($id: Int) {
     Media(id: $id, type: ANIME) {
@@ -799,7 +838,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
     // Client-side fallback: fetch directly from browser APIs (AniZip, TMDB proxy, Kitsu)
     const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
-    const epCount = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 12;
+    const epCount = (matchingSeason?.totalEpisodes && matchingSeason.totalEpisodes < 1499)
+      ? matchingSeason.totalEpisodes
+      : ((anime?.totalEpisodes && anime.totalEpisodes < 1499) ? anime.totalEpisodes : 1500);
     const clientEpsRaw = await fetchEpisodesClientSide(
       seasonId,
       matchingSeason?.name || anime?.name || "",
@@ -1023,7 +1064,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setRecsLoading(true);
     const franchiseIds = new Set(franchiseNodes.map(n => String(n.id)).filter(Boolean));
     const excludeIds = new Set([id, ...franchiseIds]);
-    fetchAnilistRecommendations(Number(id), excludeIds, 12)
+    fetchAnilistRecommendations(Number(id), excludeIds, 12, anime.genres || [])
       .then(items => {
         if (items.length > 0) {
           const withReasons = items.map((item: any) => ({
@@ -1735,21 +1776,24 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               <section className="max-w-5xl mx-auto space-y-4 mt-10">
                 {/* ── Watch Order Section (franchise order reference) ── */}
                 {(() => {
+                  const curatedNodes = getCuratedAnimeFranchiseNodes(Number(id), anime?.name);
                   const nodesToUse: FranchiseNode[] = (franchiseNodes && franchiseNodes.length > 1)
                     ? franchiseNodes
-                    : (anime?.seasons && anime.seasons.length > 1)
-                      ? anime.seasons.map(s => ({
-                          id: Number(s.id) || Number(id),
-                          idMal: s.idMal || null,
-                          title: s.name,
-                          episodes: s.totalEpisodes,
-                          season: null,
-                          seasonLabel: s.seasonLabel,
-                          totalEpisodes: s.totalEpisodes,
-                          seasonYear: s.seasonYear || null,
-                          format: "TV",
-                        }))
-                      : franchiseNodes;
+                    : (curatedNodes && curatedNodes.length > 1)
+                      ? (curatedNodes as FranchiseNode[])
+                      : (anime?.seasons && anime.seasons.length > 1)
+                        ? anime.seasons.map(s => ({
+                            id: Number(s.id) || Number(id),
+                            idMal: s.idMal || null,
+                            title: s.name,
+                            episodes: s.totalEpisodes,
+                            season: null,
+                            seasonLabel: s.seasonLabel,
+                            totalEpisodes: s.totalEpisodes,
+                            seasonYear: s.seasonYear || null,
+                            format: "TV",
+                          }))
+                        : (franchiseNodes || []);
 
                   const visibleFranchiseNodes = nodesToUse.filter(node => {
                     if (!node.title) return false;

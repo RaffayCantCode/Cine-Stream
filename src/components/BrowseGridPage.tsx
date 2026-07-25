@@ -120,21 +120,23 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
     load();
   }, [endpoint, page, mediaType]);
 
-  // ── Scroll-to-load-more: window scroll listener (works on Netlify with overflow-x:hidden body) ──
+  // ── Scroll-to-load-more: Smooth IntersectionObserver ──
   useEffect(() => {
-    const check = () => {
-      if (isLoadingRef.current || !hasMoreRef.current) return;
-      const sentinel = sentinelRef.current;
-      if (!sentinel) return;
-      const rect = sentinel.getBoundingClientRect();
-      if (rect.top <= window.innerHeight * 2) {
-        setPage((p) => p + 3);
-      }
-    };
-    triggerLoadRef.current = check;
-    window.addEventListener('scroll', check, { passive: true });
-    check(); // immediate check
-    return () => window.removeEventListener('scroll', check);
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && !isLoadingRef.current && hasMoreRef.current) {
+          setPage((p) => p + 3);
+        }
+      },
+      { rootMargin: "300px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
   }, []);
 
   // Re-check after items change

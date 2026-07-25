@@ -776,19 +776,7 @@ export async function GET(
       seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
       seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta, season);
 
-      const knownTotal = season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
-      const nextAiring = meta?.anime?.nextAiringEpisode?.episode || null;
-      const maxReleasedIndex = seasonEps.reduce((max: number, ep: any) => {
-        return ep.isReleased !== false ? Math.max(max, ep.episodeNum) : max;
-      }, 0);
-
-      const maxAllowedEpNum = knownTotal
-        ? knownTotal
-        : Math.min(Math.max(maxReleasedIndex + 1, nextAiring || 0, 12), 60);
-
-      seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= maxAllowedEpNum);
-
-      console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId} (maxReleased=${maxReleasedIndex}, maxAllowed=${maxAllowedEpNum})`);
+      console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId}`);
 
       const resPayload = {
         success: true,

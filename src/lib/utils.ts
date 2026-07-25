@@ -43,11 +43,32 @@ function getCacheKey(input: RequestInfo | URL, init?: RequestInit) {
   return `${method}:${String(input)}:${headers}`;
 }
 
+function getSmartTtlMs(urlStr: string): number {
+  const lower = urlStr.toLowerCase();
+  if (lower.includes("/genre") || lower.includes("/providers") || lower.includes("/configuration")) {
+    return 86_400_000; // 24 hours
+  }
+  if (lower.includes("/collection") || lower.includes("/franchise")) {
+    return 43_200_000; // 12 hours
+  }
+  if (lower.includes("/popular") || lower.includes("/top-rated")) {
+    return 3_600_000; // 1 hour
+  }
+  if (lower.includes("/trending")) {
+    return 1_800_000; // 30 minutes
+  }
+  if (lower.includes("/search")) {
+    return 900_000; // 15 minutes
+  }
+  return 900_000; // 15 minutes default
+}
+
 export async function fetchJson<T = unknown>(
   input: RequestInfo | URL,
   init?: FetchJsonOptions
 ): Promise<T> {
-  const { cacheTtlMs = 60_000, skipCache = false, ...requestInit } = init || {};
+  const urlStr = String(input);
+  const { cacheTtlMs = getSmartTtlMs(urlStr), skipCache = false, ...requestInit } = init || {};
   const method = requestInit.method ?? "GET";
   const shouldUseCache = !skipCache && method.toUpperCase() === "GET";
   const cacheKey = getCacheKey(input, requestInit);
@@ -56,6 +77,20 @@ export async function fetchJson<T = unknown>(
     const cached = requestCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
       return cached.data as T;
+    }
+
+    // Try sessionStorage cache for fast cross-page hydration
+    if (typeof window !== "undefined") {
+      try {
+        const storedStr = sessionStorage.getItem(`cs_cache_${cacheKey}`);
+        if (storedStr) {
+          const parsed = JSON.parse(storedStr);
+          if (parsed && parsed.expires > Date.now()) {
+            requestCache.set(cacheKey, { data: parsed.data, expires: parsed.expires });
+            return parsed.data as T;
+          }
+        }
+      } catch {}
     }
 
     const pending = pendingRequests.get(cacheKey);
@@ -84,8 +119,15 @@ export async function fetchJson<T = unknown>(
     }
 
     if (shouldUseCache) {
-      requestCache.set(cacheKey, { data, expires: Date.now() + cacheTtlMs });
+      const expires = Date.now() + cacheTtlMs;
+      requestCache.set(cacheKey, { data, expires });
       pruneCache();
+
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(`cs_cache_${cacheKey}`, JSON.stringify({ data, expires }));
+        } catch {}
+      }
     }
 
     return data as T;

@@ -28,59 +28,41 @@ const COMMON_VOWELS: Record<string, string> = { a: "e", e: "i", i: "o", o: "u", 
 const ADJACENT_KEYS: Record<string, string> = {
   q: "w", w: "e", e: "r", r: "t", t: "y", y: "u", u: "i", i: "o", o: "p",
   a: "s", s: "d", d: "f", f: "g", g: "h", h: "j", j: "k", k: "l",
-  z: "x", x: "c", c: "v", v: "b", b: "n", n: "m",
+  z: "x", x: "c", c: "v", v: "b", b: "n", n: "m", m: "n", l: "n",
 };
 
-function normalize(s: string): string {
+export function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
-export function generateVariants(query: string, maxVariants = 8): string[] {
+export function generateSearchCandidates(query: string): string[] {
   const normalized = normalize(query);
   if (!normalized) return [];
-  const variants = new Set<string>();
-  const chars = [...normalized];
+  const candidates = new Set<string>();
 
-  for (let i = 0; i < chars.length; i++) {
-    const c = chars[i];
-    if (c >= "a" && c <= "z") {
-      const adj = ADJACENT_KEYS[c];
-      if (adj) {
-        const replaced = [...chars]; replaced[i] = adj; variants.add(replaced.join(""));
-        const swapped = [...chars]; swapped[i] = adj.toUpperCase(); variants.add(swapped.join("").toLowerCase());
-      }
-      const vowel = COMMON_VOWELS[c];
-      if (vowel && vowel !== c) {
-        const replaced = [...chars]; replaced[i] = vowel; variants.add(replaced.join(""));
-      }
-    }
-    if (i < chars.length - 1) {
-      const swapped = [...chars]; [swapped[i], swapped[i + 1]] = [swapped[i + 1], swapped[i]]; variants.add(swapped.join(""));
-    }
-    const deleted = [...chars]; deleted.splice(i, 1); variants.add(deleted.join(""));
-    const doubled = [...chars]; doubled.splice(i, 0, c); variants.add(doubled.join(""));
+  // 1. Swap adjacent character pairs (e.g. naurto -> naruto, hamtlet -> hamlet, spidr -> spider)
+  const chars = [...normalized];
+  for (let i = 0; i < chars.length - 1; i++) {
+    const swapped = [...chars];
+    [swapped[i], swapped[i + 1]] = [swapped[i + 1], swapped[i]];
+    candidates.add(swapped.join(""));
   }
 
+  // 2. High-precision n/m swaps (e.g. hamlet <-> hamnet)
+  if (normalized.includes("m")) candidates.add(normalized.replace(/m/g, "n"));
+  if (normalized.includes("n")) candidates.add(normalized.replace(/n/g, "m"));
+
+  // 3. Multi-word extractions
   const words = normalized.split(" ").filter(Boolean);
   if (words.length > 1) {
     for (let i = 0; i < words.length; i++) {
-      const without = [...words]; without.splice(i, 1); variants.add(without.join(" "));
+      if (words[i].length >= 3) candidates.add(words[i]);
+      const without = [...words]; without.splice(i, 1);
+      if (without.length > 0) candidates.add(without.join(" "));
     }
-    for (let i = 0; i < words.length - 1; i++) {
-      const merged = [...words]; merged[i] = merged[i] + merged[i + 1]; merged.splice(i + 1, 1); variants.add(merged.join(" "));
-    }
-  }
-  if (words.length === 1 && normalized.length > 4) {
-    const splits = [];
-    for (let i = 2; i < normalized.length - 1; i++) {
-      splits.push(normalized.slice(0, i) + " " + normalized.slice(i));
-    }
-    splits.sort((a, b) => Math.abs(a.length / 2 - a.indexOf(" ")) - Math.abs(b.length / 2 - b.indexOf(" ")));
-    variants.add(splits[0]);
-    if (splits.length > 1) variants.add(splits[1]);
   }
 
-  return [...variants].filter(v => v.length >= 2 && v !== normalized).slice(0, maxVariants);
+  return [...candidates].filter(v => v.length >= 3 && v !== normalized).slice(0, 8);
 }
 
 export function findBestSuggestion(
@@ -92,12 +74,44 @@ export function findBestSuggestion(
   const normalizedQuery = normalize(query);
   let best: { suggestion: string; distance: number } | null = null;
   for (const candidate of candidates) {
-    const dist = editDistance(normalizedQuery, normalize(candidate));
+    const normCandidate = normalize(candidate);
+    if (!normCandidate || normCandidate === normalizedQuery) continue;
+    const dist = editDistance(normalizedQuery, normCandidate);
     if (dist <= maxDistance && (!best || dist < best.distance)) {
       best = { suggestion: candidate, distance: dist };
     }
   }
   return best;
+}
+
+export function findCloseTitleMatches(
+  query: string,
+  candidateTitles: string[],
+  maxDistance = 3
+): string[] {
+  if (!query || !candidateTitles.length) return [];
+  const normalizedQuery = normalize(query);
+  const matched = new Set<string>();
+
+  for (const candidate of candidateTitles) {
+    const normCandidate = normalize(candidate);
+    if (!normCandidate) continue;
+    if (normCandidate === normalizedQuery) continue;
+
+    const dist = editDistance(normalizedQuery, normCandidate);
+    if (dist <= maxDistance) {
+      matched.add(candidate);
+    } else if (normCandidate.startsWith(normalizedQuery) || normalizedQuery.startsWith(normCandidate)) {
+      matched.add(candidate);
+    } else {
+      const overlap = computeWordOverlap(normalizedQuery, normCandidate);
+      if (overlap >= 0.5) {
+        matched.add(candidate);
+      }
+    }
+  }
+
+  return [...matched].slice(0, 10);
 }
 
 export function getTitleExtractor(item: any): string {

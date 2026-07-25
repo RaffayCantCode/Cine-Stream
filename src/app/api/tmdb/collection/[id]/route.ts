@@ -78,13 +78,14 @@ export async function GET(
         let poster_path = item.poster_path || null;
         let title = item.title || `Anime ${item.anilist_id || item.id}`;
 
-        if (!poster_path && (item.anilist_id || item.id)) {
+        const alId = item.anilist_id || item.id;
+        if (alId) {
           try {
             const query = `query ($id: Int) { Media(id: $id, type: ANIME) { title { romaji english } coverImage { extraLarge large } bannerImage } }`;
             const alRes = await fetch("https://graphql.anilist.co", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query, variables: { id: item.anilist_id || item.id } }),
+              body: JSON.stringify({ query, variables: { id: alId } }),
               next: { revalidate: 86400 }
             });
             if (alRes.ok) {
@@ -98,6 +99,17 @@ export async function GET(
               }
             }
           } catch (e) {}
+        }
+
+        if (!poster_path && item.title) {
+          const searchFallback = await fetchSearchFallback(item, item.tmdb_type || "movie");
+          if (searchFallback?.poster_path) {
+            poster_path = searchFallback.poster_path;
+          }
+        }
+
+        if (poster_path && poster_path.startsWith("/")) {
+          poster_path = `https://image.tmdb.org/t/p/w500${poster_path}`;
         }
 
         return {
