@@ -1394,6 +1394,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setVisibleCount(INITIAL_EPISODES_PER_PAGE);
   }, [currentSeasonId]);
 
+  // Expand visible count so the selected episode is always rendered in the queue
+  useEffect(() => {
+    if (!selectedEp || !hasRestoredState) return;
+    const idx = currentSeasonEps.findIndex(e => e.episodeId === selectedEp.episodeId);
+    if (idx >= 0 && idx >= visibleCount) {
+      setVisibleCount(Math.min(idx + 1, currentSeasonEps.length));
+    }
+  }, [selectedEp?.episodeId, hasRestoredState, currentSeasonId]);
+
   const currentIdx = useMemo(
     () => currentSeasonEps.findIndex(e => e.episodeId === selectedEp?.episodeId),
     [currentSeasonEps, selectedEp]

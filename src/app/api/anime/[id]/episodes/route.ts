@@ -165,12 +165,34 @@ async function getEnrichedEpisodesList(
 ): Promise<any[]> {
   let seasonEps: any[] = [];
 
+  // Strip parenthetical suffixes (e.g. "(Japanese Dub)") from the season name so that
+  // the filler slug matches animefillerlist.com correctly. This suffix is appended by
+  // curated franchise definitions and is not part of the real anime title.
+  const cleanSeasonName = seasonName.replace(/\s*\([^)]*\)\s*/g, "").trim() || seasonName;
+
+  // Resolve MAL ID if not provided — needed for Jikan API filler data
+  if (!idMal) {
+    try {
+      const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${seasonId}`, {
+        signal: AbortSignal.timeout(3000),
+        headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+        next: { revalidate: 86400 } as any,
+      });
+      if (azRes.ok) {
+        const azData = await azRes.json();
+        if (azData?.mappings?.mal_id) {
+          idMal = azData.mappings.mal_id;
+        }
+      }
+    } catch {}
+  }
+
   // 1, 2 & 3. Try AniZip, Jikan, and Tatakai in parallel.
   // Filler lookup is deliberately NOT awaited here — it scrapes a 3rd party website
   // (animefillerlist.com) which is slow and unreliable. Running it in parallel with
-  // a strict timeout and merging results after ensures it never blocks episode delivery.
-  const fillerTimeout = new Promise<null>(r => setTimeout(() => r(null), 3500));
-  const fillerFetchPromise = fetchFillerLookupFromAnimeFillerList(seasonName);
+  // a generous timeout ensures it never blocks episode delivery.
+  const fillerTimeout = new Promise<null>(r => setTimeout(() => r(null), 6000));
+  const fillerFetchPromise = fetchFillerLookupFromAnimeFillerList(cleanSeasonName);
 
   const [aniZipEpsRes, jikanEpsRes, tatakaiEpsRes] = await Promise.allSettled([
     fetchEpisodesFromAniZip(seasonId, totalEpisodes),
@@ -205,26 +227,36 @@ async function getEnrichedEpisodesList(
   const fillerLookup = await Promise.race([fillerFetchPromise, fillerTimeout]);
 
   // Cross-merge thumbnails, descriptions, and titles across sources
-  const secondarySources = [jikanEps, tatakaiEps, aniZipEps].filter((s): s is any[] => Array.isArray(s) && s.length > 0);
+  const primarySrcName = seasonEps === aniZipEps ? aniZipEps
+    : seasonEps === jikanEps ? jikanEps
+    : seasonEps === tatakaiEps ? tatakaiEps
+    : null;
+  const secondarySources = [jikanEps, tatakaiEps, aniZipEps]
+    .filter((s): s is any[] => Array.isArray(s) && s.length > 0 && s !== primarySrcName);
   if (seasonEps.length > 0) {
+    // Merge metadata from secondary sources
     for (const src of secondarySources) {
       seasonEps = seasonEps.map((ep) => {
         const match = src.find(s => s && s.episodeNum === ep.episodeNum);
         const isGenericTitle = !ep.title || ep.title === `Episode ${ep.episodeNum}`;
-        // Only apply isFiller when the fillerLookup plausibly covers this show.
-        // Heuristic: the lookup must have at least half as many episodes as totalEpisodes
-        // to be considered a valid match. This prevents false-positive filler tags from
-        // a wrong show page (e.g., animefillerlist returning a different series).
-        const fillerLookupValid = fillerLookup != null &&
-          (fillerLookup.filler.size + fillerLookup.mixed.size + (totalEpisodes * 0.3)) >= totalEpisodes * 0.4;
         return {
           ...ep,
           title: isGenericTitle && match?.title ? match.title : ep.title,
           thumbnail: ep.thumbnail || match?.thumbnail || null,
           description: ep.description || match?.description || null,
-          isFiller: Boolean(ep.isFiller || match?.isFiller || (fillerLookupValid && fillerLookup?.filler.has(ep.episodeNum))),
+          isFiller: ep.isFiller || match?.isFiller || false,
         };
       });
+    }
+    // Apply filler lookup as a final pass so it can set filler on episodes that
+    // no API source flagged (e.g., AniZip doesn't provide filler data at all).
+    const fillerLookupValid = fillerLookup != null &&
+      (fillerLookup.filler.size + fillerLookup.mixed.size) >= Math.max(totalEpisodes * 0.1, 3);
+    if (fillerLookupValid) {
+      seasonEps = seasonEps.map((ep) => ({
+        ...ep,
+        isFiller: ep.isFiller || fillerLookup.filler.has(ep.episodeNum),
+      }));
     }
   }
 

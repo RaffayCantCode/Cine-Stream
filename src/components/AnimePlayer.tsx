@@ -9,6 +9,7 @@ interface ProviderSource {
   name: string;
   provider: "vidnest" | "animeplay" | "123embed" | "vidlink" | "autoembed";
   color: string;
+  quality: "best" | "good" | "backup";
 }
 
 interface AnimePlayerProps {
@@ -30,12 +31,18 @@ interface AnimePlayerProps {
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Source 1", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
-  { name: "Source 2", provider: "vidnest",   color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
-  { name: "Source 3", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20" },
-  { name: "Source 4", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
-  { name: "Source 5", provider: "autoembed", color: "from-[#f43f5e]/30 to-[#fb7185]/20" },
+  { name: "Source 1", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
+  { name: "Source 2", provider: "vidnest",   color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
+  { name: "Source 3", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20", quality: "good" },
+  { name: "Source 4", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20", quality: "good" },
+  { name: "Source 5", provider: "autoembed", color: "from-[#f43f5e]/30 to-[#fb7185]/20", quality: "backup" },
 ];
+
+const QUALITY_STYLES: Record<string, string> = {
+  best:   "bg-emerald-400/15 text-emerald-300 border-emerald-300/25",
+  good:   "bg-cyan-400/15 text-cyan-300 border-cyan-300/25",
+  backup: "bg-amber-400/15 text-amber-300 border-amber-300/25",
+};
 
 function buildProviderUrl(
   provider: string,
@@ -408,6 +415,11 @@ export function AnimePlayer({
           >
             <Server className="w-4 h-4" />
             {currentSource.name}
+            {currentSource?.quality && (
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[currentSource.quality]}`}>
+                {currentSource.quality}
+              </span>
+            )}
             <ChevronRight className={`w-4 h-4 transition-transform ${showSources ? "rotate-90" : ""}`} />
           </button>
           {PROVIDERS.length > 1 && (
@@ -453,6 +465,9 @@ export function AnimePlayer({
               >
                 <Server className={`w-4 h-4 shrink-0 ${isActive ? "" : "text-white/30"}`} />
                 <span className="flex-1 text-left">{source.name}</span>
+                <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[source.quality]}`}>
+                  {source.quality}
+                </span>
                 {isActive && !isLoading && !hasError && <Check className="w-3.5 h-3.5 text-emerald-300" />}
                 {isActive && isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               </button>

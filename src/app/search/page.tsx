@@ -3,19 +3,17 @@ export const runtime = 'edge';
 
 import { useState, useRef, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { PersonCard } from "@/components/PersonCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { useDebounce } from "@/hooks/useDebounce";
-import { Search as SearchIcon, MonitorPlay, Sparkles, HelpCircle, Flame, Film, Tv, User } from "lucide-react";
+import { Search as SearchIcon, Sparkles, HelpCircle } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
-import { fetchClientAnime } from "@/lib/anilist-client";
 import { motion } from "framer-motion";
 import { useContentMode } from "@/context/ContentModeContext";
-import { generateSearchCandidates, editDistance, computeWordOverlap } from "@/lib/fuzzy-search";
+import { generateSearchCandidates } from "@/lib/fuzzy-search";
 
 interface MediaItem {
   id: number;
@@ -106,13 +104,6 @@ function SearchContent() {
             }
           } catch {}
 
-          try {
-            const clientRes = await fetchClientAnime("search", 1, "", qTerm);
-            if (clientRes?.items && clientRes.items.length > 0) {
-              return clientRes.items;
-            }
-          } catch {}
-
           const cleaned = qTerm.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
           if (cleaned && cleaned !== qTerm) {
             try {
@@ -127,7 +118,7 @@ function SearchContent() {
           return [];
         };
 
-        // 2. Main query search (TMDB + Anime simultaneously)
+        // 2. Phase 1 — Main query search (TMDB + Anime simultaneously)
         const [tmdbRes, animeRes] = await Promise.allSettled([
           fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`),
           fetchAnimeWithFallback(debouncedQuery),
@@ -149,128 +140,59 @@ function SearchContent() {
           mainAnime = animeRes.value;
         }
 
-        // AUTO-CORRECT TYPO FALLBACK: If 0 results found for debouncedQuery (e.g. "naurto" or "hamtlet" or "spidrman")
+        // AUTO-CORRECT TYPO FALLBACK: If 0 results found, try all candidates in parallel
         let correctedTitle: string | null = null;
         if (mainTmdb.length === 0 && mainAnime.length === 0) {
           const candidates = generateSearchCandidates(debouncedQuery);
-          for (const cand of candidates) {
-            const [candTmdbRes, candAnimeRes] = await Promise.allSettled([
-              fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(cand)}`),
-              fetchAnimeWithFallback(cand),
-            ]);
-
-            let cTmdb: MediaItem[] = [];
-            let cAnime: AnimeItem[] = [];
-
-            if (candTmdbRes.status === "fulfilled" && candTmdbRes.value?.results) {
-              cTmdb = filterReleasedSafeContent(
-                candTmdbRes.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
-                true
-              ) as MediaItem[];
-            }
-            if (candAnimeRes.status === "fulfilled" && Array.isArray(candAnimeRes.value)) {
-              cAnime = candAnimeRes.value;
-            }
-
-            if (cTmdb.length > 0 || cAnime.length > 0) {
-              mainTmdb = cTmdb;
-              mainAnime = cAnime;
-              correctedTitle = cand.charAt(0).toUpperCase() + cand.slice(1);
+          // Fire all candidates in parallel and pick the first one that returns results
+          const candidateResults = await Promise.allSettled(
+            candidates.map(async (cand) => {
+              const [ct, ca] = await Promise.allSettled([
+                fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(cand)}`),
+                fetchAnimeWithFallback(cand),
+              ]);
+              let cTmdb: MediaItem[] = [];
+              let cAnime: AnimeItem[] = [];
+              if (ct.status === "fulfilled" && ct.value?.results) {
+                cTmdb = filterReleasedSafeContent(
+                  ct.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
+                  true
+                ) as MediaItem[];
+              }
+              if (ca.status === "fulfilled" && Array.isArray(ca.value)) {
+                cAnime = ca.value;
+              }
+              if (cTmdb.length > 0 || cAnime.length > 0) {
+                return { tmdb: cTmdb, anime: cAnime, title: cand.charAt(0).toUpperCase() + cand.slice(1) };
+              }
+              return null;
+            })
+          );
+          for (const r of candidateResults) {
+            if (r.status === "fulfilled" && r.value) {
+              mainTmdb = r.value.tmdb;
+              mainAnime = r.value.anime;
+              correctedTitle = r.value.title;
               break;
             }
           }
         }
 
+        // Show main results immediately — stop loading NOW
         setResults(mainTmdb);
         setAnimeResults(mainAnime);
         setCorrectedQuery(correctedTitle);
+        if (!cancelled) setIsLoading(false);
 
-        // 3. Smart Related Word / Title Suggestions (ONLY Real Media Titles, Zero Gibberish)
-        const suggestionsSet = new Set<string>();
-        const qLower = debouncedQuery.toLowerCase().trim();
-        const corrLower = correctedTitle ? correctedTitle.toLowerCase().trim() : "";
-
-        // Top main media items for recommendation fetching
-        const topMediaItem = mainTmdb.find((r) => (r.media_type === "movie" || r.media_type === "tv") && r.poster_path);
-        const topAnimeItem = mainAnime.find((a: any) => a.poster || a.image);
-
-        const searchPromises: Promise<any>[] = [];
-
-        if (topMediaItem) {
-          searchPromises.push(
-            fetchJson<{ results: MediaItem[] }>(
-              `/api/tmdb/recommendations?mediaId=${topMediaItem.id}&mediaType=${topMediaItem.media_type}`
-            ).catch(() => ({ results: [] }))
-          );
-        }
-
-        if (topAnimeItem) {
-          searchPromises.push(
-            fetchJson<{ data?: { recommendations: AnimeItem[] } }>(
-              `/api/anime/recommendations/${topAnimeItem.id}`
-            ).catch(() => ({ data: { recommendations: [] } }))
-          );
-        }
-
-        // Search candidate queries to get real media titles from API
-        const candidates = generateSearchCandidates(debouncedQuery);
-        candidates.slice(0, 3).forEach((cand) => {
-          if (cand.toLowerCase() !== qLower && cand.toLowerCase() !== corrLower) {
-            searchPromises.push(
-              fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(cand)}`).catch(() => ({ results: [] }))
-            );
-            searchPromises.push(
-              fetchAnimeWithFallback(cand).catch(() => [])
-            );
-          }
-        });
-
-        const promiseResults = await Promise.allSettled(searchPromises);
-
+        // 3. Phase 2 — Deferred: fetch related suggestions in background (non-blocking)
         if (!cancelled) {
-          promiseResults.forEach((res) => {
-            if (res.status === "fulfilled" && res.value) {
-              const val = res.value;
-              const extractName = (item: any) => item?.title || item?.name || item?.original_title || item?.original_name;
-
-              if (Array.isArray(val)) {
-                val.forEach((item: any) => {
-                  const name = extractName(item);
-                  if (name && name.toLowerCase() !== qLower && name.toLowerCase() !== corrLower) {
-                    suggestionsSet.add(name);
-                  }
-                });
-              } else if (val.results && Array.isArray(val.results)) {
-                val.results.forEach((item: any) => {
-                  if (item && item.media_type !== "person") {
-                    const name = extractName(item);
-                    if (name && name.toLowerCase() !== qLower && name.toLowerCase() !== corrLower) {
-                      suggestionsSet.add(name);
-                    }
-                  }
-                });
-              } else if (val.data?.recommendations && Array.isArray(val.data.recommendations)) {
-                val.data.recommendations.forEach((item: any) => {
-                  const name = extractName(item);
-                  if (name && name.toLowerCase() !== qLower && name.toLowerCase() !== corrLower) {
-                    suggestionsSet.add(name);
-                  }
-                });
-              }
-            }
+          fetchRelatedSuggestions(mainTmdb, mainAnime, correctedTitle, debouncedQuery).then(suggestions => {
+            if (!cancelled) setRelatedSuggestions(suggestions);
           });
-
-          // Filter out any gibberish words and pick top 6-8 real distinct media titles
-          const finalSuggestions = Array.from(suggestionsSet)
-            .filter((term) => term.trim().length >= 2)
-            .slice(0, 8);
-
-          setRelatedSuggestions(finalSuggestions);
         }
 
       } catch (err) {
         if (!cancelled) setError("Search failed");
-      } finally {
         if (!cancelled) setIsLoading(false);
       }
     };
@@ -281,6 +203,72 @@ function SearchContent() {
       cancelled = true;
     };
   }, [debouncedQuery]);
+
+  // ── Phase 2: Background fetch for related suggestions (non-blocking) ──────────
+  async function fetchRelatedSuggestions(
+    mainTmdb: MediaItem[],
+    mainAnime: AnimeItem[],
+    correctedTitle: string | null,
+    originalQuery: string
+  ): Promise<string[]> {
+    const suggestionsSet = new Set<string>();
+    const qLower = originalQuery.toLowerCase().trim();
+    const corrLower = correctedTitle ? correctedTitle.toLowerCase().trim() : "";
+
+    const topMediaItem = mainTmdb.find((r) => (r.media_type === "movie" || r.media_type === "tv") && r.poster_path);
+    const topAnimeItem = mainAnime.find((a: any) => a.poster || a.image);
+
+    const promises: Promise<any>[] = [];
+
+    if (topMediaItem) {
+      promises.push(
+        fetchJson<{ results: MediaItem[] }>(
+          `/api/tmdb/recommendations?mediaId=${topMediaItem.id}&mediaType=${topMediaItem.media_type}`
+        ).catch(() => ({ results: [] }))
+      );
+    }
+
+    if (topAnimeItem) {
+      promises.push(
+        fetchJson<{ data?: { recommendations: AnimeItem[] } }>(
+          `/api/anime/recommendations/${topAnimeItem.id}`
+        ).catch(() => ({ data: { recommendations: [] } }))
+      );
+    }
+
+    if (promises.length === 0) return [];
+
+    const results = await Promise.allSettled(promises);
+
+    const extractName = (item: any) => item?.title || item?.name || item?.original_title || item?.original_name;
+
+    results.forEach((res) => {
+      if (res.status !== "fulfilled" || !res.value) return;
+      const val = res.value;
+
+      if (val.results && Array.isArray(val.results)) {
+        val.results.forEach((item: any) => {
+          if (item && item.media_type !== "person") {
+            const name = extractName(item);
+            if (name && name.toLowerCase() !== qLower && name.toLowerCase() !== corrLower) {
+              suggestionsSet.add(name);
+            }
+          }
+        });
+      } else if (val.data?.recommendations && Array.isArray(val.data.recommendations)) {
+        val.data.recommendations.forEach((item: any) => {
+          const name = extractName(item);
+          if (name && name.toLowerCase() !== qLower && name.toLowerCase() !== corrLower) {
+            suggestionsSet.add(name);
+          }
+        });
+      }
+    });
+
+    return Array.from(suggestionsSet)
+      .filter((term) => term.trim().length >= 2)
+      .slice(0, 8);
+  }
 
   // Purely in-memory tab filtering (instantaneous, 0 latency, 0 aborts)
   const filteredResults = useMemo(() => {
