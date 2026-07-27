@@ -3,21 +3,16 @@ export const runtime = 'edge';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent, isTmdbAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import type { AnimeItem } from "@/components/AnimeCard";
 import { fetchClientAnime } from "@/lib/anilist-client";
-
-const HeroBanner = dynamic(() => import("@/components/HeroBanner").then((m) => m.HeroBanner), { ssr: false });
-const MediaRow = dynamic(() => import("@/components/MediaRow").then((m) => m.MediaRow), { ssr: false });
-const AnimeRow = dynamic(() => import("@/components/AnimeRow").then((m) => m.AnimeRow), { ssr: false });
-const ProviderIcon = dynamic(() => import("@/components/ProviderIcon").then((m) => m.ProviderIcon), { ssr: false });
-const ContinueWatching = dynamic(
-  () => import("@/components/ContinueWatching").then((m) => m.ContinueWatching),
-  { ssr: false }
-);
+import { HeroBanner } from "@/components/HeroBanner";
+import { MediaRow } from "@/components/MediaRow";
+import { AnimeRow } from "@/components/AnimeRow";
+import { ProviderIcon } from "@/components/ProviderIcon";
+import { ContinueWatching } from "@/components/ContinueWatching";
 import { Sidebar } from "@/components/Sidebar";
 import { TrendingProvidersHub } from "@/components/TrendingProvidersHub";
 import { FRANCHISES } from "@/lib/franchises";
@@ -188,16 +183,11 @@ export default function Home() {
       : INITIAL_COLLECTIONS
   );
   const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
-  const [revealedSections, setRevealedSections] = useState(() => globalHomeCache ? 8 : 0);
+  const [revealedSections] = useState(8);
   const [moodSeed, setMoodSeed] = useState("");
-  useEffect(() => {
-    if (isLoading) return;
-    if (revealedSections >= 8) return;
-    const t = setTimeout(() => setRevealedSections((r) => Math.min(r + 1, 8)), revealedSections === 0 ? 0 : 200);
-    return () => clearTimeout(t);
-  }, [isLoading, revealedSections]);
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
+
   const heroPoolLengthRef = useRef(0);
 
   useEffect(() => {
@@ -229,22 +219,17 @@ export default function Home() {
     }
   };
 
-  const heroPreloadLinksRef = useRef<HTMLLinkElement[]>([]);
-
   useEffect(() => {
     if (globalHomeCache) return; // Use in-memory globalHomeCache on back navigation
 
     let cancelled = false;
-    heroPreloadLinksRef.current.forEach(link => link.remove());
-    heroPreloadLinksRef.current = [];
 
     const load = async () => {
       setIsLoading(true);
       setLoadError(null);
 
       try {
-        // 1) Fire hero + anime + full rows in PARALLEL
-        const heroPromise = fetchJson<{
+        const homePromise = fetchJson<{
           trending: { results: MediaItem[] };
           popularMovies: { results: MediaItem[] };
           topRatedMovies: { results: MediaItem[] };
@@ -256,55 +241,46 @@ export default function Home() {
           animeTv: { results: MediaItem[] };
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
-        }>("/api/tmdb/home-hero", { cacheTtlMs: 180000 });
-
-        const rowsPromise = fetchJson<{
-          trending: { results: MediaItem[] };
-          popular: { results: MediaItem[] };
-          topRated: { results: MediaItem[] };
-          nowPlaying: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home", { cacheTtlMs: 180000 });
+        }>("/api/tmdb/home", { cacheTtlMs: 3600000 });
 
         const animePromise = fetchClientAnime("trending", 1).catch(() => null);
+        const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 3600000 }).catch(() => ({ collections: [] }));
-
-        // ── Hero data arrives FAST (only 2 TMDB calls) ─────────────────
-        const heroData = await heroPromise;
+        const [homeData, animeResponse, collectionsData] = await Promise.all([homePromise, animePromise, collectionsPromise]);
         if (cancelled) return;
 
-        const trendingSafe = filterReleasedSafeContent(heroData.trending?.results || [])
+        const trendingSafe = filterReleasedSafeContent(homeData.trending?.results || [])
           .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const popularSafe = filterReleasedSafeContent(heroData.popularMovies?.results || []).map(
+        const popularSafe = filterReleasedSafeContent(homeData.popularMovies?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const heroTopSafe = filterReleasedSafeContent(heroData.topRatedTv?.results || []).map(
+        const heroTopSafe = filterReleasedSafeContent(homeData.topRatedTv?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const heroRecentSafe = filterReleasedSafeContent(heroData.nowPlaying?.results || []).map(
+        const heroRecentSafe = filterReleasedSafeContent(homeData.nowPlaying?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
 
-        const topRatedMovieSafe = filterReleasedSafeContent(heroData.topRatedMovies?.results || []).map(
+        const topRatedMovieSafe = filterReleasedSafeContent(homeData.topRatedMovies?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const popularTvSafe = filterReleasedSafeContent(heroData.popularTv?.results || []).map(
+        const popularTvSafe = filterReleasedSafeContent(homeData.popularTv?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const onTheAirSafe = filterReleasedSafeContent(heroData.onTheAir?.results || []).map(
+        const onTheAirSafe = filterReleasedSafeContent(homeData.onTheAir?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const animeMovieSafe = filterReleasedSafeContent(heroData.animeMovies?.results || []).map(
+        const animeMovieSafe = filterReleasedSafeContent(homeData.animeMovies?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const animeTvSafe = filterReleasedSafeContent(heroData.animeTv?.results || []).map(
+        const animeTvSafe = filterReleasedSafeContent(homeData.animeTv?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const trendingMoviesTodaySafe = filterReleasedSafeContent(heroData.trendingMoviesToday?.results || []).map(
+        const trendingMoviesTodaySafe = filterReleasedSafeContent(homeData.trendingMoviesToday?.results || []).map(
           (i) => ({ ...i, media_type: "movie" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const trendingTvTodaySafe = filterReleasedSafeContent(heroData.trendingTvToday?.results || []).map(
+        const trendingTvTodaySafe = filterReleasedSafeContent(homeData.trendingTvToday?.results || []).map(
           (i) => ({ ...i, media_type: "tv" as const })
         ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
 
@@ -319,15 +295,27 @@ export default function Home() {
           episodes: { sub: null, dub: null },
         }));
 
+        const finalAnimeList = (animeResponse?.items && animeResponse.items.length > 0)
+          ? animeResponse.items.slice(0, 10)
+          : initialAnimeItems;
+
+        const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
+          ? collectionsData.collections
+          : INITIAL_COLLECTIONS;
+
+        const recPool = [...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe];
+        const daySalt = Math.floor(Date.now() / 86400000).toString();
+
         setTrending(trendingSafe);
         setPopular(sessionShuffle(popularSafe, "popular"));
         setTopRated(sessionShuffle(heroTopSafe, "toprated"));
         setRecent(heroRecentSafe);
         setTrendingMoviesToday(trendingMoviesTodaySafe);
         setTrendingTvToday(trendingTvTodaySafe);
-        setAnimeList(initialAnimeItems);
-        setAnimeLoading(false);
-
+        setAnimeList(finalAnimeList);
+        setCollections(validCollections);
+        setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+        setGenres((homeData.genres?.genres || []).slice(0, 18));
         setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
         setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
         setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
@@ -343,79 +331,14 @@ export default function Home() {
           ...animeMovieSafe,
           ...animeTvSafe,
         ]);
+        setAnimeLoading(false);
         setIsLoading(false);
 
-        // ── Full rows data arrives (more TMDB pages) ────────────────────
-        const [rowsData, animeResponse, collectionsData] = await Promise.all([rowsPromise, animePromise, collectionsPromise]);
-        if (cancelled) return;
-
-        const fullTrending = filterReleasedSafeContent(rowsData.trending?.results || [])
-          .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const fullPopular = filterReleasedSafeContent(rowsData.popular?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const topSafe = filterReleasedSafeContent(rowsData.topRated?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const recentSafe = filterReleasedSafeContent(rowsData.nowPlaying?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-
-        // Eagerly preload hero backdrops from the expanded pool BEFORE state update
-        const heroCandidates = [...fullTrending, ...fullPopular, ...topSafe, ...recentSafe];
-        const heroBackdrops = heroCandidates.filter((i) => i.backdrop_path).slice(0, 6);
-        for (const item of heroBackdrops) {
-          const link = document.createElement("link");
-          link.rel = "preload"; link.as = "image";
-          link.href = `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`;
-          link.fetchPriority = "high";
-          document.head.appendChild(link);
-          heroPreloadLinksRef.current.push(link);
-        }
-
-        setTrending(fullTrending);
-        setPopular(sessionShuffle(fullPopular, "popular"));
-        setTopRated(sessionShuffle(topSafe, "toprated"));
-        setRecent(recentSafe);
-
-        const recPool = [...fullPopular, ...topSafe, ...fullTrending, ...recentSafe];
-        const daySalt = Math.floor(Date.now() / 86400000).toString();
-
-        try {
-          const historyRes = await fetchJson<{ history: any[] }>("/api/watch-history", { skipCache: true }).catch(() => null);
-          const historyItems = historyRes?.history || [];
-          if (historyItems.length > 0) {
-            const lastWatched = historyItems[0];
-            const recRes = await fetchJson<{ results: any[] }>(`/api/tmdb/recommendations?mediaId=${lastWatched.mediaId}&mediaType=${lastWatched.mediaType}`, { skipCache: true }).catch(() => null);
-            if (recRes?.results && recRes.results.length > 0) {
-              setRecommended(recRes.results);
-            } else {
-              setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
-            }
-          } else {
-            setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
-          }
-        } catch {
-          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
-        }
-        setGenres((rowsData.genres?.genres || []).slice(0, 18));
-        const finalAnimeList = (animeResponse?.items && animeResponse.items.length > 0)
-          ? animeResponse.items.slice(0, 10)
-          : initialAnimeItems;
-
-        const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
-          ? collectionsData.collections
-          : INITIAL_COLLECTIONS;
-
-        setAnimeList(finalAnimeList);
-        setCollections(validCollections);
-        setAnimeLoading(false);
-
         globalHomeCache = {
-          trending: fullTrending,
-          popular: sessionShuffle(fullPopular, "popular"),
-          topRated: sessionShuffle(topSafe, "toprated"),
-          recent: recentSafe,
+          trending: trendingSafe,
+          popular: sessionShuffle(popularSafe, "popular"),
+          topRated: sessionShuffle(heroTopSafe, "toprated"),
+          recent: heroRecentSafe,
           trendingMoviesToday: trendingMoviesTodaySafe,
           trendingTvToday: trendingTvTodaySafe,
           heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
@@ -433,14 +356,14 @@ export default function Home() {
             ...animeTvSafe,
           ],
           recommended: recPool,
-          genres: (rowsData.genres?.genres || []).slice(0, 18),
+          genres: (homeData.genres?.genres || []).slice(0, 18),
           animeList: finalAnimeList,
           collections: validCollections,
         };
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Failed to load content");
-          if (!cancelled) setIsLoading(false);
+          setIsLoading(false);
           setAnimeLoading(false);
         }
       }
@@ -449,7 +372,6 @@ export default function Home() {
     load();
     return () => {
       cancelled = true;
-      heroPreloadLinksRef.current.forEach(link => link.remove());
     };
   }, []);
 

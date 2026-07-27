@@ -121,12 +121,12 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
             )}
             <span
               className={cn(
-                "flex items-center gap-1 text-xs font-extrabold px-2.5 py-1 rounded-lg uppercase tracking-wider backdrop-blur-md border transition-all shadow-sm",
+                "flex items-center gap-1 text-xs font-black px-3 py-1 rounded-lg uppercase tracking-wider backdrop-blur-md border transition-all shadow-md",
                 isAnime
-                  ? "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/30 shadow-fuchsia-500/10"
+                  ? "bg-purple-500/30 text-purple-300 border-purple-400/40 shadow-purple-500/25"
                   : isMovie
-                  ? "bg-blue-500/20 text-blue-300 border-blue-400/30 shadow-blue-500/10"
-                  : "bg-emerald-500/20 text-emerald-300 border-emerald-400/30 shadow-emerald-500/10"
+                  ? "bg-red-500/25 text-red-400 border-red-500/40 shadow-red-500/25"
+                  : "bg-emerald-500/25 text-emerald-300 border-emerald-400/40 shadow-emerald-500/25"
               )}
             >
               {isAnime ? "Anime" : isMovie ? "Movie" : "TV Show"}

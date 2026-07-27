@@ -401,16 +401,12 @@ export async function GET(
       let seasonEps: any[] = [];
       let seasonOverview: string | null = null;
 
-      // Guard against zero/undefined totalEpisodes — default to 1500 for TV seasons
-      const safeTotalEpisodes = Math.max(season.totalEpisodes || 1500, 1);
-      if (safeTotalEpisodes !== season.totalEpisodes) {
-        console.warn(`[Episodes API] Clamped totalEpisodes from ${season.totalEpisodes} to ${safeTotalEpisodes} for seasonId=${seasonId}`);
-      }
+      const isMovieOrSpecial = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) || meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE";
+      const safeTotalEpisodes = isMovieOrSpecial ? 1 : Math.max(season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : 0, 1);
 
       console.log(`[Episodes API] TMDB ready: ${isTMDBReady}, tmdbId: ${tmdbId}, tmdbSeasonNum: ${tmdbSeasonNum}, totalEpisodes: ${safeTotalEpisodes}`);
 
-      if (isTMDBReady) {
-        // ── TMDB is the source of truth for episodes ─────────────────────
+      if (isTMDBReady && !isMovieOrSpecial) {
         // ── TMDB is the source of truth for episodes ─────────────────────
         const tmdbShowPromise = tmdbFetch(`/tv/${tmdbId}`).catch(e => {
           console.error(`[Episodes API] TMDB show fetch failed for tmdbId=${tmdbId}:`, e);
@@ -435,7 +431,7 @@ export async function GET(
         }
 
         // Calculate needed TMDB seasons early based on mapRelativeToTmdb
-        let dynamicTotalEpisodes = safeTotalEpisodes;
+        let dynamicTotalEpisodes = isMovieOrSpecial ? 1 : safeTotalEpisodes;
         // True episode count from AniList (null if unknown/airing with no count)
         const knownEpisodeCount = season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
         // Is this season finished (FINISHED status)?
@@ -447,26 +443,16 @@ export async function GET(
             (s.episodeOffset || 0) > episodeOffset &&
             s.totalEpisodes > 2 // Ignore OVAs and specials when clamping
           );
-          if (nextSeasonInTMDB) {
+          
+          if (knownEpisodeCount) {
+            // AniList has a definitive count — use it strictly as the ceiling.
+            dynamicTotalEpisodes = knownEpisodeCount;
+          } else if (nextSeasonInTMDB) {
             // The next AniList season also maps to the same TMDB season — clamp to that boundary
             dynamicTotalEpisodes = (nextSeasonInTMDB.episodeOffset || 0) - episodeOffset;
           } else if (currentTmdbSeason) {
             const currentTmdbEpCount = Math.max((currentTmdbSeason.episode_count || 0) - episodeOffset, 0);
-            const futureSeasons = tmdbSeasonsList.filter((s: any) => s.season_number >= (tmdbSeasonNum || 1));
-            const totalTmdbAvailable = Math.max(futureSeasons.reduce((acc: number, s: any) => acc + s.episode_count, 0) - episodeOffset, 0);
-
-            if (knownEpisodeCount) {
-              // AniList has a definitive count — use it as the ceiling.
-              // Only allow TMDB to expand beyond AniList if TMDB count is higher AND the season is still airing.
-              if (isSeasonFinished) {
-                dynamicTotalEpisodes = knownEpisodeCount;
-              } else {
-                dynamicTotalEpisodes = Math.max(knownEpisodeCount, Math.min(currentTmdbEpCount, totalTmdbAvailable));
-              }
-            } else {
-              // AniList episode count unknown — trust TMDB
-              dynamicTotalEpisodes = Math.max(currentTmdbEpCount, totalTmdbAvailable, safeTotalEpisodes);
-            }
+            dynamicTotalEpisodes = currentTmdbEpCount > 0 ? currentTmdbEpCount : safeTotalEpisodes;
           }
           // Absolute safety cap: never return more than 1500 episodes at once
           dynamicTotalEpisodes = Math.min(Math.max(dynamicTotalEpisodes, 1), 1500);
@@ -597,6 +583,7 @@ export async function GET(
             }
 
             const tmdbEp = tmdbEpisodes.get(`${tmdbSeason}-${tmdbEpisode}`)
+              || tmdbEpisodes.get(`abs-${i}`)
               || tmdbEpisodes.get(`${tmdbSeason}-rel-${tmdbEpisode}`);
             
             seasonEps.push({
@@ -681,7 +668,7 @@ export async function GET(
                       episodeId: `${season.id}-${idx + 1}`,
                       episodeNum: idx + 1,
                       title: ep.name || `Episode ${idx + 1}`,
-                      thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : null,
+                      thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : null,
                       description: ep.overview || null,
                       releasedDate: ep.air_date || null,
                       isFiller: false,
@@ -722,11 +709,14 @@ export async function GET(
             return isRel ? Math.max(max, e.episodeNum) : max;
           }, 0);
 
+          const isSeasonFinished = season.status === "FINISHED" || (meta?.anime?.status === "FINISHED");
           const maxCap = isSpecialFormat
             ? 1
             : knownCount
               ? knownCount
-              : Math.max(maxReleased + 1, nextAiringEp || 0, 12);
+              : isSeasonFinished
+                ? Math.max(maxReleased, seasonEps.length, 1)
+                : Math.max(maxReleased + 1, nextAiringEp || 1);
 
           for (let i = 1; i <= maxCap; i++) {
             if (!covered.has(i)) {

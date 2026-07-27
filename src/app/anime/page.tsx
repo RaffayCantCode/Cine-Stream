@@ -238,48 +238,48 @@ export default function AnimeBrowsePage() {
         <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
             <div>
-              <h1 className="text-4xl font-bold text-white">Anime</h1>
-              <p className="text-sm text-white/40 mt-2">Japanese audio with English subtitles.</p>
-              <p className="text-xs text-amber-400/70 mt-2 max-w-lg">Warning: Not all anime will stream or display properly.</p>
+              <h1 className="text-4xl font-black text-white tracking-tight">Anime</h1>
+              <p className="text-sm text-purple-300/80 font-medium mt-2">Japanese audio with English subtitles.</p>
+              <p className="text-xs text-amber-400/80 mt-1 max-w-lg">Warning: Not all anime will stream or display properly.</p>
             </div>
             {!debouncedQuery.trim() && (
               <div className="flex items-center gap-3">
                 <select
                   value={sortBy}
                   onChange={(e) => { setSortBy(e.target.value as AnimeSort); setQuery(""); }}
-                  className="h-10 px-3 rounded-xl bg-[#1a1a2e] border border-white/20 text-white text-sm font-semibold appearance-none cursor-pointer hover:border-[#7288AE]/50 transition-colors outline-none"
+                  className="h-10 px-3 rounded-xl bg-[#1b152b] border border-purple-500/30 text-white text-sm font-bold appearance-none cursor-pointer hover:border-purple-500/60 transition-colors outline-none shadow-md shadow-purple-950/20"
                   aria-label="Sort by"
-                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                  style={{ colorScheme: "dark", backgroundColor: "#1b152b", backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23a855f7' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
                 >
-                  <option value="popular" className="bg-[#1a1a2e] text-white">Popular</option>
-                  <option value="ongoing" className="bg-[#1a1a2e] text-white">Ongoing</option>
-                  <option value="recent" className="bg-[#1a1a2e] text-white">Trending</option>
-                  <option value="subbed" className="bg-[#1a1a2e] text-white">Subbed</option>
-                  <option value="movie" className="bg-[#1a1a2e] text-white">Movies</option>
+                  <option value="popular" className="bg-[#1b152b] text-white">Popular</option>
+                  <option value="ongoing" className="bg-[#1b152b] text-white">Ongoing</option>
+                  <option value="recent" className="bg-[#1b152b] text-white">Trending</option>
+                  <option value="subbed" className="bg-[#1b152b] text-white">Subbed</option>
+                  <option value="movie" className="bg-[#1b152b] text-white">Movies</option>
                 </select>
                 <button
                   type="button"
                   onClick={handleShuffleAnime}
-                  className="h-10 px-4 rounded-xl bg-[#1a1a2e] border border-white/20 text-white/80 text-sm font-semibold hover:border-[#7288AE]/50 hover:text-white transition flex items-center gap-2"
+                  className="h-10 px-4 rounded-xl bg-[#1b152b] border border-purple-500/30 text-purple-200 text-sm font-bold hover:border-purple-500/60 hover:text-white transition flex items-center gap-2 shadow-md shadow-purple-950/20"
                 >
-                  <Shuffle className="w-4 h-4" /> Shuffle
+                  <Shuffle className="w-4 h-4 text-purple-400" /> Shuffle
                 </button>
               </div>
             )}
           </div>
 
           <div className="relative mb-6 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-300/40" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search anime..."
-              className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm outline-none focus:border-[#7288AE]/50 transition-colors"
+              className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/[0.05] border border-purple-500/20 text-white text-sm outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/30 transition-colors"
             />
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 text-xs"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-semibold"
               >
                 Clear
               </button>
@@ -290,7 +290,7 @@ export default function AnimeBrowsePage() {
             <div className="flex flex-wrap gap-2 mb-6">
               <button
                 onClick={() => setSelectedGenre(null)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${!selectedGenre ? "bg-[#4B5694] text-white" : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09]"}`}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${!selectedGenre ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/30" : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"}`}
               >
                 All
               </button>
@@ -298,7 +298,7 @@ export default function AnimeBrowsePage() {
                 <button
                   key={genre}
                   onClick={() => { setSelectedGenre(genre === selectedGenre ? null : genre); setQuery(""); }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${genre === selectedGenre ? "bg-[#4B5694] text-white" : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09]"}`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${genre === selectedGenre ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/30" : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"}`}
                 >
                   {genre}
                 </button>

@@ -2,7 +2,7 @@ interface StreamingAPIConfig {
   name: string;
   baseUrl: string;
   type: string;
-  quality: "Best" | "HD" | "Backup";
+  quality: "Best" | "Good" | "Backup";
   supportsNativeFullscreen?: boolean;
   healthCheckUrl?: string;
 }
@@ -18,33 +18,33 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
+    baseUrl: "https://vixsrc.to",
+    type: "vixsrc",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vixsrc.to",
+  },
+  {
+    name: "Source 3",
     baseUrl: "https://cinesrc.st",
     type: "cinesrc",
-    quality: "Best",
+    quality: "Good",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://cinesrc.st",
   },
   {
-    name: "Source 3",
-    baseUrl: "https://vidfast.to",
-    type: "vidfast",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidfast.to",
-  },
-  {
     name: "Source 4",
-    baseUrl: "https://www.2embed.skin",
-    type: "2embed",
-    quality: "Best",
+    baseUrl: "https://vidsrc.me",
+    type: "vidsrc",
+    quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://www.2embed.skin",
+    healthCheckUrl: "https://vidsrc.me",
   },
   {
     name: "Source 5",
     baseUrl: "https://autoembed.co",
     type: "autoembed",
-    quality: "Best",
+    quality: "Backup",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://autoembed.co",
   },
@@ -56,17 +56,17 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
+    case "vixsrc":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
     case "cinesrc":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}?quality=1080`;
       return `${api.baseUrl}/embed/tv/${id}?s=${season ?? 1}&e=${episode ?? 1}&quality=1080`;
 
-    case "vidfast":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}?lang=en`;
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}?lang=en`;
-
-    case "2embed":
-      if (type === "movie") return `${api.baseUrl}/embed/${id}`;
-      return `${api.baseUrl}/embedtv/${id}&s=${season ?? 1}&e=${episode ?? 1}`;
+    case "vidsrc":
+      if (type === "movie") return `${api.baseUrl}/embed/movie?tmdb=${id}`;
+      return `${api.baseUrl}/embed/tv?tmdb=${id}&season=${season ?? 1}&episode=${episode ?? 1}`;
 
     case "autoembed":
       if (type === "movie") return `${api.baseUrl}/movie/tmdb/${id}?color=8B5CF6&lang=en`;
@@ -81,7 +81,7 @@ export interface StreamingSource {
   url: string;
   name: string;
   type: string;
-  quality: "Best" | "HD" | "Backup";
+  quality: "Best" | "Good" | "Backup";
   supportsNativeFullscreen?: boolean;
 }
 

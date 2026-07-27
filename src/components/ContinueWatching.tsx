@@ -141,10 +141,10 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
 
                   <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-1 rounded-md backdrop-blur-sm tracking-widest uppercase shadow-lg ${
                     item.mediaType === "movie"
-                      ? "bg-gradient-to-r from-blue-600/90 to-indigo-600/90"
+                      ? "bg-gradient-to-r from-red-600/90 to-rose-600/90"
                       : item.mediaType === "tv"
                       ? "bg-gradient-to-r from-emerald-600/90 to-teal-600/90"
-                      : "bg-gradient-to-r from-[#4B5694]/90 to-[#7288AE]/90"
+                      : "bg-gradient-to-r from-purple-600/90 to-indigo-600/90"
                   }`}>
                     {item.mediaType === "movie" ? "Movie" : item.mediaType === "tv" ? "TV" : "JP Sub Anime"}
                   </div>

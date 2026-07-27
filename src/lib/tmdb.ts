@@ -1,8 +1,10 @@
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-// Reusable cache headers helper for TMDB API responses
-export function cacheHeaders(ttlSeconds = 1800): HeadersInit {
-  return { "Cache-Control": `public, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}` };
+export function cacheHeaders(ttlSeconds = 3600): HeadersInit {
+  return {
+    "Cache-Control": `public, max-age=300, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+    "CDN-Cache-Control": `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+  };
 }
 
 // Hardcoded blocklist for IDs that TMDB fails to flag as adult
@@ -253,29 +255,42 @@ export async function fetchTmdbEpisodeData(
   seasonNumbers: number[]
 ): Promise<Map<string, TmdbEpisodeData>> {
   const episodeMap = new Map<string, TmdbEpisodeData>();
+  const sortedSeasons = [...seasonNumbers].sort((a, b) => a - b);
 
-  for (const seasonNum of seasonNumbers) {
-    try {
-      const data = await tmdbFetch(`/tv/${tmdbId}/season/${seasonNum}`) as {
-        episodes?: {
-          episode_number: number;
-          name: string;
-          overview: string | null;
-          still_path: string | null;
-          vote_average?: number;
-          runtime?: number;
-          air_date?: string | null;
-        }[];
-      };
-      const eps = data?.episodes || [];
-      eps.forEach((ep, index) => {
+  const seasonResults = await Promise.allSettled(
+    sortedSeasons.map(async (seasonNum) => {
+      try {
+        const data = await tmdbFetch(`/tv/${tmdbId}/season/${seasonNum}`) as {
+          episodes?: {
+            episode_number: number;
+            name: string;
+            overview: string | null;
+            still_path: string | null;
+            vote_average?: number;
+            runtime?: number;
+            air_date?: string | null;
+          }[];
+        };
+        return { seasonNum, episodes: data?.episodes || [] };
+      } catch {
+        return { seasonNum, episodes: [] };
+      }
+    })
+  );
+
+  let absoluteEpCounter = 0;
+  for (const res of seasonResults) {
+    if (res.status === "fulfilled") {
+      const { seasonNum, episodes } = res.value;
+      episodes.forEach((ep, index) => {
+        absoluteEpCounter += 1;
         const key = `${seasonNum}-${ep.episode_number}`;
-        const val = {
+        const val: TmdbEpisodeData = {
           seasonNum,
           episodeNum: ep.episode_number,
           title: ep.name || "",
           thumbnail: ep.still_path
-            ? `https://image.tmdb.org/t/p/w300${ep.still_path}`
+            ? `https://image.tmdb.org/t/p/w500${ep.still_path}`
             : null,
           description: ep.overview || null,
           vote_average: ep.vote_average,
@@ -284,9 +299,8 @@ export async function fetchTmdbEpisodeData(
         };
         episodeMap.set(key, val);
         episodeMap.set(`${seasonNum}-rel-${index + 1}`, val);
+        episodeMap.set(`abs-${absoluteEpCounter}`, val);
       });
-    } catch {
-      // Season not found, skip
     }
   }
 
@@ -327,7 +341,7 @@ export async function fetchTmdbSeason(
         episodeNum: ep.episode_number,
         title: ep.name || "",
         thumbnail: ep.still_path
-          ? `https://image.tmdb.org/t/p/w300${ep.still_path}`
+          ? `https://image.tmdb.org/t/p/w500${ep.still_path}`
           : null,
         description: ep.overview || null,
         vote_average: ep.vote_average,

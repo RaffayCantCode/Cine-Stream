@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Server, Maximize2, RotateCcw, SkipForward, ChevronRight, Check, Loader2, AlertTriangle } from "lucide-react";
+import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2, Play } from "lucide-react";
 
 interface ProviderSource {
   name: string;
@@ -30,10 +30,10 @@ interface AnimePlayerProps {
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Source 1", provider: "vidnest", color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
-  { name: "Source 2", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
-  { name: "Source 3", provider: "123embed", color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
-  { name: "Source 4", provider: "vidlink", color: "from-[#111844]/30 to-[#4B5694]/20" },
+  { name: "Source 1", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20" },
+  { name: "Source 2", provider: "vidnest",   color: "from-[#e63946]/30 to-[#ff6b6b]/20" },
+  { name: "Source 3", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20" },
+  { name: "Source 4", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20" },
   { name: "Source 5", provider: "autoembed", color: "from-[#f43f5e]/30 to-[#fb7185]/20" },
 ];
 
@@ -70,7 +70,7 @@ function buildProviderUrl(
     case "vidlink":
       const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
       if (tmdbId) {
-        return isMovie 
+        return isMovie
           ? `https://vidlink.pro/movie/${tmdbId}?primaryColor=4b5694&autoplay=true${timeParam}`
           : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
       }
@@ -121,8 +121,10 @@ export function AnimePlayer({
     try {
       const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
       if (saved !== null && !forcedSource) {
-        const byName = PROVIDERS.findIndex(p => p.name === saved);
-        if (byName >= 0) return byName;
+        // Key is now provider string (e.g. "animeplay", "vidnest")
+        const byProvider = PROVIDERS.findIndex(p => p.provider === saved);
+        if (byProvider >= 0) return byProvider;
+        // Legacy: index-based fallback
         const idx = parseInt(saved, 10);
         if (!isNaN(idx) && idx >= 0 && idx < PROVIDERS.length) return idx;
       }
@@ -137,9 +139,8 @@ export function AnimePlayer({
     try {
       const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
       if (saved !== null && !forcedSource) {
-        // Support both name-based (new) and index-based (legacy) saved values
-        const byName = PROVIDERS.findIndex(p => p.name === saved);
-        if (byName >= 0) setSourceIndex(byName);
+        const byProvider = PROVIDERS.findIndex(p => p.provider === saved);
+        if (byProvider >= 0) setSourceIndex(byProvider);
         else {
           const idx = parseInt(saved, 10);
           if (!isNaN(idx) && idx >= 0 && idx < PROVIDERS.length) setSourceIndex(idx);
@@ -151,9 +152,10 @@ export function AnimePlayer({
 
   useEffect(() => {
     if (forcedSource) {
-      const byName = PROVIDERS.findIndex(p => p.name === forcedSource);
-      if (byName >= 0) {
-        setSourceIndex(byName);
+      // Match by provider string or display name for backwards compatibility
+      const byProvider = PROVIDERS.findIndex(p => p.provider === forcedSource || p.name === forcedSource);
+      if (byProvider >= 0) {
+        setSourceIndex(byProvider);
         setRetryCount(prev => prev + 1);
       }
     } else if (forceReloadCount) {
@@ -161,47 +163,44 @@ export function AnimePlayer({
     }
   }, [forcedSource, forceReloadCount]);
 
-  const handleSourceChange = (index: number, name: string) => {
+  const handleSourceChange = (index: number, provider: string) => {
     setSourceIndex(index);
     setHasError(false);
     setIsLoading(true);
     setShowSources(false);
     setRetryCount(0);
     setIframeReady(false);
+    setNeedsClickUnlock(false);
+    setLiveIframeSrc("");
     try {
-      localStorage.setItem(sourcePrefKey, name);
-      localStorage.setItem(globalPrefKey, name);
+      localStorage.setItem(sourcePrefKey, provider);
+      localStorage.setItem(globalPrefKey, provider);
     } catch {}
   };
 
   const [currentUrl, setCurrentUrl] = useState("");
+  const [liveIframeSrc, setLiveIframeSrc] = useState(""); // delayed src for animeplay
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [showSpinner, setShowSpinner] = useState(true);
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
   const [retryCount, setRetryCount] = useState(0);
   const [iframeReady, setIframeReady] = useState(false);
+  // Source 2 (animeplay) needs a click-unlock overlay to trigger autoplay
+  const [needsClickUnlock, setNeedsClickUnlock] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
+  const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
+  const isAnimeplay = currentSource.provider === "animeplay";
 
   // Auto-dismiss spinner
   useEffect(() => {
     setShowSpinner(true);
-    let isLoaded = false;
-    
-    // Listen for iframe load externally or via state
-    const loadHandler = () => { isLoaded = true; };
-    iframeRef.current?.addEventListener('load', loadHandler);
-
     const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
-    
-    return () => {
-      clearTimeout(spinnerTimer);
-      iframeRef.current?.removeEventListener('load', loadHandler);
-    };
+    return () => { clearTimeout(spinnerTimer); };
   }, [currentUrl, isLoading]);
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
@@ -223,9 +222,7 @@ export function AnimePlayer({
         links.push(link);
       }
     });
-    return () => {
-      links.forEach(link => link.remove());
-    };
+    return () => { links.forEach(link => link.remove()); };
   }, []);
 
   const initialProgressRef = useRef(startProgress);
@@ -244,17 +241,54 @@ export function AnimePlayer({
     setIsLoading(true);
     setHasError(false);
     setIframeReady(false);
+    setNeedsClickUnlock(false);
+    setLiveIframeSrc("");
   }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie]);
 
-  // When source index changes, pick the pre-resolved URL instantly
+  // When source index or retry changes, set the correct URL / overlay state
+  // For animeplay (Source 2): show click-unlock overlay; inject src only on user click
+  // For all other sources: inject src immediately
   useEffect(() => {
     const url = resolvedUrls[currentSource.provider];
-    if (url) {
-      setIsLoading(true);
-      setHasError(false);
-      setCurrentUrl(url);
+    if (!url) return;
+
+    if (delayTimerRef.current) {
+      clearTimeout(delayTimerRef.current);
+      delayTimerRef.current = null;
     }
-  }, [sourceIndex, resolvedUrls]);
+
+    setIsLoading(true);
+    setHasError(false);
+    setCurrentUrl(url);
+
+    if (currentSource.provider === "animeplay") {
+      // Don't inject src yet — show click overlay so user gesture initiates autoplay
+      setNeedsClickUnlock(true);
+      setLiveIframeSrc("");
+    } else {
+      setNeedsClickUnlock(false);
+      setLiveIframeSrc(url);
+    }
+  }, [sourceIndex, resolvedUrls, retryCount]);
+
+  // When user clicks the unlock overlay for Source 2, inject the src with a tiny delay
+  // so the iframe is fully mounted and the click event is the user gesture for autoplay
+  const handleClickUnlock = useCallback(() => {
+    setNeedsClickUnlock(false);
+    const url = resolvedUrls["animeplay"];
+    if (url) {
+      delayTimerRef.current = setTimeout(() => {
+        setLiveIframeSrc(url);
+      }, 80);
+    }
+  }, [resolvedUrls]);
+
+  // Cleanup delay timer on unmount
+  useEffect(() => {
+    return () => {
+      if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
+    };
+  }, []);
 
   // Scroll player into view on episode change
   useEffect(() => {
@@ -264,15 +298,13 @@ export function AnimePlayer({
   }, [episode]);
 
   const lastSaveTimeRef = useRef<number>(0);
-
   const autoPlayTriggeredRef = useRef(false);
 
   // Listen to postMessage for progress updates (e.g., from VidLink)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data) return;
-      
-      // Handle generic ended/next events
+
       if (event.data.type === 'video.ended' || event.data.type === 'video.next') {
         if (onProgress && (event.data.type as any) === 'video.ended') onProgress(999999);
         if (onAutoNext && !autoPlayTriggeredRef.current) {
@@ -280,7 +312,7 @@ export function AnimePlayer({
           onAutoNext();
         }
       }
-      
+
       if (event.data.type === 'video.progress' && event.data.data) {
         const { time, duration } = event.data.data;
         if (typeof time === 'number') {
@@ -321,8 +353,7 @@ export function AnimePlayer({
     return () => window.removeEventListener('message', handleMessage);
   }, [animeId, episode, tmdbSeason, onProgress, onAutoNext]);
 
-  // Handle seamless syncing via postMessage without reloading the iframe
-  // Only send for VidLink (Source 4) — other providers don't understand these messages
+  // Only send seek/play postMessages for VidLink — others don't support it
   useEffect(() => {
     if (iframeReady && iframeRef.current?.contentWindow && startProgress !== undefined && currentSource.provider === "vidlink") {
       iframeRef.current.contentWindow.postMessage({ type: "player.seek", data: startProgress }, "*");
@@ -334,19 +365,22 @@ export function AnimePlayer({
     setSourceIndex(prev => {
       const next = (prev + 1) % PROVIDERS.length;
       try {
-        localStorage.setItem(sourcePrefKey, PROVIDERS[next].name);
-        localStorage.setItem(globalPrefKey, PROVIDERS[next].name);
+        localStorage.setItem(sourcePrefKey, PROVIDERS[next].provider);
+        localStorage.setItem(globalPrefKey, PROVIDERS[next].provider);
       } catch {}
       return next;
     });
     setRetryCount(0);
     setIframeReady(false);
+    setNeedsClickUnlock(false);
+    setLiveIframeSrc("");
   }, [sourcePrefKey, globalPrefKey]);
-
 
   const retrySource = useCallback(() => {
     setRetryCount(prev => prev + 1);
     setIframeReady(false);
+    setNeedsClickUnlock(false);
+    setLiveIframeSrc("");
   }, []);
 
   const toggleFullscreen = async () => {
@@ -400,13 +434,6 @@ export function AnimePlayer({
         </div>
       </div>
 
-      {(currentSource.name === "Source 2" || currentSource.provider === "animeplay") && (
-        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold shadow-sm animate-fade-in">
-          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-          <span>If Source 2 shows a black screen, click <strong>Reload</strong> or switch to another source.</span>
-        </div>
-      )}
-
       {showSources && (
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl animate-fade-in-up"
@@ -416,8 +443,8 @@ export function AnimePlayer({
             const isActive = sourceIndex === index;
             return (
               <button
-                key={source.name}
-                onClick={() => handleSourceChange(index, source.name)}
+                key={source.provider}
+                onClick={() => handleSourceChange(index, source.provider)}
                 className={`flex items-center gap-2.5 px-3 py-3 rounded-xl text-xs font-bold transition-all ${
                   isActive
                     ? `bg-gradient-to-r ${source.color} border border-white/10 text-white shadow-lg`
@@ -459,23 +486,39 @@ export function AnimePlayer({
               </button>
             </div>
           </div>
+        ) : needsClickUnlock ? (
+          // ── Source 2 click-unlock overlay ──────────────────────────────────
+          // megaplay.buzz requires a real user gesture to autoplay video.
+          // We show a styled play button; clicking it injects the iframe src
+          // so the browser counts the subsequent autoplay as user-initiated.
+          <button
+            onClick={handleClickUnlock}
+            className="w-full h-full flex flex-col items-center justify-center gap-4 bg-black group"
+            aria-label="Click to load Source 2"
+          >
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4B5694] to-[#7288AE] flex items-center justify-center shadow-2xl shadow-[#4B5694]/40 group-hover:scale-110 transition-transform duration-200 ring-4 ring-[#7288AE]/20">
+              <Play className="w-9 h-9 text-white fill-white ml-1" />
+            </div>
+            <div className="text-center">
+              <p className="text-white font-bold text-base">Click to Play</p>
+              <p className="text-white/40 text-xs mt-1">Source 2 • Tap to start</p>
+            </div>
+          </button>
         ) : (
           <>
             {showSpinner && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none">
-                <div className="text-center">
-                  <div className="w-10 h-10 border-3 border-white/15 border-t-[#7288AE] rounded-full animate-spin mx-auto" />
-                </div>
+                <div className="w-10 h-10 border-3 border-white/15 border-t-[#7288AE] rounded-full animate-spin" />
               </div>
             )}
-            {currentUrl && (
+            {(isAnimeplay ? liveIframeSrc : currentUrl) && (
               <iframe
                 ref={iframeRef}
-                src={currentUrl}
+                src={isAnimeplay ? liveIframeSrc : currentUrl}
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; microphone"
                 allowFullScreen
-                referrerPolicy="strict-origin-when-cross-origin"
+                referrerPolicy={isAnimeplay ? "no-referrer-when-downgrade" : "strict-origin-when-cross-origin"}
                 title={`${animeTitle} - Episode ${episode}`}
                 onLoad={() => { setIsLoading(false); setHasError(false); setShowSpinner(false); setIframeReady(true); }}
                 onError={() => {
@@ -489,7 +532,6 @@ export function AnimePlayer({
           </>
         )}
       </motion.div>
-
     </div>
   );
 }

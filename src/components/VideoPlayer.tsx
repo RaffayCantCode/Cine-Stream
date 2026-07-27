@@ -20,17 +20,16 @@ interface VideoPlayerProps {
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
-  vixsrc: { bg: "bg-teal-600", badge: "bg-teal-500/20 text-teal-300" },
-  twoembed: { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
-  vidfast: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
-  vidlink: { bg: "bg-fuchsia-600", badge: "bg-fuchsia-500/20 text-fuchsia-300" },
-  vidsrc: { bg: "bg-blue-600", badge: "bg-blue-500/20 text-blue-300" },
-  autoembed: { bg: "bg-rose-600", badge: "bg-rose-500/20 text-rose-300" },
+  embedmaster: { bg: "bg-[#4B5694]", badge: "bg-[#4B5694]/20 text-[#7288AE]" },
+  vixsrc:      { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
+  cinesrc:     { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
+  vidsrc:      { bg: "bg-blue-600",  badge: "bg-blue-500/20 text-blue-300" },
+  autoembed:   { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
-  Best: "bg-emerald-400/15 text-emerald-300 border-emerald-300/25",
-  HD: "bg-cyan-400/15 text-cyan-300 border-cyan-300/25",
+  Best:   "bg-emerald-400/15 text-emerald-300 border-emerald-300/25",
+  Good:   "bg-cyan-400/15 text-cyan-300 border-cyan-300/25",
   Backup: "bg-amber-400/15 text-amber-300 border-amber-300/25",
 };
 
@@ -51,7 +50,9 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     try {
       const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
       if (saved && !forcedSource) {
-        const found = sources.find((s: StreamingSource) => s.name === saved);
+        // Try type-based key first (new format), then name-based (legacy)
+        const found = sources.find((s: StreamingSource) => s.type === saved) ||
+                      sources.find((s: StreamingSource) => s.name === saved);
         if (found) return found;
       }
     } catch {}
@@ -64,7 +65,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     try {
       const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
       if (saved && !forcedSource) {
-        const found = sources.find(s => s.name === saved);
+        const found = sources.find(s => s.type === saved) ||
+                      sources.find(s => s.name === saved);
         if (found) setCurrentSource(found);
       }
     } catch {}
@@ -78,12 +80,12 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const [retryCount, setRetryCount] = useState(0);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vixsrc;
+  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.embedmaster;
   const lastSaveTimeRef = useRef<number>(0);
 
   // Manual fallback: switch to the next source in the list (user initiated)
   const switchToNext = useCallback(() => {
-    const currentIndex = sources.findIndex((s) => s.name === currentSource?.name);
+    const currentIndex = sources.findIndex((s) => s.type === currentSource?.type);
     const nextIndex = (currentIndex + 1) % sources.length;
     if (nextIndex === currentIndex) {
       setError("All sources failed to load.");
@@ -96,8 +98,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     setIsLoading(true);
     setRetryCount(0);
     try {
-      localStorage.setItem(sourcePrefKey, nextSource.name);
-      localStorage.setItem(globalPrefKey, nextSource.name);
+      localStorage.setItem(sourcePrefKey, nextSource.type);
+      localStorage.setItem(globalPrefKey, nextSource.type);
     } catch {}
   }, [sources, currentSource, sourcePrefKey, globalPrefKey]);
 
@@ -116,11 +118,11 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
+      "https://embedmaster.link",
       "https://vixsrc.to",
-      "https://vidfast.vc",
-      "https://vidlink.pro",
-      "https://vidsrc.to",
-      "https://www.2embed.cc"
+      "https://cinesrc.st",
+      "https://vidsrc.me",
+      "https://autoembed.co"
     ];
     const links: HTMLLinkElement[] = [];
     domains.forEach(href => {
@@ -216,12 +218,14 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
 
   useEffect(() => {
     setCurrentSource(prev => {
-      let targetName = forcedSource || prev?.name;
+      let targetType = forcedSource || prev?.type;
       try {
         const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
-        if (!forcedSource && saved) targetName = saved;
+        if (!forcedSource && saved) targetType = saved;
       } catch {}
-      return sources.find(s => s.name === targetName) || sources[0];
+      return sources.find(s => s.type === targetType) ||
+             sources.find(s => s.name === targetType) ||
+             sources[0];
     });
     setError(null);
     setIsLoading(true);
@@ -242,8 +246,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     setShowSources(false);
     setRetryCount(0);
     try {
-      localStorage.setItem(sourcePrefKey, source.name);
-      localStorage.setItem(globalPrefKey, source.name);
+      localStorage.setItem(sourcePrefKey, source.type);
+      localStorage.setItem(globalPrefKey, source.type);
     } catch {}
   };
 
@@ -327,12 +331,12 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
               </p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl">
-              {sources.map((source) => {
-              const isActive = currentSource?.name === source.name;
-              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.vixsrc;
+              {sources.map((source, idx) => {
+              const isActive = currentSource?.type === source.type;
+              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.embedmaster;
               return (
                 <button
-                  key={source.name}
+                  key={source.type}
                   onClick={() => handleSourceChange(source)}
                   className={`flex items-center gap-2.5 px-3 py-3 rounded-xl text-xs font-bold transition-all ${
                     isActive
@@ -398,13 +402,13 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
               </div>
             )}
             <iframe
-              key={`${currentSource.name}-${retryCount}`}
+              key={`${currentSource.type}-${retryCount}`}
               ref={iframeRef}
               src={currentSource.url}
               className="w-full h-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
               allowFullScreen={true}
-              referrerPolicy="unsafe-url"
+              referrerPolicy="no-referrer-when-downgrade"
               title={title || "Watch"}
               onLoad={() => { setIsLoading(false); setShowSpinner(false); }}
               onError={handleIframeError}

@@ -23,13 +23,14 @@ interface MediaCardProps {
   item: MediaItem;
   index?: number;
   rank?: number;
+  priority?: boolean;
 }
 
 const CARD_WRAPPER_STYLE: React.CSSProperties = {
   animation: "fade-in-up 0.35s ease-out both",
 };
 
-export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
+export function MediaCard({ item, index = 0, rank, priority }: MediaCardProps) {
   const isPerson = item.media_type === "person";
   const isMovie = item.media_type === "movie" || (!isPerson && !!item.title);
   const title = item.title || item.name || "";
@@ -43,7 +44,7 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
     ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w342${item.poster_path}`)
     : null;
 
-  const isPriority = index < 6;
+  const isPriority = priority ?? (rank !== undefined && index < 4);
 
   return (
     <div
@@ -52,7 +53,7 @@ export function MediaCard({ item, index = 0, rank }: MediaCardProps) {
     >
       <Link
         href={link}
-        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-x ${
+        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
           rank ? "w-[142px] sm:w-[168px] md:w-[196px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
         }`}
         style={{ transformOrigin: "center bottom" }}

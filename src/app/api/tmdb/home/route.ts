@@ -5,46 +5,100 @@ import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export const revalidate = 3600;
 
-// Fetch multiple pages and merge results for a much larger pool to randomize from
-async function fetchMultiplePages(endpoint: string, pages: number[]) {
-  const results = await Promise.allSettled(
-    pages.map((page) => tmdbFetch(endpoint, { page: String(page), include_adult: "false" }))
-  );
-
-  const allItems: unknown[] = [];
-  for (const r of results) {
-    if (r.status === "fulfilled") {
-      const data = r.value as { results?: unknown[] };
-      if (data?.results) allItems.push(...data.results);
-    }
+function dailySeededShuffle<T>(array: T[]): T[] {
+  if (!array || array.length === 0) return array;
+  const today = new Date().toISOString().slice(0, 10);
+  let seed = 0;
+  for (let i = 0; i < today.length; i++) {
+    seed = (seed * 31 + today.charCodeAt(i)) >>> 0;
   }
-  return { results: allItems };
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    const j = Math.floor((seed / 4294967296) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
 }
 
 export async function GET(_request: NextRequest) {
-  // Deterministic fetching allows perfect edge caching.
-  // We fetch pages 1 and 2 to get a pool of 40 items per category, 
-  // and the client shuffles them visually.
-  const pages = [1, 2];
-
   try {
-    const [trending, popular, topRated, nowPlaying, genres] = await Promise.all([
-      fetchMultiplePages("/trending/all/week", pages),
-      fetchMultiplePages("/discover/movie?sort_by=vote_average.desc&vote_count.gte=5000", pages),
-      fetchMultiplePages("/tv/top_rated", pages),
-      fetchMultiplePages("/movie/now_playing", pages),
+    const results = await Promise.allSettled([
+      tmdbFetch("/trending/all/week", { page: "1", include_adult: "false" }),
+      tmdbFetch("/movie/popular", { page: "1", include_adult: "false" }),
+      tmdbFetch("/movie/top_rated", { page: "1", include_adult: "false" }),
+      tmdbFetch("/movie/top_rated", { page: "2", include_adult: "false" }),
+      tmdbFetch("/movie/top_rated", { page: "3", include_adult: "false" }),
+      tmdbFetch("/movie/now_playing", { page: "1", include_adult: "false" }),
+      tmdbFetch("/tv/popular", { page: "1", include_adult: "false" }),
+      tmdbFetch("/tv/top_rated", { page: "1", include_adult: "false" }),
+      tmdbFetch("/tv/top_rated", { page: "2", include_adult: "false" }),
+      tmdbFetch("/tv/top_rated", { page: "3", include_adult: "false" }),
+      tmdbFetch("/tv/on_the_air", { page: "1", include_adult: "false" }),
+      tmdbFetch("/discover/movie", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
+      tmdbFetch("/discover/tv", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
+      tmdbFetch("/trending/movie/day", { page: "1", include_adult: "false" }),
+      tmdbFetch("/trending/tv/day", { page: "1", include_adult: "false" }),
       tmdbFetch("/genre/movie/list"),
     ]);
 
+    const extractResults = (res: PromiseSettledResult<unknown>) => {
+      if (res.status === "fulfilled" && res.value && typeof res.value === "object" && "results" in res.value) {
+        return (res.value as { results?: unknown[] }).results || [];
+      }
+      return [];
+    };
+
+    const topRatedMoviesRaw = [
+      ...extractResults(results[2]),
+      ...extractResults(results[3]),
+      ...extractResults(results[4]),
+    ];
+    // Deduplicate top rated movies by ID
+    const uniqueTopRatedMoviesMap = new Map();
+    topRatedMoviesRaw.forEach((item: any) => {
+      if (item?.id && !uniqueTopRatedMoviesMap.has(item.id)) {
+        uniqueTopRatedMoviesMap.set(item.id, item);
+      }
+    });
+    const shuffledTopRatedMovies = dailySeededShuffle(Array.from(uniqueTopRatedMoviesMap.values()));
+
+    const topRatedTvRaw = [
+      ...extractResults(results[7]),
+      ...extractResults(results[8]),
+      ...extractResults(results[9]),
+    ];
+    // Deduplicate top rated TV by ID
+    const uniqueTopRatedTvMap = new Map();
+    topRatedTvRaw.forEach((item: any) => {
+      if (item?.id && !uniqueTopRatedTvMap.has(item.id)) {
+        uniqueTopRatedTvMap.set(item.id, item);
+      }
+    });
+    const shuffledTopRatedTv = dailySeededShuffle(Array.from(uniqueTopRatedTvMap.values()));
+
+    const genresRes = results[15];
+    const genres = (genresRes.status === "fulfilled" && genresRes.value && typeof genresRes.value === "object" && "genres" in genresRes.value)
+      ? (genresRes.value as { genres?: unknown[] }).genres || []
+      : [];
+
     return Response.json({
-      trending,
-      popular,
-      topRated,
-      nowPlaying,
-      genres,
+      trending: { results: extractResults(results[0]) },
+      popularMovies: { results: extractResults(results[1]) },
+      topRatedMovies: { results: shuffledTopRatedMovies },
+      nowPlaying: { results: extractResults(results[5]) },
+      popularTv: { results: extractResults(results[6]) },
+      topRatedTv: { results: shuffledTopRatedTv },
+      onTheAir: { results: extractResults(results[10]) },
+      animeMovies: { results: extractResults(results[11]) },
+      animeTv: { results: extractResults(results[12]) },
+      trendingMoviesToday: { results: extractResults(results[13]) },
+      trendingTvToday: { results: extractResults(results[14]) },
+      genres: { genres },
     }, { headers: cacheHeaders(3600) });
   } catch (error) {
     console.error("[TMDB Home API Error]:", error);
     return Response.json({ error: "Failed to fetch home media" }, { status: 500 });
   }
 }
+

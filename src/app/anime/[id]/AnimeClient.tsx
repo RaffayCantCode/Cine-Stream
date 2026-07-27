@@ -279,11 +279,9 @@ async function fetchEpisodesClientSide(
           const epsList = tmdbData?.episodes || [];
           if (epsList.length > 0) {
             const result: Episode[] = [];
-            const maxEpCount = Math.max(
-              (totalEpisodes && totalEpisodes < 1499) ? totalEpisodes : 0,
-              epsList.length,
-              aniZipEps.length
-            );
+            const maxEpCount = (totalEpisodes && totalEpisodes > 0 && totalEpisodes < 1499)
+              ? totalEpisodes
+              : Math.max(epsList.length, aniZipEps.length);
             const count = Math.min(maxEpCount || epsList.length, 1500);
             for (let i = 1; i <= count; i++) {
               const azMatch = aniZipEps.find(e => e.episodeNum === i);
@@ -295,7 +293,7 @@ async function fetchEpisodesClientSide(
                 episodeNum: i,
                 title: tmdbEp?.name || azMatch?.title || `Episode ${i}`,
                 description: tmdbEp?.overview || azMatch?.description || null,
-                thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w300${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
+                thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
                 releasedDate: tmdbEp?.air_date || azMatch?.releasedDate || null,
                 isFiller: false,
                 seasonId,
@@ -485,7 +483,7 @@ function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): Sea
       id: String(node.id),
       idMal: node.idMal || null,
       name: node.title,
-      totalEpisodes: node.episodes || 12,
+      totalEpisodes: isMovie ? 1 : (node.episodes || 0),
       seasonLabel: label,
       episodeOffset: node.episodeOffset || 0,
       isCurrent: String(node.id) === String(currentId),
@@ -593,7 +591,7 @@ async function fetchAnimeMetaClientSide(idStr: string) {
       score: media.averageScore ? String(media.averageScore) : null,
       status: media.status || null,
       genres: media.genres || [],
-      totalEpisodes: media.episodes || 12,
+      totalEpisodes: media.episodes || 0,
       seasons: [],
       season: media.season || null,
       seasonYear: media.seasonYear || null,
@@ -1058,25 +1056,41 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     return () => { cancelled = true; };
   }, [id, loadSeasonEpisodes, authStatus, initialData, anime]);
 
-  // ── Fetch You May Like recommendations (client-side AniList) ────────────
+  // ── Fetch You May Like recommendations (client-side AniList + server route fallback) ────────────
   useEffect(() => {
-    if (!anime || !id) return;
+    if (!id) return;
     setRecsLoading(true);
     const franchiseIds = new Set(franchiseNodes.map(n => String(n.id)).filter(Boolean));
     const excludeIds = new Set([id, ...franchiseIds]);
-    fetchAnilistRecommendations(Number(id), excludeIds, 12, anime.genres || [])
-      .then(items => {
+    const numericId = parseInt(anime?.id || initialData?.id || id.replace(/\D/g, ""), 10);
+    const validAnilistId = !isNaN(numericId) ? numericId : 1;
+
+    const currentGenres = anime?.genres || initialData?.genres || [];
+
+    fetchAnilistRecommendations(validAnilistId, excludeIds, 12, currentGenres)
+      .then(async (items) => {
+        if (items.length === 0 && validAnilistId > 1) {
+          // Server route fallback if client GraphQL query returned no items
+          try {
+            const res = await fetch(`/api/anime/recommendations/${validAnilistId}?genres=${encodeURIComponent(currentGenres.join(","))}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.items?.length > 0) items = data.items;
+            }
+          } catch { /* fallback failed */ }
+        }
+
         if (items.length > 0) {
           const withReasons = items.map((item: any) => ({
             ...item,
-            reason: getRecommendationReason(anime.genres?.map(g => g.charCodeAt(0)) || [], item.genres?.map((g: string) => g.charCodeAt(0)) || [])
+            reason: getRecommendationReason(currentGenres.map((g: string) => g.charCodeAt(0)), item.genres?.map((g: string) => g.charCodeAt(0)) || [])
           }));
           setRecommendations(withReasons);
         }
       })
       .catch(() => {})
       .finally(() => setRecsLoading(false));
-  }, [anime?.id, id, franchiseNodes]);
+  }, [anime?.id, id, franchiseNodes, initialData]);
 
   // ── Background Mapping Verification & Suspicious Mapping Corrector ─────
   useEffect(() => {
@@ -1391,13 +1405,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   const isSpecialFormat = useMemo(
     () =>
+      anime?.format === "MOVIE" ||
+      anime?.type === "MOVIE" ||
       currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("movie") ||
       currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("ova") ||
       currentSeasonInfo?.seasonLabel?.toLowerCase().startsWith("special"),
-    [currentSeasonInfo]
+    [anime?.format, anime?.type, currentSeasonInfo]
   );
 
-  const isSingleItem = currentSeasonEps.length <= 1 && isSpecialFormat;
+  const isMovieFormat = anime?.format === "MOVIE" || anime?.type === "MOVIE" || isSpecialFormat;
+  const isSingleItem = (currentSeasonEps.length <= 1 && isSpecialFormat) || isMovieFormat;
 
   // Ensure AnimePlayer always gets a valid numeric AniList ID for streaming URLs
   // Synthetic season IDs (generated by buildSeasonsFromTmdb for unmatched TMDB seasons)
@@ -1576,16 +1593,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
                   {anime.jname && <p className="text-white/40 text-xs sm:text-sm font-medium select-text">{anime.jname}</p>}
 
-                  {/* Season count pill */}
-                  {seasons.length > 1 && (
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs font-bold text-[#7288AE] bg-[#4B5694]/15 border border-[#7288AE]/20 px-2.5 py-0.5 rounded-full">
-                        {Math.max(seasons.filter(s => s.seasonLabel?.startsWith("Season")).length, 1)} Seasons
-                        {seasons.filter(s => !s.seasonLabel?.startsWith("Season")).length > 0 && ` + ${seasons.filter(s => !s.seasonLabel?.startsWith("Season")).length} More`}
-                      </span>
-                    </div>
-                  )}
-
                   {anime.genres && anime.genres.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {anime.genres.slice(0, 5).map(g => (
@@ -1595,29 +1602,37 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   )}
 
                     <div>
-                      {!episodesLoading && currentSeasonEps.length > 0 ? (
+                      {currentSeasonEps.length > 0 ? (
                         <div className="flex items-center flex-wrap gap-4 w-full">
                           <button
                             onClick={() => {
                               const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
-                              handleWatchEpisode(first);
+                              if (first) handleWatchEpisode(first);
                             }}
                             className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
                           >
                             <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
-                            {isSingleItem
-                              ? `Watch ${anime.type === "MOVIE" ? "Movie" : "Anime"}`
-                              : `Watch S${currentSeasonInfo ? seasons.findIndex(s => s.id === currentSeasonId) + 1 : 1} E${currentSeasonEps[0]?.episodeNum || 1}`
+                            {isMovieFormat
+                              ? `Watch ${currentSeasonEps.length > 1 ? `Movie ${currentSeasonEps[0]?.episodeNum || 1}` : "Movie"}`
+                              : `Watch Ep ${selectedEp?.episodeNum || currentSeasonEps[0]?.episodeNum || 1}`
                             }
                           </button>
 
                           <AnimeHeroTrailerButton />
                         </div>
-                      ) : !episodesLoading ? (
-                        <button disabled className="flex items-center gap-2.5 bg-white/10 text-white/30 font-bold px-8 py-4 rounded-xl text-sm cursor-not-allowed">
-                          No Episodes Available
-                        </button>
-                      ) : null}
+                      ) : episodesLoading ? (
+                        <div className="flex items-center gap-4 w-full">
+                          <div className="h-12 w-36 rounded-xl bg-white/10 animate-pulse" />
+                          <AnimeHeroTrailerButton />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4 w-full">
+                          <button disabled className="flex items-center gap-2.5 bg-white/10 text-white/30 font-bold px-8 py-4 rounded-xl text-sm cursor-not-allowed">
+                            No Episodes Available
+                          </button>
+                          <AnimeHeroTrailerButton />
+                        </div>
+                      )}
                     </div>
                 </div>
               </div>
@@ -1756,8 +1771,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                         </span>
                       </div>
                       <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Seasons</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{seasons.length || 1}</span>
+                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">{isMovieFormat ? "Parts" : "Episodes"}</span>
+                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{isMovieFormat ? (currentSeasonEps.length || 1) : (anime.totalEpisodes || currentSeasonEps.length || 1)}</span>
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Status</span>
@@ -1885,11 +1900,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     <div className="flex items-center gap-3">
                       <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg" />
                       <h2 className="text-2xl font-black text-white tracking-tight">Episodes</h2>
-                      {currentSeasonInfo && (
-                        <span className="text-xs bg-white/[0.06] text-white/50 px-2.5 py-1 rounded-full font-semibold">
-                          {currentSeasonInfo.seasonLabel}
-                        </span>
-                      )}
                     </div>
 
                   {/* ── Right Side Controls ── */}
@@ -2038,9 +2048,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           {sliceEps.map((ep, i) => {
                             const isSelected = selectedEp?.episodeId === ep.episodeId;
                             const isUnreleased = ep.isReleased === false;
+                            const backdropFallback = (anime as any)?.bannerImage || initialData?.bannerImage || displayPoster || null;
                             const thumbSrc = isUnreleased
                               ? (ep.thumbnail || null)
-                              : (ep.thumbnail || (isSingleItem && displayPoster) || displayPoster || null);
+                              : (ep.thumbnail || (isSingleItem && displayPoster) || backdropFallback);
                             const displayEpTitle = ep.title || (isSingleItem ? displayTitle : `Episode ${ep.episodeNum}`);
                             return (
                               <div
@@ -2065,7 +2076,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                                 )}
 
                                 {/* Thumbnail */}
-                                <div className={`${isSingleItem ? "w-48 md:w-56 aspect-[2/3]" : "w-36 md:w-48 aspect-video"} shrink-0 rounded-xl overflow-hidden bg-muted relative self-start`}>
+                                <div className={`${isSingleItem ? "w-44 md:w-52 aspect-[2/3]" : "w-40 sm:w-48 md:w-52 lg:w-56 aspect-video"} shrink-0 rounded-xl overflow-hidden bg-muted relative self-start`}>
                                   {thumbSrc ? (
                                     <img
                                       src={thumbSrc}

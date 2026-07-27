@@ -42,7 +42,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
     >
       <Link
         href={`/anime/${item.id}`}
-        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-x ${
+        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
           rank ? "w-[142px] sm:w-[168px] md:w-[196px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
@@ -70,7 +70,8 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
             src={item.poster}
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            loading={index < 6 ? "eager" : "lazy"}
+            loading={rank !== undefined && index < 4 ? "eager" : "lazy"}
+            decoding="async"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">

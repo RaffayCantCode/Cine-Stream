@@ -4,6 +4,7 @@ export interface FranchiseItem {
   tmdb_type?: "movie" | "tv";
   anilist_id?: number;
   title?: string;
+  episodes?: number;
   release_date?: string;
   poster_path?: string;
 }
@@ -626,22 +627,23 @@ export const FRANCHISES: FranchiseDefinition[] = [
   },
   {
     id: "demon-slayer",
-    name: "Demon Slayer Collection",
+    name: "Demon Slayer Collection (Japanese Dub)",
     overview: "Follow Tanjiro Kamado's journey to become a Demon Slayer and save his sister.",
     backdrop_path: "/3GQKYh6Trm8pxd2AypovoYQf4Ay.jpg",
     poster_path: "/xUfRZu2mi8jH6SzQEJGP6tjBuYj.jpg",
     items: [
-      { id: 85937, media_type: "anime", anilist_id: 101922, title: "Demon Slayer: Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg" },
-      { id: 635302, media_type: "anime", anilist_id: 112151, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png" },
-      { id: 85937, media_type: "anime", anilist_id: 129874, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg" },
-      { id: 85937, media_type: "anime", anilist_id: 142329, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg" },
-      { id: 85937, media_type: "anime", anilist_id: 145139, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png" },
-      { id: 85937, media_type: "anime", anilist_id: 166240, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png" },
+      { id: 85937, media_type: "anime", anilist_id: 101922, episodes: 26, title: "Demon Slayer: Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg" },
+      { id: 635302, media_type: "anime", tmdb_type: "movie", anilist_id: 112151, episodes: 1, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png" },
+      { id: 85937, media_type: "anime", anilist_id: 129874, episodes: 7, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg" },
+      { id: 85937, media_type: "anime", anilist_id: 142329, episodes: 11, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg" },
+      { id: 85937, media_type: "anime", anilist_id: 145139, episodes: 11, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png" },
+      { id: 85937, media_type: "anime", anilist_id: 166240, episodes: 8, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png" },
+      { id: 85937, media_type: "anime", tmdb_type: "movie", anilist_id: 178788, episodes: 1, title: "Infinity Castle (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178788-zm3gtpB9TpRt.jpg" },
     ]
   },
   {
     id: "jujutsu-kaisen",
-    name: "Jujutsu Kaisen Collection",
+    name: "Jujutsu Kaisen Collection (Japanese Dub)",
     overview: "Yuji Itadori joins a secret organization of Jujutsu Sorcerers to eliminate a powerful Curse.",
     backdrop_path: "/lthkKBLe1rX6iThgVFg22O02sJw.jpg",
     poster_path: "/fHpKWq9ayzSk8nSwqRuaAUemRKh.jpg",
@@ -812,7 +814,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
   },
   {
     id: "jojo",
-    name: "JoJo's Bizarre Adventure",
+    name: "JoJo's Bizarre Adventure (Japanese Dub)",
     overview: "The multi-generational saga of the Joestar family, who are possessed with intense psychic strength, and the adventures each member encounters.",
     backdrop_path: "/mLKN1dsimKPiXCZ48KED0X8a02t.jpg",
     poster_path: "/ogAWwbh3frWtiTyyXrZaVFtqCgp.jpg",
@@ -827,7 +829,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
   },
   {
     id: "fate-series",
-    name: "Fate Anime Series",
+    name: "Fate Anime Series (Japanese Dub)",
     overview: "The epic Fate universe, exploring the Holy Grail Wars where mages summon heroic spirits from history to battle for their deepest wishes. Listed in chronological watch order.",
     backdrop_path: "/b2mskN6F9kUolFc8mTBiEJwfXLC.jpg",
     poster_path: "/x7nYPOveHhINREhTtwBHot9ersB.jpg",
@@ -889,7 +891,7 @@ export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string)
         id: item.anilist_id!,
         idMal: null,
         title: item.title || franchise.name,
-        episodes: item.tmdb_type === "movie" ? 1 : 24,
+        episodes: item.episodes || (item.tmdb_type === "movie" ? 1 : null),
         season: null,
         seasonYear: item.release_date ? parseInt(item.release_date.substring(0, 4), 10) : null,
         format: item.tmdb_type === "movie" ? "MOVIE" : "TV",

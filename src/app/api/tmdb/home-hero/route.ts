@@ -5,49 +5,40 @@ import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export const revalidate = 3600;
 
-async function fetchPages(endpoint: string, pages: number[]) {
-  const promises = pages.map(page => 
-    tmdbFetch(endpoint, { page: String(page), include_adult: "false" })
-      .then(res => (res as { results?: unknown[] })?.results ?? [])
-  );
-  const results = await Promise.all(promises);
-  return results.flat();
-}
-
 export async function GET(_request: NextRequest) {
-  // Fetch multiple pages deterministically to build a very large pool.
-  // Next.js caches these perfectly. Client-side shuffle handles randomization.
-  const pagesToFetch = [1, 2, 3];
-  
   const results = await Promise.allSettled([
-    fetchPages("/trending/all/week", pagesToFetch),
-    fetchPages("/movie/popular", pagesToFetch),
-    fetchPages("/movie/top_rated", pagesToFetch),
-    fetchPages("/movie/now_playing", pagesToFetch),
-    fetchPages("/tv/popular", pagesToFetch),
-    fetchPages("/tv/top_rated", pagesToFetch),
-    fetchPages("/tv/on_the_air", pagesToFetch),
-    fetchPages("/discover/movie?with_original_language=ja", pagesToFetch),
-    fetchPages("/discover/tv?with_original_language=ja&with_genres=16", pagesToFetch),
-    fetchPages("/trending/movie/day", pagesToFetch),
-    fetchPages("/trending/tv/day", pagesToFetch),
+    tmdbFetch("/trending/all/week", { page: "1", include_adult: "false" }),
+    tmdbFetch("/movie/popular", { page: "1", include_adult: "false" }),
+    tmdbFetch("/movie/top_rated", { page: "1", include_adult: "false" }),
+    tmdbFetch("/movie/now_playing", { page: "1", include_adult: "false" }),
+    tmdbFetch("/tv/popular", { page: "1", include_adult: "false" }),
+    tmdbFetch("/tv/top_rated", { page: "1", include_adult: "false" }),
+    tmdbFetch("/tv/on_the_air", { page: "1", include_adult: "false" }),
+    tmdbFetch("/discover/movie", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
+    tmdbFetch("/discover/tv", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
+    tmdbFetch("/trending/movie/day", { page: "1", include_adult: "false" }),
+    tmdbFetch("/trending/tv/day", { page: "1", include_adult: "false" }),
   ]);
 
-  const [trending, popularMovies, topRatedMovies, nowPlaying, popularTv, topRatedTv, onTheAir, animeMovies, animeTv, trendingMoviesToday, trendingTvToday] = results.map(r =>
-    r.status === "fulfilled" ? r.value : []
-  );
+  const extractResults = (res: PromiseSettledResult<unknown>) => {
+    if (res.status === "fulfilled" && res.value && typeof res.value === "object" && "results" in res.value) {
+      return (res.value as { results?: unknown[] }).results || [];
+    }
+    return [];
+  };
 
   return Response.json({
-    trending: { results: trending },
-    popularMovies: { results: popularMovies },
-    topRatedMovies: { results: topRatedMovies },
-    nowPlaying: { results: nowPlaying },
-    popularTv: { results: popularTv },
-    topRatedTv: { results: topRatedTv },
-    onTheAir: { results: onTheAir },
-    animeMovies: { results: animeMovies },
-    animeTv: { results: animeTv },
-    trendingMoviesToday: { results: trendingMoviesToday },
-    trendingTvToday: { results: trendingTvToday },
+    trending: { results: extractResults(results[0]) },
+    popularMovies: { results: extractResults(results[1]) },
+    topRatedMovies: { results: extractResults(results[2]) },
+    nowPlaying: { results: extractResults(results[3]) },
+    popularTv: { results: extractResults(results[4]) },
+    topRatedTv: { results: extractResults(results[5]) },
+    onTheAir: { results: extractResults(results[6]) },
+    animeMovies: { results: extractResults(results[7]) },
+    animeTv: { results: extractResults(results[8]) },
+    trendingMoviesToday: { results: extractResults(results[9]) },
+    trendingTvToday: { results: extractResults(results[10]) },
   }, { headers: cacheHeaders(3600) });
 }
+

@@ -619,7 +619,7 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
 
     const totalEp = isMovie || isActualOva || isSpecial
       ? Math.max(node.episodes || 1, 1)
-      : Math.max(node.episodes || 1500, 1);
+      : (node.episodes ? Math.max(node.episodes, 1) : 0);
 
     return {
       id: String(node.id),
@@ -1217,17 +1217,14 @@ export async function getAnimeDetails(
       const sAniZip = allAniZipMappings[s.id];
       const azEp1 = sAniZip?.episodes?.["1"];
       
-      if (azEp1?.seasonNumber !== undefined && azEp1?.episodeNumber !== undefined) {
+      const isMovieOrSpecial = s.seasonLabel.startsWith("Movie") || s.seasonLabel.startsWith("OVA") || s.seasonLabel.startsWith("Special");
+      if (!isMovieOrSpecial && azEp1?.seasonNumber !== undefined && azEp1?.episodeNumber !== undefined) {
         tmdbSeasonNum = azEp1.seasonNumber;
         episodeOffset = azEp1.episodeNumber - 1;
         const key = `${tid}-${tmdbSeasonNum}`;
         mappedEpisodesCount[key] = Math.max(mappedEpisodesCount[key] || 0, episodeOffset + s.totalEpisodes);
         tmdbSeasonMap[s.id] = tmdbSeasonNum as number;
-      } else {
-        // AniZip unavailable — use label-number heuristic as fallback.
-        // e.g. "Season 2" → TMDB season 2. This is the best we can do without
-        // AniZip, and is correct for the vast majority of anime series where
-        // AniList and TMDB use the same season numbering.
+      } else if (!isMovieOrSpecial) {
         const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
         tmdbSeasonNum = labelNumMatch ? parseInt(labelNumMatch[1], 10) : parseSeasonNumberFromTitle(s.name);
         episodeOffset = 0;
@@ -1324,7 +1321,8 @@ export async function getAnimeDetails(
 
   // Fill missing episode numbers with placeholders
   const existingNums = new Set(seasonEps.map(e => e.episodeNum));
-  for (let i = 1; i <= seasonCap; i++) {
+  const targetCount = openedSeason.totalEpisodes > 0 ? openedSeason.totalEpisodes : Math.max(seasonEps.length, 1);
+  for (let i = 1; i <= targetCount; i++) {
     if (!existingNums.has(i)) {
       seasonEps.push({
         episodeId: `${activeSeasonId}-${i}`,

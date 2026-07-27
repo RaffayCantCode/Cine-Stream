@@ -214,87 +214,87 @@ export default function BrowseTvPage() {
         <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
             <div>
-            <h1 className="text-4xl font-bold text-white">TV Shows</h1>
-            <p className="text-sm text-white/40 mt-2">
-              Discover the latest episodes, timeless classics, and hidden gems.
-            </p>
+              <h1 className="text-4xl font-black text-white tracking-tight">TV Shows</h1>
+              <p className="text-sm text-emerald-400/90 font-bold tracking-wide mt-2">
+                Discover the latest episodes, timeless classics, and hidden gems.
+              </p>
+            </div>
+            {!debouncedSearch.trim() && (
+              <div className="flex items-center gap-3">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="h-10 px-3 rounded-xl bg-[#0d1c16] border border-emerald-500/30 text-white text-sm font-bold appearance-none cursor-pointer hover:border-emerald-500/60 transition-colors outline-none shadow-md shadow-emerald-950/20"
+                  aria-label="Sort by"
+                  style={{ colorScheme: "dark", backgroundColor: "#0d1c16", backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2310b981' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                >
+                  <option value="popularity.desc" className="bg-[#0d1c16] text-white">Most Popular</option>
+                  <option value="vote_average.desc" className="bg-[#0d1c16] text-white">Top Rated</option>
+                  <option value="first_air_date.desc" className="bg-[#0d1c16] text-white">Newest</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleShuffleShows}
+                  className="h-10 px-4 rounded-xl bg-[#0d1c16] border border-emerald-500/30 text-emerald-200 text-sm font-bold hover:border-emerald-500/60 hover:text-white transition flex items-center gap-2 shadow-md shadow-emerald-950/20"
+                >
+                  <Shuffle className="w-4 h-4 text-emerald-400" /> Shuffle
+                </button>
+              </div>
+            )}
           </div>
-          {!debouncedSearch.trim() && (
-            <div className="flex items-center gap-3">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="h-10 px-3 rounded-xl bg-[#131945] border border-white/20 text-white text-sm font-semibold appearance-none cursor-pointer hover:border-[#7288AE]/50 transition-colors outline-none"
-                aria-label="Sort by"
-                style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
-              >
-                <option value="popularity.desc" className="bg-[#131945] text-white">Most Popular</option>
-                <option value="vote_average.desc" className="bg-[#131945] text-white">Top Rated</option>
-                <option value="first_air_date.desc" className="bg-[#131945] text-white">Newest</option>
-              </select>
+
+          <div className="relative mb-6 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400/40" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search TV shows..."
+              className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/[0.05] border border-emerald-500/20 text-white text-sm outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-colors"
+            />
+            {searchQuery && (
               <button
-                type="button"
-                onClick={handleShuffleShows}
-                className="h-10 px-4 rounded-xl bg-[#131945] border border-white/20 text-white/80 text-sm font-semibold hover:border-[#7288AE]/50 hover:text-white transition flex items-center gap-2"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-semibold"
               >
-                <Shuffle className="w-4 h-4" /> Shuffle
+                Clear
               </button>
+            )}
+          </div>
+
+          {error && (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/80 mb-10">
+              <div className="text-sm font-semibold text-white mb-1">Couldn&apos;t load TV shows</div>
+              <div className="text-xs text-white/50 break-words">{error}</div>
             </div>
           )}
-        </div>
 
-        <div className="relative mb-6 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search TV shows..."
-            className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/[0.05] border border-white/10 text-white/80 text-sm outline-none focus:border-[#7288AE]/50 transition-colors"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 text-xs"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-
-        {error && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/80 mb-10">
-            <div className="text-sm font-semibold text-white mb-1">Couldn&apos;t load TV shows</div>
-            <div className="text-xs text-white/50 break-words">{error}</div>
-          </div>
-        )}
-
-        {!debouncedSearch.trim() && (
-          <div className="flex flex-wrap gap-2 mb-10">
-            <button
-              onClick={() => setSelectedGenre(undefined)}
-              className={cn(
-                "px-4 py-2 rounded-full text-sm font-medium transition-colors",
-                selectedGenre === undefined
-                  ? "bg-[#4B5694] text-white shadow-lg shadow-[#4B5694]/30"
-                  : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
-              )}
-            >
-              All TV Shows
-            </button>
-            {genres.map((genre) => (
+          {!debouncedSearch.trim() && (
+            <div className="flex flex-wrap gap-2 mb-10">
               <button
-                key={genre.id}
-                onClick={() => setSelectedGenre(genre.id)}
+                onClick={() => setSelectedGenre(undefined)}
                 className={cn(
-                  "px-4 py-2 rounded-full text-sm font-medium transition-colors",
-                  selectedGenre === genre.id
-                    ? "bg-[#4B5694] text-white shadow-lg shadow-[#4B5694]/30"
+                  "px-4 py-2 rounded-full text-sm font-bold transition-all",
+                  selectedGenre === undefined
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/35 border border-emerald-400/30"
                     : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
                 )}
               >
-                {genre.name}
+                All TV Shows
               </button>
-            ))}
+              {genres.map((genre) => (
+                <button
+                  key={genre.id}
+                  onClick={() => setSelectedGenre(genre.id)}
+                  className={cn(
+                    "px-4 py-2 rounded-full text-sm font-bold transition-all",
+                    selectedGenre === genre.id
+                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/35 border border-emerald-400/30"
+                      : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
+                  )}
+                >
+                  {genre.name}
+                </button>
+              ))}
           </div>
         )}
 

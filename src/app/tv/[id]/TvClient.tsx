@@ -670,10 +670,10 @@ export default function TvClient() {
                         <span className="text-sm font-bold text-white/40">{episode.episode_number}</span>
                       </div>
 
-                      <div className="w-36 md:w-48 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
+                      <div className="w-40 sm:w-48 md:w-52 lg:w-56 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
                         {episode.still_path ? (
                           <img
-                            src={`https://image.tmdb.org/t/p/w185${episode.still_path}`}
+                            src={`https://image.tmdb.org/t/p/w500${episode.still_path}`}
                             alt={episode.name}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                             loading="lazy"

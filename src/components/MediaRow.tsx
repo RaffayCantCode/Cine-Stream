@@ -130,14 +130,14 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
       </div>
 
       <div className="relative group/row">
-        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-5 pt-1 hide-scrollbar will-change-transform touch-pan-x">
+        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-5 pt-1 hide-scrollbar will-change-transform touch-pan-y touch-pan-x">
           <div className={`flex px-3 md:px-8 lg:px-10 w-max ${isTop10 ? "gap-2 md:gap-3 pl-3 md:pl-6" : "gap-3 md:gap-4"}`}>
             {isLoading
               ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (
                   <SkeletonCard key={i} index={i} />
                 ))
               : (isTop10 ? items?.slice(0, 10) : items)?.map((item, i) => (
-                  <MediaCard key={item.id} item={item} index={i} rank={isTop10 ? i + 1 : undefined} />
+                  <MediaCard key={item.id} item={item} index={i} rank={isTop10 ? i + 1 : undefined} priority={isTop10 && i < 4} />
                 ))}
           </div>
         </div>

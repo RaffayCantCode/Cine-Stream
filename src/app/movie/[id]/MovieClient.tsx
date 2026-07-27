@@ -227,7 +227,7 @@ export default function MovieClient() {
                 {movie.title}
               </h1>
               {movie.tagline && (
-                <p className="text-primary/90 font-semibold italic text-base md:text-lg">
+                <p className="text-red-500 font-bold italic text-base md:text-lg tracking-wide drop-shadow-[0_2px_12px_rgba(239,68,68,0.4)]">
                   {movie.tagline}
                 </p>
               )}
