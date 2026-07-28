@@ -4,9 +4,9 @@ import { NextRequest } from "next/server";
 import { getAnimeDetails } from "@/lib/anime-fetch";
 
 const animeMetaCacheHeaders = {
-  "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
-  "CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
-  "Cloudflare-CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Cloudflare-CDN-Cache-Control": "no-store",
 } as const;
 
 export async function GET(

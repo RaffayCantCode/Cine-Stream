@@ -76,7 +76,7 @@ export default function RootLayout({
         {/* Deployment Cache Invalidation */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
-            var BUILD_VER = 'v15-unreleased-toprated-v2';
+            var BUILD_VER = 'v18-force-cloud-flush';
             try {
               if (typeof sessionStorage !== 'undefined') {
                 var ver = sessionStorage.getItem('sv_build_ver');

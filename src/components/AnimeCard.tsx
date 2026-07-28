@@ -16,6 +16,7 @@ export interface AnimeItem {
   rating?: string | null;
   description?: string;
   genres?: string[];
+  status?: string | null;
   season?: string | null;
   seasonYear?: number | null;
   format?: string | null;

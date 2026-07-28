@@ -475,13 +475,19 @@ export async function GET(
             (s.episodeOffset || 0) > episodeOffset &&
             s.totalEpisodes > 2 // Ignore OVAs and specials when clamping
           );
-          
+
+          const totalSumInTmdb = Math.max(0, tmdbSeasonsList
+            .filter((s: any) => s.season_number >= (tmdbSeasonNum || 1))
+            .reduce((sum: number, s: any) => sum + (s.episode_count || 0), 0) - episodeOffset);
+
           if (knownEpisodeCount) {
             // AniList has a definitive count — use it strictly as the ceiling.
             dynamicTotalEpisodes = knownEpisodeCount;
           } else if (nextSeasonInTMDB) {
             // The next AniList season also maps to the same TMDB season — clamp to that boundary
             dynamicTotalEpisodes = (nextSeasonInTMDB.episodeOffset || 0) - episodeOffset;
+          } else if (totalSumInTmdb > 0) {
+            dynamicTotalEpisodes = Math.max(totalSumInTmdb, safeTotalEpisodes);
           } else if (currentTmdbSeason) {
             const currentTmdbEpCount = Math.max((currentTmdbSeason.episode_count || 0) - episodeOffset, 0);
             dynamicTotalEpisodes = currentTmdbEpCount > 0 ? currentTmdbEpCount : safeTotalEpisodes;

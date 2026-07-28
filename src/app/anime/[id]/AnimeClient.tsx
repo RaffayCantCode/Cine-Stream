@@ -47,7 +47,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "anime-v15-unreleased-toprated-v2";
+const ANIME_API_VERSION = "anime-v18-force-cloud-flush";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -774,12 +774,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
       );
+      const statusNorm = (anime?.status || "").toLowerCase().replace(/_/g, " ").trim();
       const isUnreleasedAnime = 
-        anime?.status === "NOT_YET_RELEASED" || 
-        anime?.status === "NOT_YET_AIRED" || 
-        anime?.status === "Not Yet Aired" || 
-        anime?.status === "Not yet aired" ||
-        anime?.status === "UPCOMING";
+        statusNorm.includes("not yet") || 
+        statusNorm.includes("upcoming") || 
+        statusNorm.includes("to be aired") ||
+        statusNorm.includes("unreleased");
 
       const hasEpisodes = epData.success && epData.data?.episodes && epData.data.episodes.length > 0;
       if (hasEpisodes) {
@@ -1783,7 +1783,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Status</span>
-                        <span className="text-emerald-400 font-bold text-sm bg-emerald-400/10 border border-emerald-400/20 px-3 py-1.5 rounded-lg uppercase shadow-[0_0_15px_rgba(52,211,153,0.1)]">{anime.status || "N/A"}</span>
+                        <span className="text-emerald-400 font-bold text-sm bg-emerald-400/10 border border-emerald-400/20 px-3 py-1.5 rounded-lg uppercase shadow-[0_0_15px_rgba(52,211,153,0.1)]">
+                          {(() => {
+                            const s = (anime?.status || "").toUpperCase().replace(/_/g, " ");
+                            if (s.includes("RELEASING") || s.includes("AIRING")) return "CURRENTLY AIRING";
+                            if (s.includes("NOT YET") || s.includes("UPCOMING")) return "NOT YET AIRED";
+                            return anime?.status || "N/A";
+                          })()}
+                        </span>
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Year</span>

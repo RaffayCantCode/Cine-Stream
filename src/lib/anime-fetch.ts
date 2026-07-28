@@ -150,6 +150,10 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
 
 function transformAniList(media: AniListMedia): AnimeItem | null {
   if (media.isAdult) return null;
+  let status = media.status || null;
+  if (media.nextAiringEpisode && (status === "NOT_YET_RELEASED" || status === "NOT_YET_AIRED")) {
+    status = "RELEASING";
+  }
   return {
     id: String(media.id),
     idMal: media.idMal ? String(media.idMal) : null,
@@ -162,7 +166,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     rating: media.averageScore ? String(media.averageScore / 10) : null,
     description: media.description?.replace(/<[^>]*>/g, "") || "",
     genres: media.genres || [],
-    status: media.status || null,
+    status,
     season: media.season || null,
     seasonYear: media.seasonYear || null,
     format: media.format || null,
@@ -1435,9 +1439,10 @@ export async function fetchEpisodesFromAniZip(
     if (!json.episodes) return null;
 
     const eps: EpisodeDetail[] = [];
+    const effectiveCap = seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500;
     for (const key of Object.keys(json.episodes)) {
       const epNum = parseInt(key, 10);
-      if (isNaN(epNum) || epNum > seasonCap) continue;
+      if (isNaN(epNum) || epNum > effectiveCap) continue;
 
       const ep = json.episodes[key];
       const title = ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${epNum}`;
@@ -1564,6 +1569,7 @@ export async function fetchEpisodesFromJikan(
 ): Promise<EpisodeDetail[] | null> {
   try {
     const allEps: EpisodeDetail[] = [];
+    const effectiveCap = maxEpisodes && maxEpisodes > 0 ? Math.max(maxEpisodes, 1500) : 1500;
 
     // First request to get total pages
     let firstRes = await fetch(
@@ -1586,7 +1592,7 @@ export async function fetchEpisodesFromJikan(
     // Parse first page
     for (const ep of pageEps) {
       const epNum = typeof ep.episode === "number" ? ep.episode : ep.mal_id;
-      if (!epNum || epNum > maxEpisodes) continue;
+      if (!epNum || epNum > effectiveCap) continue;
       allEps.push({
         episodeId: `${anilistId}-${epNum}`,
         episodeNum: epNum,
@@ -1601,8 +1607,8 @@ export async function fetchEpisodesFromJikan(
     }
 
     // Fetch remaining pages concurrently with 350ms stagger per request
-    if (totalPages > 1 && allEps.length < maxEpisodes) {
-      const maxPagesToFetch = Math.min(totalPages, Math.ceil(maxEpisodes / 100));
+    if (totalPages > 1 && allEps.length < effectiveCap) {
+      const maxPagesToFetch = Math.min(totalPages, Math.ceil(effectiveCap / 100));
       const promises = [];
       
       for (let p = 2; p <= maxPagesToFetch; p++) {

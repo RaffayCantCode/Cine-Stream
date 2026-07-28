@@ -29,6 +29,83 @@ interface MediaItem {
   known_for_department?: string;
 }
 
+function transformClientAniListMedia(media: any): AnimeItem {
+  let status = media.status || null;
+  if (media.nextAiringEpisode && (status === "NOT_YET_RELEASED" || status === "NOT_YET_AIRED")) {
+    status = "RELEASING";
+  }
+  return {
+    id: String(media.id),
+    idMal: media.idMal ? String(media.idMal) : null,
+    name: media.title?.english || media.title?.romaji || media.title?.native || "Unknown",
+    jname: media.title?.native || null,
+    poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
+    type: media.type || "TV",
+    episodes: { sub: media.episodes || null, dub: null },
+    rating: media.averageScore ? String((media.averageScore / 10).toFixed(1)) : null,
+    description: media.description?.replace(/<[^>]*>/g, "") || "",
+    genres: media.genres || [],
+    status,
+    season: media.season || null,
+    seasonYear: media.seasonYear || null,
+    format: media.format || null,
+  };
+}
+
+async function directClientAniListSearch(queryTerm: string): Promise<AnimeItem[]> {
+  try {
+    const query = `query ($q: String) {
+      Page(page: 1, perPage: 40) {
+        media(type: ANIME, isAdult: false, search: $q) {
+          id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+          episodes genres averageScore description status type format season seasonYear nextAiringEpisode { episode }
+        }
+      }
+    }`;
+    const res = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ query, variables: { q: queryTerm } }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const list = data?.data?.Page?.media || [];
+      return list.map(transformClientAniListMedia).filter(Boolean);
+    }
+  } catch {}
+  return [];
+}
+
+async function directClientJikanSearch(queryTerm: string): Promise<AnimeItem[]> {
+  try {
+    const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryTerm)}&limit=25`, {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const list = data?.data || [];
+      return list.map((a: any) => ({
+        id: String(a.mal_id),
+        idMal: String(a.mal_id),
+        name: a.title_english || a.title,
+        jname: a.title_japanese || null,
+        poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
+        type: a.type || "TV",
+        episodes: { sub: a.episodes || null, dub: null },
+        rating: a.score ? String(a.score) : null,
+        description: a.synopsis || "",
+        genres: a.genres?.map((g: any) => g.name) || [],
+        status: a.status || null,
+        season: a.season || null,
+        seasonYear: a.year || null,
+        format: a.type || null,
+      }));
+    }
+  } catch {}
+  return [];
+}
+
 function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -93,11 +170,12 @@ function SearchContent() {
       setError(null);
 
       try {
-        // 1. Fetch main anime search with fallbacks
+        // 1. Fetch main anime search with multi-tier fallbacks (Server API -> Direct Browser Client AniList -> Direct Browser Client Jikan)
         const fetchAnimeWithFallback = async (qTerm: string) => {
+          // Tier 1: Try server API route first
           try {
             const res = await fetchJson<{ success: boolean; data?: any }>(
-              `/api/anime/search?q=${encodeURIComponent(qTerm)}`,
+              `/api/anime/search?q=${encodeURIComponent(qTerm)}&v=anime-v18-force-cloud-flush`,
               { cacheTtlMs: 0 }
             );
             const list = Array.isArray(res?.data) ? res.data : res?.data?.animes;
@@ -106,19 +184,27 @@ function SearchContent() {
             }
           } catch {}
 
+          // Tier 2: Direct browser client AniList GraphQL search
+          const clientAniListResults = await directClientAniListSearch(qTerm);
+          if (clientAniListResults.length > 0) {
+            return clientAniListResults;
+          }
+
+          // Tier 3: Cleaned punctuation query on direct browser AniList client
           const cleaned = qTerm.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
           if (cleaned && cleaned !== qTerm) {
-            try {
-              const res2 = await fetchJson<{ success: boolean; data?: any }>(
-                `/api/anime/search?q=${encodeURIComponent(cleaned)}`,
-                { cacheTtlMs: 0 }
-              );
-              const list2 = Array.isArray(res2?.data) ? res2.data : res2?.data?.animes;
-              if (res2?.success && Array.isArray(list2) && list2.length > 0) {
-                return list2;
-              }
-            } catch {}
+            const cleanedAniListResults = await directClientAniListSearch(cleaned);
+            if (cleanedAniListResults.length > 0) {
+              return cleanedAniListResults;
+            }
           }
+
+          // Tier 4: Direct browser client Jikan search
+          const clientJikanResults = await directClientJikanSearch(qTerm);
+          if (clientJikanResults.length > 0) {
+            return clientJikanResults;
+          }
+
           return [];
         };
 
