@@ -82,7 +82,7 @@ export async function fetchJson<T = unknown>(
     // Try sessionStorage cache for fast cross-page hydration
     if (typeof window !== "undefined") {
       try {
-        const storedStr = sessionStorage.getItem(`cs_cache_${cacheKey}`);
+        const storedStr = sessionStorage.getItem(`cs_v15_cache_${cacheKey}`);
         if (storedStr) {
           const parsed = JSON.parse(storedStr);
           if (parsed && parsed.expires > Date.now()) {
@@ -125,7 +125,7 @@ export async function fetchJson<T = unknown>(
 
       if (typeof window !== "undefined") {
         try {
-          sessionStorage.setItem(`cs_cache_${cacheKey}`, JSON.stringify({ data, expires }));
+          sessionStorage.setItem(`cs_v15_cache_${cacheKey}`, JSON.stringify({ data, expires }));
         } catch {}
       }
     }

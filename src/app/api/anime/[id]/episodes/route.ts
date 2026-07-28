@@ -264,7 +264,7 @@ async function getEnrichedEpisodesList(
   if (!seasonEps || seasonEps.length === 0) {
     console.warn(`[EpisodesList] All sources failed for "${seasonName}" (id=${seasonId}). Using placeholder episodes as last resort.`);
     const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => seasonName?.includes(t));
-    const count = isSpecialFormat ? 1 : Math.max(totalEpisodes || 12, 1);
+    const count = isSpecialFormat ? 1 : (totalEpisodes && totalEpisodes > 0 ? totalEpisodes : 3);
     for (let i = 1; i <= count; i++) {
       seasonEps.push({
         episodeId: `${seasonId}-${i}`,

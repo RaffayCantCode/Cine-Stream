@@ -390,7 +390,7 @@ function SearchContent() {
                         {item.media_type === "person" ? (
                           <PersonCard item={item} />
                         ) : (
-                          <MediaCard item={item} index={i} />
+                          <MediaCard item={item} index={i} showMediaBadge={true} />
                         )}
                       </div>
                     ))}

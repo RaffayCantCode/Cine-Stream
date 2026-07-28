@@ -51,6 +51,8 @@ export interface EpisodeDetail {
   releasedDate?: string | null;
   isFiller?: boolean;
   isRecap?: boolean;
+  isReleased?: boolean;
+  isUpcoming?: boolean;
   malUrl?: string | null;
   seasonNum?: number;
   seasonId?: string;
@@ -1288,10 +1290,32 @@ export async function getAnimeDetails(
   // Step 6: Check if anime season is unreleased
   const isUnreleased = anime.status === "NOT_YET_RELEASED" || anime.status === "NOT_YET_AIRED" || media?.status === "NOT_YET_RELEASED" || media?.status === "NOT_YET_AIRED";
   if (isUnreleased) {
+    const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel?.startsWith(t));
+    const animeEpCount = anime.episodes?.sub || 0;
+    const targetCount = isSpecialFormat ? 1 : (openedSeason.totalEpisodes > 0 ? openedSeason.totalEpisodes : (animeEpCount > 0 ? animeEpCount : 3));
+    const unreleasedEps: EpisodeDetail[] = [];
+    for (let i = 1; i <= targetCount; i++) {
+      unreleasedEps.push({
+        episodeId: `${activeSeasonId}-${i}`,
+        episodeNum: i,
+        title: isSpecialFormat && i === 1 ? openedSeason.name : `Episode ${i}`,
+        description: null,
+        thumbnail: null,
+        malUrl: null,
+        releasedDate: null,
+        isFiller: false,
+        isRecap: false,
+        isReleased: false,
+        seasonNum: openedSeasonIndex + 1,
+        seasonId: activeSeasonId,
+        seasonName: openedSeason.name,
+        seasonMalId: openedSeason.idMal || null,
+      });
+    }
     return {
       anime,
-      episodes: [],
-      totalEpisodes: 0,
+      episodes: unreleasedEps,
+      totalEpisodes: targetCount,
       seasons: mappedSeasons,
       openedSeasonId: activeSeasonId,
       franchiseNodes,

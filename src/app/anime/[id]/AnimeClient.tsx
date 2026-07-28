@@ -47,7 +47,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "anime-v14-fix-caches";
+const ANIME_API_VERSION = "anime-v15-unreleased-toprated-v2";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -762,14 +762,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   ) => {
     if (!forceReload && loadedSeasonIds.current.has(seasonId)) return;
 
-    const isUnreleasedSeason = anime?.status === "NOT_YET_RELEASED" || anime?.status === "NOT_YET_AIRED" || anime?.status === "Not Yet Aired";
-    if (isUnreleasedSeason) {
-      setEpisodes([]);
-      setEpisodesLoading(false);
-      loadedSeasonIds.current.add(seasonId);
-      return;
-    }
-
     setEpisodesLoading(true);
     setSeasonOverview(null);
 
@@ -782,8 +774,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
       );
-      const isRealEpisodes = epData.success && epData.data?.episodes?.length && !epData.data.episodes.every(e => (e as any).isPlaceholder);
-      if (isRealEpisodes) {
+      const isNotYet = anime?.status === "NOT_YET_RELEASED" || anime?.status === "NOT_YET_AIRED" || anime?.status === "Not Yet Aired";
+      const hasEpisodes = epData.success && epData.data?.episodes && epData.data.episodes.length > 0;
+      if (hasEpisodes) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
         const nextEpNum = anime?.nextAiringEpisode?.episode || null;
         const isNotYet = anime?.status === "NOT_YET_RELEASED";

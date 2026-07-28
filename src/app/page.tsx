@@ -54,6 +54,8 @@ let globalHomeCache: {
   trending: MediaItem[];
   popular: MediaItem[];
   topRated: MediaItem[];
+  topRatedMovies: MediaItem[];
+  topRatedTv: MediaItem[];
   recent: MediaItem[];
   trendingMoviesToday: MediaItem[];
   trendingTvToday: MediaItem[];
@@ -165,6 +167,8 @@ export default function Home() {
   const [trending, setTrending] = useState<MediaItem[]>(() => globalHomeCache?.trending || []);
   const [popular, setPopular] = useState<MediaItem[]>(() => globalHomeCache?.popular || []);
   const [topRated, setTopRated] = useState<MediaItem[]>(() => globalHomeCache?.topRated || []);
+  const [topRatedMovies, setTopRatedMovies] = useState<MediaItem[]>(() => globalHomeCache?.topRatedMovies || []);
+  const [topRatedTv, setTopRatedTv] = useState<MediaItem[]>(() => globalHomeCache?.topRatedTv || []);
   const [recent, setRecent] = useState<MediaItem[]>(() => globalHomeCache?.recent || []);
   const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingMoviesToday || []);
   const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingTvToday || []);
@@ -229,7 +233,23 @@ export default function Home() {
       setLoadError(null);
 
       try {
-        const homePromise = fetchJson<{
+        // Priority 1: Fetch Hero Banner feed immediately via light home-hero endpoint
+        const heroDataPromise = fetchJson<{
+          trending: { results: MediaItem[] };
+          popularMovies: { results: MediaItem[] };
+          topRatedTv: { results: MediaItem[] };
+          nowPlaying: { results: MediaItem[] };
+          popularTv: { results: MediaItem[] };
+          topRatedMovies: { results: MediaItem[] };
+          onTheAir: { results: MediaItem[] };
+          animeMovies: { results: MediaItem[] };
+          animeTv: { results: MediaItem[] };
+          trendingMoviesToday: { results: MediaItem[] };
+          trendingTvToday: { results: MediaItem[] };
+        }>("/api/tmdb/home-hero", { cacheTtlMs: 3600000 }).catch(() => null);
+
+        // Priority 3 background promises
+        const fullHomePromise = fetchJson<{
           trending: { results: MediaItem[] };
           popularMovies: { results: MediaItem[] };
           topRatedMovies: { results: MediaItem[] };
@@ -242,109 +262,63 @@ export default function Home() {
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home", { cacheTtlMs: 3600000 });
+        }>("/api/tmdb/home", { cacheTtlMs: 3600000 }).catch(() => null);
 
         const animePromise = fetchClientAnime("trending", 1).catch(() => null);
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        const [homeData, animeResponse, collectionsData] = await Promise.all([homePromise, animePromise, collectionsPromise]);
+        // Wait for fast hero payload first to make Hero Banner interactive instantly
+        const heroData = await heroDataPromise;
         if (cancelled) return;
 
-        const trendingSafe = filterReleasedSafeContent(homeData.trending?.results || [])
-          .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const popularSafe = filterReleasedSafeContent(homeData.popularMovies?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const heroTopSafe = filterReleasedSafeContent(homeData.topRatedTv?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const heroRecentSafe = filterReleasedSafeContent(homeData.nowPlaying?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+        if (heroData) {
+          const trendingSafe = filterReleasedSafeContent(heroData.trending?.results || [])
+            .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const popularSafe = filterReleasedSafeContent(heroData.popularMovies?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const heroTopSafe = filterReleasedSafeContent(heroData.topRatedTv?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const heroRecentSafe = filterReleasedSafeContent(heroData.nowPlaying?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
 
-        const topRatedMovieSafe = filterReleasedSafeContent(homeData.topRatedMovies?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const popularTvSafe = filterReleasedSafeContent(homeData.popularTv?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const onTheAirSafe = filterReleasedSafeContent(homeData.onTheAir?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const animeMovieSafe = filterReleasedSafeContent(homeData.animeMovies?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const animeTvSafe = filterReleasedSafeContent(homeData.animeTv?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const trendingMoviesTodaySafe = filterReleasedSafeContent(homeData.trendingMoviesToday?.results || []).map(
-          (i) => ({ ...i, media_type: "movie" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-        const trendingTvTodaySafe = filterReleasedSafeContent(homeData.trendingTvToday?.results || []).map(
-          (i) => ({ ...i, media_type: "tv" as const })
-        ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
+          const topRatedMovieSafe = filterReleasedSafeContent(heroData.topRatedMovies?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const popularTvSafe = filterReleasedSafeContent(heroData.popularTv?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const onTheAirSafe = filterReleasedSafeContent(heroData.onTheAir?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const animeMovieSafe = filterReleasedSafeContent(heroData.animeMovies?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const animeTvSafe = filterReleasedSafeContent(heroData.animeTv?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const trendingMoviesTodaySafe = filterReleasedSafeContent(heroData.trendingMoviesToday?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const trendingTvTodaySafe = filterReleasedSafeContent(heroData.trendingTvToday?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
 
-        const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].slice(0, 10).map((item) => ({
-          id: String(item.id),
-          name: item.name || item.title || "Anime",
-          poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "",
-          type: item.media_type === "movie" ? "MOVIE" : "TV",
-          rating: item.vote_average ? String(item.vote_average.toFixed(1)) : null,
-          description: item.overview || "",
-          genres: ["Animation", "Anime"],
-          episodes: { sub: null, dub: null },
-        }));
+          setTrending(trendingSafe);
+          setPopular(sessionShuffle(popularSafe, "popular"));
+          setTopRated(sessionShuffle(heroTopSafe, "toprated"));
+          setTopRatedMovies(topRatedMovieSafe.slice(0, 10));
+          setTopRatedTv(heroTopSafe.slice(0, 10));
+          setRecent(heroRecentSafe);
+          setTrendingMoviesToday(trendingMoviesTodaySafe);
+          setTrendingTvToday(trendingTvTodaySafe);
+          setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
+          setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
+          setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
 
-        const finalAnimeList = (animeResponse?.items && animeResponse.items.length > 0)
-          ? animeResponse.items.slice(0, 10)
-          : initialAnimeItems;
-
-        const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
-          ? collectionsData.collections
-          : INITIAL_COLLECTIONS;
-
-        const recPool = [...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe];
-        const daySalt = Math.floor(Date.now() / 86400000).toString();
-
-        setTrending(trendingSafe);
-        setPopular(sessionShuffle(popularSafe, "popular"));
-        setTopRated(sessionShuffle(heroTopSafe, "toprated"));
-        setRecent(heroRecentSafe);
-        setTrendingMoviesToday(trendingMoviesTodaySafe);
-        setTrendingTvToday(trendingTvTodaySafe);
-        setAnimeList(finalAnimeList);
-        setCollections(validCollections);
-        setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
-        setGenres((homeData.genres?.genres || []).slice(0, 18));
-        setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
-        setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
-        setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
-
-        setHeroFeed([
-          ...trendingSafe,
-          ...popularSafe,
-          ...heroTopSafe,
-          ...heroRecentSafe,
-          ...topRatedMovieSafe,
-          ...popularTvSafe,
-          ...onTheAirSafe,
-          ...animeMovieSafe,
-          ...animeTvSafe,
-        ]);
-        setAnimeLoading(false);
-        setIsLoading(false);
-
-        globalHomeCache = {
-          trending: trendingSafe,
-          popular: sessionShuffle(popularSafe, "popular"),
-          topRated: sessionShuffle(heroTopSafe, "toprated"),
-          recent: heroRecentSafe,
-          trendingMoviesToday: trendingMoviesTodaySafe,
-          trendingTvToday: trendingTvTodaySafe,
-          heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
-          heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
-          heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
-          heroFeed: [
+          setHeroFeed([
             ...trendingSafe,
             ...popularSafe,
             ...heroTopSafe,
@@ -354,12 +328,132 @@ export default function Home() {
             ...onTheAirSafe,
             ...animeMovieSafe,
             ...animeTvSafe,
-          ],
-          recommended: recPool,
-          genres: (homeData.genres?.genres || []).slice(0, 18),
-          animeList: finalAnimeList,
-          collections: validCollections,
-        };
+          ]);
+
+          // Reveal Hero Banner and Continue Watching immediately
+          setIsLoading(false);
+        }
+
+        // Priority 3: Wait for full home, anime, and collections background promises
+        const [homeData, animeResponse, collectionsData] = await Promise.all([fullHomePromise, animePromise, collectionsPromise]);
+        if (cancelled) return;
+
+        if (homeData) {
+          const trendingSafe = filterReleasedSafeContent(homeData.trending?.results || [])
+            .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const popularSafe = filterReleasedSafeContent(homeData.popularMovies?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const heroTopSafe = filterReleasedSafeContent(homeData.topRatedTv?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const heroRecentSafe = filterReleasedSafeContent(homeData.nowPlaying?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+
+          const topRatedMovieSafe = filterReleasedSafeContent(homeData.topRatedMovies?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const popularTvSafe = filterReleasedSafeContent(homeData.popularTv?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const onTheAirSafe = filterReleasedSafeContent(homeData.onTheAir?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const animeMovieSafe = filterReleasedSafeContent(homeData.animeMovies?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const animeTvSafe = filterReleasedSafeContent(homeData.animeTv?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const trendingMoviesTodaySafe = filterReleasedSafeContent(homeData.trendingMoviesToday?.results || []).map(
+            (i) => ({ ...i, media_type: "movie" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const trendingTvTodaySafe = filterReleasedSafeContent(homeData.trendingTvToday?.results || []).map(
+            (i) => ({ ...i, media_type: "tv" as const })
+          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
+
+          const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].slice(0, 10).map((item) => ({
+            id: String(item.id),
+            name: item.name || item.title || "Anime",
+            poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "",
+            type: item.media_type === "movie" ? "MOVIE" : "TV",
+            rating: item.vote_average ? String(item.vote_average.toFixed(1)) : null,
+            description: item.overview || "",
+            genres: ["Animation", "Anime"],
+            episodes: { sub: null, dub: null },
+          }));
+
+          const finalAnimeList = (animeResponse?.items && animeResponse.items.length > 0)
+            ? animeResponse.items.slice(0, 10)
+            : initialAnimeItems;
+
+          const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
+            ? collectionsData.collections
+            : INITIAL_COLLECTIONS;
+
+          const recPool = [...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe];
+          const daySalt = Math.floor(Date.now() / 86400000).toString();
+
+          setTrending(trendingSafe);
+          setPopular(sessionShuffle(popularSafe, "popular"));
+          setTopRated(sessionShuffle(heroTopSafe, "toprated"));
+          setTopRatedMovies(topRatedMovieSafe.slice(0, 10));
+          setTopRatedTv(heroTopSafe.slice(0, 10));
+          setRecent(heroRecentSafe);
+          setTrendingMoviesToday(trendingMoviesTodaySafe);
+          setTrendingTvToday(trendingTvTodaySafe);
+          setAnimeList(finalAnimeList);
+          setCollections(validCollections);
+          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+          setGenres((homeData.genres?.genres || []).slice(0, 18));
+          setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
+          setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
+          setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
+
+          setHeroFeed([
+            ...trendingSafe,
+            ...popularSafe,
+            ...heroTopSafe,
+            ...heroRecentSafe,
+            ...topRatedMovieSafe,
+            ...popularTvSafe,
+            ...onTheAirSafe,
+            ...animeMovieSafe,
+            ...animeTvSafe,
+          ]);
+
+          globalHomeCache = {
+            trending: trendingSafe,
+            popular: sessionShuffle(popularSafe, "popular"),
+            topRated: sessionShuffle(heroTopSafe, "toprated"),
+            topRatedMovies: topRatedMovieSafe.slice(0, 10),
+            topRatedTv: heroTopSafe.slice(0, 10),
+            recent: heroRecentSafe,
+            trendingMoviesToday: trendingMoviesTodaySafe,
+            trendingTvToday: trendingTvTodaySafe,
+            heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
+            heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
+            heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
+            heroFeed: [
+              ...trendingSafe,
+              ...popularSafe,
+              ...heroTopSafe,
+              ...heroRecentSafe,
+              ...topRatedMovieSafe,
+              ...popularTvSafe,
+              ...onTheAirSafe,
+              ...animeMovieSafe,
+              ...animeTvSafe,
+            ],
+            recommended: recPool,
+            genres: (homeData.genres?.genres || []).slice(0, 18),
+            animeList: finalAnimeList,
+            collections: validCollections,
+          };
+        }
+        setAnimeLoading(false);
+        setIsLoading(false);
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Failed to load content");
@@ -644,18 +738,18 @@ export default function Home() {
           <LazySection show={revealedSections >= 2} placeholderHeight={360}>
             <MediaRow
               title="Top Rated Movies"
-              items={popular}
+              items={topRatedMovies}
               isLoading={isLoading}
               seeAllHref="/browse/movies/top-rated"
               accentIcon={<Star className="w-4 h-4 text-amber-400" />}
             />
           </LazySection>
 
-          {/* ─── 3. TOP RATED ─── */}
+          {/* ─── 3. TOP RATED TV ─── */}
           <LazySection show={revealedSections >= 3} placeholderHeight={360}>
             <MediaRow
               title="Top Rated TV"
-              items={topRated}
+              items={topRatedTv}
               isLoading={isLoading}
               seeAllHref="/browse/tv/top-rated"
               accentIcon={<Star className="w-4 h-4 text-amber-400" />}

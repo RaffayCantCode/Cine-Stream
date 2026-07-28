@@ -47,31 +47,34 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const globalPrefKey = `sv_src_global_${userId}_${type}`;
 
   const [currentSource, setCurrentSource] = useState<StreamingSource>(() => {
-    try {
-      const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
-      if (saved && !forcedSource) {
-        // Try type-based key first (new format), then name-based (legacy)
-        const found = sources.find((s: StreamingSource) => s.type === saved) ||
-                      sources.find((s: StreamingSource) => s.name === saved);
-        if (found) return found;
-      }
-    } catch {}
+    if (type === "tv") {
+      try {
+        const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
+        if (saved && !forcedSource) {
+          const found = sources.find((s: StreamingSource) => s.type === saved) ||
+                        sources.find((s: StreamingSource) => s.name === saved);
+          if (found) return found;
+        }
+      } catch {}
+    }
     return sources[0];
   });
   const [isSourceLoaded, setIsSourceLoaded] = useState(false);
 
   useEffect(() => {
     if (status === "loading" || isSourceLoaded) return;
-    try {
-      const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
-      if (saved && !forcedSource) {
-        const found = sources.find(s => s.type === saved) ||
-                      sources.find(s => s.name === saved);
-        if (found) setCurrentSource(found);
-      }
-    } catch {}
+    if (type === "tv") {
+      try {
+        const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
+        if (saved && !forcedSource) {
+          const found = sources.find(s => s.type === saved) ||
+                        sources.find(s => s.name === saved);
+          if (found) setCurrentSource(found);
+        }
+      } catch {}
+    }
     setIsSourceLoaded(true);
-  }, [status, sourcePrefKey, globalPrefKey, sources, isSourceLoaded, forcedSource]);
+  }, [status, sourcePrefKey, globalPrefKey, sources, isSourceLoaded, forcedSource, type]);
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,11 +100,13 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     setError(null);
     setIsLoading(true);
     setRetryCount(0);
-    try {
-      localStorage.setItem(sourcePrefKey, nextSource.type);
-      localStorage.setItem(globalPrefKey, nextSource.type);
-    } catch {}
-  }, [sources, currentSource, sourcePrefKey, globalPrefKey]);
+    if (type === "tv") {
+      try {
+        localStorage.setItem(sourcePrefKey, nextSource.type);
+        localStorage.setItem(globalPrefKey, nextSource.type);
+      } catch {}
+    }
+  }, [sources, currentSource, sourcePrefKey, globalPrefKey, type]);
 
   // Auto-dismiss spinner after timeout without forced source switching
   useEffect(() => {
@@ -219,17 +224,19 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   useEffect(() => {
     setCurrentSource(prev => {
       let targetType = forcedSource || prev?.type;
-      try {
-        const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
-        if (!forcedSource && saved) targetType = saved;
-      } catch {}
+      if (type === "tv") {
+        try {
+          const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
+          if (!forcedSource && saved) targetType = saved;
+        } catch {}
+      }
       return sources.find(s => s.type === targetType) ||
              sources.find(s => s.name === targetType) ||
              sources[0];
     });
     setError(null);
     setIsLoading(true);
-  }, [sources, sourcePrefKey, globalPrefKey, forcedSource]);
+  }, [sources, sourcePrefKey, globalPrefKey, forcedSource, type]);
 
   const prevForceReloadRef = useRef(forceReloadCount);
   useEffect(() => {
@@ -245,10 +252,12 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     setIsLoading(true);
     setShowSources(false);
     setRetryCount(0);
-    try {
-      localStorage.setItem(sourcePrefKey, source.type);
-      localStorage.setItem(globalPrefKey, source.type);
-    } catch {}
+    if (type === "tv") {
+      try {
+        localStorage.setItem(sourcePrefKey, source.type);
+        localStorage.setItem(globalPrefKey, source.type);
+      } catch {}
+    }
   };
 
   const handleIframeError = useCallback(() => {

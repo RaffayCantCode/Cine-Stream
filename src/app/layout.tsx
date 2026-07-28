@@ -73,8 +73,20 @@ export default function RootLayout({
         <link rel="preconnect" href="https://api.anipub.xyz" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://api.anipub.xyz" />
         <link rel="dns-prefetch" href="https://api.tatakai.me" />
-        {/* PWA service worker registration */}
+        {/* Deployment Cache Invalidation */}
         <script dangerouslySetInnerHTML={{ __html: `
+          (function() {
+            var BUILD_VER = 'v15-unreleased-toprated-v2';
+            try {
+              if (typeof sessionStorage !== 'undefined') {
+                var ver = sessionStorage.getItem('sv_build_ver');
+                if (ver !== BUILD_VER) {
+                  sessionStorage.clear();
+                  sessionStorage.setItem('sv_build_ver', BUILD_VER);
+                }
+              }
+            } catch(e) {}
+          })();
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
               navigator.serviceWorker.register('/sw.js', { scope: '/' })

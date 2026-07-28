@@ -24,13 +24,14 @@ interface MediaCardProps {
   index?: number;
   rank?: number;
   priority?: boolean;
+  showMediaBadge?: boolean;
 }
 
 const CARD_WRAPPER_STYLE: React.CSSProperties = {
   animation: "fade-in-up 0.35s ease-out both",
 };
 
-export function MediaCard({ item, index = 0, rank, priority }: MediaCardProps) {
+export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = false }: MediaCardProps) {
   const isPerson = item.media_type === "person";
   const isMovie = item.media_type === "movie" || (!isPerson && !!item.title);
   const title = item.title || item.name || "";
@@ -88,6 +89,16 @@ export function MediaCard({ item, index = 0, rank, priority }: MediaCardProps) {
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
             <span className="text-muted-foreground text-xs font-medium">{title}</span>
+          </div>
+        )}
+
+        {showMediaBadge && !isPerson && (
+          <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
+            <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg backdrop-blur-md border ${
+              isMovie ? "bg-red-600/85 border-red-500/30" : "bg-emerald-600/85 border-emerald-500/30"
+            }`}>
+              {isMovie ? "MOVIE" : "TV SHOW"}
+            </span>
           </div>
         )}
 
