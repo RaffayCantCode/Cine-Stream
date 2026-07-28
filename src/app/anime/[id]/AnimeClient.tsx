@@ -774,19 +774,24 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
       );
-      const isNotYet = anime?.status === "NOT_YET_RELEASED" || anime?.status === "NOT_YET_AIRED" || anime?.status === "Not Yet Aired";
+      const isUnreleasedAnime = 
+        anime?.status === "NOT_YET_RELEASED" || 
+        anime?.status === "NOT_YET_AIRED" || 
+        anime?.status === "Not Yet Aired" || 
+        anime?.status === "Not yet aired" ||
+        anime?.status === "UPCOMING";
+
       const hasEpisodes = epData.success && epData.data?.episodes && epData.data.episodes.length > 0;
       if (hasEpisodes) {
         const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
         const nextEpNum = anime?.nextAiringEpisode?.episode || null;
-        const isNotYet = anime?.status === "NOT_YET_RELEASED";
 
         let encounteredUnreleased = false;
         const nowMs = Date.now();
         const withRelease: Episode[] = sorted.map((ep) => {
           let released = ep.isReleased !== false;
 
-          if (isNotYet) {
+          if (isUnreleasedAnime) {
             released = false;
           } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextEpNum) {
             released = false;

@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
       `/api/search?keyword=${encodeURIComponent(query)}`
     );
 
-    const animes = data.data || [];
+    const rawAnimes = data?.data;
+    const animes = Array.isArray(rawAnimes) ? rawAnimes : (rawAnimes?.animes || []);
     return Response.json({
       success: true,
       data: { animes },

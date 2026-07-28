@@ -96,22 +96,26 @@ function SearchContent() {
         // 1. Fetch main anime search with fallbacks
         const fetchAnimeWithFallback = async (qTerm: string) => {
           try {
-            const res = await fetchJson<{ success: boolean; data?: { animes: AnimeItem[] } }>(
-              `/api/anime/search?q=${encodeURIComponent(qTerm)}`
+            const res = await fetchJson<{ success: boolean; data?: any }>(
+              `/api/anime/search?q=${encodeURIComponent(qTerm)}`,
+              { cacheTtlMs: 0 }
             );
-            if (res?.success && res.data?.animes && res.data.animes.length > 0) {
-              return res.data.animes;
+            const list = Array.isArray(res?.data) ? res.data : res?.data?.animes;
+            if (res?.success && Array.isArray(list) && list.length > 0) {
+              return list;
             }
           } catch {}
 
           const cleaned = qTerm.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
           if (cleaned && cleaned !== qTerm) {
             try {
-              const res2 = await fetchJson<{ success: boolean; data?: { animes: AnimeItem[] } }>(
-                `/api/anime/search?q=${encodeURIComponent(cleaned)}`
+              const res2 = await fetchJson<{ success: boolean; data?: any }>(
+                `/api/anime/search?q=${encodeURIComponent(cleaned)}`,
+                { cacheTtlMs: 0 }
               );
-              if (res2?.success && res2.data?.animes && res2.data.animes.length > 0) {
-                return res2.data.animes;
+              const list2 = Array.isArray(res2?.data) ? res2.data : res2?.data?.animes;
+              if (res2?.success && Array.isArray(list2) && list2.length > 0) {
+                return list2;
               }
             } catch {}
           }
@@ -120,7 +124,7 @@ function SearchContent() {
 
         // 2. Phase 1 — Main query search (TMDB + Anime simultaneously)
         const [tmdbRes, animeRes] = await Promise.allSettled([
-          fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`),
+          fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { cacheTtlMs: 0 }),
           fetchAnimeWithFallback(debouncedQuery),
         ]);
 
