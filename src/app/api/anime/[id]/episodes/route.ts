@@ -156,6 +156,40 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): a
   });
 }
 
+function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): any[] {
+  if (!episodes || episodes.length === 0) return [];
+
+  const knownEpisodeCount = season?.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
+  const isSpecial = ["Movie", "OVA", "Special"].some(t => 
+    (season?.seasonLabel || "").startsWith(t) || (season?.name || "").includes(t)
+  );
+  const isSeasonFinished = season?.status === "FINISHED" || (meta?.anime?.status === "FINISHED");
+
+  let result = [...episodes];
+
+  // Rule A & D: Cap strictly to knownEpisodeCount if specified
+  if (knownEpisodeCount && knownEpisodeCount > 0) {
+    result = result.filter((ep: any) => ep.episodeNum <= knownEpisodeCount);
+  } else if (isSpecial) {
+    // Specials / Movies default to 1 episode unless explicitly marked higher
+    result = result.filter((ep: any) => ep.episodeNum <= 1);
+  }
+
+  // Rule C & E: For finished content, remove pure placeholder episodes beyond real episodes
+  if (isSeasonFinished) {
+    const realEps = result.filter((ep: any) => 
+      !ep.isPlaceholder && (ep.releasedDate || (ep.title && ep.title !== `Episode ${ep.episodeNum}`) || ep.thumbnail || ep.description)
+    );
+    if (realEps.length > 0) {
+      const maxRealEp = Math.max(...realEps.map((e: any) => e.episodeNum));
+      const maxAllowed = knownEpisodeCount ? Math.min(knownEpisodeCount, maxRealEp) : maxRealEp;
+      result = result.filter((ep: any) => ep.episodeNum <= maxAllowed);
+    }
+  }
+
+  return result;
+}
+
 // Robust helper to consolidate and enrich episode lists from AniZip, Jikan, Tatakai, and Kitsu
 async function getEnrichedEpisodesList(
   seasonId: string,
@@ -643,9 +677,10 @@ export async function GET(
             });
           }
 
-          // If overlayEps (AniZip/Jikan/Tatakai) contains extra episodes beyond TMDB count, append them!
+          // If overlayEps (AniZip/Jikan/Tatakai) contains extra episodes beyond TMDB count, append them (strictly capped to knownEpisodeCount or 1 for specials)
           if (overlayEps && overlayEps.length > 0) {
-            const maxOverlayNum = Math.max(...overlayEps.map(e => e.episodeNum || 0));
+            const capLimit = knownEpisodeCount && knownEpisodeCount > 0 ? knownEpisodeCount : (isMovieOrSpecial ? 1 : 1500);
+            const maxOverlayNum = Math.min(Math.max(...overlayEps.map(e => e.episodeNum || 0)), capLimit);
             const currentMaxNum = seasonEps.length;
             if (maxOverlayNum > currentMaxNum) {
               for (let i = currentMaxNum + 1; i <= maxOverlayNum; i++) {
@@ -803,6 +838,7 @@ export async function GET(
 
       seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
       seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta, season);
+      seasonEps = cleanAndCapSeasonEpisodes(seasonEps, season, meta);
 
       console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId}`);
 
@@ -929,7 +965,8 @@ export async function GET(
           }
         }
         seasonEps.sort((a: any, b: any) => a.episodeNum - b.episodeNum);
-        seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta);
+        seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta, season);
+        seasonEps = cleanAndCapSeasonEpisodes(seasonEps, season, meta);
       }
 
       return Response.json({
@@ -1068,7 +1105,7 @@ export async function GET(
             });
           }
         }
-        episodes.push(...seasonEps);
+        episodes.push(...cleanAndCapSeasonEpisodes(seasonEps, season, meta));
       }
     }
 

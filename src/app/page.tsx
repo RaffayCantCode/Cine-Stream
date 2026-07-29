@@ -63,11 +63,67 @@ let globalHomeCache: {
   heroPopularFeed: MediaItem[];
   heroTopRatedFeed: MediaItem[];
   heroFeed: MediaItem[];
+  heroPool: MediaItem[];
   recommended: MediaItem[];
   genres: Genre[];
   animeList: AnimeItem[];
   collections: any[];
 } | null = null;
+
+function buildHeroPool(feed: MediaItem[]): MediaItem[] {
+  const isQualityItem = (i: MediaItem) => {
+    if (!i.backdrop_path || !i.poster_path) return false;
+    if (!i.overview || i.overview.trim().length < 25) return false;
+    const rating = i.vote_average ?? 0;
+    const votes = i.vote_count ?? 0;
+    if (rating < 6.2) return false;
+    if (votes < 30) return false;
+    return true;
+  };
+
+  const qualityFeed = feed.filter(isQualityItem);
+
+  const movies = qualityFeed.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
+  const shows = qualityFeed.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
+  const animeItems = qualityFeed.filter((i) => isTmdbAnime(i));
+
+  const seenIds = new Set<number>();
+  try {
+    if (typeof window !== "undefined") {
+      const raw = sessionStorage.getItem("sv_seen_hero_ids");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id: number) => seenIds.add(id));
+        }
+      }
+    }
+  } catch {}
+
+  const pickFresh = (candidates: MediaItem[]): MediaItem | null => {
+    if (candidates.length === 0) return null;
+    const unseen = candidates.filter((c) => !seenIds.has(c.id));
+    const pool = unseen.length > 0 ? unseen : candidates;
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    if (picked) {
+      seenIds.add(picked.id);
+    }
+    return picked || null;
+  };
+
+  const m = pickFresh(movies);
+  const s = pickFresh(shows);
+  const a = pickFresh(animeItems);
+
+  try {
+    if (typeof window !== "undefined") {
+      const arr = Array.from(seenIds).slice(-50);
+      sessionStorage.setItem("sv_seen_hero_ids", JSON.stringify(arr));
+    }
+  } catch {}
+
+  return [m, s, a].filter(Boolean) as MediaItem[];
+}
 
 // ─── Session-stable shuffle ───────────────────────────────────────────────────
 // We want different results every SESSION (new tab / new browser open) but
@@ -176,6 +232,7 @@ export default function Home() {
   const [heroPopularFeed, setHeroPopularFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroPopularFeed || []);
   const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTopRatedFeed || []);
   const [heroFeed, setHeroFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroFeed || []);
+  const [heroPool, setHeroPool] = useState<MediaItem[]>(() => globalHomeCache?.heroPool || []);
   const [recommended, setRecommended] = useState<MediaItem[]>(() => globalHomeCache?.recommended || []);
   const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || []);
   const [isLoading, setIsLoading] = useState(() => !globalHomeCache);
@@ -318,7 +375,7 @@ export default function Home() {
           setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
           setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
 
-          setHeroFeed([
+          const initialHeroFeed = [
             ...trendingSafe,
             ...popularSafe,
             ...heroTopSafe,
@@ -328,7 +385,16 @@ export default function Home() {
             ...onTheAirSafe,
             ...animeMovieSafe,
             ...animeTvSafe,
-          ]);
+          ];
+
+          setHeroFeed(initialHeroFeed);
+
+          let initialPool: MediaItem[] = [];
+          setHeroPool((currentPool) => {
+            if (currentPool.length > 0) return currentPool;
+            initialPool = buildHeroPool(initialHeroFeed);
+            return initialPool;
+          });
 
           // Reveal Hero Banner and Continue Watching immediately
           setIsLoading(false);
@@ -411,7 +477,7 @@ export default function Home() {
           setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
           setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
 
-          setHeroFeed([
+          const fullHeroFeed = [
             ...trendingSafe,
             ...popularSafe,
             ...heroTopSafe,
@@ -421,7 +487,19 @@ export default function Home() {
             ...onTheAirSafe,
             ...animeMovieSafe,
             ...animeTvSafe,
-          ]);
+          ];
+
+          setHeroFeed(fullHeroFeed);
+
+          let lockedPool: MediaItem[] = [];
+          setHeroPool((currentPool) => {
+            if (currentPool.length > 0) {
+              lockedPool = currentPool;
+              return currentPool;
+            }
+            lockedPool = buildHeroPool(fullHeroFeed);
+            return lockedPool;
+          });
 
           globalHomeCache = {
             trending: trendingSafe,
@@ -435,17 +513,8 @@ export default function Home() {
             heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
             heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
             heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
-            heroFeed: [
-              ...trendingSafe,
-              ...popularSafe,
-              ...heroTopSafe,
-              ...heroRecentSafe,
-              ...topRatedMovieSafe,
-              ...popularTvSafe,
-              ...onTheAirSafe,
-              ...animeMovieSafe,
-              ...animeTvSafe,
-            ],
+            heroFeed: fullHeroFeed,
+            heroPool: lockedPool,
             recommended: recPool,
             genres: (homeData.genres?.genres || []).slice(0, 18),
             animeList: finalAnimeList,
@@ -473,68 +542,6 @@ export default function Home() {
     if (arr.length === 0) return null;
     return arr[Math.floor(Math.random() * arr.length)];
   }
-
-  // ─── Hero pool: 3 cards — 1 Movie, 1 TV Show, 1 Anime ──────────────────
-  const heroPool = useMemo(() => {
-    const isQualityItem = (i: MediaItem) => {
-      if (!i.backdrop_path || !i.poster_path) return false;
-      if (!i.overview || i.overview.trim().length < 25) return false;
-      const rating = i.vote_average ?? 0;
-      const votes = i.vote_count ?? 0;
-      // Filter out obscure, low-rated, or unreviewed noise
-      if (rating < 6.2) return false;
-      if (votes < 30) return false;
-      return true;
-    };
-
-    const qualityFeed = heroFeed.filter(isQualityItem);
-
-    // Card 1: Movie (non-anime)
-    const movies = qualityFeed.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
-    // Card 2: TV Show (non-anime)
-    const shows = qualityFeed.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
-    // Card 3: Anime (movies or TV)
-    const animeItems = qualityFeed.filter((i) => isTmdbAnime(i));
-
-    // Track recently seen hero IDs in sessionStorage to prevent repetitions across page visits
-    const seenIds = new Set<number>();
-    try {
-      if (typeof window !== "undefined") {
-        const raw = sessionStorage.getItem("sv_seen_hero_ids");
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((id: number) => seenIds.add(id));
-          }
-        }
-      }
-    } catch {}
-
-    const pickFresh = (candidates: MediaItem[]): MediaItem | null => {
-      if (candidates.length === 0) return null;
-      // Prefer items that haven't been shown in recent session visits
-      const unseen = candidates.filter((c) => !seenIds.has(c.id));
-      const pool = unseen.length > 0 ? unseen : candidates;
-      const picked = pool[Math.floor(Math.random() * pool.length)];
-      if (picked) {
-        seenIds.add(picked.id);
-      }
-      return picked || null;
-    };
-
-    const m = pickFresh(movies);
-    const s = pickFresh(shows);
-    const a = pickFresh(animeItems);
-
-    try {
-      if (typeof window !== "undefined") {
-        const arr = Array.from(seenIds).slice(-50);
-        sessionStorage.setItem("sv_seen_hero_ids", JSON.stringify(arr));
-      }
-    } catch {}
-
-    return [m, s, a].filter(Boolean) as MediaItem[];
-  }, [heroFeed]);
 
   const hero = heroPool[heroIndex] || heroPool[0] || null;
 

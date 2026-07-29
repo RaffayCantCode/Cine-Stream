@@ -232,9 +232,9 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/5F0HVEgkgP99fEWDjPyikGt9jQi.jpg",
     poster_path: "/xppeysfvDKVx775MFuH8Z9BlpMk.jpg",
     items: [
-      { id: 20, media_type: "anime", anilist_id: 20, title: "Naruto", release_date: "2002-10-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-YJ2yeuo3ndStandard.png" },
-      { id: 1735, media_type: "anime", anilist_id: 1735, title: "Naruto: Shippuden", release_date: "2007-02-15", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1735-aFjN0aD1E3gN.png" },
-      { id: 97938, media_type: "anime", anilist_id: 97938, title: "Boruto: Naruto Next Generations", release_date: "2017-04-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97938-tC40rZk5kOzA.jpg" },
+      { id: 20, media_type: "anime", anilist_id: 20, title: "Naruto", release_date: "2002-10-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-dE6UHbFFg1A5.jpg" },
+      { id: 1735, media_type: "anime", anilist_id: 1735, title: "Naruto: Shippuden", release_date: "2007-02-15", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1735-kGfVm0YqCPcu.png" },
+      { id: 97938, media_type: "anime", anilist_id: 97938, title: "Boruto: Naruto Next Generations", release_date: "2017-04-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97938-BnF6M5yTaNB1.jpg" },
     ],
   },
   {
