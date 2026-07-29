@@ -151,8 +151,19 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
 function transformAniList(media: AniListMedia): AnimeItem | null {
   if (media.isAdult) return null;
   let status = media.status || null;
-  if (media.nextAiringEpisode && (status === "NOT_YET_RELEASED" || status === "NOT_YET_AIRED")) {
+  // Only upgrade NOT_YET_RELEASED → RELEASING when the series has a confirmed
+  // next airing episode. Never override FINISHED (a sequel's nextAiringEpisode
+  // must not contaminate a completed season's status).
+  if (
+    media.nextAiringEpisode &&
+    (status === "NOT_YET_RELEASED" || status === "NOT_YET_AIRED")
+  ) {
     status = "RELEASING";
+  }
+  // Guard: if AniList explicitly says FINISHED, never downgrade to RELEASING
+  // even if a related sequel has nextAiringEpisode data attached.
+  if (media.status === "FINISHED") {
+    status = "FINISHED";
   }
   return {
     id: String(media.id),

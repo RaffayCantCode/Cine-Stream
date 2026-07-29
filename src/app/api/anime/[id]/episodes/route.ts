@@ -156,34 +156,66 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): a
   });
 }
 
+function isAnimeSeasonFinished(season: any, meta?: any): boolean {
+  // Primary: explicit FINISHED status on the anime record from AniList
+  if (meta?.anime?.status === "FINISHED" || meta?.anime?.status === "FINISHED_AIRING") return true;
+  // Secondary: season-level status (not always populated, but check anyway)
+  if (season?.status === "FINISHED" || season?.status === "FINISHED_AIRING") return true;
+  // Tertiary: if AniList totalEpisodes is set AND the season has a non-airing status
+  const status = (meta?.anime?.status || "").toUpperCase();
+  const isAiringNow = status === "RELEASING" || status === "AIRING" || status === "NOT_YET_RELEASED";
+  if (!isAiringNow && season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499) {
+    // Season has a known finite episode count and is not currently airing
+    return true;
+  }
+  return false;
+}
+
 function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): any[] {
   if (!episodes || episodes.length === 0) return [];
 
-  const knownEpisodeCount = season?.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
-  const isSpecial = ["Movie", "OVA", "Special"].some(t => 
+  // knownEpisodeCount: the DEFINITIVE episode count for this specific season from AniList.
+  // This is the single source of truth — if it's set, NOTHING else overrides it.
+  const knownEpisodeCount = season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
+  const isSpecial = ["Movie", "OVA", "Special"].some(t =>
     (season?.seasonLabel || "").startsWith(t) || (season?.name || "").includes(t)
   );
-  const isSeasonFinished = season?.status === "FINISHED" || (meta?.anime?.status === "FINISHED");
+  const isFinished = isAnimeSeasonFinished(season, meta);
 
   let result = [...episodes];
 
-  // Rule A & D: Cap strictly to knownEpisodeCount if specified
+  // RULE A: If we have a definitive episode count, always cap to it.
+  // This is the PRIMARY defense against season bleeding.
   if (knownEpisodeCount && knownEpisodeCount > 0) {
     result = result.filter((ep: any) => ep.episodeNum <= knownEpisodeCount);
   } else if (isSpecial) {
-    // Specials / Movies default to 1 episode unless explicitly marked higher
+    // Specials/Movies: default to 1 unless an explicit count was specified
     result = result.filter((ep: any) => ep.episodeNum <= 1);
   }
 
-  // Rule C & E: For finished content, remove pure placeholder episodes beyond real episodes
-  if (isSeasonFinished) {
-    const realEps = result.filter((ep: any) => 
-      !ep.isPlaceholder && (ep.releasedDate || (ep.title && ep.title !== `Episode ${ep.episodeNum}`) || ep.thumbnail || ep.description)
+  // RULE C+E: For finished seasons, also purge any placeholder episodes beyond real episodes.
+  // A finished season should NEVER show placeholder cards.
+  if (isFinished) {
+    // Identify episodes that have actual metadata (title, thumbnail, description, date, or malUrl)
+    const realEps = result.filter((ep: any) =>
+      !ep.isPlaceholder &&
+      (ep.releasedDate ||
+        (ep.title && ep.title !== `Episode ${ep.episodeNum}`) ||
+        ep.thumbnail ||
+        ep.description ||
+        ep.malUrl)
     );
     if (realEps.length > 0) {
-      const maxRealEp = Math.max(...realEps.map((e: any) => e.episodeNum));
-      const maxAllowed = knownEpisodeCount ? Math.min(knownEpisodeCount, maxRealEp) : maxRealEp;
+      const maxRealEpNum = Math.max(...realEps.map((e: any) => e.episodeNum));
+      // maxAllowed: never exceed knownEpisodeCount, but also never exceed last real episode
+      const maxAllowed = knownEpisodeCount
+        ? Math.min(knownEpisodeCount, maxRealEpNum)
+        : maxRealEpNum;
       result = result.filter((ep: any) => ep.episodeNum <= maxAllowed);
+    } else if (knownEpisodeCount) {
+      // No real episodes found at all but we know how many exist — keep up to known count
+      // (don't strip everything; the season may just have no external metadata yet)
+      result = result.filter((ep: any) => ep.episodeNum <= knownEpisodeCount);
     }
   }
 
@@ -504,27 +536,27 @@ export async function GET(
         const isSeasonFinished = season.status === "FINISHED" || (meta?.anime?.status === "FINISHED");
         if (tmdbSeasonsList.length > 0) {
           const currentTmdbSeason = tmdbSeasonsList.find((s: any) => s.season_number === (tmdbSeasonNum || 1));
-          const nextSeasonInTMDB = (meta?.seasons || []).find((s: any) => 
-            s.tmdbSeasonNumber === (tmdbSeasonNum || 1) && 
+          const nextSeasonInTMDB = (meta?.seasons || []).find((s: any) =>
+            s.tmdbSeasonNumber === (tmdbSeasonNum || 1) &&
             (s.episodeOffset || 0) > episodeOffset &&
             s.totalEpisodes > 2 // Ignore OVAs and specials when clamping
           );
 
-          const totalSumInTmdb = Math.max(0, tmdbSeasonsList
-            .filter((s: any) => s.season_number >= (tmdbSeasonNum || 1))
-            .reduce((sum: number, s: any) => sum + (s.episode_count || 0), 0) - episodeOffset);
+          // CRITICAL FIX: Only count episodes in the CURRENT TMDB season, minus our offset.
+          // Previously this summed ALL seasons >= current which caused bleeding between split-cours.
+          // e.g. AoT S3 (tmdbSeason=3, offset=0) was counting S3 (22) + S4 (16+12+13) = 63, not 22.
+          const currentTmdbSeasonEpCount = currentTmdbSeason ? Math.max((currentTmdbSeason.episode_count || 0) - episodeOffset, 0) : 0;
 
           if (knownEpisodeCount) {
-            // AniList has a definitive count — use it strictly as the ceiling.
+            // AniList has a definitive count — this is always the ceiling, PERIOD.
+            // No other calculation can override this.
             dynamicTotalEpisodes = knownEpisodeCount;
           } else if (nextSeasonInTMDB) {
             // The next AniList season also maps to the same TMDB season — clamp to that boundary
             dynamicTotalEpisodes = (nextSeasonInTMDB.episodeOffset || 0) - episodeOffset;
-          } else if (totalSumInTmdb > 0) {
-            dynamicTotalEpisodes = Math.max(totalSumInTmdb, safeTotalEpisodes);
-          } else if (currentTmdbSeason) {
-            const currentTmdbEpCount = Math.max((currentTmdbSeason.episode_count || 0) - episodeOffset, 0);
-            dynamicTotalEpisodes = currentTmdbEpCount > 0 ? currentTmdbEpCount : safeTotalEpisodes;
+          } else if (currentTmdbSeasonEpCount > 0) {
+            // Use only the current TMDB season's episode count
+            dynamicTotalEpisodes = Math.max(currentTmdbSeasonEpCount, safeTotalEpisodes);
           }
           // Absolute safety cap: never return more than 1500 episodes at once
           dynamicTotalEpisodes = Math.min(Math.max(dynamicTotalEpisodes, 1), 1500);
@@ -840,7 +872,15 @@ export async function GET(
       seasonEps = enrichEpisodeReleaseStatus(seasonEps, meta, season);
       seasonEps = cleanAndCapSeasonEpisodes(seasonEps, season, meta);
 
-      console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId}`);
+      // ABSOLUTE FINAL HARD CEILING: Apply knownEpisodeCount cap one last time
+      // regardless of any code path taken above. This is the last line of defense
+      // against edge-cache stale data or any path that bypassed the cap logic.
+      const finalKnownCount = season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
+      if (finalKnownCount && finalKnownCount > 0) {
+        seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalKnownCount);
+      }
+
+      console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId} (knownCount=${finalKnownCount})`);
 
       const resPayload = {
         success: true,

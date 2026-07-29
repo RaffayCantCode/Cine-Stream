@@ -35,6 +35,7 @@ interface FranchiseNode {
   idMal: number | null;
   title: string;
   episodes: number | null;
+  totalEpisodes?: number | null;
   season: string | null;
   seasonYear: number | null;
   format: string | null;
@@ -47,7 +48,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "anime-v18-force-cloud-flush";
+const ANIME_API_VERSION = "v21-episode-cap-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -703,6 +704,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     idMal: number | null;
     title: string;
     episodes: number | null;
+    totalEpisodes?: number | null;
     season: string | null;
     seasonYear: number | null;
     format: string | null;
@@ -1872,7 +1874,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           const nodeId = String(node.id);
                           const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
                           const formatLabel = node.format === "TV" ? "TV" : node.format || "";
-                          const nodeEpCount = (isActive && currentSeasonEps.length > 0) ? currentSeasonEps.length : (node.episodes || "?");
+                          const nodeEpCount = (isActive && currentSeasonEps.length > 0) ? currentSeasonEps.length : (node.totalEpisodes || node.episodes || "?");
                           return (
                             <Link
                               key={node.id}

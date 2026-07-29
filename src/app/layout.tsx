@@ -76,7 +76,7 @@ export default function RootLayout({
         {/* Deployment Cache Invalidation */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
-            var BUILD_VER = 'v20-force-cloud-flush-naruto-fixed';
+            var BUILD_VER = 'v21-episode-cap-fix';
             try {
               if (typeof sessionStorage !== 'undefined') {
                 var ver = sessionStorage.getItem('sv_build_ver');
