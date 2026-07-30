@@ -272,10 +272,21 @@ export default function Home() {
   const [heroPopularFeed, setHeroPopularFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroPopularFeed || []);
   const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTopRatedFeed || []);
   const [heroFeed, setHeroFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroFeed || []);
-  const [heroPool, setHeroPool] = useState<MediaItem[]>(() => globalHomeCache?.heroPool || []);
+  const [heroPool, setHeroPool] = useState<MediaItem[]>(() => {
+    if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) {
+      return globalHomeCache.heroPool;
+    }
+    return loadHeroPoolFromSession();
+  });
   const [recommended, setRecommended] = useState<MediaItem[]>(() => globalHomeCache?.recommended || []);
   const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || []);
-  const [isLoading, setIsLoading] = useState(() => !globalHomeCache);
+  const [isLoading, setIsLoading] = useState(() => {
+    if (globalHomeCache && globalHomeCache.heroPool && globalHomeCache.heroPool.length > 0) {
+      return false;
+    }
+    const saved = loadHeroPoolFromSession();
+    return saved.length > 0 ? false : true;
+  });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [animeList, setAnimeList] = useState<AnimeItem[]>(() => globalHomeCache?.animeList || []);
   const [collections, setCollections] = useState<any[]>(() =>
@@ -321,12 +332,12 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (globalHomeCache) {
+    if (globalHomeCache && globalHomeCache.heroPool && globalHomeCache.heroPool.length > 0) {
       // Hydrate states from cache on back-navigation, even if React state
       // was not properly initialized (e.g. router cache preserved component)
       if (isLoading) setIsLoading(false);
       if (animeLoading) setAnimeLoading(false);
-      if (heroPool.length === 0 && globalHomeCache.heroPool.length > 0) {
+      if (heroPool.length === 0) {
         setHeroPool(globalHomeCache.heroPool);
       }
       if (loadError) setLoadError(null);
@@ -341,8 +352,6 @@ export default function Home() {
         setHeroPool(saved);
         setIsLoading(false);
         setAnimeLoading(false);
-        // Continue fetching in background to refresh data, but
-        // the banner is already visible with cached content.
       }
     }
 
@@ -353,18 +362,20 @@ export default function Home() {
       if (cancelled) return;
       setIsLoading(false);
       setAnimeLoading(false);
-      if (heroPool.length === 0) {
-        setHeroPool(current => {
-          if (current.length > 0) return current;
-          const saved = loadHeroPoolFromSession();
-          return saved.length > 0 ? saved : current;
-        });
-      }
-    }, 10000);
+      setHeroPool((current) => {
+        if (current.length > 0) return current;
+        const saved = loadHeroPoolFromSession();
+        return saved.length > 0 ? saved : current;
+      });
+    }, 5000);
 
     const load = async () => {
-      setIsLoading(true);
+      if (heroPool.length === 0) {
+        setIsLoading(true);
+      }
       setLoadError(null);
+
+      let activeHeroPool: MediaItem[] = [];
 
       try {
         // Priority 1: Fetch Hero Banner feed immediately via light home-hero endpoint
@@ -466,14 +477,12 @@ export default function Home() {
 
           setHeroFeed(initialHeroFeed);
 
-          let initialPool: MediaItem[] = [];
-          setHeroPool((currentPool) => {
-            if (currentPool.length > 0) return currentPool;
-            initialPool = buildHeroPool(initialHeroFeed);
-            return initialPool;
-          });
-
-          if (initialPool.length > 0) saveHeroPoolToSession(initialPool);
+          const initialPool = buildHeroPool(initialHeroFeed);
+          if (initialPool.length > 0) {
+            activeHeroPool = initialPool;
+            setHeroPool((currentPool) => (currentPool.length > 0 ? currentPool : initialPool));
+            saveHeroPoolToSession(initialPool);
+          }
 
           // Reveal Hero Banner and Continue Watching immediately
           setIsLoading(false);
@@ -570,17 +579,13 @@ export default function Home() {
 
           setHeroFeed(fullHeroFeed);
 
-          let lockedPool: MediaItem[] = [];
-          setHeroPool((currentPool) => {
-            if (currentPool.length > 0) {
-              lockedPool = currentPool;
-              return currentPool;
-            }
-            lockedPool = buildHeroPool(fullHeroFeed);
-            return lockedPool;
-          });
+          const fullHeroPool = buildHeroPool(fullHeroFeed);
+          const finalHeroPool = activeHeroPool.length > 0 ? activeHeroPool : fullHeroPool;
 
-          if (lockedPool.length > 0) saveHeroPoolToSession(lockedPool);
+          if (finalHeroPool.length > 0) {
+            setHeroPool((currentPool) => (currentPool.length > 0 ? currentPool : finalHeroPool));
+            saveHeroPoolToSession(finalHeroPool);
+          }
 
           globalHomeCache = {
             trending: trendingSafe,
@@ -595,7 +600,7 @@ export default function Home() {
             heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
             heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
             heroFeed: fullHeroFeed,
-            heroPool: lockedPool,
+            heroPool: finalHeroPool.length > 0 ? finalHeroPool : fullHeroPool,
             recommended: recPool,
             genres: (homeData.genres?.genres || []).slice(0, 18),
             animeList: finalAnimeList,
@@ -747,7 +752,7 @@ export default function Home() {
             )}
           </div>
         ) : (
-          !loadError && (
+          (!loadError && isLoading) && (
             <div className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end overflow-hidden bg-background">
               <div className="absolute inset-0 skeleton-pulse" />
               <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-transparent" />
