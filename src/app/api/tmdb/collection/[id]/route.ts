@@ -101,7 +101,7 @@ export async function GET(
           } catch (e) {}
         }
 
-        if (!poster_path && item.poster_path && !item.poster_path.includes("anilistcdn")) {
+        if (!poster_path && item.poster_path) {
           poster_path = item.poster_path;
         }
 
