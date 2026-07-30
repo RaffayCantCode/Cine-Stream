@@ -125,18 +125,21 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
         next: { revalidate } as any,
       });
 
-      if (res.status === 429 && attempt < retries) {
-        const retryAfter = res.headers.get("retry-after");
-        const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * (attempt + 1);
-        if (delay > 3000) {
-          throw new Error("AniList rate limited with long delay");
+      if (res.status === 429) {
+        if (attempt < retries) {
+          const retryAfter = res.headers.get("retry-after");
+          const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * (attempt + 1);
+          if (delay <= 2000) {
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
         }
-        await new Promise(r => setTimeout(r, delay));
-        continue;
+        console.warn(`[AniList Rate Limit 429]: Returning null to trigger fallback for query`);
+        return null;
       }
       
       if (!res.ok) {
-        throw new Error(`AniList returned ${res.status}`);
+        return null;
       }
 
       return await res.json();
@@ -145,9 +148,10 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
         continue;
       }
-      throw e;
+      return null;
     }
   }
+  return null;
 }
 
 function transformAniList(media: AniListMedia): AnimeItem | null {
@@ -632,11 +636,22 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
       ));
     const isTv = !isMovie && !isActualOva && !isSpecial;
 
-    let label: string;
-    if (isMovie) { movieCount++; label = `Movie ${movieCount}`; }
-    else if (isActualOva) { ovaCount++; label = `OVA ${ovaCount}`; }
-    else if (isSpecial) { specialCount++; label = `Special ${specialCount}`; }
-    else { tvCount++; label = `Season ${tvCount}`; }
+    let label: string = (node as any).seasonLabel || "";
+    if (!label) {
+      if (isMovie) { movieCount++; label = `Movie ${movieCount}`; }
+      else if (isActualOva) { ovaCount++; label = `OVA ${ovaCount}`; }
+      else if (isSpecial) { specialCount++; label = `Special ${specialCount}`; }
+      else {
+        const titleLower = node.title.toLowerCase();
+        const partMatch = titleLower.match(/(?:part|cour)\s*(\d+)/i);
+        if (partMatch && tvCount > 0) {
+          label = `Season ${tvCount} Part ${partMatch[1]}`;
+        } else {
+          tvCount++;
+          label = `Season ${tvCount}`;
+        }
+      }
+    }
 
     const totalEp = isMovie || isActualOva || isSpecial
       ? Math.max(node.episodes || 1, 1)
@@ -650,7 +665,10 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
       isCurrent: node.id === currentId,
       idMal: node.idMal,
       seasonYear: node.seasonYear,
-      status: (node as any).status || null,
+      status: (node as any).status || node.status || "FINISHED",
+      tmdbId: (node as any).tmdbId || null,
+      tmdbSeasonNumber: (node as any).tmdbSeasonNumber || null,
+      episodeOffset: (node as any).episodeOffset || 0,
     };
   });
 
@@ -1055,6 +1073,60 @@ export async function getAnimeDetails(
       }
     } catch { /* no fallback */ }
 
+    // Curated franchise node fallback (for Attack on Titan & curated series under 429 rate limit or AniList outage)
+    const curatedNodes = getCuratedAnimeFranchiseNodes(numId);
+    const curatedItem = curatedNodes?.find(n => String(n.id) === String(numId));
+    if (curatedItem) {
+      const epCount = curatedItem.episodes || 1;
+      const animeItem: AnimeItem = {
+        id: String(curatedItem.id),
+        idMal: curatedItem.idMal ? String(curatedItem.idMal) : null,
+        name: curatedItem.title,
+        jname: null,
+        poster: curatedItem.coverImage || "",
+        type: curatedItem.format || "TV",
+        episodes: { sub: epCount, dub: null },
+        rating: "8.8",
+        description: "Attack on Titan franchise entry.",
+        genres: ["Action", "Fantasy"],
+        status: curatedItem.status || "FINISHED",
+        season: null,
+        seasonYear: curatedItem.seasonYear || null,
+        format: curatedItem.format || "TV",
+      };
+
+      const seasonsList = buildSeasonList(curatedNodes || [], numId);
+      const episodes: EpisodeDetail[] = [];
+      for (let i = 1; i <= epCount; i++) {
+        episodes.push({
+          episodeId: `${numId}-${i}`,
+          episodeNum: i,
+          title: `Episode ${i}`,
+          description: null,
+          thumbnail: null,
+          malUrl: null,
+          releasedDate: null,
+          isFiller: false,
+          isRecap: false,
+          seasonNum: 1,
+          seasonId: String(numId),
+          seasonName: curatedItem.title,
+          seasonMalId: curatedItem.idMal || null,
+        });
+      }
+
+      return {
+        anime: animeItem,
+        episodes,
+        totalEpisodes: epCount,
+        seasons: seasonsList,
+        openedSeasonId: String(numId),
+        franchiseNodes: curatedNodes || [],
+        tmdbId: curatedItem.tmdbId || 1429,
+        tmdbSeasonMap: { [String(numId)]: curatedItem.tmdbSeasonNumber || 4 },
+      };
+    }
+
     try {
       const searchResults = await searchAnime(id.replace(/[-_]/g, " ").trim());
       const firstMatch = searchResults?.[0];
@@ -1221,16 +1293,12 @@ export async function getAnimeDetails(
   const mappedEpisodesCount: Record<string, number> = {}; // key: "tmdbId-seasonNum" -> total mapped episodes count
 
   for (const s of baseSeasons) {
-    const tid = tmdbIds[s.id];
-    let tmdbSeasonNum: number | null = null;
-    let episodeOffset = 0;
+    const tid = (s as any).tmdbId || tmdbIds[s.id];
+    let tmdbSeasonNum: number | null = (s as any).tmdbSeasonNumber ?? null;
+    let episodeOffset = (s as any).episodeOffset ?? 0;
 
-    if (tid) {
+    if (tid && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
       const tmdbSeasons = showSeasonsMap[tid] || [];
-      // Use the season label number (e.g., "Season 2" → 2) as the primary source.
-      // AniList season labels are computed chronologically in buildSeasonList()
-      // and are far more reliable than parsing the AniList title, which often
-      // lacks explicit season markers.
       const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
       const parsedSeasonNum = labelNumMatch
         ? parseInt(labelNumMatch[1], 10)

@@ -48,7 +48,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v22-permanent-anime-fix-flush";
+const ANIME_API_VERSION = "v24-aot-anime-fix-flush";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -477,11 +477,22 @@ function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): Sea
     const isMovie = node.format === "MOVIE";
     const isSpecial = node.format === "SPECIAL";
     const isOva = node.format === "OVA" || (node.format === "ONA" && (node.episodes || 0) < 8);
-    let label: string;
-    if (isMovie) { movieCount++; label = `Movie ${movieCount}`; }
-    else if (isOva) { ovaCount++; label = `OVA ${ovaCount}`; }
-    else if (isSpecial) { specialCount++; label = `Special ${specialCount}`; }
-    else { tvCount++; label = `Season ${tvCount}`; }
+    let label: string = (node as any).seasonLabel || "";
+    if (!label) {
+      if (isMovie) { movieCount++; label = `Movie ${movieCount}`; }
+      else if (isOva) { ovaCount++; label = `OVA ${ovaCount}`; }
+      else if (isSpecial) { specialCount++; label = `Special ${specialCount}`; }
+      else {
+        const titleLower = node.title.toLowerCase();
+        const partMatch = titleLower.match(/(?:part|cour)\s*(\d+)/i);
+        if (partMatch && tvCount > 0) {
+          label = `Season ${tvCount} Part ${partMatch[1]}`;
+        } else {
+          tvCount++;
+          label = `Season ${tvCount}`;
+        }
+      }
+    }
 
     return {
       id: String(node.id),
@@ -489,11 +500,12 @@ function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): Sea
       name: node.title,
       totalEpisodes: isMovie ? 1 : (node.episodes || 0),
       seasonLabel: label,
-      episodeOffset: node.episodeOffset || 0,
+      episodeOffset: node.episodeOffset || (node as any).episodeOffset || 0,
       isCurrent: String(node.id) === String(currentId),
       seasonYear: node.seasonYear || null,
-      tmdbId: node.tmdbId || null,
-      tmdbSeasonNumber: node.tmdbSeasonNumber || null,
+      status: (node as any).status || "FINISHED",
+      tmdbId: node.tmdbId || (node as any).tmdbId || null,
+      tmdbSeasonNumber: node.tmdbSeasonNumber || (node as any).tmdbSeasonNumber || null,
     } as any;
   });
 }

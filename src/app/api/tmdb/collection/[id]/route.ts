@@ -75,7 +75,7 @@ export async function GET(
     const fetchItem = async (item: FranchiseRouteItem) => {
       // ── Anime item handling ─────────────────────────────────────────
       if (item.media_type === "anime") {
-        let poster_path = item.poster_path || null;
+        let poster_path: string | null = null;
         let title = item.title || `Anime ${item.anilist_id || item.id}`;
 
         const alId = item.anilist_id || item.id;
@@ -99,6 +99,10 @@ export async function GET(
               }
             }
           } catch (e) {}
+        }
+
+        if (!poster_path && item.poster_path && !item.poster_path.includes("anilistcdn")) {
+          poster_path = item.poster_path;
         }
 
         if (!poster_path && item.title) {

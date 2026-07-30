@@ -71,21 +71,29 @@ let globalHomeCache: {
 } | null = null;
 
 function buildHeroPool(feed: MediaItem[]): MediaItem[] {
-  const isQualityItem = (i: MediaItem) => {
+  if (!Array.isArray(feed) || feed.length === 0) return [];
+
+  const isValidHeroCandidate = (i: MediaItem) => {
+    if (!i || !i.id) return false;
+    if ((i as any).adult) return false; // Exclude adult content
     if (!i.backdrop_path || !i.poster_path) return false;
-    if (!i.overview || i.overview.trim().length < 25) return false;
-    const rating = i.vote_average ?? 0;
-    const votes = i.vote_count ?? 0;
-    if (rating < 6.2) return false;
-    if (votes < 30) return false;
+    if (!i.overview || i.overview.trim().length < 10) return false;
+    if (EXCLUDED_LANGS.has(i.original_language || "")) return false;
     return true;
   };
 
-  const qualityFeed = feed.filter(isQualityItem);
+  const validFeed = feed.filter(isValidHeroCandidate);
+  if (validFeed.length === 0) return [];
 
-  const movies = qualityFeed.filter((i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
-  const shows = qualityFeed.filter((i) => !(i.media_type === "movie" || !!i.title) && !isTmdbAnime(i));
-  const animeItems = qualityFeed.filter((i) => isTmdbAnime(i));
+  const animeCandidates = validFeed.filter(
+    (i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja")
+  );
+  const movieCandidates = validFeed.filter(
+    (i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+  );
+  const tvCandidates = validFeed.filter(
+    (i) => (i.media_type === "tv" || !!i.name) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+  );
 
   const seenIds = new Set<number>();
   try {
@@ -100,10 +108,12 @@ function buildHeroPool(feed: MediaItem[]): MediaItem[] {
     }
   } catch {}
 
-  const pickFresh = (candidates: MediaItem[]): MediaItem | null => {
+  const pickBestCandidate = (candidates: MediaItem[]): MediaItem | null => {
     if (candidates.length === 0) return null;
+
     const unseen = candidates.filter((c) => !seenIds.has(c.id));
     const pool = unseen.length > 0 ? unseen : candidates;
+
     const picked = pool[Math.floor(Math.random() * pool.length)];
     if (picked) {
       seenIds.add(picked.id);
@@ -111,9 +121,9 @@ function buildHeroPool(feed: MediaItem[]): MediaItem[] {
     return picked || null;
   };
 
-  const m = pickFresh(movies);
-  const s = pickFresh(shows);
-  const a = pickFresh(animeItems);
+  const movieCard = pickBestCandidate(movieCandidates);
+  const tvCard = pickBestCandidate(tvCandidates);
+  const animeCard = pickBestCandidate(animeCandidates);
 
   try {
     if (typeof window !== "undefined") {
@@ -122,7 +132,20 @@ function buildHeroPool(feed: MediaItem[]): MediaItem[] {
     }
   } catch {}
 
-  return [m, s, a].filter(Boolean) as MediaItem[];
+  const heroPool = [movieCard, tvCard, animeCard].filter(Boolean) as MediaItem[];
+
+  if (heroPool.length < 3) {
+    const heroIds = new Set(heroPool.map((h) => h.id));
+    for (const item of validFeed) {
+      if (!heroIds.has(item.id)) {
+        heroPool.push(item);
+        heroIds.add(item.id);
+        if (heroPool.length >= 3) break;
+      }
+    }
+  }
+
+  return heroPool;
 }
 
 // ─── Session-stable shuffle ───────────────────────────────────────────────────
@@ -526,6 +549,9 @@ export default function Home() {
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Failed to load content");
+        }
+      } finally {
+        if (!cancelled) {
           setIsLoading(false);
           setAnimeLoading(false);
         }

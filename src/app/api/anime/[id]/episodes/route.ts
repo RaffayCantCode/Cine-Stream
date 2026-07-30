@@ -50,8 +50,11 @@ function parseSeasonAndOffsetFromTitle(title: string): { tmdbSeason: number; epi
   const lower = title.toLowerCase();
 
   // Attack on Titan & General "Final Season" rules
-  if (lower.includes("final season") || lower.includes("season 4") || lower.includes("4th season")) {
-    if (lower.includes("part 3") || lower.includes("final chapters") || lower.includes("kanketsu-hen")) {
+  if (lower.includes("final season") || lower.includes("season 4") || lower.includes("4th season") || lower.includes("final chapters")) {
+    if (lower.includes("special 2") || lower.includes("part 4") || lower.includes("kanketsu-hen 2") || (lower.includes("final chapters") && (lower.includes("2") || lower.includes("part 2")))) {
+      return { tmdbSeason: 4, episodeOffset: 29 };
+    }
+    if (lower.includes("special 1") || lower.includes("part 3") || lower.includes("final chapters") || lower.includes("kanketsu-hen")) {
       return { tmdbSeason: 4, episodeOffset: 28 };
     }
     if (lower.includes("part 2") || lower.includes("2nd part")) {
@@ -1091,7 +1094,7 @@ export async function GET(
             vote_average: tmdbEp?.vote_average,
               vote_count: tmdbEp?.vote_count,
             runtime: tmdbEp?.runtime,
-            seasonNum: seasonNumFromList,
+            seasonNum: seasonIdx,
             seasonId: season.id,
             seasonName: season.name,
             seasonMalId: season.idMal || null,
@@ -1105,7 +1108,7 @@ export async function GET(
         let seasonEps: any[] = enrichedEps.map((ep) => ({
           ...ep,
           episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
-          seasonNum: seasonNumFromList,
+          seasonNum: seasonIdx,
           seasonId: season.id,
           seasonName: season.name,
           seasonMalId: season.idMal || null,
