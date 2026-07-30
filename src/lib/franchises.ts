@@ -603,14 +603,14 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/rqbCbjB19amtOtFQbb3K2lgm2zv.jpg",
     poster_path: "/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg",
     items: [
-      { id: 1429, media_type: "anime", anilist_id: 16498, title: "Attack on Titan (Season 1)", release_date: "2013-04-07" },
-      { id: 1429, media_type: "anime", anilist_id: 20958, title: "Attack on Titan (Season 2)", release_date: "2017-04-01" },
-      { id: 1429, media_type: "anime", anilist_id: 99147, title: "Attack on Titan (Season 3)", release_date: "2018-07-23" },
-      { id: 1429, media_type: "anime", anilist_id: 104578, title: "Attack on Titan (Season 3 Part 2)", release_date: "2019-04-29" },
-      { id: 1429, media_type: "anime", anilist_id: 110277, title: "Attack on Titan (Final Season)", release_date: "2020-12-07" },
-      { id: 1429, media_type: "anime", anilist_id: 131681, title: "Attack on Titan (Final Season Part 2)", release_date: "2022-01-10" },
-      { id: 1429, media_type: "anime", anilist_id: 146984, title: "Attack on Titan (The Final Chapters Special 1)", release_date: "2023-03-04" },
-      { id: 1429, media_type: "anime", anilist_id: 162314, title: "Attack on Titan (The Final Chapters Special 2)", release_date: "2023-11-05" },
+      { id: 1429, media_type: "anime", anilist_id: 16498, episodes: 25, title: "Attack on Titan (Season 1)", release_date: "2013-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-C6FPmWm5WLua.png" },
+      { id: 1429, media_type: "anime", anilist_id: 20958, episodes: 12, title: "Attack on Titan (Season 2)", release_date: "2017-04-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20958-xBEP8R8Zfb2u.jpg" },
+      { id: 1429, media_type: "anime", anilist_id: 99147, episodes: 12, title: "Attack on Titan (Season 3)", release_date: "2018-07-23", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx99147-I3505nQ0ze9G.jpg" },
+      { id: 1429, media_type: "anime", anilist_id: 104578, episodes: 10, title: "Attack on Titan (Season 3 Part 2)", release_date: "2019-04-29", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104578-8314F25j0wY9.jpg" },
+      { id: 1429, media_type: "anime", anilist_id: 110277, episodes: 16, title: "Attack on Titan (Final Season)", release_date: "2020-12-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx110277-E0uFhB6l6u7C.jpg" },
+      { id: 1429, media_type: "anime", anilist_id: 131681, episodes: 12, title: "Attack on Titan (Final Season Part 2)", release_date: "2022-01-10", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131681-3v4gxWtNZxLV.png" },
+      { id: 1429, media_type: "anime", tmdb_type: "movie", anilist_id: 146984, episodes: 1, title: "Attack on Titan (The Final Chapters Special 1)", release_date: "2023-03-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx146984-d6a0pBq17Huu.jpg" },
+      { id: 1429, media_type: "anime", tmdb_type: "movie", anilist_id: 162314, episodes: 1, title: "Attack on Titan (The Final Chapters Special 2)", release_date: "2023-11-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx162314-r29pZ4g3wL7U.jpg" },
     ]
   },
   {
@@ -887,17 +887,28 @@ export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string)
     const matchesTitle = normTitle && franchise.name.toLowerCase().includes(normTitle.replace(/\s*(season|part|\dth|\dnd|\drd|\dst).*/i, "").trim());
 
     if (matchesId || matchesTitle) {
-      return animeItems.map(item => ({
-        id: item.anilist_id!,
-        idMal: null,
-        title: item.title || franchise.name,
-        episodes: item.episodes || (item.tmdb_type === "movie" ? 1 : null),
-        season: null,
-        seasonYear: item.release_date ? parseInt(item.release_date.substring(0, 4), 10) : null,
-        format: item.tmdb_type === "movie" ? "MOVIE" : "TV",
-        coverImage: item.poster_path || franchise.poster_path,
-        bannerImage: franchise.backdrop_path,
-      }));
+      return animeItems.map(item => {
+        let poster = item.poster_path || franchise.poster_path || null;
+        if (poster && poster.startsWith("/")) {
+          poster = `https://image.tmdb.org/t/p/w500${poster}`;
+        }
+        const itemTitleLower = (item.title || "").toLowerCase();
+        const isMovie = item.tmdb_type === "movie" || itemTitleLower.includes("(movie)");
+        const isSpecial = itemTitleLower.includes("special");
+        const format = isMovie ? "MOVIE" : isSpecial ? "SPECIAL" : "TV";
+
+        return {
+          id: item.anilist_id!,
+          idMal: null,
+          title: item.title || franchise.name,
+          episodes: item.episodes || (isMovie || isSpecial ? 1 : null),
+          season: null,
+          seasonYear: item.release_date ? parseInt(item.release_date.substring(0, 4), 10) : null,
+          format: format,
+          coverImage: poster,
+          bannerImage: franchise.backdrop_path?.startsWith("/") ? `https://image.tmdb.org/t/p/original${franchise.backdrop_path}` : franchise.backdrop_path,
+        };
+      });
     }
   }
   return null;

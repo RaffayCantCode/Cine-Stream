@@ -48,7 +48,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v21-episode-cap-fix";
+const ANIME_API_VERSION = "v22-permanent-anime-fix-flush";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -280,14 +280,17 @@ async function fetchEpisodesClientSide(
           const epsList = tmdbData?.episodes || [];
           if (epsList.length > 0) {
             const result: Episode[] = [];
+            const remainingTmdbEps = Math.max(epsList.length - mappedOffset, 0);
             const maxEpCount = (totalEpisodes && totalEpisodes > 0 && totalEpisodes < 1499)
               ? totalEpisodes
-              : Math.max(epsList.length, aniZipEps.length);
-            const count = Math.min(maxEpCount || epsList.length, 1500);
+              : remainingTmdbEps;
+            const count = Math.min(maxEpCount || remainingTmdbEps, 1500);
             for (let i = 1; i <= count; i++) {
               const azMatch = aniZipEps.find(e => e.episodeNum === i);
               const tmdbIdx = mappedOffset + i - 1;
               const tmdbEp = epsList[tmdbIdx] || epsList.find((e: any) => e.episode_number === (mappedOffset + i));
+
+              if (!tmdbEp && !azMatch) continue;
 
               result.push({
                 episodeId: azMatch?.episodeId || `${seasonId}-${i}`,
@@ -776,12 +779,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
       );
-      const statusNorm = (anime?.status || "").toLowerCase().replace(/_/g, " ").trim();
+      const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
+      const activeSeasonStatus = matchingSeason?.status || anime?.status || "";
+      const statusNorm = activeSeasonStatus.toLowerCase().replace(/_/g, " ").trim();
       const isUnreleasedAnime = 
         statusNorm.includes("not yet") || 
         statusNorm.includes("upcoming") || 
         statusNorm.includes("to be aired") ||
         statusNorm.includes("unreleased");
+      const isFinishedSeason = statusNorm.includes("finished") || statusNorm.includes("completed");
 
       const hasEpisodes = epData.success && epData.data?.episodes && epData.data.episodes.length > 0;
       if (hasEpisodes) {
@@ -838,7 +844,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
     const epCount = (matchingSeason?.totalEpisodes && matchingSeason.totalEpisodes < 1499)
       ? matchingSeason.totalEpisodes
-      : ((anime?.totalEpisodes && anime.totalEpisodes < 1499) ? anime.totalEpisodes : 1500);
+      : ((anime?.totalEpisodes && anime.totalEpisodes < 1499 && anime.id === seasonId) ? anime.totalEpisodes : 0);
     const clientEpsRaw = await fetchEpisodesClientSide(
       seasonId,
       matchingSeason?.name || anime?.name || "",
@@ -1456,6 +1462,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const displayPoster = currentSeasonInfo?.coverImage || anime?.poster || "";
   const displayBanner = currentSeasonInfo?.bannerImage || currentSeasonInfo?.coverImage || anime?.poster || "";
   const displayTitle = currentSeasonInfo?.name || anime?.name || "";
+  const displayStatus = currentSeason?.status || anime?.status || "";
 
   const franchiseAbsoluteEp = useMemo(() => {
     const currentIdx = seasons.findIndex(s => s.id === currentSeasonId);
@@ -1591,12 +1598,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     <span className="bg-gradient-to-r from-[#111844] to-[#7288AE] text-white text-[9px] md:text-[10px] font-extrabold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase shadow-lg shadow-[#4B5694]/25">Anime</span>
                     {anime.type && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.type}</span>}
                     {anime.rating && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.rating}</span>}
-                    {anime.status && (
+                    {displayStatus && (
                       <span className={`text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase ${
-                        anime.status === "Airing" || anime.status === "RELEASING"
+                        displayStatus === "Airing" || displayStatus === "RELEASING"
                           ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                           : "bg-white/10 text-white/60 border border-white/20"
-                      }`}>{anime.status}</span>
+                      }`}>{displayStatus}</span>
                     )}
                   </div>
                   <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
@@ -1781,16 +1788,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">{isMovieFormat ? "Parts" : "Episodes"}</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{isMovieFormat ? (currentSeasonEps.length || 1) : (anime.totalEpisodes || currentSeasonEps.length || 1)}</span>
+                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{isMovieFormat ? (currentSeasonEps.length || 1) : (currentSeason?.totalEpisodes || currentSeasonEps.length || anime?.totalEpisodes || 1)}</span>
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Status</span>
                         <span className="text-emerald-400 font-bold text-sm bg-emerald-400/10 border border-emerald-400/20 px-3 py-1.5 rounded-lg uppercase shadow-[0_0_15px_rgba(52,211,153,0.1)]">
                           {(() => {
-                            const s = (anime?.status || "").toUpperCase().replace(/_/g, " ");
+                            const s = (displayStatus || "").toUpperCase().replace(/_/g, " ");
                             if (s.includes("RELEASING") || s.includes("AIRING")) return "CURRENTLY AIRING";
                             if (s.includes("NOT YET") || s.includes("UPCOMING")) return "NOT YET AIRED";
-                            return anime?.status || "N/A";
+                            return displayStatus || "N/A";
                           })()}
                         </span>
                       </div>

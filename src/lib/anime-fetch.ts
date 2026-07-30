@@ -35,6 +35,7 @@ export interface SeasonInfo {
   isCurrent: boolean;
   idMal?: number | null;
   seasonYear?: number | null;
+  status?: string | null;
   tmdbSeasonNumber?: number | null;
   tmdbId?: number | null;
   episodeOffset?: number;
@@ -94,6 +95,7 @@ interface FranchiseNode {
   episodes: number | null;
   season: string | null;
   seasonYear: number | null;
+  status?: string | null;
   format: string | null;
   duration: number | null;
   coverImage?: string | null;
@@ -440,9 +442,9 @@ const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "
 // Single AniList query that retrieves the node AND its 1-hop relations in one request.
 const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   Media(id: $id, type: ANIME) {
-    id idMal title { romaji english native } episodes season seasonYear format duration bannerImage coverImage { large extraLarge }
+    id idMal title { romaji english native } episodes status season seasonYear format duration bannerImage coverImage { large extraLarge }
     relations {
-      edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge } } }
+      edges { relationType node { id idMal title { romaji english native } episodes status season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge } } }
     }
   }
 }`;
@@ -451,9 +453,9 @@ const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
 const BATCH_RELATIONS_QUERY = `query ($ids: [Int]) {
   Page(page: 1, perPage: 50) {
     media(id_in: $ids, type: ANIME) {
-      id idMal title { romaji english native } episodes season seasonYear format duration bannerImage coverImage { large extraLarge }
+      id idMal title { romaji english native } episodes status season seasonYear format duration bannerImage coverImage { large extraLarge }
       relations {
-        edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge } } }
+        edges { relationType node { id idMal title { romaji english native } episodes status season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge } } }
       }
     }
   }
@@ -477,6 +479,7 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
         episodes: data.episodes || null,
         season: data.season || null,
         seasonYear: data.seasonYear || null,
+        status: data.status || null,
         format: data.format || null,
         duration: data.duration || null,
         coverImage: data.coverImage?.extraLarge || data.coverImage?.large || null,
@@ -503,6 +506,7 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
           episodes: node.episodes || null,
           season: node.season || null,
           seasonYear: node.seasonYear || null,
+          status: node.status || null,
           format: node.format || null,
           duration: node.duration || null,
           coverImage: node.coverImage?.extraLarge || node.coverImage?.large || null,
@@ -646,6 +650,7 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
       isCurrent: node.id === currentId,
       idMal: node.idMal,
       seasonYear: node.seasonYear,
+      status: (node as any).status || null,
     };
   });
 

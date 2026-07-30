@@ -93,13 +93,14 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): a
   const nowMs = Date.now();
   const currentYear = new Date().getFullYear();
 
-  const nextAiringEpNum = meta?.anime?.nextAiringEpisode?.episode || null;
-  const isNotYetReleased = meta?.anime?.status === "NOT_YET_RELEASED" || season?.status === "NOT_YET_RELEASED";
+  const isSeasonFinished = season?.status === "FINISHED" || season?.status === "FINISHED_AIRING";
+  const nextAiringEpNum = !isSeasonFinished ? (meta?.anime?.nextAiringEpisode?.episode || null) : null;
+  const isNotYetReleased = !isSeasonFinished && (meta?.anime?.status === "NOT_YET_RELEASED" || season?.status === "NOT_YET_RELEASED");
 
   // Detect if the entire season is upcoming (not yet released or Episode 1 in future)
-  let seasonIsUpcoming = isNotYetReleased || Boolean(season?.seasonYear && season.seasonYear > currentYear);
+  let seasonIsUpcoming = isNotYetReleased || Boolean(!isSeasonFinished && season?.seasonYear && season.seasonYear > currentYear);
 
-  if (!seasonIsUpcoming && episodes.length > 0) {
+  if (!seasonIsUpcoming && !isSeasonFinished && episodes.length > 0) {
     const firstEp = episodes[0];
     if (firstEp.releasedDate) {
       const firstEpDateMs = new Date(firstEp.releasedDate).getTime();
@@ -116,7 +117,9 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): a
   return episodes.map((ep: any) => {
     let isReleased = ep.isReleased !== false;
 
-    if (seasonIsUpcoming) {
+    if (isSeasonFinished) {
+      isReleased = true;
+    } else if (seasonIsUpcoming) {
       isReleased = false;
     } else if (nextAiringEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextAiringEpNum) {
       isReleased = false;
@@ -876,8 +879,10 @@ export async function GET(
       // regardless of any code path taken above. This is the last line of defense
       // against edge-cache stale data or any path that bypassed the cap logic.
       const finalKnownCount = season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
-      if (finalKnownCount && finalKnownCount > 0) {
-        seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalKnownCount);
+      const isMovieOrSpecialFinal = ["Movie", "OVA", "Special"].some(t => (season?.seasonLabel || "").startsWith(t)) || meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE";
+      const finalCap = finalKnownCount && finalKnownCount > 0 ? finalKnownCount : (isMovieOrSpecialFinal ? 1 : null);
+      if (finalCap && finalCap > 0) {
+        seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalCap);
       }
 
       console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId} (knownCount=${finalKnownCount})`);
