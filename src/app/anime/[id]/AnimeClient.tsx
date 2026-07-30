@@ -38,6 +38,7 @@ interface FranchiseNode {
   totalEpisodes?: number | null;
   season: string | null;
   seasonYear: number | null;
+  status?: string | null;
   format: string | null;
   duration: number | null;
   coverImage?: string | null;
@@ -364,8 +365,8 @@ async function fetchFranchiseClientSide(startId: number) {
   // Query fetches the node's OWN metadata AND its relation edges
   const RELATIONS_QUERY = `query ($id: Int) {
     Media(id: $id, type: ANIME) {
-      id idMal title { romaji english native } episodes season seasonYear format bannerImage coverImage { large extraLarge }
-      relations { edges { relationType node { id idMal title { romaji english native } episodes season seasonYear format type isAdult bannerImage coverImage { large extraLarge } } } }
+      id idMal title { romaji english native } episodes status season seasonYear format bannerImage coverImage { large extraLarge }
+      relations { edges { relationType node { id idMal title { romaji english native } episodes status season seasonYear format type isAdult bannerImage coverImage { large extraLarge } } } }
     }
   }`;
   
@@ -395,6 +396,7 @@ async function fetchFranchiseClientSide(startId: number) {
           visited.set(media.id, {
             id: media.id, idMal: media.idMal || null, episodes: media.episodes,
             season: media.season, seasonYear: media.seasonYear, format: media.format,
+            status: media.status || null,
             title: media.title?.english || media.title?.romaji || media.title?.native || "",
             bannerImage: media.bannerImage || null,
             coverImage: media.coverImage?.extraLarge || media.coverImage?.large || null
@@ -414,6 +416,7 @@ async function fetchFranchiseClientSide(startId: number) {
             visited.set(relId, {
               id: relId, idMal: edge.node.idMal || null, episodes: edge.node.episodes,
               season: edge.node.season, seasonYear: edge.node.seasonYear, format: edge.node.format,
+              status: edge.node.status || null,
               title: edge.node.title?.english || edge.node.title?.romaji || edge.node.title?.native || "",
               bannerImage: edge.node.bannerImage || null,
               coverImage: edge.node.coverImage?.extraLarge || edge.node.coverImage?.large || null
@@ -1053,12 +1056,32 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           setIsLoading(false);
           setAnime(prev => {
             if (!prev) return a;
-            const prevCount = prev.seasons?.length || 0;
-            const newCount = a.seasons?.length || 0;
+            const serverSeasons = a.seasons || [];
+            const currentSeasons = prev.seasons || [];
+            const mergedSeasons = currentSeasons.map(ps => {
+              const serverMatch = serverSeasons.find((ss: any) => ss.id === ps.id);
+              if (serverMatch) {
+                return {
+                  ...ps,
+                  status: serverMatch.status || ps.status,
+                  totalEpisodes: serverMatch.totalEpisodes || ps.totalEpisodes,
+                  seasonYear: serverMatch.seasonYear || ps.seasonYear,
+                  tmdbId: serverMatch.tmdbId != null ? serverMatch.tmdbId : ps.tmdbId,
+                  tmdbSeasonNumber: serverMatch.tmdbSeasonNumber != null ? serverMatch.tmdbSeasonNumber : ps.tmdbSeasonNumber,
+                  episodeOffset: serverMatch.episodeOffset != null ? serverMatch.episodeOffset : ps.episodeOffset,
+                };
+              }
+              return ps;
+            });
+            for (const ss of serverSeasons) {
+              if (!mergedSeasons.find((ms: any) => ms.id === ss.id)) {
+                mergedSeasons.push(ss);
+              }
+            }
             return {
               ...prev,
               ...a,
-              seasons: newCount >= prevCount ? a.seasons : prev.seasons,
+              seasons: mergedSeasons,
             };
           });
           setFranchiseNodes(prev => {

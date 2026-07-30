@@ -70,6 +70,23 @@ let globalHomeCache: {
   collections: any[];
 } | null = null;
 
+const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v2";
+function saveHeroPoolToSession(pool: MediaItem[]): void {
+  if (typeof window === "undefined" || pool.length === 0) return;
+  try { sessionStorage.setItem(SESSION_HERO_POOL_KEY, JSON.stringify(pool)); } catch {}
+}
+function loadHeroPoolFromSession(): MediaItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(SESSION_HERO_POOL_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
 function buildHeroPool(feed: MediaItem[]): MediaItem[] {
   if (!Array.isArray(feed) || feed.length === 0) return [];
 
@@ -304,9 +321,46 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (globalHomeCache) return; // Use in-memory globalHomeCache on back navigation
+    if (globalHomeCache) {
+      // Hydrate states from cache on back-navigation, even if React state
+      // was not properly initialized (e.g. router cache preserved component)
+      if (isLoading) setIsLoading(false);
+      if (animeLoading) setAnimeLoading(false);
+      if (heroPool.length === 0 && globalHomeCache.heroPool.length > 0) {
+        setHeroPool(globalHomeCache.heroPool);
+      }
+      if (loadError) setLoadError(null);
+      return;
+    }
+
+    // Try sessionStorage fallback — covers the case where module-level
+    // cache was reset (hard back-nav, full page reload, etc.)
+    if (heroPool.length === 0) {
+      const saved = loadHeroPoolFromSession();
+      if (saved.length > 0) {
+        setHeroPool(saved);
+        setIsLoading(false);
+        setAnimeLoading(false);
+        // Continue fetching in background to refresh data, but
+        // the banner is already visible with cached content.
+      }
+    }
 
     let cancelled = false;
+
+    // Safety timeout: never let the loading skeleton show indefinitely
+    const loadingTimeout = setTimeout(() => {
+      if (cancelled) return;
+      setIsLoading(false);
+      setAnimeLoading(false);
+      if (heroPool.length === 0) {
+        setHeroPool(current => {
+          if (current.length > 0) return current;
+          const saved = loadHeroPoolFromSession();
+          return saved.length > 0 ? saved : current;
+        });
+      }
+    }, 10000);
 
     const load = async () => {
       setIsLoading(true);
@@ -419,6 +473,8 @@ export default function Home() {
             return initialPool;
           });
 
+          if (initialPool.length > 0) saveHeroPoolToSession(initialPool);
+
           // Reveal Hero Banner and Continue Watching immediately
           setIsLoading(false);
         }
@@ -524,6 +580,8 @@ export default function Home() {
             return lockedPool;
           });
 
+          if (lockedPool.length > 0) saveHeroPoolToSession(lockedPool);
+
           globalHomeCache = {
             trending: trendingSafe,
             popular: sessionShuffle(popularSafe, "popular"),
@@ -561,6 +619,7 @@ export default function Home() {
     load();
     return () => {
       cancelled = true;
+      clearTimeout(loadingTimeout);
     };
   }, []);
 
