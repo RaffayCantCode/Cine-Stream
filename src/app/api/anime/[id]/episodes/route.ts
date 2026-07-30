@@ -49,72 +49,53 @@ function parseSeasonAndOffsetFromTitle(title: string): { tmdbSeason: number; epi
   if (!title) return { tmdbSeason: 1, episodeOffset: 0 };
   const lower = title.toLowerCase();
 
-  // Attack on Titan & General "Final Season" rules
-  if (lower.includes("final season") || lower.includes("season 4") || lower.includes("4th season") || lower.includes("final chapters")) {
-    if (lower.includes("special 2") || lower.includes("part 4") || lower.includes("kanketsu-hen 2") || (lower.includes("final chapters") && (lower.includes("2") || lower.includes("part 2")))) {
-      return { tmdbSeason: 4, episodeOffset: 29 };
-    }
-    if (lower.includes("special 1") || lower.includes("part 3") || lower.includes("final chapters") || lower.includes("kanketsu-hen")) {
-      return { tmdbSeason: 4, episodeOffset: 28 };
-    }
-    if (lower.includes("part 2") || lower.includes("2nd part")) {
-      return { tmdbSeason: 4, episodeOffset: 16 };
-    }
-    return { tmdbSeason: 4, episodeOffset: 0 };
-  }
+  // 1. Detect Season number from generic patterns: "Season X", "SX", "Xth Season", "Final Season"
+  let seasonNum = 1;
+  const seasonMatch = 
+    lower.match(/(?:season|s)\s*(\d+)/i) || 
+    lower.match(/(\d+)(?:st|nd|rd|th)\s*season/i);
 
-  if (lower.includes("season 3") || lower.includes("3rd season")) {
-    if (lower.includes("part 2") || lower.includes("2nd part")) {
-      return { tmdbSeason: 3, episodeOffset: 12 };
-    }
-    return { tmdbSeason: 3, episodeOffset: 0 };
-  }
-
-  if (lower.includes("season 2") || lower.includes("2nd season")) {
-    if (lower.includes("part 2") || lower.includes("cour 2")) {
-      return { tmdbSeason: 2, episodeOffset: 12 };
-    }
-    return { tmdbSeason: 2, episodeOffset: 0 };
-  }
-
-  // Explicit Season number regex fallback (e.g. "Season 5", "5th Season", "S5")
-  const seasonMatch = lower.match(/(?:season|s)\s*(\d+)/i) || lower.match(/(\d+)(?:st|nd|rd|th)\s*season/i);
   if (seasonMatch && seasonMatch[1]) {
-    const sNum = parseInt(seasonMatch[1], 10);
-    if (!isNaN(sNum) && sNum > 0) {
-      const offsetMatch = lower.match(/(?:part|cour)\s*(\d+)/i);
-      const partNum = offsetMatch ? parseInt(offsetMatch[1], 10) : 1;
-      const episodeOffset = partNum > 1 ? 12 : 0;
-      return { tmdbSeason: sNum, episodeOffset };
+    seasonNum = parseInt(seasonMatch[1], 10) || 1;
+  } else if (lower.includes("final season")) {
+    seasonNum = 4;
+  }
+
+  // 2. Detect Part / Cour / Arc numbers: "Part X", "Cour X"
+  const partMatch = lower.match(/(?:part|cour)\s*(\d+)/i);
+  let partNum = partMatch && partMatch[1] ? parseInt(partMatch[1], 10) : 1;
+
+  // 3. If NO "Season X" was in the title but "Part X" / "Cour X" WAS in the title:
+  // The Part/Cour number acts as the TMDB Season number (e.g. Part 2 = S2, Part 3 = S3, Part 4 = S4)
+  if (!seasonMatch && !lower.includes("final season") && partMatch && partNum > 1) {
+    seasonNum = partNum;
+    partNum = 1;
+  }
+
+  // 4. Calculate episode offset for multi-part single seasons (e.g. Season 3 Part 2)
+  let episodeOffset = 0;
+  if (partNum > 1) {
+    if (seasonNum === 4 && partNum === 2) {
+      episodeOffset = 16;
+    } else if (seasonNum === 4 && partNum >= 3) {
+      episodeOffset = partNum === 3 ? 28 : 29;
+    } else {
+      episodeOffset = (partNum - 1) * 12;
     }
   }
 
-  return { tmdbSeason: 1, episodeOffset: 0 };
+  return { tmdbSeason: seasonNum, episodeOffset };
 }
 
 function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): any[] {
   const nowMs = Date.now();
   const currentYear = new Date().getFullYear();
 
-  const isSeasonFinished = season?.status === "FINISHED" || season?.status === "FINISHED_AIRING";
+  const isSeasonFinished = season?.status === "FINISHED" || season?.status === "FINISHED_AIRING" || meta?.anime?.status === "FINISHED";
   const nextAiringEpNum = !isSeasonFinished ? (meta?.anime?.nextAiringEpisode?.episode || null) : null;
   const isNotYetReleased = !isSeasonFinished && (meta?.anime?.status === "NOT_YET_RELEASED" || season?.status === "NOT_YET_RELEASED");
 
-  // Detect if the entire season is upcoming (not yet released or Episode 1 in future)
   let seasonIsUpcoming = isNotYetReleased || Boolean(!isSeasonFinished && season?.seasonYear && season.seasonYear > currentYear);
-
-  if (!seasonIsUpcoming && !isSeasonFinished && episodes.length > 0) {
-    const firstEp = episodes[0];
-    if (firstEp.releasedDate) {
-      const firstEpDateMs = new Date(firstEp.releasedDate).getTime();
-      if (!isNaN(firstEpDateMs) && firstEpDateMs > nowMs) {
-        seasonIsUpcoming = true;
-      }
-    }
-    if (nextAiringEpNum === 1) {
-      seasonIsUpcoming = true;
-    }
-  }
 
   let encounteredUnreleased = false;
   return episodes.map((ep: any) => {
@@ -139,20 +120,6 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): a
 
     if (!isReleased) {
       encounteredUnreleased = true;
-    }
-
-    // For upcoming episodes/seasons: strip inherited Season 1 metadata (titles/thumbnails/descriptions)
-    if (seasonIsUpcoming) {
-      return {
-        ...ep,
-        isReleased: false,
-        title: `Episode ${ep.episodeNum}`,
-        thumbnail: null,
-        description: null,
-        vote_average: undefined,
-        vote_count: undefined,
-        isPlaceholder: true,
-      };
     }
 
     return {

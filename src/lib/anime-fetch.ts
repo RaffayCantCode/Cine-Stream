@@ -657,6 +657,17 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
       ? Math.max(node.episodes || 1, 1)
       : (node.episodes ? Math.max(node.episodes, 1) : 0);
 
+    let nodeStatus: string = (node as any).status || node.status || "";
+    if (!nodeStatus) {
+      if ((node as any).nextAiringEpisode) {
+        nodeStatus = "RELEASING";
+      } else if (node.seasonYear && node.seasonYear > new Date().getFullYear()) {
+        nodeStatus = "NOT_YET_RELEASED";
+      } else {
+        nodeStatus = "FINISHED";
+      }
+    }
+
     return {
       id: String(node.id),
       name: node.title,
@@ -665,7 +676,7 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
       isCurrent: node.id === currentId,
       idMal: node.idMal,
       seasonYear: node.seasonYear,
-      status: (node as any).status || node.status || "FINISHED",
+      status: nodeStatus,
       tmdbId: (node as any).tmdbId || null,
       tmdbSeasonNumber: (node as any).tmdbSeasonNumber || null,
       episodeOffset: (node as any).episodeOffset || 0,

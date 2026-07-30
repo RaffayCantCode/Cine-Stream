@@ -48,7 +48,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v24-aot-anime-fix-flush";
+const ANIME_API_VERSION = "v26-airing-episodes-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -453,6 +453,22 @@ async function fetchFranchiseClientSide(startId: number) {
   });
 }
 
+function formatAnimeStatus(statusRaw?: string | null): { label: string; style: "finished" | "airing" | "upcoming" } {
+  if (!statusRaw) return { label: "FINISHED", style: "finished" };
+  const s = statusRaw.toUpperCase().replace(/_/g, " ").trim();
+
+  if (s.includes("FINISHED") || s.includes("COMPLETED")) {
+    return { label: "FINISHED", style: "finished" };
+  }
+  if (s.includes("RELEASING") || s.includes("CURRENTLY AIRING") || s === "AIRING") {
+    return { label: "CURRENTLY AIRING", style: "airing" };
+  }
+  if (s.includes("NOT YET") || s.includes("UPCOMING") || s.includes("UNRELEASED") || s.includes("CANCELLED")) {
+    return { label: "NOT YET AIRED", style: "upcoming" };
+  }
+  return { label: statusRaw, style: "finished" };
+}
+
 function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): SeasonInfo[] {
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
   const sorted = [...clientNodes].sort((a, b) => {
@@ -494,6 +510,17 @@ function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): Sea
       }
     }
 
+    let nodeStatus: string = (node as any).status || "";
+    if (!nodeStatus) {
+      if ((node as any).nextAiringEpisode) {
+        nodeStatus = "RELEASING";
+      } else if (node.seasonYear && node.seasonYear > new Date().getFullYear()) {
+        nodeStatus = "NOT_YET_RELEASED";
+      } else {
+        nodeStatus = "FINISHED";
+      }
+    }
+
     return {
       id: String(node.id),
       idMal: node.idMal || null,
@@ -503,7 +530,7 @@ function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): Sea
       episodeOffset: node.episodeOffset || (node as any).episodeOffset || 0,
       isCurrent: String(node.id) === String(currentId),
       seasonYear: node.seasonYear || null,
-      status: (node as any).status || "FINISHED",
+      status: nodeStatus,
       tmdbId: node.tmdbId || (node as any).tmdbId || null,
       tmdbSeasonNumber: node.tmdbSeasonNumber || (node as any).tmdbSeasonNumber || null,
     } as any;
@@ -1610,13 +1637,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     <span className="bg-gradient-to-r from-[#111844] to-[#7288AE] text-white text-[9px] md:text-[10px] font-extrabold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase shadow-lg shadow-[#4B5694]/25">Anime</span>
                     {anime.type && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.type}</span>}
                     {anime.rating && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.rating}</span>}
-                    {displayStatus && (
-                      <span className={`text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase ${
-                        displayStatus === "Airing" || displayStatus === "RELEASING"
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          : "bg-white/10 text-white/60 border border-white/20"
-                      }`}>{displayStatus}</span>
-                    )}
+                    {displayStatus && (() => {
+                      const formatted = formatAnimeStatus(displayStatus);
+                      return (
+                        <span className={`text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase ${
+                          formatted.style === "airing"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-[0_0_12px_rgba(52,211,153,0.2)]"
+                            : formatted.style === "upcoming"
+                            ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                            : "bg-white/10 text-white/60 border border-white/20"
+                        }`}>{formatted.label}</span>
+                      );
+                    })()}
                   </div>
                   <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
                   {anime.jname && <p className="text-white/40 text-xs sm:text-sm font-medium select-text">{anime.jname}</p>}
@@ -1804,18 +1836,24 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Status</span>
-                        <span className="text-emerald-400 font-bold text-sm bg-emerald-400/10 border border-emerald-400/20 px-3 py-1.5 rounded-lg uppercase shadow-[0_0_15px_rgba(52,211,153,0.1)]">
-                          {(() => {
-                            const s = (displayStatus || "").toUpperCase().replace(/_/g, " ");
-                            if (s.includes("RELEASING") || s.includes("AIRING")) return "CURRENTLY AIRING";
-                            if (s.includes("NOT YET") || s.includes("UPCOMING")) return "NOT YET AIRED";
-                            return displayStatus || "N/A";
-                          })()}
-                        </span>
+                        {(() => {
+                          const formatted = formatAnimeStatus(displayStatus);
+                          return (
+                            <span className={`font-bold text-sm px-3 py-1.5 rounded-lg uppercase inline-block shadow-sm ${
+                              formatted.style === "airing"
+                                ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 shadow-[0_0_15px_rgba(52,211,153,0.1)]"
+                                : formatted.style === "upcoming"
+                                ? "text-sky-300 bg-sky-400/10 border border-sky-400/20"
+                                : "text-white/80 bg-white/[0.06] border border-white/[0.05]"
+                            }`}>
+                              {formatted.label}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Year</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{anime.seasonYear || "N/A"}</span>
+                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{currentSeason?.seasonYear || anime?.seasonYear || "N/A"}</span>
                       </div>
                     </div>
                   </div>
