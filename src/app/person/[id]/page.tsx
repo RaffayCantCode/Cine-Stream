@@ -129,6 +129,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
     const load = async () => {
       try {
         const data = await fetchJson<Person>(`/api/tmdb/person/${id}`);

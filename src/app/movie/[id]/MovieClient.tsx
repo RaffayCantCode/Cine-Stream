@@ -60,6 +60,7 @@ export default function MovieClient() {
   const playerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
     const fetchMovie = async () => {
       setError(null);
       try {

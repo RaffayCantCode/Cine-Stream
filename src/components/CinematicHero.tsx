@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { VolumeX, Volume2, X, Play, Film } from "lucide-react";
+import { VolumeX, Volume2, X, Play, Pause, Film } from "lucide-react";
 
 export const CinematicHeroContext = React.createContext<{ playTrailer: () => void; hasTrailer: boolean }>({
   playTrailer: () => {},
@@ -18,6 +18,13 @@ interface CinematicHeroProps {
   height?: string;
   theme?: "movie" | "tv" | "anime";
   children: React.ReactNode;
+}
+
+function formatTime(seconds: number): string {
+  if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
 /**
@@ -38,7 +45,7 @@ export function CinematicHero({
   const [trailerReady, setTrailerReady] = useState(false);
   const [trailerVisible, setTrailerVisible] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [volume, setVolume] = useState(100);
+  const [volume, setVolume] = useState(50);
   const [isAtTop, setIsAtTop] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -51,12 +58,19 @@ export function CinematicHero({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
-  const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const isScrubbingRef = useRef(false);
+  const currentTimeRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const lastTimeReceivedAtRef = useRef(0);
+  const animFrameRef = useRef<number | null>(null);
+
+  // Sync ref with currentTime state
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
@@ -64,7 +78,7 @@ export function CinematicHero({
     if (!isScrubbingRef.current) {
       controlsTimerRef.current = setTimeout(() => {
         setShowControls(false);
-      }, 2500);
+      }, 3000);
     }
   }, []);
 
@@ -99,11 +113,12 @@ export function CinematicHero({
       setTrailerReady(true);
       setTrailerVisible(true);
       setIsMuted(false);
-      setVolume(100);
+      const startVolume = 50;
+      setVolume(startVolume);
       const sendUnmute = () => {
         if (iframeRef.current?.contentWindow) {
           iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: "command", func: "unMute", args: [] }), "*");
-          iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [100] }), "*");
+          iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [startVolume] }), "*");
           iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*");
         }
       };
@@ -112,29 +127,6 @@ export function CinematicHero({
       setTimeout(sendUnmute, 800);
     }
   }, [activeTrailerId, isMobile]);
-
-  // Build a youtube-nocookie embed URL that autoplays muted on loop
-  const trailerUrl = React.useMemo(() => {
-    if (!trailerId) return null;
-    const params = new URLSearchParams({
-      autoplay: "1",
-      mute: "1", // Always start muted
-      loop: "0", // Don't loop, so we can detect when it ends and close it
-      vq: "hd1080", // Try to force highest quality
-      hd: "1", // Hint for HD playback
-      controls: "0",
-      modestbranding: "1",
-      rel: "0",
-      showinfo: "0",
-      iv_load_policy: "3",
-      enablejsapi: "1",
-      disablekb: "1",
-      fs: "0",
-      playsinline: "1",
-      origin: typeof window !== "undefined" ? window.location.origin : "",
-    });
-    return `https://www.youtube-nocookie.com/embed/${trailerId}?${params.toString()}`;
-  }, [trailerId]);
 
   // Track scroll position for scroll anchoring
   useEffect(() => {
@@ -160,59 +152,146 @@ export function CinematicHero({
     }
   }, [fallbackTrailerIds]);
 
-  // Listen to YouTube API to detect when trailer ends or errors
+  // Smooth 60fps real-time progress bar ticker when playing
+  useEffect(() => {
+    if (!isPlaying || isScrubbingRef.current || !trailerVisible) {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      return;
+    }
+
+    const tick = () => {
+      if (lastTimeReceivedAtRef.current > 0 && !isScrubbingRef.current) {
+        const elapsed = (performance.now() - lastTimeReceivedAtRef.current) / 1000;
+        const estimated = lastTimeRef.current + elapsed;
+        if (duration > 0 && estimated >= duration) {
+          setCurrentTime(duration);
+        } else {
+          setCurrentTime(Math.max(0, estimated));
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animFrameRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [isPlaying, trailerVisible, duration]);
+
+  // Listen to YouTube API postMessage events & poll time/duration
   useEffect(() => {
     if (!activeTrailerId || isMobile) return;
 
     const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://www.youtube-nocookie.com") return;
+      // Validate origin safely for YouTube domains
+      if (!event.origin.includes("youtube.com") && !event.origin.includes("youtube-nocookie.com")) return;
+
       try {
-        const data = JSON.parse(event.data);
+        let data = event.data;
+        if (typeof data === "string") {
+          data = JSON.parse(data);
+        }
+        if (!data || typeof data !== "object") return;
 
         // Handle direct errors from YouTube
         if (data.event === "onError" || data.event === "error") {
-           triggerFallback();
-           return;
+          triggerFallback();
+          return;
         }
 
         if (data.event === "infoDelivery" && data.info) {
-          if (data.info.playerState === 1 && !isPlaying) {
-            iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
-              event: "command",
-              func: "setPlaybackQuality",
-              args: ["hd1080"]
-            }), "*");
-            setIsPlaying(true);
+          const info = data.info;
+
+          if (info.playerState !== undefined) {
+            if (info.playerState === 1) { // 1 = PLAYING
+              setIsPlaying(true);
+              // Force high quality when playing starts
+              iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
+                event: "command",
+                func: "setPlaybackQuality",
+                args: ["hd1080"]
+              }), "*");
+            } else if (info.playerState === 2) { // 2 = PAUSED
+              setIsPlaying(false);
+            } else if (info.playerState === 0) { // 0 = ENDED
+              setIsPlaying(false);
+              setTrailerVisible(false);
+              setCurrentTime(0);
+              lastTimeRef.current = 0;
+              lastTimeReceivedAtRef.current = 0;
+              setTimeout(() => setTrailerReady(false), 1000);
+            }
           }
-          if (data.info.playerState === 0) { // 0 = ENDED
-            setTrailerVisible(false);
-            setTimeout(() => setTrailerReady(false), 1000);
+
+          if (info.currentTime !== undefined && typeof info.currentTime === "number") {
+            lastTimeRef.current = info.currentTime;
+            lastTimeReceivedAtRef.current = performance.now();
+            if (!isScrubbingRef.current && !isPlaying) {
+              setCurrentTime(info.currentTime);
+            }
           }
-          if (data.info.currentTime !== undefined && !isScrubbingRef.current) {
-            setCurrentTime(data.info.currentTime);
-          }
-          if (data.info.duration !== undefined) {
-            setDuration(data.info.duration);
+          if (info.duration !== undefined && typeof info.duration === "number" && info.duration > 0) {
+            setDuration(info.duration);
           }
         }
       } catch (e) {}
     };
 
     window.addEventListener("message", handleMessage);
-    
-    const pingInterval = setInterval(() => {
+
+    // Periodically poll player state, time and duration from YouTube iframe
+    const pollInterval = setInterval(() => {
       if (iframeRef.current?.contentWindow) {
         iframeRef.current.contentWindow.postMessage(JSON.stringify({
-          event: "listening"
+          event: "listening",
+          id: 1
+        }), "*");
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({
+          event: "command",
+          func: "getCurrentTime",
+          args: []
+        }), "*");
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({
+          event: "command",
+          func: "getDuration",
+          args: []
         }), "*");
       }
-    }, 1000);
+    }, 250);
 
     return () => {
       window.removeEventListener("message", handleMessage);
-      clearInterval(pingInterval);
+      clearInterval(pollInterval);
     };
-  }, [activeTrailerId, isPlaying, triggerFallback, isMobile]);
+  }, [activeTrailerId, triggerFallback, isMobile, isPlaying]);
+
+  // Handle global mouseup / touchend for scrubbing
+  useEffect(() => {
+    const handleGlobalSeekEnd = () => {
+      if (isScrubbingRef.current) {
+        isScrubbingRef.current = false;
+        setIsScrubbing(false);
+        if (iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "seekTo", args: [currentTimeRef.current, true] }),
+            "*"
+          );
+          iframeRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+            "*"
+          );
+        }
+      }
+    };
+
+    window.addEventListener("mouseup", handleGlobalSeekEnd);
+    window.addEventListener("touchend", handleGlobalSeekEnd);
+    return () => {
+      window.removeEventListener("mouseup", handleGlobalSeekEnd);
+      window.removeEventListener("touchend", handleGlobalSeekEnd);
+    };
+  }, []);
 
   // Init trailer id and handle fallbacks
   useEffect(() => {
@@ -247,12 +326,12 @@ export function CinematicHero({
   // Pause trailer when scrolled completely out of view
   useEffect(() => {
     if (!heroRef.current || isMobile) return;
-    
+
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
         if (!iframeRef.current?.contentWindow) return;
-        
+
         if (entry.isIntersecting) {
           if (trailerVisible) {
             iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*");
@@ -263,16 +342,33 @@ export function CinematicHero({
       },
       { threshold: 0 }
     );
-    
+
     observer.observe(heroRef.current);
     return () => observer.disconnect();
   }, [trailerVisible, isMobile]);
+
+  const togglePlayPause = () => {
+    if (!iframeRef.current?.contentWindow) return;
+    if (isPlaying) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
+        "*"
+      );
+      setIsPlaying(false);
+    } else {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+        "*"
+      );
+      setIsPlaying(true);
+    }
+  };
 
   const toggleMute = () => {
     if (!iframeRef.current?.contentWindow) return;
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
-    
+
     const command = newMutedState ? "mute" : "unMute";
     iframeRef.current.contentWindow.postMessage(
       JSON.stringify({ event: "command", func: command, args: [] }),
@@ -280,9 +376,9 @@ export function CinematicHero({
     );
 
     if (!newMutedState && volume === 0) {
-      setVolume(100);
+      setVolume(50);
       iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ event: "command", func: "setVolume", args: [100] }),
+        JSON.stringify({ event: "command", func: "setVolume", args: [50] }),
         "*"
       );
     }
@@ -329,31 +425,18 @@ export function CinematicHero({
     }
   };
 
-  const handleSeekEnd = () => {
-    isScrubbingRef.current = false;
-    setIsScrubbing(false);
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ event: "command", func: "seekTo", args: [currentTime, true] }),
-        "*"
-      );
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-        "*"
-      );
-    }
-  };
-
   const handleSeekStart = () => {
     isScrubbingRef.current = true;
     setIsScrubbing(true);
   };
 
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
   return (
     <div ref={heroRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} className="relative w-full flex flex-col">
       {/* ── Background layer (Fixed 85svh) ──────────────────────────────────────── */}
       <div className={`absolute top-0 left-0 w-full ${height} min-h-[78svh] overflow-hidden z-0`}>
-        {/* Backdrop image — always visible */}
+        {/* Backdrop image — visible when trailer is not visible */}
         {backdropUrl && (
           <img
             src={backdropUrl}
@@ -378,7 +461,7 @@ export function CinematicHero({
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               <iframe
                 ref={iframeRef}
-                src={`https://www.youtube-nocookie.com/embed/${activeTrailerId}?autoplay=1&mute=${isMuted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}&widgetid=1&loop=0&vq=hd1080&hd=1`}
+                src={`https://www.youtube-nocookie.com/embed/${activeTrailerId}?autoplay=1&mute=${isMuted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}&widgetid=1&loop=0&vq=hd1080&hd=1`}
                 className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[78svh] min-w-[138.67svh] -translate-x-1/2 -translate-y-1/2"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen={false}
@@ -422,72 +505,103 @@ export function CinematicHero({
       {/* ── Background Desktop Trailer Controls (shown only when playing on desktop) ────── */}
       {!isMobile && activeTrailerId && trailerVisible && (
         <div className={`transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-        <div className={`absolute bottom-16 md:bottom-20 right-4 md:right-6 z-30 flex items-center gap-3 transition-opacity duration-300 ${isScrubbing ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-          <button
-            onClick={() => {
-              setTrailerVisible(false);
-              setIsMuted(true);
-              setTimeout(() => setTrailerReady(false), 500);
-            }}
-            className="flex items-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-red-500/80 hover:border-red-400/50 transition-all duration-300 shadow-lg px-3 h-10"
-            title="Stop trailer"
-          >
-            <X className="w-4 h-4 text-white shrink-0" />
-            <span className="text-white text-xs font-bold whitespace-nowrap ml-1.5">
-              Stop
-            </span>
-          </button>
-
-          <div className="flex items-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-black/80 transition-all duration-300 shadow-lg px-3 gap-2">
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={isMuted ? 0 : volume}
-              onChange={handleVolumeChange}
-              className="w-20 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-primary outline-none"
-            />
+          {/* Top right / middle controls for Play/Pause, Stop, Volume */}
+          <div className={`absolute bottom-16 md:bottom-20 right-4 md:right-6 z-30 flex items-center gap-3 transition-opacity duration-300 ${isScrubbing ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+            {/* Play/Pause Button */}
             <button
-              onClick={toggleMute}
-              className="w-8 h-8 flex items-center justify-center text-white shrink-0 rounded-full hover:text-primary transition-colors duration-200"
-              title={isMuted ? "Unmute trailer" : "Mute trailer"}
-              aria-label={isMuted ? "Unmute trailer" : "Mute trailer"}
+              onClick={togglePlayPause}
+              className="flex items-center justify-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-white/20 transition-all duration-300 shadow-lg w-10 h-10 text-white"
+              title={isPlaying ? "Pause trailer" : "Play trailer"}
+              aria-label={isPlaying ? "Pause trailer" : "Play trailer"}
             >
-              {isMuted || volume === 0 ? (
-                <VolumeX className="w-4 h-4" />
-              ) : (
-                <Volume2 className="w-4 h-4" />
-              )}
+              {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
-          </div>
-        </div>
 
-        <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 w-[90%] md:w-1/2 z-30 flex items-center gap-3">
-          <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-3 transition-opacity duration-300 ${isScrubbing ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-            <span className="text-white/90 text-xs md:text-sm font-black uppercase tracking-[0.2em] bg-black/60 backdrop-blur-md px-3 py-1 rounded-md border border-white/20 shadow-lg">Trailer</span>
+            {/* Stop Button */}
+            <button
+              onClick={() => {
+                setTrailerVisible(false);
+                setIsMuted(true);
+                setIsPlaying(false);
+                setCurrentTime(0);
+                setTimeout(() => setTrailerReady(false), 500);
+              }}
+              className="flex items-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-red-500/80 hover:border-red-400/50 transition-all duration-300 shadow-lg px-3 h-10"
+              title="Stop trailer"
+            >
+              <X className="w-4 h-4 text-white shrink-0" />
+              <span className="text-white text-xs font-bold whitespace-nowrap ml-1.5">
+                Stop
+              </span>
+            </button>
+
+            {/* Volume Control */}
+            <div className="flex items-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-black/80 transition-all duration-300 shadow-lg px-3 gap-2 h-10">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-20 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-primary outline-none"
+              />
+              <button
+                onClick={toggleMute}
+                className="w-7 h-7 flex items-center justify-center text-white shrink-0 rounded-full hover:text-primary transition-colors duration-200"
+                title={isMuted ? "Unmute trailer" : "Mute trailer"}
+                aria-label={isMuted ? "Unmute trailer" : "Mute trailer"}
+              >
+                {isMuted || volume === 0 ? (
+                  <VolumeX className="w-4 h-4" />
+                ) : (
+                  <Volume2 className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
-          <div className="relative flex-1 group/slider flex items-center h-6 cursor-pointer">
-            <div className="relative w-full h-1 group-hover/slider:h-1.5 bg-white/20 rounded-full overflow-hidden transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
-              <div 
-                className={`absolute top-0 left-0 h-full ${themeColorClass} transition-all duration-75`} 
-                style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+
+          {/* Bottom Progress Bar & Time Display */}
+          <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 w-[92%] md:w-3/4 max-w-3xl z-30 flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 shadow-2xl">
+            {/* Play/Pause icon indicator */}
+            <button
+              onClick={togglePlayPause}
+              className="text-white/80 hover:text-white transition-colors shrink-0"
+              aria-label={isPlaying ? "Pause trailer" : "Play trailer"}
+            >
+              {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
+            </button>
+
+            {/* Time readout */}
+            <span className="text-white/80 font-mono text-xs shrink-0 select-none">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+
+            {/* Progress Slider */}
+            <div className="relative flex-1 group/slider flex items-center h-5 cursor-pointer">
+              <div className="relative w-full h-1.5 group-hover/slider:h-2 bg-white/20 rounded-full overflow-hidden transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+                <div
+                  className={`absolute top-0 left-0 h-full ${themeColorClass} transition-all duration-75`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <input
+                type="range"
+                min="0"
+                max={duration > 0 ? duration : 100}
+                step="0.1"
+                value={currentTime}
+                onChange={handleSeek}
+                onMouseDown={handleSeekStart}
+                onTouchStart={handleSeekStart}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
               />
             </div>
-            <input
-              type="range"
-              min="0"
-              max={duration || 100}
-              step="0.1"
-              value={currentTime}
-              onChange={handleSeek}
-              onMouseDown={handleSeekStart}
-              onTouchStart={handleSeekStart}
-              onMouseUp={handleSeekEnd}
-              onTouchEnd={handleSeekEnd}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
+
+            {/* Trailer Badge */}
+            <span className="text-white/90 text-[10px] md:text-xs font-black uppercase tracking-[0.15em] bg-white/10 px-2 py-0.5 rounded border border-white/20 shrink-0 select-none">
+              Trailer
+            </span>
           </div>
-        </div>
         </div>
       )}
 
@@ -502,3 +616,4 @@ export function CinematicHero({
     </div>
   );
 }
+

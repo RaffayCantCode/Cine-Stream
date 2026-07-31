@@ -773,6 +773,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // Tracks which seasonIds we have already loaded episodes for
   const loadedSeasonIds = useRef<Set<string>>(new Set());
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, [id]);
+
   function isAnimeOngoing(status: string | null | undefined): boolean {
     const normalized = (status || "").toLowerCase();
     return normalized.includes("airing") || normalized.includes("releasing") || normalized.includes("not_yet");

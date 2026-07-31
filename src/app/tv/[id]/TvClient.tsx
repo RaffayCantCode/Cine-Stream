@@ -89,6 +89,10 @@ export default function TvClient() {
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, [id]);
+
+  useEffect(() => {
     if (status === "loading" || isStateLoaded) return;
     let initSeason = 1;
     let initEp = 1;
