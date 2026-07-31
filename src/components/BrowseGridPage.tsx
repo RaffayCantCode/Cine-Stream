@@ -166,17 +166,17 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           <div className="mb-8">
             <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">{title}</h1>
             {description ? <p className="text-sm text-white/40 mt-2">{description}</p> : null}
-            <div className="h-0.5 w-16 bg-gradient-to-r from-[#7288AE] to-[#4B5694] rounded-full mt-3 mb-6" />
+            <div className="h-0.5 w-16 bg-gradient-to-r from-[#D3D1CE] to-[#6C6D74] rounded-full mt-3 mb-6" />
 
             {showFilter && (
               <div className="flex items-center gap-2 bg-white/[0.04] p-1.5 rounded-2xl w-fit border border-white/[0.08] backdrop-blur-md">
                 <button
                   onClick={() => setTypeFilter("all")}
                   className={cn(
-                    "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                    "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border",
                     typeFilter === "all"
-                      ? "bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/25"
-                      : "text-white/60 hover:text-white hover:bg-white/[0.06]"
+                      ? "bg-[#262E36] text-[#D3D1CE] border-white/20 shadow-md"
+                      : "text-white/60 border-transparent hover:text-white hover:bg-white/[0.06]"
                   )}
                 >
                   <Layers className="w-3.5 h-3.5" />

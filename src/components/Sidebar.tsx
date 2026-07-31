@@ -46,10 +46,10 @@ export const Sidebar = memo(function Sidebar() {
       {/* Mobile Top Header */}
       <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-4 transform-gpu will-change-transform">
         <Link href="/" className="flex items-center gap-2">
-          <img src="/logo-icon.svg" alt="CineStream" className="w-8 h-8 drop-shadow-lg" />
-          <span className="font-bold text-lg tracking-wider">
+          <img src="/logo-icon.svg" alt="CineStream" className="w-8 h-8 drop-shadow-md" />
+          <span className="font-extrabold text-lg tracking-wider">
             <span className="text-white">CINE</span>
-            <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">STREAM</span>
+            <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
           </span>
         </Link>
 
@@ -153,51 +153,51 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-[#050B14]/40 backdrop-blur-3xl border-r border-white/[0.05] shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
+      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-[#090F15]/95 backdrop-blur-2xl border-r border-white/[0.08] shadow-[8px_0_32px_rgba(0,0,0,0.6)]">
         {/* Logo */}
         <div className="p-4 md:p-3 lg:p-4">
-          <Link href="/" className="flex items-center gap-3">
-            <img src="/logo-icon.svg" alt="CineStream" className="w-10 h-10 shrink-0 drop-shadow-lg" />
-            <span className="font-bold text-xl tracking-wider">
+          <Link href="/" className="flex items-center gap-3 group">
+            <img src="/logo-icon.svg" alt="CineStream" className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform" />
+            <span className="font-extrabold text-xl tracking-wider">
               <span className="text-white">CINE</span>
-              <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">STREAM</span>
+              <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
             </span>
           </Link>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto">
-          {navItems.map(({ href, icon: Icon, label, subtitle }) => {
-            const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+          {navItems.map((item) => {
+            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             
             return (
               <Link
-                key={href}
-                href={href}
+                key={item.href}
+                href={item.href}
                 className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300",
+                  "group relative flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-all duration-200 select-none",
                   isActive 
-                    ? "text-white" 
-                    : "text-white/50 hover:text-white"
+                    ? "text-white font-extrabold" 
+                    : "text-white/85 font-bold hover:text-white hover:bg-white/[0.08]"
                 )}
               >
                 {isActive && (
                   <motion.div
                     layoutId="nav-pill"
-                    className="absolute inset-0 rounded-xl -z-10 bg-[#4B5694]/15 border border-[#7288AE]/20"
+                    className="absolute inset-0 rounded-xl -z-10 bg-[#262E36] border border-white/15 shadow-md"
                     transition={{ type: "spring", stiffness: 380, damping: 35 }}
                   />
                 )}
                 
-                <Icon className="w-5 h-5 shrink-0" />
+                <item.icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-[#D3D1CE]" : "text-white/80 group-hover:text-white")} />
                 
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium truncate">
-                    {label}
+                  <span className="text-sm font-bold truncate tracking-tight">
+                    {item.label}
                   </span>
-                  {subtitle && (
-                    <span className="text-[10px] text-white/40 truncate leading-tight">
-                      {subtitle}
+                  {item.subtitle && (
+                    <span className="text-[10px] text-white/60 truncate leading-tight font-semibold">
+                      {item.subtitle}
                     </span>
                   )}
                 </div>
@@ -210,7 +210,7 @@ export const Sidebar = memo(function Sidebar() {
         <div className="px-3">
           <Link
             href="/contact"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/40 hover:text-[#f59e0b] hover:bg-[#f59e0b]/[0.06] transition-all text-xs font-medium"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/60 hover:text-[#f59e0b] hover:bg-[#f59e0b]/[0.06] transition-all text-xs font-semibold"
           >
             <Bug className="w-4 h-4" />
             <span>Report Issue</span>
@@ -221,10 +221,10 @@ export const Sidebar = memo(function Sidebar() {
         <div className="px-3 py-3">
           <Link
             href="/search"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:text-white hover:bg-white/[0.06] transition-all"
           >
             <Search className="w-5 h-5" />
-            <span className="text-sm font-medium">
+            <span className="text-sm font-bold">
               Search
             </span>
           </Link>
@@ -276,9 +276,9 @@ export const Sidebar = memo(function Sidebar() {
             ) : (
               <button
                 onClick={() => signIn()}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#4B5694] hover:bg-[#7288AE] text-white text-xs font-bold transition-all"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#262E36] hover:bg-white/15 border border-white/15 text-[#D3D1CE] hover:text-white text-xs font-extrabold transition-all shadow-md active:scale-95 cursor-pointer"
               >
-                <LogIn className="w-4 h-4" />
+                <LogIn className="w-4 h-4 text-[#D3D1CE]" />
                 <span>Log in</span>
               </button>
             )

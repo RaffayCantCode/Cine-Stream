@@ -40,7 +40,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
     >
       <Link
         href={link}
-        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-muted/50 transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-primary/40 hover:ring-2 hover:ring-primary/50 focus:outline-none"
+        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.5)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_22px_45px_rgba(0,0,0,0.85)] hover:ring-white/35 focus:outline-none sheen-wrapper"
       >
         {posterUrl ? (
           <img

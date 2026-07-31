@@ -100,8 +100,8 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     <section className="px-3 md:px-8 lg:px-10 pt-4 pb-1">
       <div className="max-w-screen-2xl mx-auto">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-1 h-5 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
-          <h2 className="text-base md:text-xl font-black text-white tracking-tight">Continue Watching</h2>
+          <div className="w-1.5 h-5 bg-gradient-to-b from-indigo-400 to-purple-600 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.5)]" />
+          <h2 className="text-base md:text-xl font-extrabold text-white tracking-tight">Continue Watching</h2>
         </div>
 
         <div className="overflow-hidden pb-3" ref={emblaRef}>
@@ -117,10 +117,10 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
               <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 onClick={() => handlePlay(item)}
-                className="flex-[0_0_auto] w-[122px] sm:w-[142px] md:w-[152px] relative group cursor-pointer animate-fade-in-up"
+                className="flex-[0_0_auto] w-[132px] sm:w-[158px] md:w-[172px] relative group cursor-pointer animate-fade-in-up"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
-                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card ring-1 ring-white/[0.07] mb-2.5 relative shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition-all duration-300 group-hover:ring-[#7288AE]/50 group-hover:shadow-xl group-hover:shadow-black/25">
+                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card/80 ring-1 ring-white/10 mb-2.5 relative shadow-[0_12px_32px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:ring-white/35 group-hover:shadow-[0_24px_48px_rgba(0,0,0,0.9)] sheen-wrapper">
                   {posterUrl ? (
                     <img
                       src={posterUrl}
@@ -139,44 +139,42 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                     </div>
                   )}
 
-                  <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-1 rounded-md backdrop-blur-sm tracking-widest uppercase shadow-lg ${
+                  <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md backdrop-blur-md tracking-widest uppercase shadow-lg border border-white/10 ${
                     item.mediaType === "movie"
-                      ? "bg-gradient-to-r from-red-600/90 to-rose-600/90"
+                      ? "bg-rose-600/85 border-rose-500/30"
                       : item.mediaType === "tv"
-                      ? "bg-gradient-to-r from-emerald-600/90 to-teal-600/90"
-                      : "bg-gradient-to-r from-purple-600/90 to-indigo-600/90"
+                      ? "bg-emerald-600/85 border-emerald-500/30"
+                      : "bg-purple-950/80 border-purple-500/30 text-purple-200"
                   }`}>
                     {item.mediaType === "movie" ? "Movie" : item.mediaType === "tv" ? "TV" : "JP Sub Anime"}
                   </div>
 
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-xl">
-                      <Play className="w-4 h-4 fill-white text-white ml-0.5" />
+                  <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                    <div className="w-11 h-11 rounded-full bg-black/65 backdrop-blur-xl border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
+                      <Play className="w-4 h-4 fill-current ml-0.5 transition-colors" />
                     </div>
                   </div>
 
                   {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-                    <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-sm rounded-md px-2 py-1 text-[11px] sm:text-xs font-black text-white shadow-lg">
+                    <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-md rounded-md px-2 py-0.5 text-[11px] sm:text-xs font-black text-white shadow-lg border border-white/10">
                       S{item.season} E{item.episode}
                     </div>
                   )}
 
-
-
                   <button
                     onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-red-500 hover:text-white hover:scale-110 hover:shadow-[0_0_15px_rgba(239,68,68,0.6)] z-20 md:opacity-0 md:group-hover:opacity-100"
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-rose-600 hover:text-white hover:scale-110 hover:shadow-[0_0_15px_rgba(244,63,94,0.6)] z-20 md:opacity-0 md:group-hover:opacity-100"
                     aria-label="Remove"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                <h4 className="text-xs font-semibold text-white/80 line-clamp-1 leading-tight">
+                <h4 className="text-xs font-bold text-white/90 line-clamp-1 leading-tight tracking-tight">
                   {item.title}
                 </h4>
                 {(item.mediaType === "tv" || item.mediaType === "anime") && item.episodeName && (
-                  <p className="text-[11px] text-[#7288AE] font-medium mt-0.5 line-clamp-1">
+                  <p className="text-[11px] text-indigo-300/80 font-medium mt-0.5 line-clamp-1">
                     {item.episodeName}
                   </p>
                 )}

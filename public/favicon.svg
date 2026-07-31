@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <defs>
-    <linearGradient id="fg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#4B5694"/>
-      <stop offset="50%" stop-color="#7288AE"/>
-      <stop offset="100%" stop-color="#EAE0CF"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="9" fill="#0d1233"/>
-  <rect x="1" y="1" width="30" height="30" rx="8" stroke="url(#fg)" stroke-width="1" opacity="0.4"/>
-  <!-- Simplified swirls and play button -->
-  <path d="M7 16c0-5 4-9 9-9 2.5 0 4.7 1 6.4 2.6" stroke="url(#fg)" stroke-width="2" stroke-linecap="round" fill="none"/>
-  <path d="M25 16c0 5-4 9-9 9-2.5 0-4.7-1-6.4-2.6" stroke="url(#fg)" stroke-width="2" stroke-linecap="round" fill="none"/>
-  <polygon points="13,11 21,16 13,21" fill="url(#fg)" stroke="url(#fg)" stroke-width="1" stroke-linejoin="round" />
+  <!-- Midnight Slate Background Badge -->
+  <rect width="32" height="32" rx="8" fill="#090F15"/>
+  <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="7.25" stroke="#D3D1CE" stroke-width="1.25" stroke-opacity="0.6"/>
+
+  <!-- Bold Geometric Vault Monogram -->
+  <path d="M10 10C10 8.34 11.34 7 13 7H20C21.66 7 23 8.34 23 10V11C23 12.66 21.66 14 20 14H12C10.34 14 9 15.34 9 17V18C9 19.66 10.34 21 12 21H19C20.66 21 22 22.34 22 24V25C22 26.66 20.66 28 19 28H12C10.34 28 9 26.66 9 25" 
+        stroke="#D3D1CE" 
+        stroke-width="3" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+
+  <!-- Solid Crisp Play Delta in Center -->
+  <polygon points="14,12 21,16.5 14,21" fill="#D3D1CE" stroke="#090F15" stroke-width="0.8"/>
 </svg>

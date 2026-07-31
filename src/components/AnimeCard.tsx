@@ -44,25 +44,35 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
       <Link
         href={`/anime/${item.id}`}
         className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
-          rank ? "w-[142px] sm:w-[168px] md:w-[196px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
+          rank ? "w-[148px] sm:w-[184px] md:w-[210px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
         {rank && (
           <div 
-            className="absolute -left-2 bottom-[-10px] text-[104px] sm:text-[132px] md:text-[164px] font-black leading-none z-0 select-none pointer-events-none"
+            className={`absolute bottom-[-10px] font-black leading-none z-0 select-none pointer-events-none tracking-tighter ${
+              rank === 1
+                ? "-left-2 sm:-left-3 md:-left-4 text-[94px] sm:text-[118px] md:text-[144px]"
+                : rank === 10
+                ? "-left-5 sm:-left-6 md:-left-7 text-[78px] sm:text-[102px] md:text-[124px]"
+                : "-left-4 sm:-left-5 md:-left-6 text-[96px] sm:text-[124px] md:text-[150px]"
+            }`}
             style={{ 
-              WebkitTextStroke: "1.5px rgba(255,255,255,0.72)", 
+              background: rank === 1 
+                ? "linear-gradient(180deg, #FDE68A 0%, #F59E0B 50%, #B45309 100%)" 
+                : "linear-gradient(180deg, #FFFFFF 0%, #D3D1CE 45%, #6C6D74 100%)",
+              WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
-              textShadow: "0 8px 18px rgba(0,0,0,0.75)"
+              WebkitTextStroke: "1px rgba(255,255,255,0.2)",
+              filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.95)) drop-shadow(0 0 16px rgba(211,209,206,0.15))"
             }}
           >
             {rank}
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-muted ring-1 ring-white/[0.07] shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition-all duration-300 group-hover:shadow-xl group-hover:shadow-primary/25 group-hover:ring-[#7288AE]/55 ${
-            rank ? "ml-8 w-[calc(100%-2rem)]" : "w-full"
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:shadow-[0_20px_40px_rgba(0,0,0,0.9)] group-hover:ring-white/35 sheen-wrapper ${
+            rank ? "ml-6 sm:ml-7 md:ml-8 w-[calc(100%-1.5rem)] sm:w-[calc(100%-1.75rem)] md:w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}
         >
@@ -80,72 +90,47 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           </div>
         )}
 
-        <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5">
-          <span className="bg-[#4B5694]/90 backdrop-blur-xl text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-1 rounded-md uppercase leading-none shadow-lg">
+        <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
+          <span className="bg-purple-950/80 backdrop-blur-md border border-purple-500/30 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
             JP SUB
           </span>
           {dubCount !== null && dubCount > 0 && (
-            <span className="bg-amber-500/90 backdrop-blur-xl text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-1 rounded-md uppercase leading-none shadow-lg">
+            <span className="bg-amber-500/90 backdrop-blur-md border border-amber-400/40 text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
               DUB
             </span>
           )}
         </div>
 
-        <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-black/85 to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/95 via-black/50 to-transparent pointer-events-none z-10" />
 
-        <div className="absolute bottom-0 inset-x-0 z-10 p-2.5 sm:p-3 pointer-events-none transition-transform duration-300 group-hover:-translate-y-1">
-          <h3 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)]">
-            {item.name}
-          </h3>
+        {/* Hover overlay: Play button & EPS badge */}
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 pointer-events-none">
+          <div className="absolute top-2 right-2">
+            {subCount !== null && subCount > 0 && (
+              <span className="bg-black/75 backdrop-blur-md border border-white/15 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-md">
+                {subCount} EPS
+              </span>
+            )}
+          </div>
+
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/65 backdrop-blur-xl border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 transition-colors" />
+            </div>
+          </div>
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-end p-3 sm:p-4 pb-[3.5rem] sm:pb-[4.5rem]">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-primary/90 backdrop-blur-xl flex items-center justify-center translate-y-3 group-hover:translate-y-0 transition-transform duration-300 shadow-[0_0_20px_rgba(213,82,163,0.35)]">
-              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white text-white ml-0.5" />
-            </div>
-          </div>
+        {/* Persistent Title & Hover Genre Layer */}
+        <div className="absolute bottom-0 inset-x-0 z-30 p-3 pointer-events-none flex flex-col justify-end">
+          {item.genres && item.genres.length > 0 && (
+            <p className="text-[10px] sm:text-[11px] font-black text-fuchsia-300 line-clamp-1 uppercase tracking-widest leading-none drop-shadow-md mb-1 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+              {item.genres.slice(0, 2).join(" · ")}
+            </p>
+          )}
 
-          <div className="relative z-10 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 flex-wrap font-black">
-              {item.seasonYear && (
-                <span className="bg-white/20 px-2 py-0.5 rounded backdrop-blur-md uppercase text-[10px] sm:text-[11px] text-white tracking-widest shadow-[0_4px_15px_rgba(0,0,0,0.5)] border border-white/20">
-                  {item.season ? `${item.season} ` : ""}{item.seasonYear}
-                </span>
-              )}
-              {item.rating && (
-                <span className="flex items-center gap-1 text-amber-400 bg-amber-400/20 border border-amber-400/40 px-2 py-0.5 rounded backdrop-blur-md text-[10px] sm:text-[11px] tracking-wider shadow-[0_4px_15px_rgba(0,0,0,0.5)]">
-                  <Star className="w-3.5 h-3.5 fill-current" />
-                  {item.rating}
-                </span>
-              )}
-            </div>
-
-            {item.genres && item.genres.length > 0 && (
-              <p className="text-[11px] sm:text-xs font-black text-blue-300 line-clamp-1 uppercase tracking-widest leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                {item.genres.slice(0, 2).join(" · ")}
-              </p>
-            )}
-
-            <div className="flex items-center gap-2 flex-wrap drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-              {item.type && (
-                <span className="text-white/90 text-[11px] sm:text-xs font-black uppercase tracking-widest">
-                  {item.type}
-                </span>
-              )}
-              {subCount !== null && (
-                <span className="flex items-center gap-1 text-emerald-400 text-[11px] sm:text-xs font-black tracking-wider">
-                  {subCount} EPS
-                </span>
-              )}
-            </div>
-
-            {item.reason && (
-              <div className="text-[10px] sm:text-[11px] font-black text-fuchsia-400 mt-0.5 line-clamp-1 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                ✨ {item.reason}
-              </div>
-            )}
-          </div>
+          <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
+            {item.name}
+          </h3>
         </div>
 
         <div className="absolute inset-0 rounded-2xl ring-1 ring-white/0 group-hover:ring-[#7288AE]/40 transition-all duration-500 pointer-events-none" />

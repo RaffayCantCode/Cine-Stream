@@ -530,7 +530,7 @@ export default function Home() {
           const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].slice(0, 10).map((item) => ({
             id: String(item.id),
             name: item.name || item.title || "Anime",
-            poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "",
+            poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : "",
             type: item.media_type === "movie" ? "MOVIE" : "TV",
             rating: item.vote_average ? String(item.vote_average.toFixed(1)) : null,
             description: item.overview || "",
@@ -685,9 +685,9 @@ export default function Home() {
   }, [heroPool, timerReset]);
 
   return (
-    <div className="relative min-h-screen bg-[#070B14] text-[#EAE0CF] pb-20 overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-[520px] bg-[linear-gradient(180deg,rgba(114,136,174,0.10),rgba(7,11,20,0)_72%)] pointer-events-none" />
-      <div className="absolute inset-x-0 top-[42rem] h-px bg-gradient-to-r from-transparent via-[#7288AE]/20 to-transparent pointer-events-none" />
+    <div className="relative min-h-screen bg-[#090F15] text-[#D3D1CE] pb-20 overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-[520px] bg-[linear-gradient(180deg,rgba(38,46,54,0.12),rgba(9,15,21,0)_72%)] pointer-events-none" />
+      <div className="absolute inset-x-0 top-[42rem] h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
 
       <Sidebar />
       <main className="relative z-10 md:pl-56 lg:pl-64 bleed-header">
@@ -948,16 +948,15 @@ export default function Home() {
                   );
                 })}
               </div>
-              {collections.length > 0 && (
+                                {collections.length > 0 && (
                 <div className="mt-8 flex justify-center">
                   <Link
                     href="/browse/franchises"
-                    className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-gradient-to-r from-[#4B5694] via-[#5c6bb0] to-[#7288AE] text-white text-sm font-extrabold tracking-wide shadow-xl shadow-[#4B5694]/30 hover:shadow-2xl hover:shadow-[#4B5694]/50 ring-1 ring-white/20 hover:ring-white/40 hover:scale-[1.04] active:scale-95 transition-all duration-300 backdrop-blur-md overflow-hidden"
+                    className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-[#262E36] hover:bg-white/15 backdrop-blur-xl border border-white/20 text-[#D3D1CE] hover:text-white text-sm font-extrabold tracking-wide shadow-xl shadow-black/50 hover:shadow-black/70 hover:border-white/35 hover:scale-[1.03] active:scale-95 transition-all duration-300 overflow-hidden sheen-wrapper cursor-pointer"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
-                    <Layers className="w-4 h-4 text-white/90 group-hover:rotate-12 transition-transform duration-300" />
+                    <Layers className="w-4 h-4 text-[#D3D1CE] group-hover:rotate-12 transition-transform duration-300" />
                     <span>View More Franchises</span>
-                    <ChevronRight className="w-4 h-4 text-white/90 group-hover:translate-x-1 transition-transform duration-300" />
+                    <ChevronRight className="w-4 h-4 text-[#D3D1CE] group-hover:translate-x-1 transition-transform duration-300" />
                   </Link>
                 </div>
               )}
@@ -971,7 +970,7 @@ export default function Home() {
               items={recent}
               isLoading={isLoading}
               seeAllHref="/browse/movies"
-              accentIcon={<Clock className="w-4 h-4 text-[#7288AE]" />}
+              accentIcon={<Clock className="w-4 h-4 text-[#B3B7BA]" />}
             />
           </LazySection>
 
@@ -986,18 +985,18 @@ export default function Home() {
           </LazySection>
 
           {/* ─── FOOTER TAG ─── */}
-          <footer className="border-t border-[#7288AE]/20 pt-10 pb-8 flex flex-col items-center justify-center gap-4">
+          <footer className="border-t border-white/10 pt-10 pb-8 flex flex-col items-center justify-center gap-4">
             <div className="flex items-center gap-2">
               <img src="/logo-icon.svg" alt="CineStream" className="w-7 h-7 opacity-90" />
-              <span className="text-base font-black tracking-widest text-white/90">
-                CINE<span className="text-primary">STREAM</span>
+              <span className="text-base font-black tracking-widest text-[#D3D1CE]">
+                CINE<span className="text-[#B3B7BA]">STREAM</span>
               </span>
             </div>
             <div className="flex flex-col items-center text-center gap-2">
               <p className="text-xs sm:text-sm text-white/70 font-semibold tracking-wide">
                 Movies. TV. Anime. All in one place.
               </p>
-              <p className="text-[10px] sm:text-xs text-[#7288AE]/80 max-w-md px-4 font-medium leading-relaxed">
+              <p className="text-[10px] sm:text-xs text-white/40 max-w-md px-4 font-medium leading-relaxed">
                 CineStream does not host any media, it only provides media from open sources!
               </p>
             </div>

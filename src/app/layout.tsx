@@ -16,8 +16,8 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://cine-stream.site"),
   title: {
-    template: "%s | CineStream",
-    default: "CineStream - Movies, TV & Anime",
+    template: "%s",
+    default: "CineStream",
   },
   description: "Movies. TV. Anime. All in one place. Stream everything you love — premium, curated, and always fresh.",
   icons: { icon: "/favicon.svg", apple: "/favicon.svg" },

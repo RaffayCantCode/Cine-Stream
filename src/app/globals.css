@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -23,53 +25,53 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 293 68% 34%;
-    --radius: 0.75rem;
+    --radius: 0.85rem;
   }
 
   .dark {
-    --background: 215 60% 5%;
-    --foreground: 40 39% 86%;
-    --card: 232 55% 16%;
-    --card-foreground: 40 39% 86%;
-    --popover: 232 55% 16%;
-    --popover-foreground: 40 39% 86%;
-    --primary: 231 33% 44%;
-    --primary-foreground: 40 39% 86%;
-    --secondary: 218 27% 56%;
-    --secondary-foreground: 232 60% 11%;
-    --muted: 232 30% 20%;
-    --muted-foreground: 218 20% 60%;
-    --accent: 40 39% 86%;
-    --accent-foreground: 232 60% 11%;
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 40 39% 86%;
-    --border: 232 25% 24%;
-    --input: 232 25% 20%;
-    --ring: 218 27% 56%;
+    --background: 210 30% 6%;    /* Midnight #090F15 */
+    --foreground: 40 6% 82%;      /* Arctic #D3D1CE */
+    --card: 210 17% 18%;          /* Mountainside #262E36 */
+    --card-foreground: 40 6% 82%;
+    --popover: 210 17% 18%;
+    --popover-foreground: 40 6% 82%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 17% 24%;
+    --secondary-foreground: 40 6% 82%;
+    --muted: 210 17% 15%;
+    --muted-foreground: 230 4% 65%; /* Apres Ski #6C6D74 */
+    --accent: 275 80% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 17% 22%;
+    --input: 210 17% 20%;
+    --ring: 243 75% 59%;
   }
 
-  /* Movie Mode: Deeper cinematic blues/slates and ruby accents */
+  /* Movie Mode: Midnight slate with vibrant Ruby Red accents */
   .mode-movies.dark {
-    --background: 220 50% 8%;
-    --card: 220 45% 12%;
-    --primary: 350 70% 45%;
-    --ring: 350 70% 45%;
+    --background: 210 30% 5.5%;
+    --card: 210 17% 17%;
+    --primary: 348 85% 50%;
+    --ring: 348 85% 50%;
   }
 
-  /* TV Mode: Cleaner teal/emerald accents for episodic content */
+  /* TV Mode: Midnight slate with radiant Emerald accents */
   .mode-tv.dark {
-    --background: 210 40% 10%;
-    --card: 210 35% 14%;
-    --primary: 160 60% 35%;
-    --ring: 160 60% 35%;
+    --background: 210 30% 5.5%;
+    --card: 210 17% 17%;
+    --primary: 160 80% 40%;
+    --ring: 160 80% 40%;
   }
 
-  /* Anime Mode: Vibrant dark purples and vivid pinks */
+  /* Anime Mode: Midnight slate with vivid Violet accents */
   .mode-anime.dark {
-    --background: 260 50% 10%;
-    --card: 260 45% 15%;
-    --primary: 280 65% 50%;
-    --ring: 280 65% 50%;
+    --background: 210 30% 5.5%;
+    --card: 210 17% 17%;
+    --primary: 278 85% 56%;
+    --ring: 278 85% 56%;
   }
 }
 
@@ -82,6 +84,7 @@
     overscroll-behavior-y: none;
     -webkit-overflow-scrolling: touch;
     scroll-padding-top: 32px;
+    font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif;
   }
   @media (pointer: fine) {
     html {
@@ -89,20 +92,85 @@
     }
   }
   body {
-    @apply bg-background text-foreground transition-colors duration-700 ease-in-out;
+    @apply bg-background text-foreground transition-colors duration-700 ease-in-out antialiased;
     margin: 0;
     padding: 0;
     min-height: 100dvh;
     overflow-x: hidden;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
+    letter-spacing: -0.01em;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+    letter-spacing: -0.025em;
   }
   ::selection {
-    background: hsl(218 27% 56% / 0.3);
-    color: hsl(40 39% 86%);
+    background: rgba(99, 102, 241, 0.35);
+    color: #ffffff;
   }
 }
 
+/* Impeccable Glassmorphism & UI Tokens */
+.premium-glass {
+  background: rgba(8, 10, 18, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 16px 48px -8px rgba(79, 70, 229, 0.25);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15);
+}
+
+/* Sheen Glint Sweep Effect on Hover */
+.sheen-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+.sheen-wrapper::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(
+    60deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 80%
+  );
+  transform: rotate(25deg);
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  opacity: 0;
+}
+.sheen-wrapper:hover::after {
+  left: 130%;
+  opacity: 1;
+}
+
+/* Custom Ultra-Slim Scrollbar */
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -112,28 +180,23 @@
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(7, 8, 14, 0.6);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(231 30% 32% / 0.5);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(218 27% 50% / 0.8);
+  background: rgba(99, 102, 241, 0.6);
 }
-
-.premium-glass {
-  @apply bg-black/40 backdrop-blur-xl border-white/5;
-  border-bottom-width: 1px;
-}
-
 
 @keyframes shimmer {
   0% { background-position: -200% 0; }
@@ -143,32 +206,21 @@
 .shimmer {
   background: linear-gradient(
     90deg,
-    hsl(232 30% 14%) 25%,
-    hsl(232 30% 22%) 50%,
-    hsl(232 30% 14%) 75%
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.03) 75%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  animation: shimmer 1.6s ease-in-out infinite;
 }
 
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 0.5s ease-out both;
-}
-
-.skeleton-pulse {
-  background: linear-gradient(
-    90deg,
-    hsl(232 30% 14%) 0%,
-    hsl(232 30% 22%) 50%,
-    hsl(232 30% 14%) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: fade-in-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Mobile Spacing & Layout Spacing Rules */
@@ -182,7 +234,7 @@
   }
 }
 
-/* Eliminate mobile 300ms click delay & optimize touch responses */
+/* Touch and Click Optimizations */
 button,
 a,
 input,
@@ -194,12 +246,11 @@ textarea,
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Optimized click feedback - squish effect (restricted to pointer devices to avoid touch scroll jitter) */
 @media (hover: hover) and (pointer: fine) {
   button:active,
   a:active,
   [role="button"]:active {
-    transform: scale(0.97);
-    transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    transform: scale(0.975);
+    transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1) !important;
   }
 }

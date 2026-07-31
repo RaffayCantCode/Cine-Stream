@@ -55,25 +55,35 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       <Link
         href={link}
         className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
-          rank ? "w-[142px] sm:w-[168px] md:w-[196px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
+          rank ? "w-[148px] sm:w-[184px] md:w-[210px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
         {rank && (
           <div 
-            className="absolute -left-2 bottom-[-10px] text-[104px] sm:text-[132px] md:text-[164px] font-black leading-none z-0 select-none pointer-events-none"
+            className={`absolute bottom-[-10px] font-black leading-none z-0 select-none pointer-events-none tracking-tighter ${
+              rank === 1
+                ? "-left-2 sm:-left-3 md:-left-4 text-[94px] sm:text-[118px] md:text-[144px]"
+                : rank === 10
+                ? "-left-5 sm:-left-6 md:-left-7 text-[78px] sm:text-[102px] md:text-[124px]"
+                : "-left-4 sm:-left-5 md:-left-6 text-[96px] sm:text-[124px] md:text-[150px]"
+            }`}
             style={{ 
-              WebkitTextStroke: "1.5px rgba(255,255,255,0.72)", 
+              background: rank === 1 
+                ? "linear-gradient(180deg, #FDE68A 0%, #F59E0B 50%, #B45309 100%)" 
+                : "linear-gradient(180deg, #FFFFFF 0%, #D3D1CE 45%, #6C6D74 100%)",
+              WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
-              textShadow: "0 8px 18px rgba(0,0,0,0.75)"
+              WebkitTextStroke: "1px rgba(255,255,255,0.2)",
+              filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.95)) drop-shadow(0 0 16px rgba(211,209,206,0.15))"
             }}
           >
             {rank}
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-muted/50 ring-1 ring-white/[0.07] shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition-all duration-300 group-hover:shadow-xl group-hover:shadow-primary/25 group-hover:ring-[#7288AE]/55 ${
-            rank ? "ml-8 w-[calc(100%-2rem)]" : "w-full"
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:shadow-[0_20px_40px_rgba(0,0,0,0.9)] group-hover:ring-white/35 sheen-wrapper ${
+            rank ? "ml-6 sm:ml-7 md:ml-8 w-[calc(100%-1.5rem)] sm:w-[calc(100%-1.75rem)] md:w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}
         >
@@ -95,20 +105,20 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
         {showMediaBadge && !isPerson && (
           <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
             <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg backdrop-blur-md border ${
-              isMovie ? "bg-red-600/85 border-red-500/30" : "bg-emerald-600/85 border-emerald-500/30"
+              isMovie ? "bg-rose-600/85 border-rose-500/30" : "bg-emerald-600/85 border-emerald-500/30"
             }`}>
               {isMovie ? "MOVIE" : "TV SHOW"}
             </span>
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/35 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-transparent opacity-50 group-hover:opacity-0 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent opacity-40 group-hover:opacity-0 transition-opacity duration-300" />
 
         <div className="absolute inset-0 flex flex-col justify-between p-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
           {!isPerson && item.vote_average && item.vote_count && item.vote_count > 20 ? (
             <div className="flex justify-end">
-              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">
+              <div className="flex items-center gap-1 bg-black/75 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/15 shadow-md">
                 <Star className="w-3 h-3 fill-current" />
                 {item.vote_average.toFixed(1)}
               </div>
@@ -118,24 +128,24 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           )}
 
           {!isPerson && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#111844] to-[#4B5694] flex items-center justify-center translate-y-3 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-105 shadow-lg shadow-black/30">
-                <Play className="w-5 h-5 fill-white text-white ml-0.5" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-12 h-12 rounded-full bg-black/65 backdrop-blur-xl border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
+                <Play className="w-5 h-5 fill-current ml-0.5 transition-colors" />
               </div>
             </div>
           )}
 
           <div className="relative z-10 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-            <h3 className="text-white font-bold text-[13px] leading-tight mb-1.5 line-clamp-2 drop-shadow-lg">
+            <h3 className="text-white font-extrabold text-[13px] leading-snug mb-1.5 line-clamp-2 drop-shadow-md tracking-tight">
               {title}
             </h3>
             <div className="flex items-center gap-2">
               {year && !isPerson && (
-                <span className="text-white/80 text-xs font-medium bg-white/15 backdrop-blur-sm px-2 py-0.5 rounded">
+                <span className="text-white/90 text-xs font-semibold bg-white/20 backdrop-blur-md px-2 py-0.5 rounded border border-white/10">
                   {year}
                 </span>
               )}
-              <span className="text-white/50 text-xs">
+              <span className="text-white/60 text-xs font-medium uppercase tracking-wider">
                 {isPerson ? "Person" : isMovie ? "Movie" : "TV"}
               </span>
             </div>
@@ -143,7 +153,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
         </div>
 
         {!isPerson && item.vote_average ? (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/60 backdrop-blur-sm text-amber-400 text-xs font-bold px-1.5 py-0.5 rounded-md group-hover:opacity-0 transition-opacity duration-300">
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-md text-amber-400 text-xs font-bold px-2 py-0.5 rounded-md border border-white/10 shadow-sm group-hover:opacity-0 transition-opacity duration-300">
             <Star className="w-2.5 h-2.5 fill-current" />
             {item.vote_average.toFixed(1)}
           </div>

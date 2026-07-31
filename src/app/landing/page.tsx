@@ -5,142 +5,131 @@ import { Film, Tv, Sparkles, Star, Clapperboard, Globe, ChevronRight } from "luc
 const portalCards = [
   {
     title: "Cinema",
-    subtitle: "Movies",
-    description: "Blockbusters, indie darlings, timeless classics — the big screen experience at home.",
+    subtitle: "Blockbusters & Classics",
+    description: "Indie darlings, Hollywood blockbusters, and timeless cinematic masterpieces.",
     icon: Film,
     href: "/browse/movies",
-    gradient: "from-[#111844] via-[#1a2268] to-[#4B5694]",
-    borderColor: "border-[#4B5694]/50",
-    accentColor: "bg-[#4B5694]",
+    badgeColor: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+    accentGlow: "group-hover:border-rose-500/40",
   },
   {
     title: "Series",
-    subtitle: "TV Shows",
-    description: "Binge-worthy seasons, gripping dramas, and laugh-out-loud comedies.",
+    subtitle: "TV Shows & Originals",
+    description: "Binge-worthy seasons, gripping dramas, and iconic TV series.",
     icon: Tv,
     href: "/browse/tv",
-    gradient: "from-[#111844] via-[#1e2a50] to-[#7288AE]",
-    borderColor: "border-[#7288AE]/50",
-    accentColor: "bg-[#7288AE]",
+    badgeColor: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    accentGlow: "group-hover:border-emerald-500/40",
   },
   {
     title: "Anime",
-    subtitle: "JP Dub + Eng Sub",
-    description: "Japanese audio, English subtitles — from classics to seasonal hits.",
+    subtitle: "JP Sub & Eng Dub",
+    description: "Japanese audio, English subtitles — seasonal hits and legendary series.",
     icon: Sparkles,
     href: "/anime",
-    gradient: "from-[#111844] via-[#2a2244] to-[#EAE0CF]",
-    borderColor: "border-[#EAE0CF]/30",
-    accentColor: "bg-[#EAE0CF]",
+    badgeColor: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+    accentGlow: "group-hover:border-purple-500/40",
   },
 ];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div className="min-h-screen bg-[#07080E] text-white overflow-x-hidden font-sans">
       {/* ─── NAV ─── */}
-      <nav className="fixed top-0 inset-x-0 z-50 h-16 flex items-center px-6 md:px-12">
+      <nav className="fixed top-0 inset-x-0 z-50 h-20 flex items-center px-6 md:px-12 bg-[#07080E]/80 backdrop-blur-xl border-b border-white/[0.06]">
         <div className="max-w-screen-2xl mx-auto w-full flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <img src="/logo-icon.svg" alt="CineStream" className="w-9 h-9" />
-            <span className="font-bold text-xl tracking-wider">
-              <span className="text-[#EAE0CF]">CINE</span>
-              <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">STREAM</span>
+          <Link href="/" className="flex items-center gap-3">
+            <img src="/logo-icon.svg" alt="CineStream" className="w-9 h-9 drop-shadow-[0_0_12px_rgba(124,58,237,0.4)]" />
+            <span className="font-black text-xl tracking-wider">
+              <span className="text-white">CINE</span>
+              <span className="bg-gradient-to-r from-rose-400 via-emerald-300 to-purple-400 bg-clip-text text-transparent">STREAM</span>
             </span>
           </Link>
           <Link
             href="/"
-            className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-[#EAE0CF] text-sm font-bold hover:shadow-lg hover:shadow-[#4B5694]/30 transition-all"
+            className="px-6 py-2.5 rounded-full bg-white text-black text-xs md:text-sm font-extrabold hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 transition-all"
           >
             Start Browsing
           </Link>
         </div>
       </nav>
 
-      {/* ─── UNIVERSE PORTAL ─── */}
-      <section className="relative min-h-screen flex items-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#111844] via-[#111844]/80 to-background pointer-events-none" />
-        <div className="absolute top-1/3 left-0 w-[500px] h-[500px] bg-[#4B5694]/5 rounded-full blur-[150px]" />
-        <div className="absolute bottom-1/4 right-0 w-[400px] h-[400px] bg-[#7288AE]/5 rounded-full blur-[120px]" />
+      {/* ─── HERO PORTAL ─── */}
+      <section className="relative min-h-screen flex items-center overflow-hidden pt-28 pb-20">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950/20 via-[#07080E] to-[#07080E] pointer-events-none" />
+        <div className="absolute top-1/4 left-10 w-[450px] h-[450px] bg-purple-900/10 rounded-full blur-[140px] pointer-events-none" />
 
-        <div className="relative w-full px-6 md:px-12 max-w-screen-2xl mx-auto pt-28 pb-20">
-          <div className="flex flex-col lg:flex-row lg:items-end gap-10 lg:gap-20 mb-14">
-            <div className="max-w-2xl">
-              <div className="flex items-center gap-2 mb-5">
-                <div className="w-10 h-[2px] bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] rounded-full" />
-                <span className="text-[11px] font-bold tracking-[0.25em] uppercase text-[#7288AE]">All in one place</span>
+        <div className="relative w-full px-6 md:px-12 max-w-screen-2xl mx-auto z-10">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-10 mb-14">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] border border-white/10 backdrop-blur-md mb-6">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[11px] font-bold tracking-widest uppercase text-white/70">
+                  Unified Streaming Vault
+                </span>
               </div>
-              <h1 className="text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[1.05]">
-                <span className="text-[#EAE0CF]">Movies.</span>
+              <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[1.05] drop-shadow-md">
+                <span className="text-white">Movies.</span>
                 <br />
-                <span className="text-[#EAE0CF]">TV.</span>
+                <span className="text-white/90">TV.</span>
                 <br />
-                <span className="bg-gradient-to-r from-[#7288AE] to-[#EAE0CF] bg-clip-text text-transparent">Anime.</span>
+                <span className="bg-gradient-to-r from-rose-400 via-emerald-300 to-purple-400 bg-clip-text text-transparent">Anime.</span>
               </h1>
-              <p className="text-[#7288AE] text-lg md:text-xl mt-5 font-medium leading-relaxed max-w-lg">
-                All in one place. Stream everything you love — curated, premium, and always fresh.
+              <p className="text-white/60 text-base md:text-xl mt-6 font-medium leading-relaxed max-w-xl">
+                Stream everything in one place. Curated, ultra-fast, zero bloat, and always free.
               </p>
-              <div className="flex items-center gap-4 mt-7">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-[#7288AE]/60">
-                  <Clapperboard className="w-4 h-4" />
-                  <span>10K+ Titles</span>
+              <div className="flex flex-wrap items-center gap-6 mt-8">
+                <div className="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-white/50">
+                  <Clapperboard className="w-4 h-4 text-rose-400" />
+                  <span>10K+ Movies</span>
                 </div>
-                <div className="w-px h-4 bg-[#7288AE]/20" />
-                <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-[#7288AE]/60">
-                  <Star className="w-4 h-4" />
-                  <span>Curated</span>
+                <div className="w-px h-4 bg-white/15" />
+                <div className="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-white/50">
+                  <Star className="w-4 h-4 text-amber-400" />
+                  <span>Top Rated</span>
                 </div>
-                <div className="w-px h-4 bg-[#7288AE]/20" />
-                <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-[#7288AE]/60">
-                  <Globe className="w-4 h-4" />
-                  <span>HD Quality</span>
+                <div className="w-px h-4 bg-white/15" />
+                <div className="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-white/50">
+                  <Globe className="w-4 h-4 text-emerald-400" />
+                  <span>Full HD</span>
                 </div>
               </div>
-              <div className="mt-8 flex items-center gap-4">
+              <div className="mt-10 flex flex-wrap items-center gap-4">
                 <Link
                   href="/"
-                  className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-[#EAE0CF] font-bold text-sm hover:shadow-xl hover:shadow-[#4B5694]/30 transition-all"
+                  className="px-8 py-3.5 rounded-full bg-white text-black font-extrabold text-sm hover:bg-white/90 hover:shadow-xl hover:shadow-white/10 transition-all"
                 >
-                  Start Exploring
+                  Explore Catalog →
                 </Link>
                 <Link
                   href="/anime"
-                  className="px-8 py-3.5 rounded-xl border border-[#7288AE]/30 text-[#EAE0CF]/80 font-bold text-sm hover:border-[#7288AE]/60 hover:text-[#EAE0CF] transition-all"
+                  className="px-8 py-3.5 rounded-full bg-white/[0.06] border border-white/15 text-white/90 font-bold text-sm hover:bg-white/10 hover:border-white/30 transition-all"
                 >
                   Browse Anime
                 </Link>
               </div>
             </div>
-
-            <div className="hidden lg:flex items-center gap-1.5 text-[#EAE0CF]/20">
-              {[...Array(3)].map((_, i) => (
-                <span key={i} className="text-3xl font-black" style={{ opacity: 0.6 - i * 0.15 }}>✦</span>
-              ))}
-            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {portalCards.map((card) => (
               <Link
                 key={card.title}
                 href={card.href}
-                className="group relative overflow-hidden rounded-2xl border transition-all duration-500 hover:scale-[1.02] active:scale-[0.98]"
-                style={{ borderColor: "rgba(114, 136, 174, 0.15)" }}
+                className={`group relative overflow-hidden rounded-xl border border-white/10 bg-card/80 p-8 transition-all duration-300 hover:scale-[1.02] hover:bg-card/95 shadow-[0_12px_32px_rgba(0,0,0,0.65)] hover:shadow-[0_24px_48px_rgba(0,0,0,0.9)] sheen-wrapper ${card.accentGlow}`}
               >
-                <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-80`} />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/[0.04] to-transparent rounded-bl-full" />
-
-                <div className="relative p-7 md:p-8">
-                  <div className={`w-12 h-12 rounded-xl ${card.accentColor}/20 border ${card.borderColor} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                    <card.icon className="w-6 h-6 text-[#EAE0CF]" />
+                <div className="relative z-10 flex flex-col justify-between h-full min-h-[220px]">
+                  <div>
+                    <div className={`w-12 h-12 rounded-xl border flex items-center justify-center mb-5 backdrop-blur-md transition-transform duration-300 group-hover:scale-110 ${card.badgeColor}`}>
+                      <card.icon className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-2xl font-black text-white mb-1 tracking-tight">{card.title}</h3>
+                    <p className="text-[11px] font-bold tracking-widest uppercase text-white/40 mb-3">{card.subtitle}</p>
+                    <p className="text-sm text-white/60 font-medium leading-relaxed">{card.description}</p>
                   </div>
-                  <h3 className="text-xl font-black text-[#EAE0CF] mb-0.5">{card.title}</h3>
-                  <p className="text-[11px] font-bold tracking-widest uppercase text-[#7288AE]/80 mb-3">{card.subtitle}</p>
-                  <p className="text-sm text-[#7288AE]/70 leading-relaxed mb-5 line-clamp-2">{card.description}</p>
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-[#EAE0CF]/80 group-hover:text-[#EAE0CF] transition-colors">
-                    <span>Explore</span>
-                    <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+                  <div className="mt-6 flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase text-white/80 group-hover:text-white transition-colors">
+                    <span>Enter Vault</span>
+                    <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                   </div>
                 </div>
               </Link>
@@ -150,22 +139,17 @@ export default function LandingPage() {
       </section>
 
       {/* ─── FOOTER ─── */}
-      <footer className="relative border-t border-[#7288AE]/20 py-10">
-        <div className="max-w-screen-2xl mx-auto px-6 md:px-12 flex flex-col items-center justify-center gap-4">
-          <div className="flex items-center gap-2">
+      <footer className="relative border-t border-white/[0.08] py-12 bg-[#05060B]">
+        <div className="max-w-screen-2xl mx-auto px-6 md:px-12 flex flex-col items-center justify-center gap-4 text-center">
+          <div className="flex items-center gap-3">
             <img src="/logo-icon.svg" alt="CineStream" className="w-7 h-7 opacity-90" />
-            <span className="text-base font-black tracking-widest text-white/90">
-              CINE<span className="text-primary">STREAM</span>
+            <span className="text-lg font-black tracking-wider text-[#D3D1CE]">
+              CINE<span className="text-[#B3B7BA]">STREAM</span>
             </span>
           </div>
-          <div className="flex flex-col items-center text-center gap-2">
-            <p className="text-xs sm:text-sm text-white/70 font-semibold tracking-wide">
-              Movies. TV. Anime. All in one place.
-            </p>
-            <p className="text-[10px] sm:text-xs text-[#7288AE]/80 max-w-md px-4 font-medium leading-relaxed">
-              CineStream does not host any media, it only provides media from open sources!
-            </p>
-          </div>
+          <p className="text-xs text-white/50 font-medium max-w-md leading-relaxed">
+            Movies. TV. Anime. All in one place. CineStream does not host any files locally.
+          </p>
         </div>
       </footer>
     </div>

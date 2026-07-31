@@ -277,9 +277,9 @@ export default function MovieClient() {
             <div className="flex items-center flex-wrap gap-4 w-full">
               <button
                 onClick={handleWatch}
-                className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+                className="group flex items-center gap-2.5 bg-[#E11D48] hover:bg-[#F43F5E] text-white font-extrabold px-8 py-4 rounded-xl text-sm transition-all duration-300 shadow-xl shadow-rose-950/60 hover:scale-[1.03] active:scale-95 border border-rose-400/20 cursor-pointer"
               >
-                <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
+                <Play className="w-5 h-5 fill-current ml-0.5 group-hover:scale-110 transition-transform text-white" />
                 Watch Now
               </button>
 

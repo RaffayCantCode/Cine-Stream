@@ -178,18 +178,18 @@ export default function TrendingPage() {
               <p className="text-sm text-white/40 mt-2">{title}</p>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => setActiveTab("movie")} className={`px-4 py-2 rounded-xl text-sm font-semibold ${activeTab === "movie" ? "bg-[#4B5694] text-white" : "bg-white/[0.05] text-white/60"}`}>Movies</button>
-              <button onClick={() => setActiveTab("tv")} className={`px-4 py-2 rounded-xl text-sm font-semibold ${activeTab === "tv" ? "bg-[#4B5694] text-white" : "bg-white/[0.05] text-white/60"}`}>TV Shows</button>
-              <button onClick={() => setActiveTab("anime")} className={`px-4 py-2 rounded-xl text-sm font-semibold ${activeTab === "anime" ? "bg-[#4B5694] text-white" : "bg-white/[0.05] text-white/60"}`}>Anime</button>
+              <button onClick={() => setActiveTab("movie")} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${activeTab === "movie" ? "bg-[#262E36] text-[#D3D1CE] border-white/20 shadow-md" : "bg-white/[0.04] text-white/60 border-transparent hover:text-white hover:bg-white/10"}`}>Movies</button>
+              <button onClick={() => setActiveTab("tv")} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${activeTab === "tv" ? "bg-[#262E36] text-[#D3D1CE] border-white/20 shadow-md" : "bg-white/[0.04] text-white/60 border-transparent hover:text-white hover:bg-white/10"}`}>TV Shows</button>
+              <button onClick={() => setActiveTab("anime")} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${activeTab === "anime" ? "bg-[#262E36] text-[#D3D1CE] border-white/20 shadow-md" : "bg-white/[0.04] text-white/60 border-transparent hover:text-white hover:bg-white/10"}`}>Anime</button>
               {activeTab !== "anime" && (
                 <select
                   value={timeWindow}
                   onChange={(e) => setTimeWindow(e.target.value as "day" | "week")}
-                  className="h-10 px-3 rounded-xl bg-[#131945] border border-white/20 text-white text-sm font-semibold appearance-none cursor-pointer hover:border-[#7288AE]/50 transition-colors"
-                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                  className="h-10 px-3.5 rounded-xl bg-[#262E36] border border-white/20 text-[#D3D1CE] text-sm font-bold appearance-none cursor-pointer hover:border-white/35 transition-colors"
+                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23D3D1CE' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
                 >
-                  <option value="day" className="bg-[#131945] text-white">Today</option>
-                  <option value="week" className="bg-[#131945] text-white">This Week</option>
+                  <option value="day" className="bg-[#262E36] text-[#D3D1CE]">Today</option>
+                  <option value="week" className="bg-[#262E36] text-[#D3D1CE]">This Week</option>
                 </select>
               )}
             </div>

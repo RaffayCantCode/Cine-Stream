@@ -75,21 +75,24 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
   const scrollByAmount = (direction: "left" | "right") => {
     const el = scrollerRef.current;
     if (!el) return;
-    const amount = Math.max(320, Math.floor(el.clientWidth * 0.85));
+    const cardEl = el.querySelector(".row-item") || el.firstElementChild?.firstElementChild;
+    const step = cardEl ? (cardEl as HTMLElement).offsetWidth + 16 : 200;
+    const scrollCount = Math.max(1, Math.floor(el.clientWidth / step));
+    const amount = step * scrollCount;
     el.scrollBy({ left: direction === "left" ? -amount : amount, behavior: "smooth" });
   };
 
   return (
     <div
-      className="py-4 md:py-6 space-y-4 animate-fade-in-up"
-      style={{ animationDuration: "0.45s", contentVisibility: "auto", containIntrinsicSize: "auto 330px" }}
+      className="py-3 md:py-4 space-y-3 animate-fade-in-up"
+      style={{ animationDuration: "0.45s", contentVisibility: "auto", containIntrinsicSize: "auto 240px" }}
     >
       <div className="flex items-center justify-between px-3 md:px-8 lg:px-10">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-5 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
+          <div className={`w-1 bg-gradient-to-b from-[#D3D1CE] to-[#6C6D74] rounded-full ${isTop10 ? "h-6 md:h-8" : "h-5"}`} />
           <div className="flex items-center gap-2">
             {accentIcon}
-            <h2 className="text-base md:text-xl font-black text-white tracking-tight">{title}</h2>
+            <h2 className={isTop10 ? "text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-md" : "text-base md:text-xl font-black text-white tracking-tight"}>{title}</h2>
           </div>
         </div>
         <div className="flex items-center gap-3 md:gap-6">
@@ -100,7 +103,7 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
                 scrollByAmount("left");
               }}
               disabled={!canScrollLeft}
-              className={`w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${canScrollLeft ? 'hover:bg-primary hover:border-primary cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
+              className={`w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${canScrollLeft ? 'hover:bg-white/15 hover:border-white/30 cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
               aria-label="Scroll left"
             >
               <ChevronLeft className="w-5 h-5 ml-[-1px]" />
@@ -111,7 +114,7 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
                 scrollByAmount("right");
               }}
               disabled={!canScrollRight}
-              className={`w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${canScrollRight ? 'hover:bg-primary hover:border-primary cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
+              className={`w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${canScrollRight ? 'hover:bg-white/15 hover:border-white/30 cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
               aria-label="Scroll right"
             >
               <ChevronRight className="w-5 h-5 mr-[-1px]" />
@@ -120,7 +123,7 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
           {seeAllHref && (
             <a
               href={seeAllHref}
-              className="flex items-center gap-1 text-xs font-semibold text-white/50 hover:text-[#7288AE] transition-colors group px-3 py-2 rounded-lg hover:bg-white/[0.05]"
+              className="flex items-center gap-1 text-xs font-semibold text-white/50 hover:text-[#D3D1CE] transition-colors group px-3 py-2 rounded-lg hover:bg-white/[0.05]"
             >
               See all
               <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
@@ -130,8 +133,8 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
       </div>
 
       <div className="relative group/row">
-        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-5 pt-1 hide-scrollbar will-change-transform touch-pan-y touch-pan-x">
-          <div className={`flex px-3 md:px-8 lg:px-10 w-max ${isTop10 ? "gap-2 md:gap-3 pl-3 md:pl-6" : "gap-3 md:gap-4"}`}>
+        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-5 pt-1 hide-scrollbar will-change-transform touch-pan-y touch-pan-x scroll-smooth">
+          <div className="flex px-3 md:px-8 lg:px-10 w-max gap-3 md:gap-4">
             {isLoading
               ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (
                   <SkeletonCard key={i} index={i} />

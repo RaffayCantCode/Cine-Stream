@@ -505,18 +505,8 @@ export function CinematicHero({
       {/* ── Background Desktop Trailer Controls (shown only when playing on desktop) ────── */}
       {!isMobile && activeTrailerId && trailerVisible && (
         <div className={`transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-          {/* Top right / middle controls for Play/Pause, Stop, Volume */}
+          {/* Top right / middle controls for Stop, Volume */}
           <div className={`absolute bottom-16 md:bottom-20 right-4 md:right-6 z-30 flex items-center gap-3 transition-opacity duration-300 ${isScrubbing ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-            {/* Play/Pause Button */}
-            <button
-              onClick={togglePlayPause}
-              className="flex items-center justify-center bg-black/70 backdrop-blur-md border border-white/30 rounded-full hover:bg-white/20 transition-all duration-300 shadow-lg w-10 h-10 text-white"
-              title={isPlaying ? "Pause trailer" : "Play trailer"}
-              aria-label={isPlaying ? "Pause trailer" : "Play trailer"}
-            >
-              {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-            </button>
-
             {/* Stop Button */}
             <button
               onClick={() => {

@@ -74,8 +74,8 @@ export const AnimeRow = memo(function AnimeRow({ title, items, isLoading, seeAll
     >
       <div className="flex items-center justify-between px-3 md:px-8 lg:px-10">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-5 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
-          <h2 className="text-base md:text-xl font-black text-white tracking-tight">{title}</h2>
+          <div className={`w-1 bg-gradient-to-b from-[#D3D1CE] to-[#6C6D74] rounded-full ${isTop10 ? "h-6 md:h-8" : "h-5"}`} />
+          <h2 className={isTop10 ? "text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-md" : "text-base md:text-xl font-black text-white tracking-tight"}>{title}</h2>
         </div>
         <div className="flex items-center gap-3 md:gap-6">
           <div className="hidden md:flex items-center gap-2">

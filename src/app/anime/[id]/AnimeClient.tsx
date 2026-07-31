@@ -28,7 +28,7 @@ function AnimeHeroTrailerButton() {
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users, Film } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users, Film, CheckCircle2 } from "lucide-react";
 
 interface FranchiseNode {
   id: number;
@@ -504,7 +504,7 @@ function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): Sea
   return sorted.map((node) => {
     const isMovie = node.format === "MOVIE";
     const isSpecial = node.format === "SPECIAL";
-    const isOva = node.format === "OVA" || (node.format === "ONA" && (node.episodes || 0) < 8);
+    const isOva = node.format === "OVA";
     let label: string = (node as any).seasonLabel || "";
     if (!label) {
       if (isMovie) { movieCount++; label = `Movie ${movieCount}`; }
@@ -1488,6 +1488,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     () => currentSeasonEps.findIndex(e => e.episodeId === selectedEp?.episodeId),
     [currentSeasonEps, selectedEp]
   );
+  const nextEp = useMemo(
+    () => (currentIdx >= 0 && currentIdx < currentSeasonEps.length - 1 ? currentSeasonEps[currentIdx + 1] : null),
+    [currentIdx, currentSeasonEps]
+  );
   const currentSeasonInfo = useMemo(
     () => seasons.find(s => String(s.id) === String(currentSeasonId)) || franchiseNodes.find(n => String(n.id) === String(currentSeasonId)) || null,
     [seasons, franchiseNodes, currentSeasonId]
@@ -1795,6 +1799,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           </button>
                         </div>
                       </div>
+                      {nextEp && nextEp.isReleased !== false && (
+                        <button
+                          onClick={() => handleWatchEpisode(nextEp)}
+                          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Play Next: E{nextEp.episodeNum}
+                        </button>
+                      )}
                     </div>
 
                     {/* ── Episode Queue Sidebar ── */}

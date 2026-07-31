@@ -627,13 +627,7 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
 
     const isMovie = node.format === "MOVIE" && !isShortMovie;
     const isSpecial = node.format === "SPECIAL" || isShortMovie;
-    // Only treat as OVA if it's an actual OVA/ONA short collection (< 8 eps) or
-    // an ONA without a known broadcast season. Otherwise it's a streaming TV series.
-    const isActualOva = node.format === "OVA"
-      || (node.format === "ONA" && (
-        (node.episodes || 0) < 8
-        || !knownBroadcastSeasons.has(node.season || "")
-      ));
+    const isActualOva = node.format === "OVA";
     const isTv = !isMovie && !isActualOva && !isSpecial;
 
     let label: string = (node as any).seasonLabel || "";

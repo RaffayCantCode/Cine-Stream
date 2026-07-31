@@ -160,9 +160,9 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           <div className="flex flex-wrap justify-center md:justify-start items-center gap-3">
             <Link
               href={`${link}${isAnime ? "&autoplay=1" : "?autoplay=1"}`}
-              className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-5 py-3 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+              className="inline-flex items-center gap-2.5 bg-[#D3D1CE] hover:bg-white text-[#090F15] font-extrabold px-6 py-3.5 rounded-xl text-sm transition-all duration-300 shadow-xl shadow-black/50 hover:scale-[1.03] active:scale-95 cursor-pointer"
             >
-              <Play className="w-5 h-5 fill-current" />
+              <Play className="w-5 h-5 fill-current ml-0.5" />
               Watch Now
             </Link>
             <Link

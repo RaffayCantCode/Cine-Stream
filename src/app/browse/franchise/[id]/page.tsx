@@ -242,9 +242,10 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20">
+    <div className="flex h-screen bg-[#070913] text-white font-sans overflow-hidden flex-col md:flex-row">
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64 bleed-header">
+      <main className="flex-1 md:pl-56 lg:pl-64 h-[100dvh] overflow-y-auto w-full custom-scrollbar relative bg-[#070913]">
+        {/* Cinematic Header */}
         <CinematicHero
           backdropPath={collection.backdrop_path}
           title={collection.name}
@@ -254,16 +255,16 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
             <div className="max-w-2xl">
               <Link 
                 href="/browse/franchises"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white/80 hover:text-white rounded-full text-sm font-medium transition-all mb-6 border border-white/10 hover:border-white/20 w-fit"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-black/60 hover:bg-white/20 backdrop-blur-xl text-white/90 hover:text-white rounded-full text-xs font-bold transition-all mb-6 border border-white/15 hover:border-white/30 shadow-lg w-fit"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to Franchises
               </Link>
-              <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4">
+              <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4 drop-shadow-md">
                 {collection.name}
               </h1>
               {collection.overview && (
-                <p className="text-white/70 max-w-2xl text-sm md:text-base leading-relaxed">
+                <p className="text-white/80 max-w-2xl text-sm md:text-base leading-relaxed font-medium">
                   {collection.overview}
                 </p>
               )}
@@ -289,8 +290,8 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
               {collection.groups.map((group, gIdx) => (
                 <div key={gIdx}>
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="w-1 h-5 bg-primary rounded-full" />
-                    <h2 className="text-xl font-bold tracking-tight text-white">{group.name}</h2>
+                    <div className="w-1.5 h-5 bg-gradient-to-b from-amber-400 via-indigo-400 to-purple-600 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.5)]" />
+                    <h2 className="text-xl font-extrabold tracking-tight text-white">{group.name}</h2>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
                     {group.parts.map((item, index) => (
@@ -303,8 +304,8 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
           ) : (
             <>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-1 h-5 bg-primary rounded-full" />
-                <h2 className="text-xl font-bold tracking-tight text-white">Chronological Order</h2>
+                <div className="w-1.5 h-5 bg-gradient-to-b from-amber-400 via-indigo-400 to-purple-600 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.5)]" />
+                <h2 className="text-xl font-extrabold tracking-tight text-white">Chronological Order</h2>
               </div>
               
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
