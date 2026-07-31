@@ -46,7 +46,7 @@ export const Sidebar = memo(function Sidebar() {
       {/* Mobile Top Header */}
       <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-4 transform-gpu will-change-transform">
         <Link href="/" className="flex items-center gap-2">
-          <img src="/logo-icon.svg" alt="CineStream" className="w-8 h-8 drop-shadow-md" />
+          <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-8 h-8 drop-shadow-md" />
           <span className="font-extrabold text-lg tracking-wider">
             <span className="text-white">CINE</span>
             <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
@@ -157,7 +157,7 @@ export const Sidebar = memo(function Sidebar() {
         {/* Logo */}
         <div className="p-4 md:p-3 lg:p-4">
           <Link href="/" className="flex items-center gap-3 group">
-            <img src="/logo-icon.svg" alt="CineStream" className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform" />
+            <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform" />
             <span className="font-extrabold text-xl tracking-wider">
               <span className="text-white">CINE</span>
               <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
