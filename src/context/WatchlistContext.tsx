@@ -79,7 +79,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
             list = (await res.json()).items ?? [];
             clearLocalWatchlist();
           } else {
-            const res = await fetch("/api/watchlist", { cache: "no-store" });
+            // Try fetch with one retry on failure.
+            let res = await fetch("/api/watchlist", { cache: "no-store" });
+            if (!res.ok) {
+              await new Promise((r) => setTimeout(r, 800));
+              res = await fetch("/api/watchlist", { cache: "no-store" });
+            }
             if (!res.ok) throw new Error("Fetch failed");
             list = (await res.json()).items ?? [];
           }
@@ -89,7 +94,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
             setLoading(false);
           }
         } catch {
-          // Offline / server error — keep whatever the guest had locally.
+          // Offline / persistent server error — keep whatever the guest had locally.
+          // For authenticated users with empty local, this stays [] but loading finishes
+          // so the user sees the empty state rather than infinite skeleton.
           if (!cancelled) {
             rebuildKeys(local);
             setItemsSafe(local);
@@ -112,11 +119,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const toggle = (input: SaveableInput) => {
     const key = watchlistKey(input.mediaId, input.mediaType);
     const exists = keySetRef.current.has(key);
-    const current = itemsRef.current;
+    const prev = itemsRef.current;
 
     let next: WatchlistItem[];
     if (exists) {
-      next = current.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
+      next = prev.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
     } else {
       next = [
         {
@@ -127,48 +134,64 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           backdropPath: input.backdropPath ?? null,
           savedAt: Date.now(),
         },
-        ...current,
+        ...prev,
       ];
     }
 
+    // Optimistic update.
+    rebuildKeys(next);
+    setItemsSafe(next);
     if (!isAuthed) writeLocalWatchlist(next);
 
     if (isAuthed) {
-      if (exists) {
-        fetch(
-          `/api/watchlist/${input.mediaId}?mediaType=${input.mediaType}`,
-          { method: "DELETE" }
-        ).catch(() => {});
-      } else {
-        fetch("/api/watchlist", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mediaId: input.mediaId,
-            mediaType: input.mediaType,
-            title: input.title,
-            posterPath: input.posterPath ?? null,
-            backdropPath: input.backdropPath ?? null,
-          }),
-        }).catch(() => {});
-      }
-    }
+      const url = exists
+        ? `/api/watchlist/${input.mediaId}?mediaType=${input.mediaType}`
+        : "/api/watchlist";
+      const opts: RequestInit = exists
+        ? { method: "DELETE" }
+        : {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mediaId: input.mediaId,
+              mediaType: input.mediaType,
+              title: input.title,
+              posterPath: input.posterPath ?? null,
+              backdropPath: input.backdropPath ?? null,
+            }),
+          };
 
-    rebuildKeys(next);
-    setItemsSafe(next);
+      fetch(url, opts).then((res) => {
+        if (!res.ok) throw new Error("Watchlist API failed");
+      }).catch(() => {
+        // Roll back the optimistic update on failure.
+        rebuildKeys(prev);
+        setItemsSafe(prev);
+      });
+    }
   };
 
   const remove = (mediaId: number, mediaType: string) => {
     const key = watchlistKey(mediaId, mediaType);
-    const next = itemsRef.current.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
+    const prev = itemsRef.current;
+    const next = prev.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
 
-    if (!isAuthed) writeLocalWatchlist(next);
-    if (isAuthed) {
-      fetch(`/api/watchlist/${mediaId}?mediaType=${mediaType}`, { method: "DELETE" }).catch(() => {});
-    }
-
+    // Optimistic update.
     rebuildKeys(next);
     setItemsSafe(next);
+    if (!isAuthed) writeLocalWatchlist(next);
+
+    if (isAuthed) {
+      fetch(`/api/watchlist/${mediaId}?mediaType=${mediaType}`, { method: "DELETE" })
+        .then((res) => {
+          if (!res.ok) throw new Error("Watchlist delete failed");
+        })
+        .catch(() => {
+          // Roll back on failure.
+          rebuildKeys(prev);
+          setItemsSafe(prev);
+        });
+    }
   };
 
   const isSaved = (mediaId: number, mediaType: string) =>
