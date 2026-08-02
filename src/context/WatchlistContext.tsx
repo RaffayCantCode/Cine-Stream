@@ -57,8 +57,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     keySetRef.current = s;
   };
 
-  // Load when auth state resolves.
+  // Fetch the authoritative list from the server and apply it to state+refs.
   useEffect(() => {
+    const applyList = (list: WatchlistItem[]) => {
+      rebuildKeys(list);
+      setItemsSafe(list);
+    };
+
+    // Load when auth state resolves.
     if (status === "loading") return;
 
     if (status === "authenticated" && session?.user?.id) {
@@ -88,20 +94,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
             if (!res.ok) throw new Error("Fetch failed");
             list = (await res.json()).items ?? [];
           }
-          if (!cancelled) {
-            rebuildKeys(list);
-            setItemsSafe(list);
-            setLoading(false);
-          }
+          if (!cancelled) applyList(list);
+          setLoading(false);
         } catch {
           // Offline / persistent server error — keep whatever the guest had locally.
-          // For authenticated users with empty local, this stays [] but loading finishes
-          // so the user sees the empty state rather than infinite skeleton.
-          if (!cancelled) {
-            rebuildKeys(local);
-            setItemsSafe(local);
-            setLoading(false);
-          }
+          if (!cancelled) applyList(local);
+          setLoading(false);
         }
       })();
       return () => {
@@ -109,21 +107,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // Guest / signed out — serve from localStorage.
-    const local = readLocalWatchlist();
-    rebuildKeys(local);
-    setItemsSafe(local);
+    // Guest / signed out — serve from localStorage (synchronous, always consistent).
+    applyList(readLocalWatchlist());
     setLoading(false);
   }, [status, session?.user?.id]);
 
   const toggle = (input: SaveableInput) => {
     const key = watchlistKey(input.mediaId, input.mediaType);
     const exists = keySetRef.current.has(key);
-    const prev = itemsRef.current;
 
     let next: WatchlistItem[];
     if (exists) {
-      next = prev.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
+      next = itemsRef.current.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
     } else {
       next = [
         {
@@ -134,63 +129,81 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           backdropPath: input.backdropPath ?? null,
           savedAt: Date.now(),
         },
-        ...prev,
+        ...itemsRef.current,
       ];
     }
 
     // Optimistic update.
     rebuildKeys(next);
     setItemsSafe(next);
-    if (!isAuthed) writeLocalWatchlist(next);
 
-    if (isAuthed) {
-      const url = exists
-        ? `/api/watchlist/${input.mediaId}?mediaType=${input.mediaType}`
-        : "/api/watchlist";
-      const opts: RequestInit = exists
-        ? { method: "DELETE" }
-        : {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mediaId: input.mediaId,
-              mediaType: input.mediaType,
-              title: input.title,
-              posterPath: input.posterPath ?? null,
-              backdropPath: input.backdropPath ?? null,
-            }),
-          };
-
-      fetch(url, opts).then((res) => {
-        if (!res.ok) throw new Error("Watchlist API failed");
-      }).catch(() => {
-        // Roll back the optimistic update on failure.
-        rebuildKeys(prev);
-        setItemsSafe(prev);
-      });
+    // Guests persist synchronously to localStorage — always consistent, instant.
+    if (!isAuthed) {
+      writeLocalWatchlist(next);
+      return;
     }
+
+    // Authenticated — persist to the server. On failure, reconcile the UI from
+    // the authoritative server list instead of reverting to a stale snapshot
+    // (which oscillates/flickers when toggles are spammed).
+    const url = exists
+      ? `/api/watchlist/${input.mediaId}?mediaType=${input.mediaType}`
+      : "/api/watchlist";
+    const opts: RequestInit = exists
+      ? { method: "DELETE" }
+      : {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mediaId: input.mediaId,
+            mediaType: input.mediaType,
+            title: input.title,
+            posterPath: input.posterPath ?? null,
+            backdropPath: input.backdropPath ?? null,
+          }),
+        };
+
+    fetch(url, opts)
+      .then((res) => {
+        if (!res.ok) throw new Error("Watchlist API failed");
+      })
+      .catch(() => {
+        refreshFromServer();
+      });
   };
 
   const remove = (mediaId: number, mediaType: string) => {
     const key = watchlistKey(mediaId, mediaType);
-    const prev = itemsRef.current;
-    const next = prev.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
+    const next = itemsRef.current.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
 
     // Optimistic update.
     rebuildKeys(next);
     setItemsSafe(next);
-    if (!isAuthed) writeLocalWatchlist(next);
 
-    if (isAuthed) {
-      fetch(`/api/watchlist/${mediaId}?mediaType=${mediaType}`, { method: "DELETE" })
-        .then((res) => {
-          if (!res.ok) throw new Error("Watchlist delete failed");
-        })
-        .catch(() => {
-          // Roll back on failure.
-          rebuildKeys(prev);
-          setItemsSafe(prev);
-        });
+    if (!isAuthed) {
+      writeLocalWatchlist(next);
+      return;
+    }
+
+    fetch(`/api/watchlist/${mediaId}?mediaType=${mediaType}`, { method: "DELETE" })
+      .then((res) => {
+        if (!res.ok) throw new Error("Watchlist delete failed");
+      })
+      .catch(() => {
+        refreshFromServer();
+      });
+  };
+
+  // Re-sync UI state from the server after a failed mutation.
+  const refreshFromServer = async () => {
+    try {
+      const res = await fetch("/api/watchlist", { cache: "no-store" });
+      if (!res.ok) return;
+      const list: WatchlistItem[] = (await res.json()).items ?? [];
+      rebuildKeys(list);
+      setItemsSafe(list);
+    } catch {
+      /* network unavailable — keep the last known optimistic state */
     }
   };
 
