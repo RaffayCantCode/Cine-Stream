@@ -55,7 +55,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       <Link
         href={link}
         className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
-          rank ? "w-[148px] sm:w-[184px] md:w-[210px]" : "w-[132px] sm:w-[158px] md:w-[186px]"
+          rank ? "w-[140px] sm:w-[172px] md:w-[196px]" : "w-[118px] sm:w-[138px] md:w-[158px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >

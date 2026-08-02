@@ -29,6 +29,7 @@ import { GridMediaCard } from "@/components/GridMediaCard";
 import { format } from "date-fns";
 import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { CastRow } from "@/components/CastRow";
+import { WatchlistButton } from "@/components/WatchlistButton";
 
 interface Movie {
   id: number;
@@ -277,11 +278,19 @@ export default function MovieClient() {
             <div className="flex items-center flex-wrap gap-4 w-full">
               <button
                 onClick={handleWatch}
-                className="group flex items-center gap-2.5 bg-[#E11D48] hover:bg-[#F43F5E] text-white font-extrabold px-8 py-4 rounded-xl text-sm transition-all duration-300 shadow-xl shadow-rose-950/60 hover:scale-[1.03] active:scale-95 border border-rose-400/20 cursor-pointer"
+                className="group flex items-center gap-2.5 bg-[#E11D48] hover:bg-[#F43F5E] text-white font-extrabold px-8 py-4 rounded-xl text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 border border-rose-400/20 cursor-pointer"
               >
                 <Play className="w-5 h-5 fill-current ml-0.5 group-hover:scale-110 transition-transform text-white" />
                 Watch Now
               </button>
+
+              <WatchlistButton
+                mediaId={movie.id}
+                mediaType="movie"
+                title={movie.title}
+                posterPath={movie.poster_path ?? null}
+                backdropPath={movie.backdrop_path ?? null}
+              />
 
               <MovieHeroTrailerButton />
             </div>

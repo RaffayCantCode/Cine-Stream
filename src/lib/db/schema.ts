@@ -25,6 +25,7 @@ export const users = pgTable("user", {
   }),
   image: varchar("image", { length: 255 }),
   password: varchar("password", { length: 255 }),
+  theme: varchar("theme", { length: 32 }).default("global").notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -113,7 +114,31 @@ export const watchHistory = pgTable(
   ]
 );
 
+// Watchlist table
+export const watchlists = pgTable(
+  "watchlist",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mediaId: integer("media_id").notNull(),
+    mediaType: varchar("media_type", { length: 10 }).notNull(),
+    title: varchar("title").notNull(),
+    posterPath: varchar("poster_path"),
+    backdropPath: varchar("backdrop_path"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("uq_watchlist_user_media").on(t.userId, t.mediaId, t.mediaType),
+  ]
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type WatchHistoryItem = typeof watchHistory.$inferSelect;
 export type InsertWatchHistory = typeof watchHistory.$inferInsert;
+export type WatchlistItem = typeof watchlists.$inferSelect;
+export type InsertWatchlistItem = typeof watchlists.$inferInsert;

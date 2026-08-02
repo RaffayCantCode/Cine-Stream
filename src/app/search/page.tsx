@@ -410,8 +410,8 @@ function SearchContent() {
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 capitalize touch-manipulation ${
                     activeTab === tab
                       ? tab === "anime"
-                        ? "bg-[#4B5694] text-white shadow-lg shadow-[#4B5694]/20"
-                        : "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                        ? "bg-[#4B5694] text-white shadow-lg shadow-black/30"
+                        : "bg-primary text-primary-foreground shadow-lg shadow-black/30"
                       : "bg-white/[0.05] text-white/50 hover:bg-white/[0.09] hover:text-white"
                   }`}
                 >

@@ -22,6 +22,8 @@ import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
+import { ThemeButton } from "@/components/ThemeButton";
+import { WatchlistLink } from "@/components/WatchlistLink";
 
 const navItems: { href: string; icon: any; label: string; subtitle?: string }[] = [
   { href: "/", icon: Home, label: "Home" },
@@ -54,6 +56,8 @@ export const Sidebar = memo(function Sidebar() {
         </Link>
 
         <div className="flex items-center gap-1">
+          <ThemeButton compact className="md:hidden" />
+          <WatchlistLink compact className="md:hidden" />
           <Link
             href="/contact"
             className="p-2.5 text-white/30 hover:text-[#f59e0b] rounded-xl transition-all touch-manipulation"
@@ -94,7 +98,7 @@ export const Sidebar = memo(function Sidebar() {
                 {profileOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                    <div className="absolute top-full right-0 mt-2 z-50 w-44 py-1.5 rounded-xl bg-[#0d1233] border border-[#7288AE]/20 shadow-2xl shadow-black/40 overflow-hidden">
+                    <div className="absolute top-full right-0 mt-2 z-50 w-44 py-1.5 rounded-xl bg-card border border-border shadow-2xl shadow-black/40 overflow-hidden">
                       <div className="px-4 py-2.5 border-b border-white/[0.06]">
                         <p className="text-sm font-semibold text-white truncate">{user.name}</p>
                       </div>
@@ -153,7 +157,7 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-[#090F15]/95 backdrop-blur-2xl border-r border-white/[0.08] shadow-[8px_0_32px_rgba(0,0,0,0.6)]">
+      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-background/95 backdrop-blur-2xl border-r border-white/[0.08] shadow-[8px_0_32px_rgba(0,0,0,0.6)]">
         {/* Logo */}
         <div className="p-4 md:p-3 lg:p-4">
           <Link href="/" className="flex items-center gap-3 group">
@@ -184,12 +188,12 @@ export const Sidebar = memo(function Sidebar() {
                 {isActive && (
                   <motion.div
                     layoutId="nav-pill"
-                    className="absolute inset-0 rounded-xl -z-10 bg-[#262E36] border border-white/15 shadow-md"
+                    className="absolute inset-0 rounded-xl -z-10 bg-card border border-white/15 shadow-md"
                     transition={{ type: "spring", stiffness: 380, damping: 35 }}
                   />
                 )}
                 
-                <item.icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-[#D3D1CE]" : "text-white/80 group-hover:text-white")} />
+                <item.icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-foreground" : "text-white/80 group-hover:text-white")} />
                 
                 <div className="flex flex-col">
                   <span className="text-sm font-bold truncate tracking-tight">
@@ -255,7 +259,7 @@ export const Sidebar = memo(function Sidebar() {
                 {profileOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                    <div className="absolute bottom-full left-0 mb-2 z-50 w-full py-1.5 rounded-xl bg-[#0d1233] border border-[#7288AE]/20 shadow-2xl shadow-black/40 overflow-hidden">
+                    <div className="absolute bottom-full left-0 mb-2 z-50 w-full py-1.5 rounded-xl bg-card border border-border shadow-2xl shadow-black/40 overflow-hidden">
                       <div className="px-4 py-2.5 border-b border-white/[0.06]">
                         <p className="text-sm font-semibold text-white truncate">{user.name}</p>
                         {user.email && (
@@ -276,9 +280,9 @@ export const Sidebar = memo(function Sidebar() {
             ) : (
               <button
                 onClick={() => signIn()}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#262E36] hover:bg-white/15 border border-white/15 text-[#D3D1CE] hover:text-white text-xs font-extrabold transition-all shadow-md active:scale-95 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-card hover:bg-card/80 border border-white/15 text-foreground hover:text-white text-xs font-extrabold transition-all shadow-md active:scale-95 cursor-pointer"
               >
-                <LogIn className="w-4 h-4 text-[#D3D1CE]" />
+                <LogIn className="w-4 h-4 text-foreground" />
                 <span>Log in</span>
               </button>
             )

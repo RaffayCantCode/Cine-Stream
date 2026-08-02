@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "theme" varchar(32) DEFAULT 'global' NOT NULL;

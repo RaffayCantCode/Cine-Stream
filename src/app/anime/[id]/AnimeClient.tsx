@@ -11,6 +11,7 @@ import { AnimeRow } from "@/components/AnimeRow";
 import { AnimeCard } from "@/components/AnimeCard";
 import { CastRow } from "@/components/CastRow";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+import { WatchlistButton } from "@/components/WatchlistButton";
 
 function AnimeHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -1677,7 +1678,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       return (
                         <span className={`text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase ${
                           formatted.style === "airing"
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-[0_0_12px_rgba(52,211,153,0.2)]"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                             : formatted.style === "upcoming"
                             ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
                             : "bg-white/10 text-white/60 border border-white/20"
@@ -1704,7 +1705,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
                               if (first) handleWatchEpisode(first);
                             }}
-                            className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+                            className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-black/30"
                           >
                             <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                             {isMovieFormat
@@ -1712,6 +1713,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               : `Watch Ep ${selectedEp?.episodeNum || currentSeasonEps[0]?.episodeNum || 1}`
                             }
                           </button>
+
+                          <WatchlistButton
+                            mediaId={Number(anime.id)}
+                            mediaType="anime"
+                            title={anime.name}
+                            posterPath={anime.poster || null}
+                          />
 
                           <AnimeHeroTrailerButton />
                         </div>
@@ -1869,7 +1877,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       </div>
                       <div>
                         <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Rating</span>
-                        <span className="text-amber-400 font-bold text-sm bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-max shadow-[0_0_15px_rgba(251,191,36,0.1)]">
+                        <span className="text-amber-400 font-bold text-sm bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-max">
                           <Star className="w-4 h-4 fill-current" /> 
                           {anime.rating || anime.score ? (Number(anime.rating || anime.score) > 10 ? (Number(anime.rating || anime.score) / 10).toFixed(1) : Number(anime.rating || anime.score).toFixed(1)) : "N/A"}
                         </span>
@@ -1885,7 +1893,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           return (
                             <span className={`font-bold text-sm px-3 py-1.5 rounded-lg uppercase inline-block shadow-sm ${
                               formatted.style === "airing"
-                                ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 shadow-[0_0_15px_rgba(52,211,153,0.1)]"
+                                ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20"
                                 : formatted.style === "upcoming"
                                 ? "text-sky-300 bg-sky-400/10 border border-sky-400/20"
                                 : "text-white/80 bg-white/[0.06] border border-white/[0.05]"
@@ -2028,7 +2036,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
                           gridMode 
                             ? "bg-white/[0.06] text-white/60 hover:text-white border-white/[0.06] hover:bg-white/[0.10]" 
-                            : "bg-[#7288AE]/20 text-white border-[#7288AE]/50 shadow-[0_0_15px_rgba(114,136,174,0.3)] hover:bg-[#7288AE]/40"
+                            : "bg-[#7288AE]/20 text-white border-[#7288AE]/50 hover:bg-[#7288AE]/40"
                         )}
                         title={gridMode ? "Switch to list view" : "Switch to compact grid view (Recommended for long anime)"}
                       >

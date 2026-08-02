@@ -685,8 +685,8 @@ export default function Home() {
   }, [heroPool, timerReset]);
 
   return (
-    <div className="relative min-h-screen bg-[#090F15] text-[#D3D1CE] pb-20 overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-[520px] bg-[linear-gradient(180deg,rgba(38,46,54,0.12),rgba(9,15,21,0)_72%)] pointer-events-none" />
+    <div className="relative min-h-screen bg-background text-foreground pb-20 overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-[520px] bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_72%)] pointer-events-none" />
       <div className="absolute inset-x-0 top-[42rem] h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
 
       <Sidebar />
@@ -887,7 +887,7 @@ export default function Home() {
 
                   {/* Rotated poster-card element — Spotify style */}
                   <div
-                    className="absolute bottom-[-8px] right-[-8px] w-[62px] h-[62px] rounded-lg shadow-2xl flex items-center justify-center text-3xl rotate-[20deg] group-hover:rotate-[15deg] group-hover:scale-110 transition-all duration-500"
+                    className="absolute bottom-[-8px] right-[-8px] w-[62px] h-[62px] rounded-lg shadow-2xl flex items-center justify-center text-3xl rotate-[20deg] transition-transform duration-500 group-hover:scale-105"
                     style={{ backgroundColor: g.iconBg, boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}
                   >
                     {g.icon}
@@ -954,7 +954,7 @@ export default function Home() {
                     href="/browse/franchises"
                     className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-[#262E36] hover:bg-white/15 backdrop-blur-xl border border-white/20 text-[#D3D1CE] hover:text-white text-sm font-extrabold tracking-wide shadow-xl shadow-black/50 hover:shadow-black/70 hover:border-white/35 hover:scale-[1.03] active:scale-95 transition-all duration-300 overflow-hidden sheen-wrapper cursor-pointer"
                   >
-                    <Layers className="w-4 h-4 text-[#D3D1CE] group-hover:rotate-12 transition-transform duration-300" />
+                    <Layers className="w-4 h-4 text-[#D3D1CE] transition-transform duration-300" />
                     <span>View More Franchises</span>
                     <ChevronRight className="w-4 h-4 text-[#D3D1CE] group-hover:translate-x-1 transition-transform duration-300" />
                   </Link>

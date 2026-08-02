@@ -29,6 +29,7 @@ import { GridMediaCard } from "@/components/GridMediaCard";
 import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { format } from "date-fns";
 import { CastRow } from "@/components/CastRow";
+import { WatchlistButton } from "@/components/WatchlistButton";
 
 interface Episode {
   id: number;
@@ -507,15 +508,23 @@ export default function TvClient() {
                     : null;
                   handleWatchEpisode(playingSeason, playingEpisode, ep?.name);
                 }}
-                className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-primary/25"
+                className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-black/30"
               >
                 <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch S{playingSeason} E{playingEpisode}
               </button>
 
+<WatchlistButton
+                mediaId={show.id}
+                mediaType="tv"
+                title={show.name}
+                posterPath={show.poster_path ?? null}
+                backdropPath={show.backdrop_path ?? null}
+              />
+
               <TvHeroTrailerButton />
+              </div>
             </div>
-          </div>
         </div>
       </CinematicHero>
 
@@ -629,7 +638,7 @@ export default function TvClient() {
                     className={cn(
                       "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5",
                       selectedSeason === s.season_number
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                        ? "bg-primary text-primary-foreground shadow-md shadow-black/30"
                         : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
                     )}
                   >
@@ -664,7 +673,7 @@ export default function TvClient() {
                       className={cn(
                         "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
                         isWatching
-                          ? "ring-2 ring-primary bg-gradient-to-br from-primary/15 to-primary/5 border-transparent shadow-lg shadow-primary/20"
+                          ? "ring-2 ring-primary bg-gradient-to-br from-primary/15 to-primary/5 border-transparent shadow-lg shadow-black/25"
                           : isUpcoming
                           ? "bg-white/[0.015] border-amber-400/10 hover:bg-amber-400/10 hover:border-amber-400/20"
                           : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"

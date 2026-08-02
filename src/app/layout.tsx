@@ -81,6 +81,16 @@ export default function RootLayout({
         {/* Deployment Cache Invalidation */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
+            /* Restore saved theme before first paint to avoid a flash */
+            try {
+              var THEMES = ['global','glass','oled','cinema','wisteria','solaris'];
+              var t = window.localStorage.getItem('cinestream.theme');
+              if (THEMES.indexOf(t) !== -1 && t !== 'global') {
+                document.documentElement.classList.add('theme-' + t);
+              }
+            } catch(e) {}
+          })();
+          (function() {
             var BUILD_VER = 'v22-logo-icon-cache-reset';
             try {
               if (typeof sessionStorage !== 'undefined') {
@@ -118,8 +128,8 @@ export default function RootLayout({
       <body className={`${outfit.variable} font-sans antialiased bg-background text-foreground`}>
         {/* Global Background Glow */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden z-[-1]">
-          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px]" />
-          <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-secondary/5 blur-[120px]" />
+          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/[0.03] blur-[120px]" />
+          <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-secondary/[0.03] blur-[120px]" />
         </div>
         <Providers>{children}</Providers>
       </body>

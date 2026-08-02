@@ -100,7 +100,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     <section className="px-3 md:px-8 lg:px-10 pt-4 pb-1">
       <div className="max-w-screen-2xl mx-auto">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-1.5 h-5 bg-gradient-to-b from-indigo-400 to-purple-600 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.5)]" />
+          <div className="w-1.5 h-5 rounded-full bg-primary" />
           <h2 className="text-base md:text-xl font-extrabold text-white tracking-tight">Continue Watching</h2>
         </div>
 
@@ -117,7 +117,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
               <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 onClick={() => handlePlay(item)}
-                className="flex-[0_0_auto] w-[132px] sm:w-[158px] md:w-[172px] relative group cursor-pointer animate-fade-in-up"
+                className="flex-[0_0_auto] w-[124px] sm:w-[146px] md:w-[158px] relative group cursor-pointer animate-fade-in-up"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
                 <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card/80 ring-1 ring-white/10 mb-2.5 relative shadow-[0_12px_32px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:ring-white/35 group-hover:shadow-[0_24px_48px_rgba(0,0,0,0.9)] sheen-wrapper">
@@ -163,7 +163,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
 
                   <button
                     onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-rose-600 hover:text-white hover:scale-110 hover:shadow-[0_0_15px_rgba(244,63,94,0.6)] z-20 md:opacity-0 md:group-hover:opacity-100"
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-rose-600 hover:text-white hover:scale-110 z-20 md:opacity-0 md:group-hover:opacity-100"
                     aria-label="Remove"
                   >
                     <X className="w-4 h-4" />

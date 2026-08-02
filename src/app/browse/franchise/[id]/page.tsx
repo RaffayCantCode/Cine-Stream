@@ -290,7 +290,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
               {collection.groups.map((group, gIdx) => (
                 <div key={gIdx}>
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="w-1.5 h-5 bg-gradient-to-b from-amber-400 via-indigo-400 to-purple-600 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.5)]" />
+                    <div className="w-1.5 h-5 rounded-full bg-primary" />
                     <h2 className="text-xl font-extrabold tracking-tight text-white">{group.name}</h2>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
@@ -304,7 +304,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
           ) : (
             <>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-1.5 h-5 bg-gradient-to-b from-amber-400 via-indigo-400 to-purple-600 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.5)]" />
+                <div className="w-1.5 h-5 rounded-full bg-primary" />
                 <h2 className="text-xl font-extrabold tracking-tight text-white">Chronological Order</h2>
               </div>
               
