@@ -139,7 +139,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                     </div>
                   )}
 
-                  <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md backdrop-blur-md tracking-widest uppercase shadow-lg border border-white/10 ${
+                  <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md tracking-widest uppercase shadow-lg border border-white/10 ${
                     item.mediaType === "movie"
                       ? "bg-rose-600/85 border-rose-500/30"
                       : item.mediaType === "tv"
@@ -150,20 +150,20 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                   </div>
 
                   <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                    <div className="w-11 h-11 rounded-full bg-black/65 backdrop-blur-xl border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
+                    <div className="w-11 h-11 rounded-full bg-black/65 border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
                       <Play className="w-4 h-4 fill-current ml-0.5 transition-colors" />
                     </div>
                   </div>
 
                   {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-                    <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-md rounded-md px-2 py-0.5 text-[11px] sm:text-xs font-black text-white shadow-lg border border-white/10">
+                    <div className="absolute bottom-2 left-2 bg-black/80 rounded-md px-2 py-0.5 text-[11px] sm:text-xs font-black text-white shadow-lg border border-white/10">
                       S{item.season} E{item.episode}
                     </div>
                   )}
 
                   <button
                     onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-rose-600 hover:text-white hover:scale-110 z-20 md:opacity-0 md:group-hover:opacity-100"
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-rose-600 hover:text-white hover:scale-110 z-20 md:opacity-0 md:group-hover:opacity-100"
                     aria-label="Remove"
                   >
                     <X className="w-4 h-4" />

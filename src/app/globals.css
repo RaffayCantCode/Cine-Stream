@@ -127,20 +127,30 @@
   }
 
   /* Liquid Glass Palette Background: soft obsidian liquid slate with subtle ambient glass glows */
+  /* Base layer is a static opaque gradient (no per-frame repaint); the drifting
+     aurora lives on a GPU-composited fixed layer animated via transform only. */
   html.theme-glass.dark body {
+    background: linear-gradient(160deg, #090b12 0%, #111422 50%, #090b12 100%);
+  }
+  html.theme-glass.dark body::before {
+    content: "";
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
     background:
       radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.12) 0%, transparent 45%),
       radial-gradient(circle at 85% 12%, rgba(168, 85, 247, 0.12) 0%, transparent 45%),
       radial-gradient(circle at 50% 60%, rgba(236, 72, 153, 0.08) 0%, transparent 50%),
-      radial-gradient(circle at 85% 85%, rgba(52, 211, 153, 0.08) 0%, transparent 45%),
-      linear-gradient(160deg, #090b12 0%, #111422 50%, #090b12 100%);
-    background-size: 160% 160%, 150% 150%, 170% 170%, 160% 160%, 100% 100%;
+      radial-gradient(circle at 85% 85%, rgba(52, 211, 153, 0.08) 0%, transparent 45%);
+    background-size: 130% 130%, 120% 120%, 140% 140%, 130% 130%;
+    will-change: transform;
     animation: liquid-glass-aurora 24s ease-in-out infinite alternate;
   }
   @keyframes liquid-glass-aurora {
-    0%   { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0 0; }
-    50%  { background-position: 30% 20%, 70% 30%, 40% 60%, 80% 80%, 0 0; }
-    100% { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0 0; }
+    0%   { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+    50%  { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
+    100% { transform: translate3d(-1.5%, -1%, 0) scale(1); }
   }
 
   /* Refined Glass Panels */
@@ -154,8 +164,8 @@
     box-shadow:
       0 20px 50px -15px rgba(0, 0, 0, 0.6),
       inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
-    backdrop-filter: blur(24px) saturate(160%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+    backdrop-filter: blur(16px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
   }
 
   html.theme-glass.dark .glass-card {
@@ -198,33 +208,35 @@
     animation: liquid-glass-streak 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 
-  /* Refined Glass Floating Sidebar */
+  /* Refined Glass Floating Sidebar — modest blur + higher opacity so the
+     fixed sidebar doesn't re-blur the whole page behind it on every scroll. */
   html.theme-glass.dark aside {
-    background: rgba(15, 18, 32, 0.55) !important;
+    background: rgba(15, 18, 32, 0.72) !important;
     border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
-    backdrop-filter: blur(32px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
+    backdrop-filter: blur(16px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
   }
 
-  /* Translucent Card Surfaces */
+  /* Translucent Card Surfaces — translucent + hairline border only.
+     backdrop-filter is intentionally avoided here: it's applied to hundreds
+     of grid cards at once and forces a re-blur behind every card while
+     scrolling, which is the #1 scroll-lag culprit. */
   html.theme-glass.dark .bg-card,
   html.theme-glass.dark .bg-card\/95,
   html.theme-glass.dark .bg-card\/90,
   html.theme-glass.dark .bg-card\/80,
   html.theme-glass.dark .bg-card\/60,
   html.theme-glass.dark .bg-card\/40 {
-    background: rgba(255, 255, 255, 0.05) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-top-color: rgba(255, 255, 255, 0.25) !important;
-    backdrop-filter: blur(20px) saturate(150%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
   }
 
   /* Frosted Top Chrome Header */
   html.theme-glass.dark .bg-background\/95 {
-    background-color: rgba(9, 11, 18, 0.75) !important;
-    backdrop-filter: blur(28px) saturate(180%);
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    background-color: rgba(9, 11, 18, 0.85) !important;
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
   }
 
   /* Smooth Gradient Vignettes for Hero / Section Overlays */
@@ -412,21 +424,30 @@
   }
 
   /* Wisteria Bloom Canvas: Animated multi-color mesh blending Electric Violet (#9400D3), Magenta Pink (#ED80E9), Ice Lavender (#D3D3FF), & Thistle (#D8BFD8) */
+  /* Static opaque base + GPU-composited aurora on a fixed layer (transform only). */
   html.theme-wisteria.dark body {
+    background: linear-gradient(150deg, #0e071a 0%, #1a0c2e 45%, #140924 100%);
+  }
+  html.theme-wisteria.dark body::before {
+    content: "";
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
     background:
       radial-gradient(circle at 10% 10%, rgba(148, 0, 211, 0.5) 0%, transparent 48%),
       radial-gradient(circle at 88% 12%, rgba(237, 128, 233, 0.45) 0%, transparent 45%),
       radial-gradient(circle at 48% 48%, rgba(211, 211, 255, 0.3) 0%, transparent 50%),
       radial-gradient(circle at 85% 85%, rgba(216, 191, 216, 0.35) 0%, transparent 48%),
-      radial-gradient(circle at 12% 88%, rgba(148, 0, 211, 0.38) 0%, transparent 45%),
-      linear-gradient(150deg, #0e071a 0%, #1a0c2e 45%, #140924 100%);
-    background-size: 180% 180%, 160% 160%, 170% 170%, 190% 190%, 180% 180%, 100% 100%;
+      radial-gradient(circle at 12% 88%, rgba(148, 0, 211, 0.38) 0%, transparent 45%);
+    background-size: 140% 140%, 120% 120%, 130% 130%, 150% 150%, 140% 140%;
+    will-change: transform;
     animation: wisteria-bloom-aurora 22s ease-in-out infinite alternate;
   }
   @keyframes wisteria-bloom-aurora {
-    0%   { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
-    50%  { background-position: 35% 25%, 65% 20%, 30% 70%, 75% 35%, -25% -15%, 0 0; }
-    100% { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
+    0%   { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+    50%  { transform: translate3d(1.5%, 1%, 0) scale(1.05); }
+    100% { transform: translate3d(-1.5%, -1%, 0) scale(1); }
   }
 
   html.theme-wisteria.dark .premium-glass,
@@ -446,8 +467,8 @@
       0 24px 60px -20px rgba(18, 4, 32, 0.85),
       inset 0 1px 0 rgba(211, 211, 255, 0.45),
       inset 0 -22px 42px -24px rgba(148, 0, 211, 0.35) !important;
-    backdrop-filter: blur(36px) saturate(200%) !important;
-    -webkit-backdrop-filter: blur(36px) saturate(200%) !important;
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   }
 
   html.theme-wisteria.mode-movies.dark {
@@ -499,21 +520,30 @@
   }
 
   /* Zesty Lemon Canvas: Animated multi-color mesh blending Sun Yellow (#FFFF66), Gold (#FFE566), Olive Sage (#D6D58B), & Brass (#B3B347) */
+  /* Static opaque base + GPU-composited aurora on a fixed layer (transform only). */
   html.theme-solaris.dark body {
+    background: linear-gradient(150deg, #0e1006 0%, #1a1c0b 45%, #121407 100%);
+  }
+  html.theme-solaris.dark body::before {
+    content: "";
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
     background:
       radial-gradient(circle at 10% 12%, rgba(255, 255, 102, 0.45) 0%, transparent 48%),
       radial-gradient(circle at 88% 10%, rgba(255, 229, 102, 0.42) 0%, transparent 45%),
       radial-gradient(circle at 48% 48%, rgba(214, 213, 139, 0.3) 0%, transparent 50%),
       radial-gradient(circle at 85% 85%, rgba(179, 179, 71, 0.35) 0%, transparent 48%),
-      radial-gradient(circle at 12% 88%, rgba(255, 255, 102, 0.3) 0%, transparent 45%),
-      linear-gradient(150deg, #0e1006 0%, #1a1c0b 45%, #121407 100%);
-    background-size: 180% 180%, 160% 160%, 170% 170%, 190% 190%, 180% 180%, 100% 100%;
+      radial-gradient(circle at 12% 88%, rgba(255, 255, 102, 0.3) 0%, transparent 45%);
+    background-size: 140% 140%, 120% 120%, 130% 130%, 150% 150%, 140% 140%;
+    will-change: transform;
     animation: zesty-lemon-aurora 22s ease-in-out infinite alternate;
   }
   @keyframes zesty-lemon-aurora {
-    0%   { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
-    50%  { background-position: 35% 25%, 65% 20%, 30% 70%, 75% 35%, -25% -15%, 0 0; }
-    100% { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
+    0%   { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+    50%  { transform: translate3d(1.5%, 1%, 0) scale(1.05); }
+    100% { transform: translate3d(-1.5%, -1%, 0) scale(1); }
   }
 
   html.theme-solaris.dark .premium-glass,
@@ -533,8 +563,8 @@
       0 24px 60px -20px rgba(10, 12, 4, 0.85),
       inset 0 1px 0 rgba(255, 255, 180, 0.45),
       inset 0 -22px 42px -24px rgba(179, 179, 71, 0.35) !important;
-    backdrop-filter: blur(36px) saturate(200%) !important;
-    -webkit-backdrop-filter: blur(36px) saturate(200%) !important;
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   }
 
   html.theme-solaris.mode-movies.dark {
@@ -611,9 +641,9 @@
 
 /* Impeccable Glassmorphism & UI Tokens */
 .premium-glass {
-  background: rgba(8, 10, 18, 0.65);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(8, 10, 18, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }

@@ -104,7 +104,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
 
         {showMediaBadge && !isPerson && (
           <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
-            <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg backdrop-blur-md border ${
+            <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg border ${
               isMovie ? "bg-rose-600/85 border-rose-500/30" : "bg-emerald-600/85 border-emerald-500/30"
             }`}>
               {isMovie ? "MOVIE" : "TV SHOW"}
@@ -118,7 +118,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
         <div className="absolute inset-0 flex flex-col justify-between p-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
           {!isPerson && item.vote_average && item.vote_count && item.vote_count > 20 ? (
             <div className="flex justify-end">
-              <div className="flex items-center gap-1 bg-black/75 backdrop-blur-xl text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/15 shadow-md">
+              <div className="flex items-center gap-1 bg-black/75 text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/15 shadow-md">
                 <Star className="w-3 h-3 fill-current" />
                 {item.vote_average.toFixed(1)}
               </div>
@@ -129,7 +129,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
 
           {!isPerson && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-12 h-12 rounded-full bg-black/65 backdrop-blur-xl border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
+              <div className="w-12 h-12 rounded-full bg-black/65 border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
                 <Play className="w-5 h-5 fill-current ml-0.5 transition-colors" />
               </div>
             </div>
@@ -141,7 +141,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
             </h3>
             <div className="flex items-center gap-2">
               {year && !isPerson && (
-                <span className="text-white/90 text-xs font-semibold bg-white/20 backdrop-blur-md px-2 py-0.5 rounded border border-white/10">
+                <span className="text-white/90 text-xs font-semibold bg-white/20 px-2 py-0.5 rounded border border-white/10">
                   {year}
                 </span>
               )}
@@ -153,7 +153,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
         </div>
 
         {!isPerson && item.vote_average ? (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-md text-amber-400 text-xs font-bold px-2 py-0.5 rounded-md border border-white/10 shadow-sm group-hover:opacity-0 transition-opacity duration-300">
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 text-amber-400 text-xs font-bold px-2 py-0.5 rounded-md border border-white/10 shadow-sm group-hover:opacity-0 transition-opacity duration-300">
             <Star className="w-2.5 h-2.5 fill-current" />
             {item.vote_average.toFixed(1)}
           </div>

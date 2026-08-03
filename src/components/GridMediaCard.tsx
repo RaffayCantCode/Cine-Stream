@@ -58,7 +58,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
 
         {/* Top right rating badge */}
         {item.vote_average ? (
-          <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 backdrop-blur-md text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">
+          <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">
             <Star className="w-3 h-3 fill-current" />
             {item.vote_average.toFixed(1)}
           </div>

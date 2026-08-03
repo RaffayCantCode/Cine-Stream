@@ -491,7 +491,7 @@ export default function ProviderPage() {
         {/* ══════════════════════════════════════════════════════════════════
             CONTROLS BAR — filter, sort, view toggle
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-white/[0.06] px-6 md:px-12">
+        <div className="sticky top-0 z-30 bg-background/90 backdrop-blur-sm border-b border-white/[0.06] px-6 md:px-12">
           <div className="max-w-screen-2xl mx-auto py-3 flex items-center justify-between gap-4 flex-wrap">
 
             {/* Search Input */}

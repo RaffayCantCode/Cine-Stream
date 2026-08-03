@@ -7,10 +7,9 @@ import { getTheme } from "@/lib/themes";
 /**
  * Theme-aware branded loading screen.
  *
- * Shared by the route-level `app/loading.tsx` (slow route fetches) and the
- * client-side `NavigationLoader` (every link/router navigation), so every
- * page switch shows the same themed logo animation and never flashes the
- * default palette.
+ * Rendered by the client-side `NavigationLoader` (every link/router
+ * navigation), so every page switch shows the same themed logo animation
+ * and never flashes the default palette.
  */
 export function LoadingScreen() {
   const { theme } = useTheme();

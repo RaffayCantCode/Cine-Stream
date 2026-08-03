@@ -157,7 +157,7 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-background/95 backdrop-blur-2xl border-r border-white/[0.08] shadow-[8px_0_32px_rgba(0,0,0,0.6)]">
+      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-background/95 backdrop-blur-sm border-r border-white/[0.08] shadow-[8px_0_32px_rgba(0,0,0,0.6)]">
         {/* Logo */}
         <div className="p-4 md:p-3 lg:p-4">
           <Link href="/" className="flex items-center gap-3 group">

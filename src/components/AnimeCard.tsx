@@ -91,11 +91,11 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         )}
 
         <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
-          <span className="bg-purple-950/80 backdrop-blur-md border border-purple-500/30 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+          <span className="bg-purple-950/80 border border-purple-500/30 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
             JP SUB
           </span>
           {dubCount !== null && dubCount > 0 && (
-            <span className="bg-amber-500/90 backdrop-blur-md border border-amber-400/40 text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+            <span className="bg-amber-500/90 border border-amber-400/40 text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
               DUB
             </span>
           )}
@@ -107,14 +107,14 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 pointer-events-none">
           <div className="absolute top-2 right-2">
             {subCount !== null && subCount > 0 && (
-              <span className="bg-black/75 backdrop-blur-md border border-white/15 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-md">
+              <span className="bg-black/75 border border-white/15 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-md">
                 {subCount} EPS
               </span>
             )}
           </div>
 
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/65 backdrop-blur-xl border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/65 border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
               <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 transition-colors" />
             </div>
           </div>
