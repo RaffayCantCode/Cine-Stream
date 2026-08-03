@@ -9,6 +9,7 @@ import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { Loader2 } from "lucide-react";
 import { fetchJson, isTmdbAnime, filterReleasedSafeContent } from "@/lib/utils";
 import { fetchClientAnime } from "@/lib/anilist-client";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 type TrendType = "movie" | "tv" | "anime";
 
@@ -41,6 +42,7 @@ export default function TrendingPage() {
 
   isLoadingRef.current = isLoading || isLoadingMore;
   hasMoreRef.current = hasMore;
+  usePageContentReady(!isLoading);
 
   const title = useMemo(() => {
     if (activeTab === "movie") return "Trending Movies";

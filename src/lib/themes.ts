@@ -52,17 +52,17 @@ export const THEMES: ThemeDefinition[] = [
     id: "wisteria",
     label: "Wisteria",
     tagline: "Bloom",
-    description: "Soft lavender and vivid violet with a bright pink pulse. Dreamy purple palette.",
-    preview: "linear-gradient(135deg, #1A1028 0%, #6A209A 45%, #D8A0E8 100%)",
+    description: "Rich Wisteria Bloom palette blending deep electric violet, ice lavender, thistle orchid, and radiant magenta pink.",
+    preview: "linear-gradient(135deg, #120C24 0%, #9400D3 35%, #ED80E9 70%, #D3D3FF 100%)",
     accent: "#ED80E9",
   },
   {
     id: "solaris",
     label: "Solaris",
     tagline: "Lemon",
-    description: "Warm yellow-gold with an olive backbone. Sunlit, energetic, easy on the eyes.",
-    preview: "linear-gradient(135deg, #1A1A0A 0%, #6B6A30 45%, #FFE566 100%)",
-    accent: "#FFE566",
+    description: "Multi-layered Zesty Lemon palette combining sun yellow, sunshine gold, warm olive sage, and deep olive brass.",
+    preview: "linear-gradient(135deg, #14160A 0%, #B3B347 35%, #D6D58B 65%, #FFFF66 100%)",
+    accent: "#FFFF66",
   },
 ];
 

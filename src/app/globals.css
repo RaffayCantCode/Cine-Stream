@@ -98,78 +98,66 @@
   }
 }
 
-/* ============ 1. GLASS (Premium Liquid Glass) ============ */
+/* ============ 1. GLASS (Subtle Liquid Glass Palette) ============ */
 @layer base {
   html.theme-glass.dark {
-    /* Near-black base so the aurora behind reads clearly as colour, not "blue". */
-    --background: 228 14% 4%;
-    --foreground: 0 0% 96%;
-    --card: 230 18% 10%;
-    --card-foreground: 0 0% 96%;
-    --popover: 230 18% 8%;
-    --popover-foreground: 0 0% 96%;
-    --primary: 250 96% 70%;
+    --background: 225 20% 6%;
+    --foreground: 0 0% 98%;
+    --card: 225 18% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 225 20% 8%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 230 16% 14%;
-    --secondary-foreground: 0 0% 94%;
-    --muted: 230 16% 11%;
-    --muted-foreground: 235 10% 76%;
-    --accent: 265 96% 74%;
+    --secondary: 225 15% 14%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 225 15% 12%;
+    --muted-foreground: 220 10% 75%;
+    --accent: 260 85% 65%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 58%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 230 22% 22%;
-    --input: 230 18% 16%;
-    --ring: 250 96% 70%;
-    --brand-glow-opacity: 1;
-    --card-border-opacity: 0.24;
-    --hairline-opacity: 0.2;
-    --safe-card-border: rgba(255, 255, 255, 0.28);
+    --border: 0 0% 100% / 0.12;
+    --input: 0 0% 100% / 0.08;
+    --ring: 217 91% 60%;
+    --brand-glow-opacity: 0.8;
+    --card-border-opacity: 0.2;
+    --hairline-opacity: 0.15;
+    --safe-card-border: rgba(255, 255, 255, 0.25);
   }
 
-  /* The living aurora BEHIND the glass. This is what makes it "liquid",
-     not a theme recolor: vivid, moving colour that the panels refract.
-     Uses percentage-based gradients so they fill any viewport size. */
+  /* Liquid Glass Palette Background: soft obsidian liquid slate with subtle ambient glass glows */
   html.theme-glass.dark body {
     background:
-      radial-gradient(ellipse at 8% 12%, rgba(140, 80, 255, 0.45) 0%, transparent 55%),
-      radial-gradient(ellipse at 22% -4%, rgba(0, 220, 255, 0.4) 0%, transparent 50%),
-      radial-gradient(ellipse at 62% -6%, rgba(255, 60, 190, 0.35) 0%, transparent 50%),
-      radial-gradient(ellipse at 104% 22%, rgba(90, 255, 190, 0.35) 0%, transparent 50%),
-      radial-gradient(ellipse at 50% 118%, rgba(255, 140, 60, 0.38) 0%, transparent 50%),
-      linear-gradient(165deg, #0c0e1a 0%, #141830 50%, #0c0e1a 100%);
-    background-size: 170% 170%, 150% 150%, 160% 160%, 180% 180%, 190% 190%, 100% 100%;
-    animation: glass-aurora 24s ease-in-out infinite;
+      radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.12) 0%, transparent 45%),
+      radial-gradient(circle at 85% 12%, rgba(168, 85, 247, 0.12) 0%, transparent 45%),
+      radial-gradient(circle at 50% 60%, rgba(236, 72, 153, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 85% 85%, rgba(52, 211, 153, 0.08) 0%, transparent 45%),
+      linear-gradient(160deg, #090b12 0%, #111422 50%, #090b12 100%);
+    background-size: 160% 160%, 150% 150%, 170% 170%, 160% 160%, 100% 100%;
+    animation: liquid-glass-aurora 24s ease-in-out infinite alternate;
   }
-  @keyframes glass-aurora {
-    0%   { background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0 0; }
-    50%  { background-position: 36% 28%, 46% 12%, 52% -14%, 66% 34%, -34% -22%, 0 0; }
-    100% { background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0 0; }
+  @keyframes liquid-glass-aurora {
+    0%   { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0 0; }
+    50%  { background-position: 30% 20%, 70% 30%, 40% 60%, 80% 80%, 0 0; }
+    100% { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0 0; }
   }
 
-  /* Frosted floating panels: bright glass, heavy blur, glossy edge highlight */
+  /* Refined Glass Panels */
   html.theme-glass.dark .glass-card,
   html.theme-glass.dark .premium-glass,
   html.theme-glass.dark .glass-pill {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(140, 140, 255, 0.08) 38%, rgba(255, 255, 255, 0.04) 70%, rgba(255, 255, 255, 0.1));
-    border: 1px solid rgba(255, 255, 255, 0.32);
-    border-top-color: rgba(255, 255, 255, 0.75);
-    border-left-color: rgba(255, 255, 255, 0.4);
-    border-right-color: rgba(255, 255, 255, 0.18);
-    border-bottom-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-top-color: rgba(255, 255, 255, 0.35) !important;
+    border-left-color: rgba(255, 255, 255, 0.22) !important;
     box-shadow:
-      0 34px 80px -30px rgba(0, 0, 0, 0.7),
-      0 0 0 1px rgba(255, 255, 255, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      inset 0 -30px 60px -30px rgba(160, 140, 255, 0.22);
-    backdrop-filter: blur(64px) saturate(230%) brightness(1.15);
-    -webkit-backdrop-filter: blur(64px) saturate(230%) brightness(1.15);
+      0 20px 50px -15px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+    backdrop-filter: blur(24px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
   }
 
-  /* Cards are capsules that clip the light-shine.
-     (`.premium-glass` is deliberately excluded: it's the fixed top bars that
-     must let dropdowns and the portalled theme modal escape. Only `.glass-card`
-     gets the glass specular highlight + drifting light-beam.) */
   html.theme-glass.dark .glass-card {
     position: relative;
     overflow: hidden;
@@ -179,87 +167,114 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: linear-gradient(115deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.05) 22%, transparent 38%, transparent 66%, rgba(255, 255, 255, 0.12) 100%);
-    z-index: 0;
+    background: linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.25) 0%,
+      rgba(255, 255, 255, 0.04) 24%,
+      transparent 42%,
+      transparent 68%,
+      rgba(255, 255, 255, 0.08) 100%
+    );
+    z-index: 1;
   }
-  /* A slow light-beam drifting through the pane like light through glass */
+  /* Iridescent Liquid Light Streak */
   html.theme-glass.dark .glass-card::after {
     content: "";
     position: absolute;
-    top: -60%;
-    left: -45%;
-    height: 220%;
-    width: 30%;
+    top: -70%;
+    left: -60%;
+    height: 240%;
+    width: 40%;
     pointer-events: none;
-    z-index: 0;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), rgba(190, 200, 255, 0.2), transparent);
-    transform: rotate(16deg) translateX(-140%);
-    animation: liquid-glass-streak 9s ease-in-out infinite;
+    z-index: 1;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.25),
+      rgba(200, 220, 255, 0.15),
+      transparent
+    );
+    transform: rotate(20deg) translateX(-180%);
+    animation: liquid-glass-streak 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 
-  /* Sidebar = a floating sheet of glass */
+  /* Refined Glass Floating Sidebar */
   html.theme-glass.dark aside {
-    background: rgba(120, 130, 200, 0.12) !important;
-    border-color: rgba(255, 255, 255, 0.26) !important;
-    backdrop-filter: blur(60px) saturate(220%) brightness(1.12);
-    -webkit-backdrop-filter: blur(60px) saturate(220%) brightness(1.12);
+    background: rgba(15, 18, 32, 0.55) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+    backdrop-filter: blur(32px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
   }
 
-  /* Generic card surfaces get a translucent "frost" tint. NO backdrop-filter
-     here: the page root (`.bg-background`) and every `.bg-card`/`.bg-muted`
-     would otherwise become a containing block for fixed/absolute descendants
-     (sidebar, headers, dropdowns, modals) and break their positioning. Blur is
-     reserved for the few dedicated chrome surfaces: `.glass-card`,
-     `.premium-glass`, `.glass-pill`, and the sidebar `aside`. */
+  /* Translucent Card Surfaces */
   html.theme-glass.dark .bg-card,
   html.theme-glass.dark .bg-card\/95,
   html.theme-glass.dark .bg-card\/90,
   html.theme-glass.dark .bg-card\/80,
   html.theme-glass.dark .bg-card\/60,
   html.theme-glass.dark .bg-card\/40 {
-    background-color: rgba(255, 255, 255, 0.09) !important;
-  }
-  html.theme-glass.dark .bg-card\/95,
-  html.theme-glass.dark .bg-card\/90,
-  html.theme-glass.dark .bg-card\/80 {
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-top-color: rgba(255, 255, 255, 0.25) !important;
+    backdrop-filter: blur(20px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
   }
 
-  /* Keep the top chrome bars themselves frosted (they ARE the blurred layer,
-     so they don't contain fixed descendants that break). */
+  /* Frosted Top Chrome Header */
   html.theme-glass.dark .bg-background\/95 {
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    background-color: rgba(9, 11, 18, 0.75) !important;
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
   }
 
-  /* Text sits cleanly on frosted glass without the noise fighting it */
+  /* Smooth Gradient Vignettes for Hero / Section Overlays */
+  html.theme-glass.dark .from-background {
+    --tw-gradient-from: #090b12 var(--tw-gradient-from-position) !important;
+  }
+  html.theme-glass.dark .via-background\/95,
+  html.theme-glass.dark .via-background\/90,
+  html.theme-glass.dark .via-background\/80,
+  html.theme-glass.dark .via-background\/60,
+  html.theme-glass.dark .via-background\/45,
+  html.theme-glass.dark .via-background {
+    --tw-gradient-via: rgba(9, 11, 18, 0.65) var(--tw-gradient-via-position) !important;
+  }
+  html.theme-glass.dark .to-background {
+    --tw-gradient-to: rgba(9, 11, 18, 0) var(--tw-gradient-to-position) !important;
+  }
+  html.theme-glass.dark .bg-background {
+    background-color: transparent !important;
+  }
+
+  /* Clean contrast text */
   html.theme-glass.dark main {
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(255, 255, 255, 0.98);
   }
 
-  /* Accents keep content identity */
+  /* Liquid Accents for Category Modes */
   html.theme-glass.mode-movies.dark {
-    --background: 227 12% 4%;
-    --primary: 348 90% 60%;
-    --ring: 348 90% 60%;
+    --background: 240 16% 8%;
+    --primary: 348 95% 62%;
+    --ring: 348 95% 62%;
   }
   html.theme-glass.mode-tv.dark {
-    --background: 227 12% 4%;
-    --primary: 160 80% 50%;
-    --ring: 160 80% 50%;
+    --background: 240 16% 8%;
+    --primary: 160 85% 52%;
+    --ring: 160 85% 52%;
   }
   html.theme-glass.mode-anime.dark {
-    --background: 227 12% 4%;
-    --primary: 268 90% 68%;
-    --ring: 268 90% 68%;
+    --background: 240 16% 8%;
+    --primary: 270 95% 70%;
+    --ring: 270 95% 70%;
   }
 }
 
 /* Light refracting slowly through liquid glass surfaces */
 @keyframes liquid-glass-streak {
-  0%   { transform: rotate(16deg) translateX(-160%) skewX(-8deg); }
-  45%  { opacity: 1; }
-  100% { transform: rotate(16deg) translateX(460%) skewX(-8deg); opacity: 0.55; }
+  0%   { transform: rotate(20deg) translateX(-180%) skewX(-8deg); opacity: 0; }
+  30%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: rotate(20deg) translateX(480%) skewX(-8deg); opacity: 0; }
 }
 
 /* ============ 2. OLED ============ */
@@ -368,135 +383,175 @@
   }
 }
 
-/* ============ 4. WISTERIA (Purple Bloom) ============ */
+/* ============ 4. WISTERIA (Wisteria Bloom Palette) ============ */
 @layer base {
   html.theme-wisteria.dark {
-    --background: 275 44% 14%;
-    --foreground: 300 35% 94%;
-    --card: 275 36% 20%;
-    --card-foreground: 300 35% 94%;
-    --popover: 275 38% 18%;
-    --popover-foreground: 300 35% 94%;
-    --primary: 282 100% 48%;
+    --background: 265 40% 10%;
+    --foreground: 270 50% 96%;
+    --card: 268 35% 15%;
+    --card-foreground: 270 50% 96%;
+    --popover: 268 35% 13%;
+    --popover-foreground: 270 50% 96%;
+    --primary: 295 85% 72%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 275 30% 26%;
-    --secondary-foreground: 300 35% 94%;
-    --muted: 275 28% 22%;
-    --muted-foreground: 300 18% 76%;
-    --accent: 302 82% 74%;
+    --secondary: 268 30% 22%;
+    --secondary-foreground: 270 50% 94%;
+    --muted: 268 25% 18%;
+    --muted-foreground: 270 20% 78%;
+    --accent: 282 100% 41%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 58%;
+    --destructive: 0 75% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 275 34% 30%;
-    --input: 275 30% 24%;
-    --ring: 282 100% 55%;
-    --brand-glow-opacity: 0.8;
-    --card-border-opacity: 0.22;
-    --hairline-opacity: 0.2;
-    --safe-card-border: rgba(212, 160, 230, 0.28);
+    --border: 268 30% 26%;
+    --input: 268 25% 20%;
+    --ring: 295 85% 72%;
+    --brand-glow-opacity: 0.9;
+    --card-border-opacity: 0.28;
+    --hairline-opacity: 0.22;
+    --safe-card-border: rgba(237, 128, 233, 0.35);
+  }
 
-    background-image:
-      radial-gradient(900px 500px at 10% -5%, rgba(148, 0, 211, 0.45), transparent 60%),
-      radial-gradient(760px 680px at 110% 20%, rgba(237, 128, 233, 0.3), transparent 55%),
-      radial-gradient(900px 740px at 50% 120%, rgba(148, 0, 211, 0.35), transparent 60%),
-      linear-gradient(165deg, rgba(36, 20, 55, 0.55), rgba(12, 8, 24, 0.6));
+  /* Wisteria Bloom Canvas: Animated multi-color mesh blending Electric Violet (#9400D3), Magenta Pink (#ED80E9), Ice Lavender (#D3D3FF), & Thistle (#D8BFD8) */
+  html.theme-wisteria.dark body {
+    background:
+      radial-gradient(circle at 10% 10%, rgba(148, 0, 211, 0.5) 0%, transparent 48%),
+      radial-gradient(circle at 88% 12%, rgba(237, 128, 233, 0.45) 0%, transparent 45%),
+      radial-gradient(circle at 48% 48%, rgba(211, 211, 255, 0.3) 0%, transparent 50%),
+      radial-gradient(circle at 85% 85%, rgba(216, 191, 216, 0.35) 0%, transparent 48%),
+      radial-gradient(circle at 12% 88%, rgba(148, 0, 211, 0.38) 0%, transparent 45%),
+      linear-gradient(150deg, #0e071a 0%, #1a0c2e 45%, #140924 100%);
+    background-size: 180% 180%, 160% 160%, 170% 170%, 190% 190%, 180% 180%, 100% 100%;
+    animation: wisteria-bloom-aurora 22s ease-in-out infinite alternate;
+  }
+  @keyframes wisteria-bloom-aurora {
+    0%   { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
+    50%  { background-position: 35% 25%, 65% 20%, 30% 70%, 75% 35%, -25% -15%, 0 0; }
+    100% { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
   }
 
   html.theme-wisteria.dark .premium-glass,
   html.theme-wisteria.dark .glass-card,
   html.theme-wisteria.dark .glass-pill {
-    background: linear-gradient(160deg, rgba(170, 20, 240, 0.18), rgba(80, 30, 130, 0.35) 45%, rgba(30, 14, 55, 0.55));
-    border: 1px solid rgba(212, 160, 230, 0.28);
-    border-top-color: rgba(237, 160, 240, 0.55);
-    border-bottom-color: rgba(120, 0, 180, 0.35);
+    background: linear-gradient(
+      135deg,
+      rgba(237, 128, 233, 0.22) 0%,
+      rgba(148, 0, 211, 0.18) 40%,
+      rgba(211, 211, 255, 0.08) 75%,
+      rgba(216, 191, 216, 0.18) 100%
+    ) !important;
+    border: 1px solid rgba(237, 128, 233, 0.32) !important;
+    border-top-color: rgba(211, 211, 255, 0.65) !important;
+    border-left-color: rgba(237, 128, 233, 0.45) !important;
     box-shadow:
-      0 22px 60px -22px rgba(20, 4, 35, 0.85),
-      inset 0 1px 0 rgba(237, 160, 240, 0.3),
-      inset 0 -26px 44px -30px rgba(148, 0, 211, 0.4);
+      0 24px 60px -20px rgba(18, 4, 32, 0.85),
+      inset 0 1px 0 rgba(211, 211, 255, 0.45),
+      inset 0 -22px 42px -24px rgba(148, 0, 211, 0.35) !important;
+    backdrop-filter: blur(36px) saturate(200%) !important;
+    -webkit-backdrop-filter: blur(36px) saturate(200%) !important;
   }
 
   html.theme-wisteria.mode-movies.dark {
-    --background: 275 44% 14%;
-    --card: 275 36% 20%;
+    --background: 265 40% 10%;
+    --card: 268 35% 15%;
     --primary: 330 82% 58%;
     --ring: 330 82% 58%;
   }
   html.theme-wisteria.mode-tv.dark {
-    --background: 275 44% 14%;
-    --card: 275 36% 20%;
+    --background: 265 40% 10%;
+    --card: 268 35% 15%;
     --primary: 160 72% 50%;
     --ring: 160 72% 50%;
   }
   html.theme-wisteria.mode-anime.dark {
-    --background: 275 44% 14%;
-    --card: 275 36% 20%;
+    --background: 265 40% 10%;
+    --card: 268 35% 15%;
     --primary: 302 82% 74%;
     --ring: 302 82% 74%;
   }
 }
 
-/* ============ 5. ZESTY (Lemon) ============ */
+/* ============ 5. ZESTY (Lemon Solaris Palette) ============ */
 @layer base {
   html.theme-solaris.dark {
-    --background: 55 30% 12%;
-    --foreground: 55 50% 94%;
-    --card: 55 26% 18%;
-    --card-foreground: 55 50% 94%;
-    --popover: 55 28% 16%;
-    --popover-foreground: 55 50% 94%;
-    --primary: 55 100% 72%;
+    --background: 55 25% 7%;
+    --foreground: 55 50% 96%;
+    --card: 55 22% 13%;
+    --card-foreground: 55 50% 96%;
+    --popover: 55 22% 11%;
+    --popover-foreground: 55 50% 96%;
+    --primary: 60 100% 70%;
     --primary-foreground: 55 60% 6%;
-    --secondary: 55 24% 24%;
+    --secondary: 55 20% 18%;
     --secondary-foreground: 55 50% 94%;
-    --muted: 55 22% 20%;
-    --muted-foreground: 55 20% 66%;
-    --accent: 50 100% 70%;
+    --muted: 55 18% 15%;
+    --muted-foreground: 55 20% 72%;
+    --accent: 50 100% 68%;
     --accent-foreground: 55 60% 6%;
-    --destructive: 0 72% 58%;
+    --destructive: 0 75% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 55 30% 30%;
-    --input: 55 26% 24%;
-    --ring: 55 100% 72%;
-    --brand-glow-opacity: 0.75;
-    --card-border-opacity: 0.22;
-    --hairline-opacity: 0.2;
-    --safe-card-border: rgba(255, 229, 102, 0.28);
+    --border: 55 22% 22%;
+    --input: 55 20% 18%;
+    --ring: 60 100% 70%;
+    --brand-glow-opacity: 0.85;
+    --card-border-opacity: 0.28;
+    --hairline-opacity: 0.22;
+    --safe-card-border: rgba(255, 255, 102, 0.35);
+  }
 
-    background-image:
-      radial-gradient(900px 500px at 10% -5%, rgba(255, 229, 102, 0.35), transparent 60%),
-      radial-gradient(760px 680px at 110% 20%, rgba(214, 213, 139, 0.28), transparent 55%),
-      radial-gradient(900px 740px at 50% 120%, rgba(179, 179, 71, 0.3), transparent 60%),
-      linear-gradient(165deg, rgba(34, 32, 14, 0.55), rgba(14, 16, 8, 0.6));
+  /* Zesty Lemon Canvas: Animated multi-color mesh blending Sun Yellow (#FFFF66), Gold (#FFE566), Olive Sage (#D6D58B), & Brass (#B3B347) */
+  html.theme-solaris.dark body {
+    background:
+      radial-gradient(circle at 10% 12%, rgba(255, 255, 102, 0.45) 0%, transparent 48%),
+      radial-gradient(circle at 88% 10%, rgba(255, 229, 102, 0.42) 0%, transparent 45%),
+      radial-gradient(circle at 48% 48%, rgba(214, 213, 139, 0.3) 0%, transparent 50%),
+      radial-gradient(circle at 85% 85%, rgba(179, 179, 71, 0.35) 0%, transparent 48%),
+      radial-gradient(circle at 12% 88%, rgba(255, 255, 102, 0.3) 0%, transparent 45%),
+      linear-gradient(150deg, #0e1006 0%, #1a1c0b 45%, #121407 100%);
+    background-size: 180% 180%, 160% 160%, 170% 170%, 190% 190%, 180% 180%, 100% 100%;
+    animation: zesty-lemon-aurora 22s ease-in-out infinite alternate;
+  }
+  @keyframes zesty-lemon-aurora {
+    0%   { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
+    50%  { background-position: 35% 25%, 65% 20%, 30% 70%, 75% 35%, -25% -15%, 0 0; }
+    100% { background-position: 0% 0%, 100% 0%, 50% 50%, 100% 100%, 0% 100%, 0 0; }
   }
 
   html.theme-solaris.dark .premium-glass,
   html.theme-solaris.dark .glass-card,
   html.theme-solaris.dark .glass-pill {
-    background: linear-gradient(160deg, rgba(255, 229, 102, 0.16), rgba(160, 160, 70, 0.3) 45%, rgba(26, 26, 12, 0.55));
-    border: 1px solid rgba(255, 229, 102, 0.28);
-    border-top-color: rgba(255, 255, 180, 0.55);
-    border-bottom-color: rgba(160, 160, 70, 0.35);
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 102, 0.2) 0%,
+      rgba(255, 229, 102, 0.15) 38%,
+      rgba(214, 213, 139, 0.08) 72%,
+      rgba(179, 179, 71, 0.16) 100%
+    ) !important;
+    border: 1px solid rgba(255, 255, 102, 0.3) !important;
+    border-top-color: rgba(255, 255, 180, 0.65) !important;
+    border-left-color: rgba(255, 229, 102, 0.45) !important;
     box-shadow:
-      0 22px 60px -22px rgba(10, 12, 4, 0.85),
-      inset 0 1px 0 rgba(255, 255, 180, 0.3),
-      inset 0 -26px 44px -30px rgba(179, 179, 71, 0.4);
+      0 24px 60px -20px rgba(10, 12, 4, 0.85),
+      inset 0 1px 0 rgba(255, 255, 180, 0.45),
+      inset 0 -22px 42px -24px rgba(179, 179, 71, 0.35) !important;
+    backdrop-filter: blur(36px) saturate(200%) !important;
+    -webkit-backdrop-filter: blur(36px) saturate(200%) !important;
   }
 
   html.theme-solaris.mode-movies.dark {
-    --background: 55 30% 12%;
-    --card: 55 26% 18%;
+    --background: 55 25% 7%;
+    --card: 55 22% 13%;
     --primary: 356 82% 58%;
     --ring: 356 82% 58%;
   }
   html.theme-solaris.mode-tv.dark {
-    --background: 55 30% 12%;
-    --card: 55 26% 18%;
+    --background: 55 25% 7%;
+    --card: 55 22% 13%;
     --primary: 120 72% 50%;
     --ring: 120 72% 50%;
   }
   html.theme-solaris.mode-anime.dark {
-    --background: 55 30% 12%;
-    --card: 55 26% 18%;
+    --background: 55 25% 7%;
+    --card: 55 22% 13%;
     --primary: 50 100% 70%;
     --ring: 50 100% 70%;
   }

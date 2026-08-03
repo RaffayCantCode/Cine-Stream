@@ -3,6 +3,8 @@ import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
+import { PageTransitionOverlay } from "@/components/PageTransitionOverlay";
+import { NavigationLoader } from "@/components/NavigationLoader";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 
@@ -131,7 +133,11 @@ export default function RootLayout({
           <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/[0.03] blur-[120px]" />
           <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-secondary/[0.03] blur-[120px]" />
         </div>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <PageTransitionOverlay />
+          <NavigationLoader />
+        </Providers>
       </body>
     </html>
   );

@@ -16,6 +16,7 @@ import { ContinueWatching } from "@/components/ContinueWatching";
 import { Sidebar } from "@/components/Sidebar";
 import { TrendingProvidersHub } from "@/components/TrendingProvidersHub";
 import { FRANCHISES } from "@/lib/franchises";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 const INITIAL_COLLECTIONS = FRANCHISES.map(f => ({
   id: f.id,
@@ -299,6 +300,7 @@ export default function Home() {
   const [moodSeed, setMoodSeed] = useState("");
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
+  usePageContentReady(!isLoading && !animeLoading);
 
   const heroPoolLengthRef = useRef(0);
 

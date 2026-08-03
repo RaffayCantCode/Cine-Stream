@@ -188,7 +188,7 @@ export const Sidebar = memo(function Sidebar() {
                 {isActive && (
                   <motion.div
                     layoutId="nav-pill"
-                    className="absolute inset-0 rounded-xl -z-10 bg-card border border-white/15 shadow-md"
+                    className="absolute inset-0 rounded-xl -z-10 bg-white/15 border border-white/30 shadow-[0_4px_20px_rgba(255,255,255,0.15)] backdrop-blur-md"
                     transition={{ type: "spring", stiffness: 380, damping: 35 }}
                   />
                 )}

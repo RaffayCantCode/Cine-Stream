@@ -30,6 +30,7 @@ import { format } from "date-fns";
 import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 interface Movie {
   id: number;
@@ -59,6 +60,7 @@ export default function MovieClient() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<HTMLDivElement>(null);
+  usePageContentReady(!isLoading);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });

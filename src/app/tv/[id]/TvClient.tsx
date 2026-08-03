@@ -30,6 +30,7 @@ import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/util
 import { format } from "date-fns";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 interface Episode {
   id: number;
@@ -88,6 +89,7 @@ export default function TvClient() {
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [hasEverWatched, setHasEverWatched] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
+  usePageContentReady(!isLoading);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });

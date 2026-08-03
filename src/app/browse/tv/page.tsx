@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
 import { cn, fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
+import { usePageContentReady } from "@/lib/pageLoad";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
 interface Genre {
@@ -30,6 +31,7 @@ export default function BrowseTvPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [shows, setShows] = useState<TvShow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  usePageContentReady(!isLoading);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   const [page, setPage] = useState<number | null>(null);

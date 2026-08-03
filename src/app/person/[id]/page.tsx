@@ -10,6 +10,7 @@ import { fetchJson } from "@/lib/utils";
 import { useContentMode } from "@/context/ContentModeContext";
 import { ScrollableGridRow } from "@/components/ScrollableGridRow";
 import { SimilarPeople } from "@/components/SimilarPeople";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 interface Person {
   id: number;
@@ -127,6 +128,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
   const [person, setPerson] = useState<Person | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  usePageContentReady(!isLoading);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });

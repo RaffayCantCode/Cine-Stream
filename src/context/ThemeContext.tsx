@@ -46,6 +46,31 @@ function applyThemeClass(theme: ThemeId) {
   document.documentElement.classList.add(`theme-${theme}`);
 }
 
+// Browser chrome (mobile address bar / PWA status bar) should match the theme
+// instead of a hardcoded global color.
+const THEME_META_COLORS: Record<ThemeId, string> = {
+  global: "#090F15",
+  glass: "#090B12",
+  oled: "#000000",
+  cinema: "#20060B",
+  wisteria: "#120C24",
+  solaris: "#14160A",
+};
+
+function syncThemeMetaColor(theme: ThemeId) {
+  try {
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.appendChild(meta);
+    }
+    meta.content = THEME_META_COLORS[theme] || THEME_META_COLORS.global;
+  } catch {
+    /* ignore */
+  }
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   // Initialize lazily so we read localStorage only on the client (never SSR).
   const [theme, setThemeState] = useState<ThemeId>(
@@ -63,6 +88,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (lastApplied.current === theme) return;
     lastApplied.current = theme;
     applyThemeClass(theme);
+    syncThemeMetaColor(theme);
   }, [theme]);
 
   // Keep the theme synced with the logged-in user's preference.

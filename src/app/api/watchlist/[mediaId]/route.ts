@@ -10,30 +10,35 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ mediaId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { mediaId: mediaIdRaw } = await params;
+    const mediaId = Number(mediaIdRaw);
+    const mediaType =
+      new URL(request.url).searchParams.get("mediaType") ?? "";
+
+    if (!Number.isFinite(mediaId) || !["movie", "tv", "anime"].includes(mediaType)) {
+      return Response.json({ error: "Invalid params" }, { status: 400 });
+    }
+
+    const db = getDb();
+    await db
+      .delete(watchlists)
+      .where(
+        and(
+          eq(watchlists.userId, session.user.id),
+          eq(watchlists.mediaId, mediaId),
+          eq(watchlists.mediaType, mediaType)
+        )
+      );
+
+    return Response.json({ success: true });
+  } catch (error) {
+    console.error("[watchlist DELETE error]", error);
+    return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
-
-  const { mediaId: mediaIdRaw } = await params;
-  const mediaId = Number(mediaIdRaw);
-  const mediaType =
-    new URL(request.url).searchParams.get("mediaType") ?? "";
-
-  if (!Number.isFinite(mediaId) || !["movie", "tv", "anime"].includes(mediaType)) {
-    return Response.json({ error: "Invalid params" }, { status: 400 });
-  }
-
-  const db = getDb();
-  await db
-    .delete(watchlists)
-    .where(
-      and(
-        eq(watchlists.userId, session.user.id),
-        eq(watchlists.mediaId, mediaId),
-        eq(watchlists.mediaType, mediaType)
-      )
-    );
-
-  return Response.json({ success: true });
 }

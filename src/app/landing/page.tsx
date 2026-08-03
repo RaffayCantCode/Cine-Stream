@@ -42,7 +42,7 @@ export default function LandingPage() {
             <img src="/logo-icon.svg" alt="CineStream" className="w-9 h-9 drop-shadow-[0_0_12px_rgba(124,58,237,0.4)]" />
             <span className="font-black text-xl tracking-wider">
               <span className="text-white">CINE</span>
-              <span className="bg-gradient-to-r from-rose-400 via-emerald-300 to-purple-400 bg-clip-text text-transparent">STREAM</span>
+              <span className="text-white">STREAM</span>
             </span>
           </Link>
           <Link
@@ -73,7 +73,7 @@ export default function LandingPage() {
                 <br />
                 <span className="text-white/90">TV.</span>
                 <br />
-                <span className="bg-gradient-to-r from-rose-400 via-emerald-300 to-purple-400 bg-clip-text text-transparent">Anime.</span>
+                <span className="text-white">Anime.</span>
               </h1>
               <p className="text-white/60 text-base md:text-xl mt-6 font-medium leading-relaxed max-w-xl">
                 Stream everything in one place. Curated, ultra-fast, zero bloat, and always free.

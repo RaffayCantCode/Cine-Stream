@@ -27,6 +27,7 @@ import {
   Search,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 interface MediaItem {
   id: number;
@@ -122,6 +123,7 @@ export default function ProviderPage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const isLoadingRef = useRef(false);
   isLoadingRef.current = isLoading || isSearching;
+  usePageContentReady(!isLoading);
 
   // ── close sort dropdown on outside click ──────────────────────────────────
   useEffect(() => {

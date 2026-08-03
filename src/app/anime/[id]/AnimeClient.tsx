@@ -12,6 +12,7 @@ import { AnimeCard } from "@/components/AnimeCard";
 import { CastRow } from "@/components/CastRow";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { WatchlistButton } from "@/components/WatchlistButton";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 function AnimeHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -753,6 +754,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
+  usePageContentReady(!isLoading);
 
   interface FranchiseNode {
     id: number;

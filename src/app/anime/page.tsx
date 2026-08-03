@@ -9,6 +9,7 @@ const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").t
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { fetchJson, shuffleArray } from "@/lib/utils";
 import { fetchClientAnime } from "@/lib/anilist-client";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 type AnimeSort = "popular" | "ongoing" | "recent" | "subbed" | "movie" | "search";
 
@@ -40,6 +41,7 @@ export default function AnimeBrowsePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState<number | null>(null);
+  usePageContentReady(!isLoading);
 
   // Set session-stable starting page client-side on mount
   useEffect(() => {

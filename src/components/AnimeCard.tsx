@@ -44,7 +44,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
       <Link
         href={`/anime/${item.id}`}
         className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
-          rank ? "w-[140px] sm:w-[172px] md:w-[196px]" : "w-[118px] sm:w-[138px] md:w-[158px]"
+          rank ? "w-[158px] sm:w-[194px] md:w-[220px]" : "w-[136px] sm:w-[165px] md:w-[188px]"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
@@ -52,10 +52,10 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           <div 
             className={`absolute bottom-[-10px] font-black leading-none z-0 select-none pointer-events-none tracking-tighter ${
               rank === 1
-                ? "-left-2 sm:-left-3 md:-left-4 text-[94px] sm:text-[118px] md:text-[144px]"
+                ? "-left-2 sm:-left-3 md:-left-4 text-[100px] sm:text-[126px] md:text-[152px]"
                 : rank === 10
-                ? "-left-5 sm:-left-6 md:-left-7 text-[78px] sm:text-[102px] md:text-[124px]"
-                : "-left-4 sm:-left-5 md:-left-6 text-[96px] sm:text-[124px] md:text-[150px]"
+                ? "-left-5 sm:-left-6 md:-left-7 text-[84px] sm:text-[108px] md:text-[130px]"
+                : "-left-4 sm:-left-5 md:-left-6 text-[102px] sm:text-[130px] md:text-[156px]"
             }`}
             style={{ 
               background: rank === 1 

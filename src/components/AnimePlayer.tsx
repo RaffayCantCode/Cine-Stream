@@ -101,6 +101,9 @@ function buildProviderUrl(
   }
 }
 
+/** How long to wait for an embed to signal it started playing before falling back. */
+const PLAYBACK_DETECT_TIMEOUT = 5000;
+
 export function AnimePlayer({
   animeId,
   malId,
@@ -178,7 +181,6 @@ export function AnimePlayer({
     setRetryCount(0);
     setIframeReady(false);
     setNeedsClickUnlock(false);
-    setLiveIframeSrc("");
     try {
       localStorage.setItem(sourcePrefKey, provider);
       localStorage.setItem(globalPrefKey, provider);
@@ -186,29 +188,51 @@ export function AnimePlayer({
   };
 
   const [currentUrl, setCurrentUrl] = useState("");
-  const [liveIframeSrc, setLiveIframeSrc] = useState(""); // delayed src for animeplay
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [showSpinner, setShowSpinner] = useState(true);
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
   const [retryCount, setRetryCount] = useState(0);
   const [iframeReady, setIframeReady] = useState(false);
-  // Source 2 (animeplay) needs a click-unlock overlay to trigger autoplay
+  // Set when the embed confirmed playback (postMessage signal) — the embed
+  // loaded but never started playing (e.g. autoplay needs a user gesture).
   const [needsClickUnlock, setNeedsClickUnlock] = useState(false);
+  const [playbackStarted, setPlaybackStarted] = useState(false);
+  const [unlockAttempts, setUnlockAttempts] = useState(0);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playbackStartedRef = useRef(false);
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
   const isAnimeplay = currentSource.provider === "animeplay";
 
-  // Auto-dismiss spinner
+  const cancelDetectionTimer = useCallback(() => {
+    if (detectTimerRef.current) {
+      clearTimeout(detectTimerRef.current);
+      detectTimerRef.current = null;
+    }
+  }, []);
+
+  const markPlaybackStarted = useCallback(() => {
+    playbackStartedRef.current = true;
+    setPlaybackStarted(true);
+    setNeedsClickUnlock(false);
+    setIsLoading(false);
+    setShowSpinner(false);
+    cancelDetectionTimer();
+  }, [cancelDetectionTimer]);
+
+  // Auto-dismiss spinner (non-animeplay sources). The animeplay spinner is
+  // dismissed by real playback detection so the user never stares at a black frame.
   useEffect(() => {
+    if (isAnimeplay) return;
     setShowSpinner(true);
     const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
     return () => { clearTimeout(spinnerTimer); };
-  }, [currentUrl, isLoading]);
+  }, [currentUrl, isLoading, isAnimeplay]);
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
@@ -249,12 +273,12 @@ export function AnimePlayer({
     setHasError(false);
     setIframeReady(false);
     setNeedsClickUnlock(false);
-    setLiveIframeSrc("");
+    setUnlockAttempts(0);
   }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie]);
 
-  // When source index or retry changes, set the correct URL / overlay state
-  // For animeplay (Source 2): show click-unlock overlay; inject src only on user click
-  // For all other sources: inject src immediately
+  // When the source index or retry count changes, load the embed immediately and
+  // start playback detection. If the embed never reports playback (e.g. Source 1
+  // blocks autoplay without a user gesture), the tap-to-play overlay appears.
   useEffect(() => {
     const url = resolvedUrls[currentSource.provider];
     if (!url) return;
@@ -263,39 +287,63 @@ export function AnimePlayer({
       clearTimeout(delayTimerRef.current);
       delayTimerRef.current = null;
     }
+    cancelDetectionTimer();
 
+    playbackStartedRef.current = false;
+    setPlaybackStarted(false);
+    setNeedsClickUnlock(false);
     setIsLoading(true);
     setHasError(false);
     setCurrentUrl(url);
+    setIframeReady(false);
 
-    if (currentSource.provider === "animeplay") {
-      // Don't inject src yet — show click overlay so user gesture initiates autoplay
-      setNeedsClickUnlock(true);
-      setLiveIframeSrc("");
-    } else {
-      setNeedsClickUnlock(false);
-      setLiveIframeSrc(url);
-    }
-  }, [sourceIndex, resolvedUrls, retryCount]);
+    detectTimerRef.current = setTimeout(() => {
+      if (playbackStartedRef.current) return;
+      if (currentSource.provider === "animeplay") {
+        // Gesture-restricted embed: offer a tap-to-play button instead of a black frame.
+        setNeedsClickUnlock(true);
+        setIsLoading(false);
+        setShowSpinner(false);
+      } else {
+        // Any other source that never reports ready is treated as failed.
+        setHasError(true);
+        setIsLoading(false);
+        setShowSpinner(false);
+      }
+    }, PLAYBACK_DETECT_TIMEOUT);
+  }, [sourceIndex, resolvedUrls, retryCount, cancelDetectionTimer]);
 
-  // When user clicks the unlock overlay for Source 2, inject the src with a tiny delay
-  // so the iframe is fully mounted and the click event is the user gesture for autoplay
+  // After the user taps to play (animeplay), remount the iframe inside the
+  // user gesture so autoplay is permitted, then re-run detection. If it still
+  // stays silent, surface the error state instead of looping the overlay.
+  useEffect(() => {
+    if (unlockAttempts === 0) return;
+    playbackStartedRef.current = false;
+    setPlaybackStarted(false);
+    setIframeReady(false);
+    setIsLoading(true);
+    setShowSpinner(true);
+
+    detectTimerRef.current = setTimeout(() => {
+      if (playbackStartedRef.current) return;
+      setHasError(true);
+      setIsLoading(false);
+      setShowSpinner(false);
+    }, PLAYBACK_DETECT_TIMEOUT);
+  }, [unlockAttempts]);
+
   const handleClickUnlock = useCallback(() => {
     setNeedsClickUnlock(false);
-    const url = resolvedUrls["animeplay"];
-    if (url) {
-      delayTimerRef.current = setTimeout(() => {
-        setLiveIframeSrc(url);
-      }, 80);
-    }
-  }, [resolvedUrls]);
+    setUnlockAttempts(a => a + 1);
+  }, []);
 
-  // Cleanup delay timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
+      cancelDetectionTimer();
     };
-  }, []);
+  }, [cancelDetectionTimer]);
 
   // Scroll player into view on episode change
   useEffect(() => {
@@ -307,21 +355,91 @@ export function AnimePlayer({
   const lastSaveTimeRef = useRef<number>(0);
   const autoPlayTriggeredRef = useRef(false);
 
-  // Listen to postMessage for progress updates (e.g., from VidLink)
+  // Listen to postMessage for progress + playback-detection events:
+  // - VidLink emits video.ended / video.next / video.progress
+  // - MegaPlay (animeplay) emits { event: "time" | "complete" | "error" } and
+  //   { type: "watching-log", currentTime, duration }
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data) return;
 
-      if (event.data.type === 'video.ended' || event.data.type === 'video.next') {
-        if (onProgress && (event.data.type as any) === 'video.ended') onProgress(999999);
+      const data = event.data as Record<string, any>;
+
+      // ── MegaPlay playback signals ────────────────────────────────────────
+      const mpTime =
+        data.event === "time" && typeof data.time === "number"
+          ? (data.time as number)
+          : data.type === "watching-log" && typeof data.currentTime === "number"
+            ? (data.currentTime as number)
+            : null;
+      const mpDuration =
+        typeof data.duration === "number"
+          ? (data.duration as number)
+          : null;
+
+      if (mpTime !== null) {
+        markPlaybackStarted();
+
+        if (typeof mpTime === "number") {
+          if (onProgress) onProgress(mpTime);
+
+          if (mpDuration && mpDuration > 0 && mpTime >= mpDuration - 2) {
+            if (onAutoNext && !autoPlayTriggeredRef.current) {
+              autoPlayTriggeredRef.current = true;
+              onAutoNext();
+            }
+          }
+
+          const now = Date.now();
+          if (now - lastSaveTimeRef.current > 10000) {
+            lastSaveTimeRef.current = now;
+            const cleanId = animeId?.replace(/\D/g, "");
+            const numericId = parseInt(cleanId || "", 10);
+            if (!Number.isNaN(numericId)) {
+              fetch('/api/watch-history/progress', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mediaId: numericId,
+                  mediaType: "anime",
+                  season: tmdbSeason || 1,
+                  episode: episode || 1,
+                  progress: Math.floor(mpTime),
+                  duration: Math.floor(mpDuration || 0)
+                })
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+
+      if (data.event === "complete") {
+        markPlaybackStarted();
+        if (onProgress) onProgress(999999);
         if (onAutoNext && !autoPlayTriggeredRef.current) {
           autoPlayTriggeredRef.current = true;
           onAutoNext();
         }
       }
 
-      if (event.data.type === 'video.progress' && event.data.data) {
-        const { time, duration } = event.data.data;
+      if (data.event === "error") {
+        setHasError(true);
+        setIsLoading(false);
+        setShowSpinner(false);
+        cancelDetectionTimer();
+      }
+
+      // ── VidLink events ───────────────────────────────────────────────────
+      if (data.type === 'video.ended' || data.type === 'video.next') {
+        if (onProgress && (data.type as any) === 'video.ended') onProgress(999999);
+        if (onAutoNext && !autoPlayTriggeredRef.current) {
+          autoPlayTriggeredRef.current = true;
+          onAutoNext();
+        }
+      }
+
+      if (data.type === 'video.progress' && data.data) {
+        const { time, duration } = data.data;
         if (typeof time === 'number') {
           if (onProgress) onProgress(time);
 
@@ -358,7 +476,7 @@ export function AnimePlayer({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [animeId, episode, tmdbSeason, onProgress, onAutoNext]);
+  }, [animeId, episode, tmdbSeason, onProgress, onAutoNext, markPlaybackStarted, cancelDetectionTimer]);
 
   // Only send seek/play postMessages for VidLink — others don't support it
   useEffect(() => {
@@ -380,14 +498,12 @@ export function AnimePlayer({
     setRetryCount(0);
     setIframeReady(false);
     setNeedsClickUnlock(false);
-    setLiveIframeSrc("");
   }, [sourcePrefKey, globalPrefKey]);
 
   const retrySource = useCallback(() => {
     setRetryCount(prev => prev + 1);
     setIframeReady(false);
     setNeedsClickUnlock(false);
-    setLiveIframeSrc("");
   }, []);
 
   const toggleFullscreen = async () => {
@@ -403,6 +519,10 @@ export function AnimePlayer({
       }
     } catch { /* ignore */ }
   };
+
+  // Keep the animeplay frame hidden until the player confirms playback, so a
+  // gesture-restricted embed can never flash a black screen.
+  const hideUntilPlaying = isAnimeplay && !playbackStarted && !needsClickUnlock && !hasError;
 
   return (
     <div className="w-full space-y-4">
@@ -502,45 +622,60 @@ export function AnimePlayer({
             </div>
           </div>
         ) : needsClickUnlock ? (
-          // ── Source 2 click-unlock overlay ──────────────────────────────────
-          // megaplay.buzz requires a real user gesture to autoplay video.
-          // We show a styled play button; clicking it injects the iframe src
-          // so the browser counts the subsequent autoplay as user-initiated.
+          // ── Tap-to-play fallback (shown only when the embed loaded but
+          //    never started playback, e.g. gesture-restricted autoplay) ──
+          // Clicking remounts the iframe inside the user gesture, which lets
+          // the browser allow autoplay and prevents the black screen.
           <button
             onClick={handleClickUnlock}
             className="w-full h-full flex flex-col items-center justify-center gap-4 bg-black group"
-            aria-label="Click to load Source 2"
+            aria-label={`Tap to start ${currentSource.name}`}
           >
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4B5694] to-[#7288AE] flex items-center justify-center shadow-2xl shadow-[#4B5694]/40 group-hover:scale-110 transition-transform duration-200 ring-4 ring-[#7288AE]/20">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform duration-200 ring-4 ring-primary/20">
               <Play className="w-9 h-9 text-white fill-white ml-1" />
             </div>
             <div className="text-center">
-              <p className="text-white font-bold text-base">Click to Play</p>
-              <p className="text-white/40 text-xs mt-1">Source 2 • Tap to start</p>
+              <p className="text-white font-bold text-base">Tap to Play</p>
+              <p className="text-white/40 text-xs mt-1">{currentSource.name} • Tap to start</p>
             </div>
           </button>
         ) : (
           <>
             {showSpinner && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none">
-                <div className="w-10 h-10 border-3 border-white/15 border-t-[#7288AE] rounded-full animate-spin" />
+                <div className="w-10 h-10 border-3 border-white/15 border-t-primary rounded-full animate-spin" />
               </div>
             )}
-            {(isAnimeplay ? liveIframeSrc : currentUrl) && (
+            {currentUrl && (
               <iframe
+                key={`${currentSource.provider}-${retryCount}-${unlockAttempts}`}
                 ref={iframeRef}
-                src={isAnimeplay ? liveIframeSrc : currentUrl}
-                className="w-full h-full"
+                src={currentUrl}
+                className={`w-full h-full transition-opacity duration-500 ${
+                  hideUntilPlaying ? "opacity-0 pointer-events-none" : "opacity-100"
+                }`}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; microphone"
                 allowFullScreen
                 referrerPolicy={isAnimeplay ? "no-referrer-when-downgrade" : "strict-origin-when-cross-origin"}
                 title={`${animeTitle} - Episode ${episode}`}
-                onLoad={() => { setIsLoading(false); setHasError(false); setShowSpinner(false); setIframeReady(true); }}
+                onLoad={() => {
+                  setIsLoading(false);
+                  setHasError(false);
+                  setIframeReady(true);
+                  if (!isAnimeplay) {
+                    // Non-gesture sources are ready once their frame loads.
+                    setShowSpinner(false);
+                    playbackStartedRef.current = true;
+                    setPlaybackStarted(true);
+                    cancelDetectionTimer();
+                  }
+                }}
                 onError={() => {
                   console.warn(`[AnimePlayer] ${currentSource.name} failed to load`);
                   setHasError(true);
                   setIsLoading(false);
                   setShowSpinner(false);
+                  cancelDetectionTimer();
                 }}
               />
             )}

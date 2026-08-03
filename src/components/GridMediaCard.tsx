@@ -67,10 +67,10 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
 
       {/* Details (always visible below) */}
       <div className="flex flex-col gap-1 px-1">
-        <h3 className="text-white font-bold text-sm leading-tight line-clamp-2">
+        <h3 className="text-foreground font-bold text-sm leading-tight line-clamp-2">
           {title}
         </h3>
-        <div className="flex items-center gap-2 text-white/50 text-xs font-medium">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
           {year && <span>{year}</span>}
           {year && <span>•</span>}
           <span>{isAnime ? "Anime" : isMovie ? "Movie" : "TV"}</span>
