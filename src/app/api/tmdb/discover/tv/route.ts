@@ -34,6 +34,13 @@ export async function GET(request: NextRequest) {
     params.with_watch_monetization_types = monetizationTypes;
   }
 
+  // Exclude anime: TMDB keyword 210024 = "anime" (authoritative classification)
+  // Also exclude Japanese-language Animation (genre 16) as a secondary signal
+  // for titles not yet tagged with the keyword. Western animation is unaffected
+  // because it is typically English-language.
+  params.without_keywords = "210024";
+  params.without_original_language = "ja";
+
   try {
     // Skip all caches for provider-filtered requests — ensures fresh results after any config change
     const data = await tmdbFetch("/discover/tv", params, { noCache: !!withProviders });

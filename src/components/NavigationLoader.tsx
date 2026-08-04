@@ -12,7 +12,7 @@ import {
 /** Route-enter completion event dispatched by the app template. */
 const ROUTE_ENTER_COMPLETE = "sv:route-enter-complete";
 /** Minimum time the loader stays on screen so it reads as a real page load. */
-const MIN_HOLD_MS = 1500;
+const MIN_HOLD_MS = 500;
 /** Fallback: hide this long after the route commits if the enter event never fires. */
 const ENTER_FALLBACK_MS = 1600;
 /** Fallback when a page announced async content but never reported ready. */

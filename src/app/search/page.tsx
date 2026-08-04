@@ -10,7 +10,7 @@ import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Search as SearchIcon, Sparkles, HelpCircle } from "lucide-react";
 import { Input } from "@/components/ui/Input";
-import { fetchJson, filterReleasedSafeContent } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useContentMode } from "@/context/ContentModeContext";
 import { generateSearchCandidates } from "@/lib/fuzzy-search";
@@ -27,6 +27,8 @@ interface MediaItem {
   adult?: boolean;
   profile_path?: string;
   known_for_department?: string;
+  original_language?: string;
+  genre_ids?: number[];
 }
 
 function transformClientAniListMedia(media: any): AnimeItem {
@@ -220,9 +222,15 @@ function SearchContent() {
         let mainAnime: AnimeItem[] = [];
 
         if (tmdbRes.status === "fulfilled" && tmdbRes.value?.results) {
-          mainTmdb = filterReleasedSafeContent(
-            tmdbRes.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
-            true
+          // Apply filterExcludeAnime as a client-side safety net: ensures that
+          // any anime title that slipped through the server filter (e.g. TMDB
+          // entries lacking the anime keyword) never appears under Movies or TV.
+          // Person results are preserved by filterExcludeAnime's type guard.
+          mainTmdb = filterExcludeAnime(
+            filterReleasedSafeContent(
+              tmdbRes.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
+              true
+            ) as MediaItem[]
           ) as MediaItem[];
         }
 
@@ -244,9 +252,11 @@ function SearchContent() {
               let cTmdb: MediaItem[] = [];
               let cAnime: AnimeItem[] = [];
               if (ct.status === "fulfilled" && ct.value?.results) {
-                cTmdb = filterReleasedSafeContent(
-                  ct.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
-                  true
+                cTmdb = filterExcludeAnime(
+                  filterReleasedSafeContent(
+                    ct.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
+                    true
+                  ) as MediaItem[]
                 ) as MediaItem[];
               }
               if (ca.status === "fulfilled" && Array.isArray(ca.value)) {

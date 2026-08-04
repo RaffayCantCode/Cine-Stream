@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
-import { filterReleasedSafeContent } from "@/lib/utils";
+import { filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
 
 export const revalidate = 0; // Don't cache personalized recommendations
 
@@ -17,10 +17,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const data = await tmdbFetch(`/${mediaType}/${mediaId}/recommendations`);
-    const results = filterReleasedSafeContent((data as any)?.results || []).map((i: any) => ({
-      ...i,
-      media_type: mediaType,
-    }));
+    const results = filterExcludeAnime(
+      filterReleasedSafeContent((data as any)?.results || []).map((i: any) => ({
+        ...i,
+        media_type: mediaType,
+      }))
+    );
     return Response.json({ results });
   } catch (error) {
     console.error("[TMDB Recommendations API Error]:", error);

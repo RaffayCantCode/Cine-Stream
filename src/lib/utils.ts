@@ -217,6 +217,26 @@ export function isTmdbAnime(item: { original_language?: string; genre_ids?: numb
     item.genre_ids.includes(16);
 }
 
+/**
+ * Strips Japanese anime entries from a TMDB result array.
+ *
+ * Anime is identified by the combination of:
+ *   - original_language === "ja"  (Japanese origin)
+ *   - genre_ids includes 16       (Animation genre)
+ *
+ * This deliberately preserves western animation (Pixar, Disney, DreamWorks)
+ * which are typically English-language, and avoids false positives on
+ * live-action Japanese content which won't have genre 16.
+ *
+ * Use this in Movies, TV Shows, and Search pipelines only.
+ * Do NOT use it inside the Anime section — which has its own independent providers.
+ */
+export function filterExcludeAnime<T extends { original_language?: string; genre_ids?: number[] }>(
+  items: T[]
+): T[] {
+  return items.filter((item) => !isTmdbAnime(item));
+}
+
 export function filterReleasedSafeContent<T extends {
   adult?: boolean;
   release_date?: string;

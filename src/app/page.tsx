@@ -4,7 +4,7 @@ export const runtime = 'edge';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers } from "lucide-react";
-import { fetchJson, filterReleasedSafeContent, isTmdbAnime } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent, isTmdbAnime, filterExcludeAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import type { AnimeItem } from "@/components/AnimeCard";
 import { fetchClientAnime } from "@/lib/anilist-client";
@@ -393,7 +393,7 @@ export default function Home() {
           animeTv: { results: MediaItem[] };
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
-        }>("/api/tmdb/home-hero", { cacheTtlMs: 3600000 }).catch(() => null);
+        }>("/api/tmdb/home-hero?v=2", { cacheTtlMs: 3600000 }).catch(() => null);
 
         // Priority 3 background promises
         const fullHomePromise = fetchJson<{
@@ -409,7 +409,7 @@ export default function Home() {
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home", { cacheTtlMs: 3600000 }).catch(() => null);
+        }>("/api/tmdb/home?v=2", { cacheTtlMs: 3600000 }).catch(() => null);
 
         const animePromise = fetchClientAnime("trending", 1).catch(() => null);
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
@@ -461,6 +461,11 @@ export default function Home() {
           setRecent(heroRecentSafe);
           setTrendingMoviesToday(trendingMoviesTodaySafe);
           setTrendingTvToday(trendingTvTodaySafe);
+          // Build recommended pool excluding anime — Recommended For You is a
+          // Movies + TV row and should not surface anime titles.
+          const daySalt = Math.floor(Date.now() / 86400000).toString();
+          const recPool = filterExcludeAnime([...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe]);
+          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
           setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
           setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
           setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
@@ -548,7 +553,9 @@ export default function Home() {
             ? collectionsData.collections
             : INITIAL_COLLECTIONS;
 
-          const recPool = [...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe];
+          // Build recommended pool excluding anime — Recommended For You is a
+          // Movies + TV row and should not surface anime titles.
+          const recPool = filterExcludeAnime([...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe]);
           const daySalt = Math.floor(Date.now() / 86400000).toString();
 
           setTrending(trendingSafe);

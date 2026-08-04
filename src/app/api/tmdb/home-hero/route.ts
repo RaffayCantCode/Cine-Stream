@@ -47,11 +47,21 @@ export async function GET(_request: NextRequest) {
     return [];
   };
 
+  // Strip Japanese animated content (anime) from movie/TV result arrays.
+  // The dedicated animeMovies/animeTv keys (results[11], results[12]) are
+  // intentionally excluded from this filter — they are the anime home row data.
+  const excludeAnime = (items: any[]): any[] =>
+    items.filter(
+      (item) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
+    );
+
   const topRatedMoviesRaw = [
     ...extractResults(results[2]),
     ...extractResults(results[3]),
     ...extractResults(results[4]),
-  ];
+  ].filter(
+    (item: any) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
+  );
   const uniqueTopRatedMoviesMap = new Map();
   topRatedMoviesRaw.forEach((item: any) => {
     if (item?.id && !uniqueTopRatedMoviesMap.has(item.id)) {
@@ -64,7 +74,9 @@ export async function GET(_request: NextRequest) {
     ...extractResults(results[7]),
     ...extractResults(results[8]),
     ...extractResults(results[9]),
-  ];
+  ].filter(
+    (item: any) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
+  );
   const uniqueTopRatedTvMap = new Map();
   topRatedTvRaw.forEach((item: any) => {
     if (item?.id && !uniqueTopRatedTvMap.has(item.id)) {
@@ -75,16 +87,16 @@ export async function GET(_request: NextRequest) {
 
   return Response.json({
     trending: { results: extractResults(results[0]) },
-    popularMovies: { results: extractResults(results[1]) },
+    popularMovies: { results: excludeAnime(extractResults(results[1]) as any[]) },
     topRatedMovies: { results: shuffledTopRatedMovies },
-    nowPlaying: { results: extractResults(results[5]) },
-    popularTv: { results: extractResults(results[6]) },
+    nowPlaying: { results: excludeAnime(extractResults(results[5]) as any[]) },
+    popularTv: { results: excludeAnime(extractResults(results[6]) as any[]) },
     topRatedTv: { results: shuffledTopRatedTv },
-    onTheAir: { results: extractResults(results[10]) },
+    onTheAir: { results: excludeAnime(extractResults(results[10]) as any[]) },
     animeMovies: { results: extractResults(results[11]) },
     animeTv: { results: extractResults(results[12]) },
-    trendingMoviesToday: { results: extractResults(results[13]) },
-    trendingTvToday: { results: extractResults(results[14]) },
+    trendingMoviesToday: { results: excludeAnime(extractResults(results[13]) as any[]) },
+    trendingTvToday: { results: excludeAnime(extractResults(results[14]) as any[]) },
   }, { headers: cacheHeaders(3600) });
 }
 

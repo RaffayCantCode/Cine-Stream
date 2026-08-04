@@ -872,11 +872,11 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/3be0BffeZTyMbj4Ndzo6Y877SBQ.jpg",
     poster_path: "/3PlBwwizkPDZITeIPUlXQCejeQD.jpg",
     items: [
-      { id: 1587, media_type: "movie", title: "Twilight" },
+      { id: 8966, media_type: "movie", title: "Twilight" },
       { id: 18239, media_type: "movie", title: "The Twilight Saga: New Moon" },
       { id: 24021, media_type: "movie", title: "The Twilight Saga: Eclipse" },
-      { id: 41233, media_type: "movie", title: "The Twilight Saga: Breaking Dawn - Part 1" },
-      { id: 82690, media_type: "movie", title: "The Twilight Saga: Breaking Dawn - Part 2" }
+      { id: 50619, media_type: "movie", title: "The Twilight Saga: Breaking Dawn - Part 1" },
+      { id: 50620, media_type: "movie", title: "The Twilight Saga: Breaking Dawn - Part 2" }
     ]
   }
 ];

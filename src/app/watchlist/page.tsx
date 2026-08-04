@@ -133,7 +133,7 @@ export default function WatchlistPage() {
                         <button
                           onClick={() => remove(item.mediaId, item.mediaType)}
                           aria-label={`Remove ${item.title} from watchlist`}
-                          className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 backdrop-blur-md text-white shadow-lg ring-1 ring-white/20 transition-all duration-300 hover:bg-rose-600 hover:text-white hover:scale-110"
+                          className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 backdrop-blur-md text-white shadow-lg ring-1 ring-white/20 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-rose-600 hover:scale-110"
                         >
                           <X className="w-4 h-4" />
                         </button>

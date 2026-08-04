@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { Film, Tv, Layers } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
-import { fetchJson, filterReleasedSafeContent, cn } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent, filterExcludeAnime, cn } from "@/lib/utils";
 
 interface BrowseGridPageProps {
   title: string;
@@ -101,7 +101,10 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
         }
 
         const filtered = filterReleasedSafeContent(merged);
-        const mapped = filtered.map((item) =>
+        // Strip anime from dedicated movie/tv feeds. Mixed "all" feeds (e.g. trending)
+        // are intentionally left untouched since they don't feed Movies or TV pages.
+        const withoutAnime = mediaType ? filterExcludeAnime(filtered) : filtered;
+        const mapped = withoutAnime.map((item) =>
           activeType ? { ...item, media_type: item.media_type || activeType } : item
         );
 

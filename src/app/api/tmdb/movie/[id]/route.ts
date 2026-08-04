@@ -21,10 +21,21 @@ export async function GET(
     const recs = result.recommendations as { results?: unknown[] } | undefined;
     const sim = result.similar as { results?: unknown[] } | undefined;
 
+    const isAnime = (item: any) =>
+      item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16);
+
+    if (recs?.results) {
+      recs.results = recs.results.filter((item: any) => !isAnime(item));
+    }
+
+    if (sim?.results) {
+      sim.results = sim.results.filter((item: any) => !isAnime(item));
+    }
+
     if (extraRecs && recs?.results) {
       const existing = new Set(recs.results.map((r: any) => r.id));
       for (const item of (extraRecs as any).results ?? []) {
-        if (!existing.has(item.id)) {
+        if (!isAnime(item) && !existing.has(item.id)) {
           existing.add(item.id);
           recs.results.push(item);
         }
@@ -34,7 +45,7 @@ export async function GET(
     if (extraSimilar && sim?.results) {
       const existing = new Set(sim.results.map((r: any) => r.id));
       for (const item of (extraSimilar as any).results ?? []) {
-        if (!existing.has(item.id)) {
+        if (!isAnime(item) && !existing.has(item.id)) {
           existing.add(item.id);
           sim.results.push(item);
         }

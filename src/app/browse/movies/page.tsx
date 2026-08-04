@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
-import { cn, fetchJson, shuffleArray, filterReleasedSafeContent } from "@/lib/utils";
+import { cn, fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
 import { usePageContentReady } from "@/lib/pageLoad";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
@@ -24,6 +24,8 @@ interface Movie {
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
+  original_language?: string;
+  genre_ids?: number[];
 }
 
 export default function BrowseMoviesPage() {
@@ -72,7 +74,7 @@ export default function BrowseMoviesPage() {
       params.append("sortBy", sortBy);
       params.append("page", rng.toString());
       const data = await fetchJson<{ results: Movie[] }>(`/api/tmdb/discover/movies?${params}`);
-      setMovies(shuffleArray(filterReleasedSafeContent(data.results || [])));
+      setMovies(shuffleArray(filterExcludeAnime(filterReleasedSafeContent(data.results || []))));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to shuffle");
     } finally {
@@ -140,7 +142,7 @@ export default function BrowseMoviesPage() {
           })
         );
 
-        const allItems = results.flatMap((r) => filterReleasedSafeContent(r.results || [], !!debouncedSearch.trim()));
+        const allItems = results.flatMap((r) => filterExcludeAnime(filterReleasedSafeContent(r.results || [], !!debouncedSearch.trim())));
         setMovies((prev) => {
           const combined = initialLoad.current ? shuffleArray(allItems) : [...prev, ...allItems];
           const seenIds = new Set();

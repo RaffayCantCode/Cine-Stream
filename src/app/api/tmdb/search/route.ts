@@ -46,6 +46,20 @@ function scoreResult(item: any, query: string): number {
   return Math.round(coverage * 600 + popularity * 80 + Number(item.vote_count || 0) / 1000);
 }
 
+/**
+ * Returns true if a TMDB item is Japanese anime (original_language=ja + Animation genre 16).
+ * Used to prevent anime from appearing in Movies/TV search results.
+ * Person results are never filtered by this check.
+ */
+function isAnimeItem(item: any): boolean {
+  if (item.media_type === "person") return false;
+  return (
+    item.original_language === "ja" &&
+    Array.isArray(item.genre_ids) &&
+    item.genre_ids.includes(16)
+  );
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const query = searchParams.get("query");
@@ -80,13 +94,19 @@ export async function GET(request: NextRequest) {
 
     results.sort((a, b) => scoreResult(b, query) - scoreResult(a, query));
 
+    // Exclude anime (Japanese animated content) from movie/tv search results.
+    // Anime content belongs exclusively to the Anime section (AniList/Jikan based).
+    // Person results and non-anime movies/TV shows are unaffected.
+    const filteredResults = results.filter((item) => !isAnimeItem(item));
+
     return Response.json({
       page: Number(page) || 1,
       total_pages: totalPages,
-      total_results: results.length,
-      results,
+      total_results: filteredResults.length,
+      results: filteredResults,
     });
   } catch (error) {
     return Response.json({ error: "Failed to search" }, { status: 500 });
   }
 }
+
