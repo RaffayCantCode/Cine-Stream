@@ -1,12 +1,12 @@
 // CineStream Service Worker
 // Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
 // CACHE_VERSION is updated to bust previous worker cache.
-const CACHE_VERSION = 'v22-logo-reset';
+const CACHE_VERSION = 'v23-anime-thumbnails-fix';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
 
-const STATIC_ASSETS = ['/', '/manifest.json', '/favicon.svg?v=22', '/logo-icon.svg?v=22'];
+const STATIC_ASSETS = ['/', '/manifest.json', '/favicon.svg?v=23', '/logo-icon.svg?v=23'];
 
 // Install — pre-cache static shell
 self.addEventListener('install', (event) => {

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
-import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromTatakai, fetchEpisodesFromKitsu, fetchFillerLookupFromAnimeFillerList, DEFAULT_FETCH_USER_AGENT } from "@/lib/anime-fetch";
+import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromTatakai, fetchEpisodesFromKitsu, fetchFillerLookupFromAnimeFillerList, resolveTmdbMappingFromAniZip, DEFAULT_FETCH_USER_AGENT } from "@/lib/anime-fetch";
 import { tmdbFetch, fetchTmdbEpisodeData } from "@/lib/tmdb";
 
 interface TmdbSeasonMin {
@@ -213,7 +213,7 @@ async function getEnrichedEpisodesList(
   if (!idMal) {
     try {
       const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${seasonId}`, {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(8000),
         headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
         next: { revalidate: 86400 } as any,
       });
@@ -457,6 +457,25 @@ export async function GET(
       let tmdbSeasonNum = clientTmdbSeasonNum ?? season.tmdbSeasonNumber;
       let episodeOffset = clientEpisodeOffset ?? (season as any).episodeOffset ?? 0;
 
+      // Slow-path TMDB recovery: when the meta lookup came back without TMDB
+      // mapping (e.g. AniList unreachable on Cloudflare edge → Jikan fallback),
+      // resolve the mapping directly from AniZip so TMDB stays the primary
+      // thumbnail source. AniZip is reliable on the edge, and its ep-1 mapping
+      // gives us the TMDB season + offset for the whole season.
+      if (tmdbId == null || tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) {
+        try {
+          const resolved = await resolveTmdbMappingFromAniZip(season.id);
+          if (resolved) {
+            console.log(`[Episodes API] Recovered TMDB mapping from AniZip for seasonId=${season.id}: tmdbId=${resolved.tmdbId}, tmdbSeason=${resolved.tmdbSeason}, offset=${resolved.episodeOffset}`);
+            if (tmdbId == null) tmdbId = resolved.tmdbId;
+            if (tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) tmdbSeasonNum = resolved.tmdbSeason;
+            if (clientEpisodeOffset == null && ((season as any).episodeOffset == null || (season as any).episodeOffset === undefined)) {
+              episodeOffset = resolved.episodeOffset;
+            }
+          }
+        } catch { /* keep whatever we have */ }
+      }
+
       // Smart season & offset title parsing override — fixes season mismatching
       if ((!tmdbSeasonNum || tmdbSeasonNum === 1) && (season.name || meta?.anime?.name)) {
         const titleToParse = season.name || meta?.anime?.name || "";
@@ -583,7 +602,7 @@ export async function GET(
             if (overlayEps.length === 0 && !effectiveMalId) {
               try {
                 const azMapRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${season.id}`, {
-                  signal: AbortSignal.timeout(6000),
+                  signal: AbortSignal.timeout(8000),
                   headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
                 });
                 if (azMapRes.ok) {

@@ -865,7 +865,7 @@ export async function getAnimeDetails(
       if (!isNaN(tmdbIdNum)) {
         try {
           const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${tmdbIdNum}`, {
-            signal: AbortSignal.timeout(3000),
+            signal: AbortSignal.timeout(8000),
             headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
             next: { revalidate: 86400 },
           });
@@ -907,7 +907,7 @@ export async function getAnimeDetails(
   let media: any = null;
 
   const aniZipPromise = fetch(`https://api.ani.zip/mappings?anilist_id=${id}`, {
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(8000),
     headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
     next: { revalidate: 86400 } // Cache mappings for 24h
   }).then(async res => res.ok ? res.json() : null).catch(() => null);
@@ -988,7 +988,7 @@ export async function getAnimeDetails(
   if (!media && !isNaN(numId)) {
     try {
       const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(8000),
         headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
         next: { revalidate: 86400 }
       });
@@ -1011,7 +1011,7 @@ export async function getAnimeDetails(
       if (!resolvedMalId && !isNaN(numId)) {
         try {
           const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${numId}`, {
-            signal: AbortSignal.timeout(3000),
+            signal: AbortSignal.timeout(8000),
             headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
             next: { revalidate: 86400 }
           });
@@ -1035,7 +1035,20 @@ export async function getAnimeDetails(
           const a = jData.data;
           if (a && a.rating !== "rx") {
             const isUnreleasedJikan = a.status?.includes("Not yet aired") || a.status?.includes("Not Yet Aired");
-            const totalEps = isUnreleasedJikan ? 0 : Math.max(a.episodes || (a.status?.includes("Airing") ? 1500 : 12), 1);
+            // Prefer the real episode count from AniZip keys over Jikan's sentinel
+            // (e.g. airing shows report 1500 while AniZip knows the true count).
+            let aniZipEpCount: number | null = null;
+            if (aniZipMapping?.episodes) {
+              const keys = Object.keys(aniZipMapping.episodes).map(Number).filter(k => !isNaN(k));
+              if (keys.length > 0) aniZipEpCount = Math.max(...keys);
+            }
+            const jikanEpCount = a.episodes && a.episodes > 0 ? a.episodes : null;
+            const knownRealCount = Math.max(aniZipEpCount || 0, jikanEpCount || 0);
+            const totalEps = isUnreleasedJikan
+              ? 0
+              : knownRealCount > 0
+                ? knownRealCount
+                : Math.max(a.episodes || (a.status?.includes("Airing") ? 1500 : 12), 1);
             let episodes: EpisodeDetail[] = [];
             if (!isUnreleasedJikan && !skipEpisodes) {
               const realEps = await fetchEpisodesFromJikan(a.mal_id, String(id), Math.min(totalEps, epLimit));
@@ -1068,18 +1081,43 @@ export async function getAnimeDetails(
               status: a.status || null, season: a.season || null,
               seasonYear: a.year || null, format: a.type || null,
             };
-            const jikanSeason: SeasonInfo = {
-              id: String(id), name: animeItem.name,
-              seasonLabel: "Episodes", totalEpisodes: totalEps,
-              isCurrent: true, idMal: a.mal_id,
-            };
-
             let tmdbId: number | null = null;
             if (aniZipMapping?.mappings?.themoviedb_id) {
               tmdbId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
               if (isNaN(tmdbId)) tmdbId = null;
             }
+
+            // Derive the TMDB season mapping from AniZip even on the Jikan fallback
+            // path. AniZip works reliably on the Cloudflare edge (where AniList can
+            // be unavailable), and its ep-1 seasonNumber/episodeNumber give us the
+            // TMDB season + offset that the TMDB-first episodes pipeline needs.
+            let tmdbSeasonNumber: number | null = null;
+            let episodeOffset = 0;
+            if (tmdbId) {
+              const azEp1 = aniZipMapping?.episodes?.["1"];
+              if (
+                azEp1 &&
+                azEp1.seasonNumber !== undefined &&
+                azEp1.episodeNumber !== undefined
+              ) {
+                tmdbSeasonNumber = azEp1.seasonNumber;
+                episodeOffset = Math.max(azEp1.episodeNumber - 1, 0);
+              }
+            }
+
+            const jikanSeason: SeasonInfo = {
+              id: String(id), name: animeItem.name,
+              seasonLabel: "Episodes", totalEpisodes: totalEps,
+              isCurrent: true, idMal: a.mal_id,
+              tmdbId,
+              tmdbSeasonNumber,
+              episodeOffset,
+            };
+
             let tmdbSeasonMap: Record<string, number> | undefined = undefined;
+            if (tmdbId && tmdbSeasonNumber != null) {
+              tmdbSeasonMap = { [String(id)]: tmdbSeasonNumber };
+            }
             let seasonsList: SeasonInfo[] = [jikanSeason];
 
             return {
@@ -1265,7 +1303,7 @@ export async function getAnimeDetails(
         } else {
           try {
             const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
-              signal: AbortSignal.timeout(2000),
+              signal: AbortSignal.timeout(8000),
               headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
               next: { revalidate: 86400 }
             });
@@ -1577,6 +1615,52 @@ export async function fetchEpisodesFromAniZip(
     return eps.sort((a, b) => a.episodeNum - b.episodeNum);
   } catch (error) {
     console.error("[AnimeFetch] AniZip fetch failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Resolve the TMDB show + season mapping for an AniList season directly from
+ * AniZip. This is the same mapping getAnimeDetails derives, but it works even
+ * when AniList is unreachable (e.g. Cloudflare edge) because it only depends on
+ * api.ani.zip, which is reliable. Returns null when no mapping is available.
+ */
+export async function resolveTmdbMappingFromAniZip(
+  anilistId: string
+): Promise<{ tmdbId: number; tmdbSeason: number; episodeOffset: number } | null> {
+  try {
+    const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+      next: { revalidate: 86400 } as any,
+    });
+    if (!res.ok) return null;
+    const az = await res.json();
+
+    let tmdbId: number | null = null;
+    if (az?.mappings?.themoviedb_id) {
+      tmdbId = parseInt(az.mappings.themoviedb_id, 10);
+      if (isNaN(tmdbId)) tmdbId = null;
+    }
+    if (!tmdbId) return null;
+
+    const azEp1 = az?.episodes?.["1"];
+    if (
+      azEp1 &&
+      azEp1.seasonNumber !== undefined &&
+      azEp1.episodeNumber !== undefined
+    ) {
+      return {
+        tmdbId,
+        tmdbSeason: azEp1.seasonNumber,
+        episodeOffset: Math.max(azEp1.episodeNumber - 1, 0),
+      };
+    }
+
+    // No per-episode season mapping — still expose the tmdbId so the caller can
+    // at least attempt TMDB as the primary thumbnail source.
+    return { tmdbId, tmdbSeason: 1, episodeOffset: 0 };
+  } catch {
     return null;
   }
 }

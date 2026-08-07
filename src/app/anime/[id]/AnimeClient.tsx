@@ -51,7 +51,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v30-large-anime-thumbnails-fix";
+const ANIME_API_VERSION = "v31-anizip-tmdb-recovery";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
