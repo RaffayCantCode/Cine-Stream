@@ -51,7 +51,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v28-jojo-naruto-thumbnails-fix";
+const ANIME_API_VERSION = "v30-large-anime-thumbnails-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -1071,7 +1071,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 return {
                   ...ps,
                   status: serverMatch.status || ps.status,
-                  totalEpisodes: serverMatch.totalEpisodes || ps.totalEpisodes,
+                  totalEpisodes: Math.max(serverMatch.totalEpisodes || 0, ps.totalEpisodes || 0),
                   seasonYear: serverMatch.seasonYear || ps.seasonYear,
                   tmdbId: serverMatch.tmdbId != null ? serverMatch.tmdbId : ps.tmdbId,
                   tmdbSeasonNumber: serverMatch.tmdbSeasonNumber != null ? serverMatch.tmdbSeasonNumber : ps.tmdbSeasonNumber,
@@ -1088,6 +1088,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             return {
               ...prev,
               ...a,
+              totalEpisodes: Math.max(a.totalEpisodes || 0, prev.totalEpisodes || 0),
               seasons: mergedSeasons,
             };
           });

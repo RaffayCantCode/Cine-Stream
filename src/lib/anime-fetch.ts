@@ -1098,7 +1098,7 @@ export async function getAnimeDetails(
     const curatedNodes = getCuratedAnimeFranchiseNodes(numId);
     const curatedItem = curatedNodes?.find(n => String(n.id) === String(numId));
     if (curatedItem) {
-      const epCount = curatedItem.episodes || 1;
+      const epCount = curatedItem.episodes && curatedItem.episodes > 1 ? curatedItem.episodes : (curatedItem.format === "MOVIE" || curatedItem.format === "SPECIAL" ? 1 : 12);
       const animeItem: AnimeItem = {
         id: String(curatedItem.id),
         idMal: curatedItem.idMal ? String(curatedItem.idMal) : null,
@@ -1553,7 +1553,7 @@ export async function fetchEpisodesFromAniZip(
       const title = ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${epNum}`;
       const description = ep.overview || ep.summary || null;
       let thumbnail = ep.image || null;
-      if (thumbnail && (thumbnail.includes("/cover/") || thumbnail.includes("/banner/") || thumbnail.includes("bx20-"))) {
+      if (thumbnail && (thumbnail.includes("/cover/") || thumbnail.includes("/banner/") || /\/bx\d+[-]/.test(thumbnail))) {
         thumbnail = null;
       }
       const releasedDate = ep.airDate || ep.airdate || null;
@@ -1748,13 +1748,15 @@ export async function fetchEpisodesFromJikan(
         if (!data || !data.data) continue;
         for (const ep of data.data) {
           const epNum = typeof ep.episode === "number" ? ep.episode : ep.mal_id;
-          if (!epNum || epNum > maxEpisodes) continue;
+          if (!epNum || epNum > effectiveCap) continue;
+          const thumb = ep.images?.jpg?.image_url || null;
+          const validThumb = thumb && !(thumb.includes("/cover/") || thumb.includes("/banner/") || /\/bx\d+[-]/.test(thumb)) ? thumb : null;
           allEps.push({
             episodeId: `${anilistId}-${epNum}`,
             episodeNum: epNum,
             title: ep.title || `Episode ${epNum}`,
             description: ep.synopsis || null,
-            thumbnail: ep.images?.jpg?.image_url || null,
+            thumbnail: validThumb,
             releasedDate: ep.aired || null,
             isFiller: ep.filler || false,
             isRecap: ep.recap || false,
