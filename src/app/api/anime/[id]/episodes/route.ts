@@ -278,10 +278,14 @@ async function getEnrichedEpisodesList(
       seasonEps = seasonEps.map((ep) => {
         const match = src.find(s => s && s.episodeNum === ep.episodeNum);
         const isGenericTitle = !ep.title || ep.title === `Episode ${ep.episodeNum}`;
+        const epThumbIsCover = ep.thumbnail && (ep.thumbnail.includes("/cover/") || ep.thumbnail.includes("/banner/") || ep.thumbnail.includes("bx20-"));
+        const matchThumbIsCover = match?.thumbnail && (match.thumbnail.includes("/cover/") || match.thumbnail.includes("/banner/") || match.thumbnail.includes("bx20-"));
+        const epThumb = !epThumbIsCover ? ep.thumbnail : null;
+        const matchThumb = !matchThumbIsCover ? match?.thumbnail : null;
         return {
           ...ep,
           title: isGenericTitle && match?.title ? match.title : ep.title,
-          thumbnail: ep.thumbnail || match?.thumbnail || null,
+          thumbnail: epThumb || matchThumb || null,
           description: ep.description || match?.description || null,
           isFiller: ep.isFiller || match?.isFiller || false,
         };
@@ -650,24 +654,23 @@ export async function GET(
           for (let i = 1; i <= dynamicTotalEpisodes; i++) {
             const matchEp = overlayEps.find(j => j.episodeNum === i);
             
-            let tmdbSeason = matchEp?.seasonNumber || null;
-            let tmdbEpisode = matchEp?.episodeNumber || null;
-
-            if (!tmdbSeason || !tmdbEpisode) {
-              const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
-              tmdbSeason = mapped.seasonNumber;
-              tmdbEpisode = mapped.episodeNumber;
-            }
+            const mapped = mapRelativeToTmdb(episodeOffset + i, startSeason, tmdbSeasonsList);
+            const tmdbSeason = mapped.seasonNumber;
+            const tmdbEpisode = mapped.episodeNumber;
 
             const tmdbEp = tmdbEpisodes.get(`${tmdbSeason}-${tmdbEpisode}`)
+              || tmdbEpisodes.get(`abs-${episodeOffset + i}`)
               || tmdbEpisodes.get(`abs-${i}`)
               || tmdbEpisodes.get(`${tmdbSeason}-rel-${tmdbEpisode}`);
             
+            const isMatchThumbCover = matchEp?.thumbnail && (matchEp.thumbnail.includes("/cover/") || matchEp.thumbnail.includes("/banner/") || matchEp.thumbnail.includes("bx20-"));
+            const validMatchThumb = !isMatchThumbCover ? matchEp?.thumbnail : null;
+
             seasonEps.push({
               episodeId: matchEp?.episodeId || `${season.id}-${i}`,
               episodeNum: i,
               title: tmdbEp?.title || matchEp?.title || `Episode ${i}`,
-              thumbnail: tmdbEp?.thumbnail || matchEp?.thumbnail || null,
+              thumbnail: tmdbEp?.thumbnail || validMatchThumb || null,
               malUrl: matchEp?.malUrl || null,
               isFiller: matchEp?.isFiller || false,
               releasedDate: tmdbEp?.air_date || matchEp?.releasedDate || null,

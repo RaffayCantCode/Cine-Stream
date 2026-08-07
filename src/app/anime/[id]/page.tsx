@@ -90,9 +90,54 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       next: { revalidate: 86400 },
     });
 
-    if (!res.ok) throw new Error("AniList fetch failed");
-    const json = await res.json();
-    const anime = json?.data?.Media;
+    let json = res.ok ? await res.json().catch(() => null) : null;
+    let anime = json?.data?.Media;
+
+    if (!anime && !isNaN(numId)) {
+      // Fallback 1: Try AniList by MAL ID (in case numId was a MAL ID)
+      try {
+        const malRes = await fetch('https://graphql.anilist.co', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            query: `query ($idMal: Int) {
+              Media(idMal: $idMal, type: ANIME, isAdult: false) {
+                id idMal title { romaji english native } description coverImage { extraLarge large } bannerImage episodes genres averageScore status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
+              }
+            }`,
+            variables: { idMal: numId }
+          }),
+          signal: AbortSignal.timeout(3000),
+          next: { revalidate: 86400 },
+        }).then(r => r.json()).catch(() => null);
+        if (malRes?.data?.Media) {
+          anime = malRes.data.Media;
+        }
+      } catch {}
+    }
+
+    if (!anime && !isNaN(numId)) {
+      // Fallback 2: Try AniZip mapping for TMDB ID
+      try {
+        const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
+          signal: AbortSignal.timeout(2000),
+        }).then(r => r.json()).catch(() => null);
+        const alId = azRes?.mappings?.anilist_id;
+        if (alId) {
+          const alRes = await fetch('https://graphql.anilist.co', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ query: INITIAL_QUERY, variables: { id: alId } }),
+            signal: AbortSignal.timeout(3000),
+            next: { revalidate: 86400 },
+          }).then(r => r.json()).catch(() => null);
+          if (alRes?.data?.Media) {
+            anime = alRes.data.Media;
+          }
+        }
+      } catch {}
+    }
+
     if (!anime) throw new Error("No media found");
 
     // Strip HTML from description

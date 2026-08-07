@@ -51,7 +51,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v26-airing-episodes-fix";
+const ANIME_API_VERSION = "v28-jojo-naruto-thumbnails-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {

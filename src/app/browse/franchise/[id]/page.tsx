@@ -114,7 +114,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
     hydratedPosterIds.current.clear();
     const load = async () => {
       try {
-        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}?v=franchise-aot-v25-live-covers`, { skipCache: true });
+        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}?v=franchise-v27-live-fix`, { skipCache: true });
         setCollection(data);
       } catch (err) {
         setError("Failed to load franchise");
@@ -172,8 +172,26 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
         const batch = missingPosterItems.slice(i, i + 6);
         const results = await Promise.allSettled(
           batch.map(async (item) => {
-            const mediaType = item.media_type === "tv" ? "tv" : "movie";
-            const key = `${mediaType}-${item.id}`;
+            const rawMediaType = item.media_type || "movie";
+            const key = `${rawMediaType}-${item.id}`;
+
+            if (rawMediaType === "anime") {
+              return {
+                key,
+                id: item.id,
+                media_type: item.media_type,
+                title: item.title || item.name,
+                name: item.name || item.title,
+                overview: item.overview || "",
+                poster_path: item.poster_path || null,
+                backdrop_path: item.backdrop_path || null,
+                vote_average: item.vote_average ?? null,
+                release_date: item.release_date || item.first_air_date || "",
+                first_air_date: item.first_air_date || "",
+              };
+            }
+
+            const mediaType = rawMediaType === "tv" ? "tv" : "movie";
 
             let detail: any = null;
             let fallback: any = null;

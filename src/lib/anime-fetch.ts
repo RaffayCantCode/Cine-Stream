@@ -968,7 +968,23 @@ export async function getAnimeDetails(
   aniZipMapping = aniZipResData;
   media = fetchedMedia;
 
-  // Fallback: If numId was actually a TMDB ID or unknown ID that failed AniList direct lookup, try AniZip TMDB mapping
+  // Fallback 1: If numId failed direct AniList ID lookup, try AniList lookup by MAL ID
+  if (!media && !isNaN(numId)) {
+    try {
+      const qMal = `query ($idMal: Int) {
+        Media(idMal: $idMal, type: ANIME, isAdult: false) {
+          id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+          episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
+        }
+      }`;
+      const malRes = await anilistQuery(qMal, { idMal: numId }, 1, 86400);
+      if (malRes?.data?.Media) {
+        media = malRes.data.Media;
+      }
+    } catch {}
+  }
+
+  // Fallback 2: If numId was actually a TMDB ID or unknown ID that failed AniList direct lookup, try AniZip TMDB mapping
   if (!media && !isNaN(numId)) {
     try {
       const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
@@ -985,12 +1001,12 @@ export async function getAnimeDetails(
     } catch {}
   }
 
-  // Jikan fallback for the main metadata (use ONLY if we have valid MAL ID)
+  // Jikan fallback for the main metadata (use if we have valid MAL ID or numId as MAL ID)
   if (!media) {
     try {
       let resolvedMalId = aniZipMapping?.mappings?.mal_id
         ? String(aniZipMapping.mappings.mal_id)
-        : isMalInput ? String(numId) : null;
+        : isMalInput || !isNaN(numId) ? String(numId) : null;
 
       if (!resolvedMalId && !isNaN(numId)) {
         try {
@@ -1536,7 +1552,10 @@ export async function fetchEpisodesFromAniZip(
       const ep = json.episodes[key];
       const title = ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${epNum}`;
       const description = ep.overview || ep.summary || null;
-      const thumbnail = ep.image || null;
+      let thumbnail = ep.image || null;
+      if (thumbnail && (thumbnail.includes("/cover/") || thumbnail.includes("/banner/") || thumbnail.includes("bx20-"))) {
+        thumbnail = null;
+      }
       const releasedDate = ep.airDate || ep.airdate || null;
       // AniZip provides duration in seconds; convert to minutes
       const runtime = typeof ep.duration === "number" ? Math.round(ep.duration / 60) : null;
@@ -1941,9 +1960,10 @@ export async function fetchEpisodesFromTatakai(
     if (!json.episodes || !Array.isArray(json.episodes)) return null;
 
     const eps: EpisodeDetail[] = [];
+    const effectiveCap = seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500;
     for (const ep of json.episodes) {
       const epNum = typeof ep.number === "number" ? ep.number : parseInt(String(ep.number), 10);
-      if (isNaN(epNum) || epNum > seasonCap) continue;
+      if (isNaN(epNum) || epNum > effectiveCap) continue;
 
       eps.push({
         episodeId: `${anilistId}-${epNum}`,
@@ -1980,8 +2000,9 @@ export async function fetchEpisodesFromKitsu(
     if (!anime) return null;
 
     const kitsuId = anime.id;
+    const limitParam = Math.min(Math.max(seasonCap || 20, 1), 20);
     const epRes = await fetch(
-      `https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=${seasonCap}`,
+      `https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=${limitParam}`,
       { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } }
     );
     if (!epRes.ok) return null;
@@ -1989,9 +2010,10 @@ export async function fetchEpisodesFromKitsu(
     const epsData = epJson.data || [];
 
     const eps: EpisodeDetail[] = [];
+    const effectiveCap = seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500;
     for (const ep of epsData) {
       const epNum = ep.attributes?.number;
-      if (!epNum || epNum > seasonCap) continue;
+      if (!epNum || epNum > effectiveCap) continue;
 
       const title = ep.attributes?.canonicalTitle || ep.attributes?.title || `Episode ${epNum}`;
       const description = ep.attributes?.synopsis || null;

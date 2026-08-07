@@ -163,14 +163,14 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/21459-yeVkolGKdGUV.jpg",
     poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg",
     items: [
-      { id: 65930, media_type: "anime", anilist_id: 21459, title: "My Hero Academia (Season 1)", release_date: "2016-04-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg" },
-      { id: 65930, media_type: "anime", anilist_id: 21856, title: "My Hero Academia (Season 2)", release_date: "2017-03-25", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21856-gutauxhWAwn6.png" },
-      { id: 65930, media_type: "anime", anilist_id: 100166, title: "My Hero Academia (Season 3)", release_date: "2018-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100166-jUCZYbzn2XLw.jpg" },
-      { id: 65930, media_type: "anime", anilist_id: 104276, title: "My Hero Academia (Season 4)", release_date: "2019-10-12", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104276-SnEowMvesWIE.png" },
-      { id: 65930, media_type: "anime", anilist_id: 117193, title: "My Hero Academia (Season 5)", release_date: "2021-03-27", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx117193-E75BlZmDh1aB.jpg" },
-      { id: 65930, media_type: "anime", anilist_id: 139630, title: "My Hero Academia (Season 6)", release_date: "2022-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx139630-3v4gxWtNZxLV.jpg" },
-      { id: 65930, media_type: "anime", anilist_id: 163139, title: "My Hero Academia (Season 7)", release_date: "2024-05-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx163139-JchZhUFlNTWU.jpg" },
-      { id: 65930, media_type: "anime", anilist_id: 182896, title: "My Hero Academia Final Season", release_date: "2025-10-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx182896-mvxTVHGdDB4q.jpg" },
+      { id: 21459, media_type: "anime", anilist_id: 21459, tmdb_id: 65930, title: "My Hero Academia (Season 1)", release_date: "2016-04-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg" },
+      { id: 21856, media_type: "anime", anilist_id: 21856, tmdb_id: 65930, title: "My Hero Academia (Season 2)", release_date: "2017-03-25", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21856-gutauxhWAwn6.png" },
+      { id: 100166, media_type: "anime", anilist_id: 100166, tmdb_id: 65930, title: "My Hero Academia (Season 3)", release_date: "2018-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100166-jUCZYbzn2XLw.jpg" },
+      { id: 104276, media_type: "anime", anilist_id: 104276, tmdb_id: 65930, title: "My Hero Academia (Season 4)", release_date: "2019-10-12", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104276-SnEowMvesWIE.png" },
+      { id: 117193, media_type: "anime", anilist_id: 117193, tmdb_id: 65930, title: "My Hero Academia (Season 5)", release_date: "2021-03-27", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx117193-E75BlZmDh1aB.jpg" },
+      { id: 139630, media_type: "anime", anilist_id: 139630, tmdb_id: 65930, title: "My Hero Academia (Season 6)", release_date: "2022-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx139630-3v4gxWtNZxLV.jpg" },
+      { id: 163139, media_type: "anime", anilist_id: 163139, tmdb_id: 65930, title: "My Hero Academia (Season 7)", release_date: "2024-05-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx163139-JchZhUFlNTWU.jpg" },
+      { id: 182896, media_type: "anime", anilist_id: 182896, tmdb_id: 65930, title: "My Hero Academia Final Season", release_date: "2025-10-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx182896-mvxTVHGdDB4q.jpg" },
     ]
   },
   {
@@ -237,9 +237,9 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/5F0HVEgkgP99fEWDjPyikGt9jQi.jpg",
     poster_path: "/xppeysfvDKVx775MFuH8Z9BlpMk.jpg",
     items: [
-      { id: 20, media_type: "anime", anilist_id: 20, title: "Naruto", release_date: "2002-10-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-dE6UHbFFg1A5.jpg" },
-      { id: 1735, media_type: "anime", anilist_id: 1735, title: "Naruto: Shippuden", release_date: "2007-02-15", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1735-kGfVm0YqCPcu.png" },
-      { id: 97938, media_type: "anime", anilist_id: 97938, title: "Boruto: Naruto Next Generations", release_date: "2017-04-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97938-BnF6M5yTaNB1.jpg" },
+      { id: 20, media_type: "anime", anilist_id: 20, title: "Naruto", release_date: "2002-10-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-dE6UHbFFg1A5.jpg", tmdb_id: 46260 },
+      { id: 1735, media_type: "anime", anilist_id: 1735, title: "Naruto: Shippuden", release_date: "2007-02-15", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1735-kGfVm0YqCPcu.png", tmdb_id: 31910 },
+      { id: 97938, media_type: "anime", anilist_id: 97938, title: "Boruto: Naruto Next Generations", release_date: "2017-04-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97938-BnF6M5yTaNB1.jpg", tmdb_id: 70881 },
     ],
   },
   {
@@ -249,13 +249,13 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/21175-bXEDZ4sk6jTJ.png",
     poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg",
     items: [
-      { id: 223, media_type: "anime", anilist_id: 223, title: "Dragon Ball", release_date: "1986-02-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx223-scE5uJfXqqj8.png" },
-      { id: 813, media_type: "anime", anilist_id: 813, title: "Dragon Ball Z", release_date: "1989-04-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx813-ZhnFNOeCU5dQ.png" },
-      { id: 225, media_type: "anime", anilist_id: 225, title: "Dragon Ball GT", release_date: "1996-02-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx225-pzkDUVy7tKxH.png" },
-      { id: 21175, media_type: "anime", anilist_id: 21175, title: "Dragon Ball Super", release_date: "2015-07-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg" },
-      { id: 101302, media_type: "anime", tmdb_type: "movie", anilist_id: 101302, title: "Dragon Ball Super: Broly (Movie)", release_date: "2018-12-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101302-7L0lcwYeFQQM.jpg" },
-      { id: 133898, media_type: "anime", tmdb_type: "movie", anilist_id: 133898, title: "Dragon Ball Super: Super Hero (Movie)", release_date: "2022-06-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx133898-KdQ7fWTG06n4.png" },
-      { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png" },
+      { id: 223, media_type: "anime", anilist_id: 223, title: "Dragon Ball", release_date: "1986-02-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx223-scE5uJfXqqj8.png", tmdb_id: 12609 },
+      { id: 813, media_type: "anime", anilist_id: 813, title: "Dragon Ball Z", release_date: "1989-04-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx813-ZhnFNOeCU5dQ.png", tmdb_id: 12971 },
+      { id: 225, media_type: "anime", anilist_id: 225, title: "Dragon Ball GT", release_date: "1996-02-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx225-pzkDUVy7tKxH.png", tmdb_id: 12697 },
+      { id: 21175, media_type: "anime", anilist_id: 21175, title: "Dragon Ball Super", release_date: "2015-07-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg", tmdb_id: 62715 },
+      { id: 101302, media_type: "anime", tmdb_type: "movie", anilist_id: 101302, title: "Dragon Ball Super: Broly (Movie)", release_date: "2018-12-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101302-7L0lcwYeFQQM.jpg", tmdb_id: 503314 },
+      { id: 133898, media_type: "anime", tmdb_type: "movie", anilist_id: 133898, title: "Dragon Ball Super: Super Hero (Movie)", release_date: "2022-06-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx133898-KdQ7fWTG06n4.png", tmdb_id: 610150 },
+      { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png", tmdb_id: 236979 },
     ]
   },
   {
@@ -357,11 +357,11 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/116674-l2YlIyJzvGSV.jpg",
     poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg",
     items: [
-      { id: 269, media_type: "anime", anilist_id: 269, title: "Bleach (Original Series)", release_date: "2004-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx269-d2GmRkJbMopq.png" },
-      { id: 116674, media_type: "anime", anilist_id: 116674, title: "Bleach: Thousand-Year Blood War (Part 1)", release_date: "2022-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg" },
-      { id: 159322, media_type: "anime", anilist_id: 159322, title: "Bleach: Thousand-Year Blood War - The Separation (Part 2)", release_date: "2023-07-08", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx159322-Sp1GflRhE6Po.jpg" },
-      { id: 169755, media_type: "anime", anilist_id: 169755, title: "Bleach: Thousand-Year Blood War - The Conflict (Part 3)", release_date: "2024-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx169755-Rqb7MjnzdTc6.jpg" },
-      { id: 185874, media_type: "anime", anilist_id: 185874, title: "Bleach: Thousand-Year Blood War - Part 4", release_date: "2025-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx185874-aU3e6tBT6wwA.jpg" },
+      { id: 269, media_type: "anime", anilist_id: 269, title: "Bleach (Original Series)", release_date: "2004-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx269-d2GmRkJbMopq.png", tmdb_id: 30984 },
+      { id: 116674, media_type: "anime", anilist_id: 116674, title: "Bleach: Thousand-Year Blood War (Part 1)", release_date: "2022-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg", tmdb_id: 126282, tmdb_season_number: 1 },
+      { id: 159322, media_type: "anime", anilist_id: 159322, title: "Bleach: Thousand-Year Blood War - The Separation (Part 2)", release_date: "2023-07-08", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx159322-Sp1GflRhE6Po.jpg", tmdb_id: 126282, tmdb_season_number: 2 },
+      { id: 169755, media_type: "anime", anilist_id: 169755, title: "Bleach: Thousand-Year Blood War - The Conflict (Part 3)", release_date: "2024-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx169755-Rqb7MjnzdTc6.jpg", tmdb_id: 126282, tmdb_season_number: 3 },
+      { id: 185874, media_type: "anime", anilist_id: 185874, title: "Bleach: Thousand-Year Blood War - Part 4", release_date: "2025-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx185874-aU3e6tBT6wwA.jpg", tmdb_id: 126282, tmdb_season_number: 4 },
     ]
   },
   {
@@ -608,14 +608,14 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/rqbCbjB19amtOtFQbb3K2lgm2zv.jpg",
     poster_path: "/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg",
     items: [
-      { id: 1429, media_type: "anime", anilist_id: 16498, episodes: 25, title: "Attack on Titan (Season 1)", release_date: "2013-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-buvcRTBx4NSm.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 1, episode_offset: 0, season_label: "Season 1" },
-      { id: 1429, media_type: "anime", anilist_id: 20958, episodes: 12, title: "Attack on Titan (Season 2)", release_date: "2017-04-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20958-HuFJyr54Mmir.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 2, episode_offset: 0, season_label: "Season 2" },
-      { id: 1429, media_type: "anime", anilist_id: 99147, episodes: 12, title: "Attack on Titan (Season 3)", release_date: "2018-07-23", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx99147-AiPDD8cwlCfi.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 3, episode_offset: 0, season_label: "Season 3" },
-      { id: 1429, media_type: "anime", anilist_id: 104578, episodes: 10, title: "Attack on Titan (Season 3 Part 2)", release_date: "2019-04-29", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104578-k61nx3LPjvgd.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 3, episode_offset: 12, season_label: "Season 3 Part 2" },
-      { id: 1429, media_type: "anime", anilist_id: 110277, episodes: 16, title: "Attack on Titan (Final Season)", release_date: "2020-12-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx110277-sKUNXAsWMNFw.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 0, season_label: "Final Season Part 1" },
-      { id: 1429, media_type: "anime", anilist_id: 131681, episodes: 12, title: "Attack on Titan (Final Season Part 2)", release_date: "2022-01-10", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131681-5ooUqvqNtee1.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 16, season_label: "Final Season Part 2" },
-      { id: 1429, media_type: "anime", tmdb_type: "movie", anilist_id: 146984, episodes: 1, title: "Attack on Titan (The Final Chapters Special 1)", release_date: "2023-03-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx146984-GXrLeT6vQqyP.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 28, season_label: "Special 1" },
-      { id: 1429, media_type: "anime", tmdb_type: "movie", anilist_id: 162314, episodes: 1, title: "Attack on Titan (The Final Chapters Special 2)", release_date: "2023-11-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx162314-qIWdAAFtvY8J.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 29, season_label: "Special 2" },
+      { id: 16498, media_type: "anime", anilist_id: 16498, episodes: 25, title: "Attack on Titan (Season 1)", release_date: "2013-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-buvcRTBx4NSm.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 1, episode_offset: 0, season_label: "Season 1" },
+      { id: 20958, media_type: "anime", anilist_id: 20958, episodes: 12, title: "Attack on Titan (Season 2)", release_date: "2017-04-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20958-HuFJyr54Mmir.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 2, episode_offset: 0, season_label: "Season 2" },
+      { id: 99147, media_type: "anime", anilist_id: 99147, episodes: 12, title: "Attack on Titan (Season 3)", release_date: "2018-07-23", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx99147-AiPDD8cwlCfi.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 3, episode_offset: 0, season_label: "Season 3" },
+      { id: 104578, media_type: "anime", anilist_id: 104578, episodes: 10, title: "Attack on Titan (Season 3 Part 2)", release_date: "2019-04-29", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104578-k61nx3LPjvgd.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 3, episode_offset: 12, season_label: "Season 3 Part 2" },
+      { id: 110277, media_type: "anime", anilist_id: 110277, episodes: 16, title: "Attack on Titan (Final Season)", release_date: "2020-12-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx110277-sKUNXAsWMNFw.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 0, season_label: "Final Season Part 1" },
+      { id: 131681, media_type: "anime", anilist_id: 131681, episodes: 12, title: "Attack on Titan (Final Season Part 2)", release_date: "2022-01-10", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131681-5ooUqvqNtee1.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 16, season_label: "Final Season Part 2" },
+      { id: 146984, media_type: "anime", tmdb_type: "movie", anilist_id: 146984, episodes: 1, title: "Attack on Titan (The Final Chapters Special 1)", release_date: "2023-03-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx146984-GXrLeT6vQqyP.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 28, season_label: "Special 1" },
+      { id: 162314, media_type: "anime", tmdb_type: "movie", anilist_id: 162314, episodes: 1, title: "Attack on Titan (The Final Chapters Special 2)", release_date: "2023-11-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx162314-qIWdAAFtvY8J.jpg", status: "FINISHED", tmdb_id: 1429, tmdb_season_number: 4, episode_offset: 29, season_label: "Special 2" },
     ]
   },
   {
@@ -637,13 +637,13 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/3GQKYh6Trm8pxd2AypovoYQf4Ay.jpg",
     poster_path: "/xUfRZu2mi8jH6SzQEJGP6tjBuYj.jpg",
     items: [
-      { id: 85937, media_type: "anime", anilist_id: 101922, episodes: 26, title: "Demon Slayer: Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg" },
-      { id: 635302, media_type: "anime", tmdb_type: "movie", anilist_id: 112151, episodes: 1, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png" },
-      { id: 85937, media_type: "anime", anilist_id: 129874, episodes: 7, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg" },
-      { id: 85937, media_type: "anime", anilist_id: 142329, episodes: 11, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg" },
-      { id: 85937, media_type: "anime", anilist_id: 145139, episodes: 11, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png" },
-      { id: 85937, media_type: "anime", anilist_id: 166240, episodes: 8, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png" },
-      { id: 85937, media_type: "anime", tmdb_type: "movie", anilist_id: 178788, episodes: 1, title: "Infinity Castle (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178788-zm3gtpB9TpRt.jpg" },
+      { id: 101922, media_type: "anime", anilist_id: 101922, episodes: 26, title: "Demon Slayer: Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg", tmdb_id: 85937, tmdb_season_number: 1 },
+      { id: 112151, media_type: "anime", tmdb_type: "movie", anilist_id: 112151, episodes: 1, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png", tmdb_id: 635302 },
+      { id: 129874, media_type: "anime", anilist_id: 129874, episodes: 7, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg", tmdb_id: 85937, tmdb_season_number: 2 },
+      { id: 142329, media_type: "anime", anilist_id: 142329, episodes: 11, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg", tmdb_id: 85937, tmdb_season_number: 2, episode_offset: 7 },
+      { id: 145139, media_type: "anime", anilist_id: 145139, episodes: 11, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png", tmdb_id: 85937, tmdb_season_number: 3 },
+      { id: 166240, media_type: "anime", anilist_id: 166240, episodes: 8, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png", tmdb_id: 85937, tmdb_season_number: 4 },
+      { id: 178788, media_type: "anime", tmdb_type: "movie", anilist_id: 178788, episodes: 1, title: "Infinity Castle (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178788-zm3gtpB9TpRt.jpg", tmdb_id: 85937 },
     ]
   },
   {
@@ -653,10 +653,10 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/lthkKBLe1rX6iThgVFg22O02sJw.jpg",
     poster_path: "/fHpKWq9ayzSk8nSwqRuaAUemRKh.jpg",
     items: [
-      { id: 95479, media_type: "anime", anilist_id: 113415, title: "Jujutsu Kaisen Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-LHBAeoZDIsnF.jpg" },
-      { id: 810693, media_type: "anime", anilist_id: 131573, title: "Jujutsu Kaisen 0 (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131573-rpl82vDEDRm6.jpg" },
-      { id: 95479, media_type: "anime", anilist_id: 145064, title: "Jujutsu Kaisen Season 2", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145064-hSNRJM03pvv1.jpg" },
-      { id: 95479, media_type: "anime", anilist_id: 172463, title: "Jujutsu Kaisen Season 3", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx172463-LnXqHzt74SJL.jpg" },
+      { id: 113415, media_type: "anime", anilist_id: 113415, title: "Jujutsu Kaisen Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-LHBAeoZDIsnF.jpg", tmdb_id: 95479, tmdb_season_number: 1 },
+      { id: 131573, media_type: "anime", anilist_id: 131573, title: "Jujutsu Kaisen 0 (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131573-rpl82vDEDRm6.jpg", tmdb_id: 810693 },
+      { id: 145064, media_type: "anime", anilist_id: 145064, title: "Jujutsu Kaisen Season 2", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145064-hSNRJM03pvv1.jpg", tmdb_id: 95479, tmdb_season_number: 2 },
+      { id: 172463, media_type: "anime", anilist_id: 172463, title: "Jujutsu Kaisen Season 3", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx172463-LnXqHzt74SJL.jpg", tmdb_id: 95479, tmdb_season_number: 3 },
     ]
   },
   {
@@ -824,12 +824,12 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/mLKN1dsimKPiXCZ48KED0X8a02t.jpg",
     poster_path: "/ogAWwbh3frWtiTyyXrZaVFtqCgp.jpg",
     items: [
-      { id: 45790, media_type: "anime", anilist_id: 14719, title: "Phantom Blood & Battle Tendency (Part 1 & 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx14719-VT5dRzTBSZ0w.jpg" },
-      { id: 45790, media_type: "anime", anilist_id: 20474, title: "Stardust Crusaders (Part 3)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20474-xuqem5GBlBtb.jpg" },
-      { id: 45790, media_type: "anime", anilist_id: 20799, title: "Stardust Crusaders - Battle in Egypt", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20799-S1eyqBDlx51E.jpg" },
-      { id: 45790, media_type: "anime", anilist_id: 21450, title: "Diamond is Unbreakable (Part 4)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21450-D7XFwEQjZ5GA.jpg" },
-      { id: 45790, media_type: "anime", anilist_id: 102883, title: "Golden Wind (Part 5)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx102883-S9KzdMJhDswJ.png" },
-      { id: 45790, media_type: "anime", anilist_id: 131942, title: "Stone Ocean (Part 6)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131942-rermlZ9lplHX.png" },
+      { id: 14719, media_type: "anime", anilist_id: 14719, title: "Phantom Blood & Battle Tendency (Part 1 & 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx14719-VT5dRzTBSZ0w.jpg", tmdb_id: 45790, tmdb_season_number: 1, episode_offset: 0 },
+      { id: 20474, media_type: "anime", anilist_id: 20474, title: "Stardust Crusaders (Part 3)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20474-xuqem5GBlBtb.jpg", tmdb_id: 45790, tmdb_season_number: 2, episode_offset: 0 },
+      { id: 20799, media_type: "anime", anilist_id: 20799, title: "Stardust Crusaders - Battle in Egypt", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20799-S1eyqBDlx51E.jpg", tmdb_id: 45790, tmdb_season_number: 2, episode_offset: 24 },
+      { id: 21450, media_type: "anime", anilist_id: 21450, title: "Diamond is Unbreakable (Part 4)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21450-D7XFwEQjZ5GA.jpg", tmdb_id: 45790, tmdb_season_number: 3, episode_offset: 0 },
+      { id: 102883, media_type: "anime", anilist_id: 102883, title: "Golden Wind (Part 5)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx102883-S9KzdMJhDswJ.png", tmdb_id: 45790, tmdb_season_number: 4, episode_offset: 0 },
+      { id: 131942, media_type: "anime", anilist_id: 131942, title: "Stone Ocean (Part 6)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131942-rermlZ9lplHX.png", tmdb_id: 45790, tmdb_season_number: 5, episode_offset: 0 },
     ]
   },
   {
@@ -839,17 +839,17 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/b2mskN6F9kUolFc8mTBiEJwfXLC.jpg",
     poster_path: "/x7nYPOveHhINREhTtwBHot9ersB.jpg",
     items: [
-      { id: 45845, media_type: "anime", anilist_id: 10087, title: "Fate/Zero (Season 1)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx10087-M4Hd9qrHGrXk.png" },
-      { id: 45845, media_type: "anime", anilist_id: 11741, title: "Fate/Zero (Season 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx11741-oEy1fJHYm2zJ.jpg" },
-      { id: 37858, media_type: "anime", anilist_id: 356, title: "Fate/stay night (2006)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx356-mTpMvtillumS.png" },
-      { id: 61415, media_type: "anime", anilist_id: 19603, title: "Unlimited Blade Works (Season 1)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx19603-ycT0pyEgDVQu.jpg" },
-      { id: 61415, media_type: "anime", anilist_id: 20792, title: "Unlimited Blade Works (Season 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20792-Q53sZsUAh5FF.jpg" },
-      { id: 441130, media_type: "anime", tmdb_type: "movie", anilist_id: 20791, title: "Heaven's Feel I. presage flower", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20791-yPCX5GJuMH2k.png" },
-      { id: 530254, media_type: "anime", tmdb_type: "movie", anilist_id: 21718, title: "Heaven's Feel II. lost butterfly", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21718-Hjj26Sapx1bd.jpg" },
-      { id: 556973, media_type: "anime", tmdb_type: "movie", anilist_id: 21719, title: "Heaven's Feel III. spring song", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21719-MSdTlkno0Z0u.jpg" },
-      { id: 72304, media_type: "anime", anilist_id: 98035, title: "Fate/Apocrypha", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx98035-rdkjeqUUsG2j.jpg" },
-      { id: 90677, media_type: "anime", anilist_id: 103275, title: "Fate/Grand Order: Babylonia", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx103275-SN0wwshS3tWA.jpg" },
-      { id: 219816, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154966-eQRCmSrCh96j.png" },
+      { id: 10087, media_type: "anime", anilist_id: 10087, title: "Fate/Zero (Season 1)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx10087-M4Hd9qrHGrXk.png", tmdb_id: 45845, tmdb_season_number: 1 },
+      { id: 11741, media_type: "anime", anilist_id: 11741, title: "Fate/Zero (Season 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx11741-oEy1fJHYm2zJ.jpg", tmdb_id: 45845, tmdb_season_number: 2 },
+      { id: 356, media_type: "anime", anilist_id: 356, title: "Fate/stay night (2006)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx356-mTpMvtillumS.png", tmdb_id: 37858 },
+      { id: 19603, media_type: "anime", anilist_id: 19603, title: "Unlimited Blade Works (Season 1)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx19603-ycT0pyEgDVQu.jpg", tmdb_id: 61415, tmdb_season_number: 1 },
+      { id: 20792, media_type: "anime", anilist_id: 20792, title: "Unlimited Blade Works (Season 2)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20792-Q53sZsUAh5FF.jpg", tmdb_id: 61415, tmdb_season_number: 2 },
+      { id: 20791, media_type: "anime", tmdb_type: "movie", anilist_id: 20791, title: "Heaven's Feel I. presage flower", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20791-yPCX5GJuMH2k.png", tmdb_id: 441130 },
+      { id: 21718, media_type: "anime", tmdb_type: "movie", anilist_id: 21718, title: "Heaven's Feel II. lost butterfly", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21718-Hjj26Sapx1bd.jpg", tmdb_id: 530254 },
+      { id: 21719, media_type: "anime", tmdb_type: "movie", anilist_id: 21719, title: "Heaven's Feel III. spring song", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21719-MSdTlkno0Z0u.jpg", tmdb_id: 556973 },
+      { id: 98035, media_type: "anime", anilist_id: 98035, title: "Fate/Apocrypha", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx98035-rdkjeqUUsG2j.jpg", tmdb_id: 72304 },
+      { id: 103275, media_type: "anime", anilist_id: 103275, title: "Fate/Grand Order: Babylonia", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx103275-SN0wwshS3tWA.jpg", tmdb_id: 90677 },
+      { id: 154966, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154966-eQRCmSrCh96j.png", tmdb_id: 219816 },
     ]
   },
   {
@@ -903,7 +903,7 @@ export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string)
         const format = isMovie ? "MOVIE" : isSpecial ? "SPECIAL" : "TV";
 
         return {
-          id: item.anilist_id!,
+          id: item.anilist_id || item.id,
           idMal: null,
           title: item.title || franchise.name,
           episodes: item.episodes || (isMovie || isSpecial ? 1 : null),
@@ -911,7 +911,7 @@ export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string)
           seasonYear: item.release_date ? parseInt(item.release_date.substring(0, 4), 10) : null,
           format: format,
           status: item.status || "FINISHED",
-          tmdbId: item.tmdb_id || (item.id !== 1429 ? item.id : 1429),
+          tmdbId: item.tmdb_id || item.id,
           tmdbSeasonNumber: item.tmdb_season_number || null,
           episodeOffset: item.episode_offset || 0,
           seasonLabel: item.season_label || null,
