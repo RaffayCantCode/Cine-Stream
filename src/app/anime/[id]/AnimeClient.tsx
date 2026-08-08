@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { AnimePlayer } from "@/components/AnimePlayer";
-import { AnimeRow } from "@/components/AnimeRow";
-import { AnimeCard } from "@/components/AnimeCard";
-import { CastRow } from "@/components/CastRow";
+import { ChevronDown, ChevronRight, ChevronLeft, CheckCircle2, Film, Grid2x2, List, ListOrdered, Loader2, Play, Star } from "lucide-react";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { WatchlistButton } from "@/components/WatchlistButton";
+import { AnimeCard } from "@/components/AnimeCard";
+import { cn, fetchJson, formatDate } from "@/lib/utils";
 import { usePageContentReady } from "@/lib/pageLoad";
+import type { AnimeCatalog, AnimeItem, EpisodeDetail, SeasonInfo } from "@/lib/anime/types";
+
+const AnimePlayer = dynamic(() => import("@/components/AnimePlayer").then((m) => m.AnimePlayer), { ssr: false });
 
 function AnimeHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -27,2319 +29,1359 @@ function AnimeHeroTrailerButton() {
     </button>
   );
 }
-import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
-import type { SeasonInfo } from "@/lib/anime-fetch";
-import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users, Film, CheckCircle2 } from "lucide-react";
 
-interface FranchiseNode {
-  id: number;
-  idMal: number | null;
-  title: string;
-  episodes: number | null;
-  totalEpisodes?: number | null;
-  season: string | null;
-  seasonYear: number | null;
-  status?: string | null;
-  format: string | null;
-  duration: number | null;
-  coverImage?: string | null;
-  bannerImage?: string | null;
-  tmdbId?: number | null;
-  tmdbSeasonNumber?: number | null;
-  episodeOffset?: number;
+function isSpecialSeason(season: SeasonInfo): boolean {
+  const label = (season.seasonLabel || "").toLowerCase();
+  const name = (season.name || "").toLowerCase();
+  const format = (season.format || "").toUpperCase();
+  return (
+    format === "SPECIAL" ||
+    format === "OVA" ||
+    label.startsWith("special") ||
+    label.startsWith("ova") ||
+    name.includes("special") ||
+    name.includes("ova") ||
+    (name.includes("hitorigoto") && !name.includes("kusuriya"))
+  );
 }
 
-// ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v31-anizip-tmdb-recovery";
-const ANILIST_API = "https://graphql.anilist.co";
-
-async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
-  const res = await fetch(ANILIST_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!res.ok) throw new Error("AniList query failed");
-  return res.json();
+function isMovieSeason(season: SeasonInfo): boolean {
+  const label = (season.seasonLabel || "").toLowerCase();
+  return season.format === "MOVIE" || label.startsWith("movie");
 }
 
-function transformRecItem(media: any): any {
-  if (media.isAdult) return null;
-  return {
-    id: String(media.id),
-    idMal: media.idMal ? String(media.idMal) : null,
-    name: media.title?.english || media.title?.romaji || "Unknown",
-    jname: media.title?.native || null,
-    poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
-    type: media.type || "ANIME",
-    episodes: { sub: media.episodes || null, dub: null },
-    rating: media.averageScore ? String((media.averageScore / 10).toFixed(1)) : null,
-    description: media.description?.replace(/<[^>]*>/g, "") || "",
-    genres: media.genres || [],
-    status: media.status || null,
-    season: media.season || null,
-    seasonYear: media.seasonYear || null,
-    format: media.format || null,
-  };
+function isOngoingStatus(status: string | null | undefined): boolean {
+  const normalized = (status || "").toUpperCase();
+  if (!normalized) return false;
+  return normalized === "RELEASING" || normalized === "NOT_YET_RELEASED";
 }
 
-async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<string>, minItems = 12, animeGenres: string[] = []): Promise<any[]> {
-  let items: any[] = [];
-
-  try {
-    const data = await anilistQuery(`
-      query ($id: Int) {
-        Media(id: $id, type: ANIME) {
-          recommendations(page: 1, perPage: 25, sort: [RATING_DESC]) {
-            nodes {
-              mediaRecommendation {
-                id idMal isAdult title { romaji english native }
-                coverImage { large extraLarge }
-                episodes genres averageScore description status type format season seasonYear
-              }
-            }
-          }
-        }
-      }
-    `, { id: anilistId });
-
-    const nodes = data?.data?.Media?.recommendations?.nodes || [];
-    items = nodes
-      .map((n: any) => n?.mediaRecommendation)
-      .filter(Boolean)
-      .map(transformRecItem)
-      .filter(Boolean)
-      .filter((item: any) => !excludeIds.has(item.id) && item.id !== String(anilistId));
-  } catch { /* recommendations failed */ }
-
-  if (items.length < minItems) {
-    try {
-      const existingIds = new Set(items.map((i: any) => i.id));
-      const seenGenres = new Set<string>();
-      items.forEach((i: any) => i.genres?.forEach((g: string) => seenGenres.add(g)));
-      if (seenGenres.size === 0 && animeGenres.length > 0) {
-        animeGenres.forEach((g: string) => seenGenres.add(g));
-      }
-      const genreList = [...seenGenres].slice(0, 3);
-      if (genreList.length > 0) {
-        const padData = await anilistQuery(`
-          query ($genres: [String], $page: Int) {
-            Page(page: $page, perPage: 25) {
-              media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC], genre_in: $genres) {
-                id idMal isAdult title { romaji english native }
-                coverImage { large extraLarge }
-                episodes genres averageScore description status type format season seasonYear
-              }
-            }
-          }
-        `, { genres: genreList, page: 1 });
-
-        const padItems = (padData?.data?.Page?.media || [])
-          .map(transformRecItem)
-          .filter(Boolean)
-          .filter((item: any) => !existingIds.has(item.id) && !excludeIds.has(item.id) && item.id !== String(anilistId));
-        items = [...items, ...padItems];
-      }
-    } catch { /* padding failed */ }
-  }
-
-  // Fallback: If still under minItems, query top popular anime
-  if (items.length < minItems) {
-    try {
-      const existingIds = new Set(items.map((i: any) => i.id));
-      const popData = await anilistQuery(`
-        query {
-          Page(page: 1, perPage: 25) {
-            media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC]) {
-              id idMal isAdult title { romaji english native }
-              coverImage { large extraLarge }
-              episodes genres averageScore description status type format season seasonYear
-            }
-          }
-        }
-      `, {});
-
-      const popItems = (popData?.data?.Page?.media || [])
-        .map(transformRecItem)
-        .filter(Boolean)
-        .filter((item: any) => !existingIds.has(item.id) && !excludeIds.has(item.id) && item.id !== String(anilistId));
-      items = [...items, ...popItems];
-    } catch { /* popular fallback failed */ }
-  }
-
-  const seen = new Set<string>();
-  items = items.filter((item: any) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
-
-  return items.slice(0, Math.max(minItems, 20));
-}
-
-async function getAniZipMappingClientSide(anilistId: number) {
-  try {
-    const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
-      signal: AbortSignal.timeout(3000)
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const tmdbId = data.mappings?.themoviedb_id ? parseInt(data.mappings.themoviedb_id, 10) : null;
-      const azEp1 = data.episodes?.["1"];
-      const tmdbSeasonNumber = typeof azEp1?.seasonNumber === "number" ? azEp1.seasonNumber : null;
-      const episodeOffset = typeof azEp1?.episodeNumber === "number" ? azEp1.episodeNumber - 1 : null;
-      const hasEpisodeMapping = tmdbId != null && tmdbSeasonNumber != null && episodeOffset != null;
-      return { tmdbId, tmdbSeasonNumber, episodeOffset, hasEpisodeMapping };
-    }
-  } catch (e) {
-    console.warn(`[AniZip Client] Failed to fetch mappings for ${anilistId}`, e);
-  }
-  return null;
-}
-
-async function fetchEpisodesClientSide(
-  seasonId: string,
-  seasonName: string,
-  totalEpisodes: number,
-  tmdbId?: number | null,
-  tmdbSeasonNum?: number | null,
-  episodeOffset?: number | null
-): Promise<Episode[]> {
-  try {
-    // 1. Try AniZip directly from browser
-    const aniZipRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${seasonId}`, {
-      signal: AbortSignal.timeout(4000)
-    }).catch(() => null);
-
-    let aniZipEps: Episode[] = [];
-    let mappedTmdbId = tmdbId;
-    let mappedTmdbSeason = tmdbSeasonNum;
-    let mappedOffset = episodeOffset ?? 0;
-
-    if (aniZipRes?.ok) {
-      const azData = await aniZipRes.json();
-      if (azData?.mappings?.themoviedb_id) {
-        mappedTmdbId = parseInt(azData.mappings.themoviedb_id, 10) || tmdbId;
-      }
-      const ep1 = azData?.episodes?.["1"];
-      if (typeof ep1?.seasonNumber === "number") {
-        mappedTmdbSeason = ep1.seasonNumber;
-      }
-      if (typeof ep1?.episodeNumber === "number") {
-        mappedOffset = ep1.episodeNumber - 1;
-      }
-
-      if (azData?.episodes) {
-        for (const k of Object.keys(azData.episodes)) {
-          const num = parseInt(k, 10);
-          if (isNaN(num)) continue;
-          const ep = azData.episodes[k];
-          aniZipEps.push({
-            episodeId: `${seasonId}-${num}`,
-            episodeNum: num,
-            title: ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${num}`,
-            description: ep.overview || ep.summary || null,
-            thumbnail: ep.image || null,
-            releasedDate: ep.airDate || ep.airdate || null,
-            isFiller: false,
-            seasonId,
-            seasonNum: 1,
-          });
-        }
-      }
-    }
-
-    // 2. If TMDB mapping is known, fetch rich metadata via TMDB proxy route
-    let activeTmdbId = mappedTmdbId;
-    let activeTmdbSeason = mappedTmdbSeason;
-
-    // Fallback: If TMDB ID is missing, search TMDB for the anime title directly from browser!
-    if (!activeTmdbId && seasonName) {
-      try {
-        const cleanName = seasonName.replace(/\b(season|part|2nd|3rd|4th|5th|final)\b.*$/i, "").trim() || seasonName;
-        const searchRes = await fetch(`/api/tmdb/search?query=${encodeURIComponent(cleanName)}&type=tv`, {
-          signal: AbortSignal.timeout(3000)
-        });
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          const firstTv = searchData?.results?.[0];
-          if (firstTv?.id) {
-            activeTmdbId = firstTv.id;
-            activeTmdbSeason = 1;
-          }
-        }
-      } catch { /* ignore */ }
-    }
-
-    if (activeTmdbId && activeTmdbSeason != null) {
-      try {
-        const tmdbRes = await fetch(`/api/tmdb/tv/${activeTmdbId}/season/${activeTmdbSeason}`, {
-          signal: AbortSignal.timeout(4000)
-        });
-        if (tmdbRes.ok) {
-          const tmdbData = await tmdbRes.json();
-          const epsList = tmdbData?.episodes || [];
-          if (epsList.length > 0) {
-            const result: Episode[] = [];
-            const remainingTmdbEps = Math.max(epsList.length - mappedOffset, 0);
-            const maxEpCount = (totalEpisodes && totalEpisodes > 0 && totalEpisodes < 1499)
-              ? totalEpisodes
-              : remainingTmdbEps;
-            const count = Math.min(maxEpCount || remainingTmdbEps, 1500);
-            for (let i = 1; i <= count; i++) {
-              const azMatch = aniZipEps.find(e => e.episodeNum === i);
-              const tmdbIdx = mappedOffset + i - 1;
-              const tmdbEp = epsList[tmdbIdx] || epsList.find((e: any) => e.episode_number === (mappedOffset + i));
-
-              if (!tmdbEp && !azMatch) continue;
-
-              result.push({
-                episodeId: azMatch?.episodeId || `${seasonId}-${i}`,
-                episodeNum: i,
-                title: tmdbEp?.name || azMatch?.title || `Episode ${i}`,
-                description: tmdbEp?.overview || azMatch?.description || null,
-                thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
-                releasedDate: tmdbEp?.air_date || azMatch?.releasedDate || null,
-                isFiller: false,
-                seasonId,
-                seasonNum: 1,
-              });
-            }
-            if (result.length > 0) return result.sort((a, b) => a.episodeNum - b.episodeNum);
-          }
-        }
-      } catch { /* ignore */ }
-    }
-
-    // 3. If AniZip returned episodes, return them
-    if (aniZipEps.length > 0) {
-      return aniZipEps.sort((a, b) => a.episodeNum - b.episodeNum);
-    }
-
-    // 4. Try Kitsu directly from browser
-    try {
-      const kSearch = await fetch(`https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(seasonName)}&page[limit]=1`, { signal: AbortSignal.timeout(3000) });
-      if (kSearch.ok) {
-        const kJson = await kSearch.json();
-        const kId = kJson.data?.[0]?.id;
-        if (kId) {
-          const kitsuLimit = Math.max((totalEpisodes && totalEpisodes < 1499) ? totalEpisodes : 50, 50);
-          const kEpsRes = await fetch(`https://kitsu.io/api/edge/anime/${kId}/episodes?page[limit]=${kitsuLimit}`, { signal: AbortSignal.timeout(4000) });
-          if (kEpsRes.ok) {
-            const kEpsJson = await kEpsRes.json();
-            const kData = kEpsJson.data || [];
-            const kEps: Episode[] = [];
-            for (const ep of kData) {
-              const num = ep.attributes?.number;
-              if (!num) continue;
-              kEps.push({
-                episodeId: `kitsu-${kId}-${num}`,
-                episodeNum: num,
-                title: ep.attributes?.canonicalTitle || ep.attributes?.title || `Episode ${num}`,
-                description: ep.attributes?.synopsis || null,
-                thumbnail: ep.attributes?.thumbnail?.original || null,
-                releasedDate: ep.attributes?.airdate || null,
-                isFiller: false,
-                seasonId,
-                seasonNum: 1,
-              });
-            }
-            if (kEps.length > 0) return kEps.sort((a, b) => a.episodeNum - b.episodeNum);
-          }
-        }
-      }
-    } catch { /* ignore */ }
-  } catch (e) {
-    console.warn(`[Client Episode Fetch] Error for ${seasonId}`, e);
-  }
-
-  return [];
-}
-
-async function fetchFranchiseClientSide(startId: number) {
-  const curated = getCuratedAnimeFranchiseNodes(startId);
-  if (curated && curated.length > 1) {
-    return curated as FranchiseNode[];
-  }
-
-  // Query fetches the node's OWN metadata AND its relation edges
-  const RELATIONS_QUERY = `query ($id: Int) {
-    Media(id: $id, type: ANIME) {
-      id idMal title { romaji english native } episodes status season seasonYear format bannerImage coverImage { large extraLarge }
-      relations { edges { relationType node { id idMal title { romaji english native } episodes status season seasonYear format type isAdult bannerImage coverImage { large extraLarge } } } }
-    }
-  }`;
-  
-  const visited = new Map<number, any>();
-  const queue = [startId];
-  let hops = 0;
-  
-  while (queue.length > 0 && visited.size < 150 && hops < 15) {
-    const batch = queue.splice(0, queue.length);
-    hops++;
-    
-    await Promise.all(batch.map(async (nodeId) => {
-      try {
-        const res = await fetch("https://graphql.anilist.co", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({ query: RELATIONS_QUERY, variables: { id: nodeId } }),
-          signal: AbortSignal.timeout(8000)
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data?.data?.Media) return;
-        
-        const media = data.data.Media;
-        // Register this node with its OWN data (title, format, etc.)
-        if (!visited.has(media.id)) {
-          visited.set(media.id, {
-            id: media.id, idMal: media.idMal || null, episodes: media.episodes,
-            season: media.season, seasonYear: media.seasonYear, format: media.format,
-            status: media.status || null,
-            title: media.title?.english || media.title?.romaji || media.title?.native || "",
-            bannerImage: media.bannerImage || null,
-            coverImage: media.coverImage?.extraLarge || media.coverImage?.large || null
-          });
-        }
-        
-        // Traverse SEQUEL, PREQUEL, ALTERNATIVE, PARENT, SIDE_STORY, SPIN_OFF relations
-        const edges = media.relations?.edges || [];
-        for (const edge of edges) {
-          if (!edge.node) continue;
-          const rType = edge.relationType;
-          if (!["PREQUEL", "SEQUEL", "ALTERNATIVE", "PARENT", "SIDE_STORY", "SPIN_OFF"].includes(rType)) continue;
-          if (edge.node.type !== "ANIME" || edge.node.isAdult) continue;
-          const relId = edge.node.id;
-          if (!visited.has(relId) && !queue.includes(relId)) {
-            // Pre-populate with relation data so we have title even if we can't fetch its own page
-            visited.set(relId, {
-              id: relId, idMal: edge.node.idMal || null, episodes: edge.node.episodes,
-              season: edge.node.season, seasonYear: edge.node.seasonYear, format: edge.node.format,
-              status: edge.node.status || null,
-              title: edge.node.title?.english || edge.node.title?.romaji || edge.node.title?.native || "",
-              bannerImage: edge.node.bannerImage || null,
-              coverImage: edge.node.coverImage?.extraLarge || edge.node.coverImage?.large || null
-            });
-            queue.push(relId);
-          }
-        }
-      } catch (e) { /* ignore */ }
-    }));
-  }
-  
-  const nodes = Array.from(visited.values()).filter(n => n.title); // Drop nodes with no title
-  
-  // Filter out the 3 unrelated/redundant Fate movies/OVAs
-  const EXCLUDED_IDS = new Set([6922, 19165, 12565]);
-  const filteredNodes = nodes.filter(n => !EXCLUDED_IDS.has(Number(n.id)));
-
-  const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-  return filteredNodes.sort((a, b) => {
-    // Custom chronological order for the Fate series
-    const FATE_ORDER = [10087, 11741, 356, 19603, 20792, 20791, 21718, 21719];
-    const idxA = FATE_ORDER.indexOf(Number(a.id));
-    const idxB = FATE_ORDER.indexOf(Number(b.id));
-    
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-
-    const yearA = a.seasonYear || 9999;
-    const yearB = b.seasonYear || 9999;
-    if (yearA !== yearB) return yearA - yearB;
-    const formatOrder = { TV: 0, TV_SHORT: 1, ONA: 2, OVA: 3, SPECIAL: 4, MOVIE: 5 };
-    const fA = (formatOrder as any)[a.format || "TV"] ?? 6;
-    const fB = (formatOrder as any)[b.format || "TV"] ?? 6;
-    if (fA !== fB) return fA - fB;
-    return seasonOrder.indexOf(a.season || "FALL") - seasonOrder.indexOf(b.season || "FALL");
+/** Format a Unix timestamp (seconds or ms) as "Fri, Feb 6, 2026". */
+function formatAirDate(timestamp: number): string {
+  const ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
-function formatAnimeStatus(statusRaw?: string | null, eps?: Episode[]): { label: string; style: "finished" | "airing" | "upcoming" } {
-  if (!statusRaw) return { label: "FINISHED", style: "finished" };
-  const s = statusRaw.toUpperCase().replace(/_/g, " ").trim();
-
-  if (s.includes("FINISHED") || s.includes("COMPLETED")) {
-    return { label: "FINISHED", style: "finished" };
-  }
-  if (s.includes("RELEASING") || s.includes("CURRENTLY AIRING") || s === "AIRING") {
-    return { label: "CURRENTLY AIRING", style: "airing" };
-  }
-  if (eps && eps.length > 0) {
-    const ep1 = eps.find(e => e.episodeNum === 1) || eps[0];
-    if (ep1?.releasedDate) {
-      const epMs = new Date(ep1.releasedDate).getTime();
-      if (!isNaN(epMs) && epMs <= Date.now()) {
-        return { label: "CURRENTLY AIRING", style: "airing" };
-      }
-    }
-  }
-  if (s.includes("NOT YET") || s.includes("UPCOMING") || s.includes("UNRELEASED") || s.includes("CANCELLED")) {
-    return { label: "NOT YET AIRED", style: "upcoming" };
-  }
-  return { label: statusRaw, style: "finished" };
+interface EpisodesResponse {
+  success: boolean;
+  data?: { episodes: EpisodeDetail[]; seasonOverview: string | null };
 }
 
-function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): SeasonInfo[] {
-  const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-  const sorted = [...clientNodes].sort((a, b) => {
-    const yearA = a.seasonYear || 9999;
-    const yearB = b.seasonYear || 9999;
-    if (yearA !== yearB) return yearA - yearB;
-    const formatOrder = { TV: 0, TV_SHORT: 1, ONA: 2, OVA: 3, SPECIAL: 4, MOVIE: 5 };
-    const fA = (formatOrder as any)[a.format || "TV"] ?? 6;
-    const fB = (formatOrder as any)[b.format || "TV"] ?? 6;
-    if (fA !== fB) return fA - fB;
-    const sA = seasonOrder.indexOf(a.season || "FALL");
-    const sB = seasonOrder.indexOf(b.season || "FALL");
-    return sA - sB;
-  });
-
-  let tvCount = 0;
-  let movieCount = 0;
-  let ovaCount = 0;
-  let specialCount = 0;
-
-  return sorted.map((node) => {
-    const isMovie = node.format === "MOVIE";
-    const isSpecial = node.format === "SPECIAL";
-    const isOva = node.format === "OVA";
-    let label: string = (node as any).seasonLabel || "";
-    if (!label) {
-      if (isMovie) { movieCount++; label = `Movie ${movieCount}`; }
-      else if (isOva) { ovaCount++; label = `OVA ${ovaCount}`; }
-      else if (isSpecial) { specialCount++; label = `Special ${specialCount}`; }
-      else {
-        const titleLower = node.title.toLowerCase();
-        const partMatch = titleLower.match(/(?:part|cour)\s*(\d+)/i);
-        if (partMatch && tvCount > 0) {
-          label = `Season ${tvCount} Part ${partMatch[1]}`;
-        } else {
-          tvCount++;
-          label = `Season ${tvCount}`;
-        }
-      }
-    }
-
-    let nodeStatus: string = (node as any).status || "";
-    if (!nodeStatus) {
-      if ((node as any).nextAiringEpisode) {
-        nodeStatus = "RELEASING";
-      } else if (node.seasonYear && node.seasonYear > new Date().getFullYear()) {
-        nodeStatus = "NOT_YET_RELEASED";
-      } else {
-        nodeStatus = "FINISHED";
-      }
-    }
-
-    return {
-      id: String(node.id),
-      idMal: node.idMal || null,
-      name: node.title,
-      totalEpisodes: isMovie ? 1 : (node.episodes || 0),
-      seasonLabel: label,
-      episodeOffset: node.episodeOffset || (node as any).episodeOffset || 0,
-      isCurrent: String(node.id) === String(currentId),
-      seasonYear: node.seasonYear || null,
-      status: nodeStatus,
-      tmdbId: node.tmdbId || (node as any).tmdbId || null,
-      tmdbSeasonNumber: node.tmdbSeasonNumber || (node as any).tmdbSeasonNumber || null,
-    } as any;
-  });
+interface AnimeClientProps {
+  initialData: AnimeCatalog | null;
 }
 
-async function fetchAnimeMetaClientSide(idStr: string) {
-  if (!idStr) return null;
-  const isMal = idStr.startsWith("mal-");
-  const parsedId = parseInt(idStr.replace("mal-", ""), 10);
-  if (isNaN(parsedId)) return null;
-
-  const query = isMal 
-    ? `query ($idMal: Int) {
-        Media(idMal: $idMal, type: ANIME, isAdult: false) {
-          id idMal title { romaji english native } coverImage { large extraLarge }
-          episodes genres averageScore description status type format season seasonYear duration trailer { id site }
-        }
-      }`
-    : `query ($id: Int) {
-        Media(id: $id, type: ANIME, isAdult: false) {
-          id idMal title { romaji english native } coverImage { large extraLarge }
-          episodes genres averageScore description status type format season seasonYear duration trailer { id site }
-        }
-      }`;
-
-  const variables = isMal ? { idMal: parsedId } : { id: parsedId };
-
-  try {
-    const res = await fetch("https://graphql.anilist.co", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ query, variables }),
-      signal: AbortSignal.timeout(8000)
-    });
-
-    if (!res.ok) {
-      try {
-        const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${parsedId}`, { signal: AbortSignal.timeout(4000) });
-        if (azRes.ok) {
-          const azData = await azRes.json();
-          const malId = azData.mappings?.mal_id;
-          if (malId) {
-            const jRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}`, { signal: AbortSignal.timeout(6000) });
-            if (jRes.ok) {
-              const jData = await jRes.json();
-              const a = jData.data;
-              if (a) {
-                const jAnime: AnimeDetail = {
-                  id: String(parsedId),
-                  idMal: String(a.mal_id),
-                  name: a.title_english || a.title || "Unknown",
-                  jname: a.title_japanese || null,
-                  poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
-                  description: a.synopsis || "",
-                  type: a.type || "TV",
-                  rating: a.score ? String(a.score) : null,
-                  score: a.score ? String(a.score) : null,
-                  status: a.status || null,
-                  genres: (a.genres || []).map((g: any) => g.name),
-                  totalEpisodes: a.episodes || 12,
-                  seasons: [{
-                    id: String(parsedId),
-                    name: a.title_english || a.title || "Unknown",
-                    seasonLabel: "Season 1",
-                    totalEpisodes: a.episodes || 12,
-                    isCurrent: true,
-                    idMal: a.mal_id,
-                    seasonYear: a.year || null,
-                  }],
-                  season: a.season || null,
-                  seasonYear: a.year || null,
-                  format: a.type || null,
-                  openedSeasonId: String(parsedId),
-                  tmdbId: null,
-                  duration: a.duration || null,
-                  trailerId: a.trailer?.youtube_id || null,
-                };
-                return { success: true, data: { anime: jAnime, franchiseNodes: [] } };
-              }
-            }
-          }
-        }
-      } catch {}
-      return null;
-    }
-
-    const json = await res.json();
-    const media = json?.data?.Media;
-    if (!media) return null;
-
-    const anime: AnimeDetail = {
-      id: String(media.id),
-      idMal: media.idMal ? String(media.idMal) : null,
-      name: media.title?.english || media.title?.romaji || media.title?.native || "Unknown",
-      jname: media.title?.native || null,
-      poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
-      description: media.description || "",
-      type: media.format || media.type || "TV",
-      rating: media.averageScore ? String(media.averageScore) : null,
-      score: media.averageScore ? String(media.averageScore) : null,
-      status: media.status || null,
-      genres: media.genres || [],
-      totalEpisodes: media.episodes || 0,
-      seasons: [],
-      season: media.season || null,
-      seasonYear: media.seasonYear || null,
-      format: media.format || null,
-      openedSeasonId: String(media.id),
-      tmdbId: null,
-      duration: media.duration || null,
-      trailerId: media.trailer?.site === "youtube" ? media.trailer.id : null,
-    };
-
-    // Get franchise nodes
-    const clientNodes = await fetchFranchiseClientSide(media.id);
-    const finalSeasons = mapNodesToSeasons(clientNodes, media.id);
-    anime.seasons = finalSeasons;
-
-    return {
-      success: true,
-      data: {
-        anime,
-        franchiseNodes: clientNodes,
-      }
-    };
-  } catch (e) {
-    console.error("[Anime Client Fallback Meta] Error fetching client side", e);
-  }
-  return null;
-}
-
-
-
-interface AnimeDetail {
-  id: string;
-  idMal?: string | null;
-  name: string;
-  jname?: string | null;
-  poster: string;
-  description: string;
-  type?: string | null;
-  rating?: string | null;
-  score?: string | null;
-  status?: string | null;
-  genres?: string[];
-  totalEpisodes: number;
-  seasons: SeasonInfo[];
-  season?: string | null;
-  seasonYear?: number | null;
-  format?: string | null;
-  openedSeasonId?: string | null;
-  tmdbId?: number | null;
-  duration?: number | null;
-  trailerId?: string | null;
-  nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
-}
-
-interface Episode {
-  episodeId: string;
-  episodeNum: number;
-  title?: string;
-  thumbnail?: string | null;
-  malUrl?: string | null;
-  isFiller?: boolean;
-  releasedDate?: string;
-  isReleased?: boolean;
-  description?: string;
-  vote_average?: number;
-  vote_count?: number;
-  runtime?: number;
-  seasonNum?: number;
-  seasonId?: string;
-  seasonName?: string;
-  seasonMalId?: number | null;
-}
-
-export default function AnimeClient({ initialData }: { initialData?: any | null } = {}) {
+export default function AnimeClient({ initialData }: AnimeClientProps) {
   const params = useParams();
-  const id = params?.id as string;
-  const { data: session, status: authStatus } = useSession();
+  const rawId = String(params.id);
+  const { data: session, status } = useSession();
+  const catalog = initialData;
 
-  const [anime, setAnime] = useState<AnimeDetail | null>(() => {
-    // Hydrate from server-passed initial data immediately on first render.
-    // This eliminates the blank skeleton — the poster/title/description/genres
-    // are visible the instant the page hydrates, before any client fetch fires.
-    if (initialData && initialData.id) return initialData as AnimeDetail;
-    return null;
-  });
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  // If we already have initialData, skip the blank skeleton entirely.
-  const [isLoading, setIsLoading] = useState(!initialData);
-  const [episodesLoading, setEpisodesLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>(() => catalog?.openedSeasonId ?? "");
+  const [seasonData, setSeasonData] = useState<{ episodes: EpisodeDetail[]; seasonOverview: string | null } | null>(null);
+  const [seasonLoading, setSeasonLoading] = useState(false);
+  const [episodesError, setEpisodesError] = useState<string | null>(null);
+
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playingSeasonId, setPlayingSeasonId] = useState<string>(() => catalog?.openedSeasonId ?? "");
+  const [playingEpisode, setPlayingEpisode] = useState(1);
+  const [hasEverWatched, setHasEverWatched] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
+  const [isStateLoaded, setIsStateLoaded] = useState(false);
 
-  // Franchise node data for Season Guide
-  const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
-  const [showSeasonGuide, setShowSeasonGuide] = useState(false);
-  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
-  const [hasRestoredState, setHasRestoredState] = useState(false);
+  const [specialsOpen, setSpecialsOpen] = useState(false);
+  const [moviesOpen, setMoviesOpen] = useState(false);
+  const [watchOrderOpen, setWatchOrderOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list" | "number">("grid");
 
-  const tmdbIdRef = useRef<number | null>(null);
-  const animeStatusRef = useRef<string | null>(null);
-  const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [recsLoading, setRecsLoading] = useState(false);
-  usePageContentReady(!isLoading);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sv_anime_episode_view");
+      if (saved === "grid" || saved === "list" || saved === "number") {
+        setViewMode(saved);
+      }
+    } catch {}
+  }, []);
+  const [descExpanded, setDescExpanded] = useState(false);
 
-  interface FranchiseNode {
-    id: number;
-    idMal: number | null;
-    title: string;
-    episodes: number | null;
-    totalEpisodes?: number | null;
-    season: string | null;
-    seasonYear: number | null;
-    format: string | null;
-  }
-
-  // currentSeasonId tracks the ACTIVE season by its AniList ID
-  const [currentSeasonId, setCurrentSeasonId] = useState<string>(id);
+  const [recommendations, setRecommendations] = useState<AnimeItem[]>([]);
+  const [isLoading, setIsLoading] = useState(() => !initialData);
+  const [error, setError] = useState<string | null>(null);
 
   const playerRef = useRef<HTMLDivElement>(null);
-  const selectedQueueEpRef = useRef<HTMLButtonElement>(null);
+  const queueScrollRef = useRef<HTMLDivElement>(null);
+  const selectedEpRef = useRef<HTMLButtonElement>(null);
+  const autoplayHandledRef = useRef(false);
 
-  // Tracks which seasonIds we have already loaded episodes for
-  const loadedSeasonIds = useRef<Set<string>>(new Set());
+  usePageContentReady(!isLoading);
 
+  // ── Scroll to top on id change ───────────────────────────────────────────
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
-  }, [id]);
+  }, [rawId]);
 
-  function isAnimeOngoing(status: string | null | undefined): boolean {
-    const normalized = (status || "").toLowerCase();
-    return normalized.includes("airing") || normalized.includes("releasing") || normalized.includes("not_yet");
-  }
-
-  function isFutureDate(dateValue: string | null | undefined): boolean {
-    if (!dateValue) return false;
-    const dateOnlyStr = dateValue.split("T")[0];
-    const episodeDate = new Date(`${dateOnlyStr}T00:00:00`);
-    if (Number.isNaN(episodeDate.getTime())) return false;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return episodeDate.getTime() > today.getTime();
-  }
-
-  function isWithinNextDays(dateValue: string | null | undefined, days = 7): boolean {
-    if (!dateValue) return false;
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return false;
-    const now = Date.now();
-    return date.getTime() >= now && date.getTime() <= now + days * 24 * 60 * 60 * 1000;
-  }
-
-  function isEpisodeReleased(ep: Episode, status?: string | null): boolean {
-    if (!isAnimeOngoing(status)) return true;
-    if (!isFutureDate(ep.releasedDate)) return true;
-
-    // If episode metadata came from an actual episode source, prefer availability
-    // over a suspicious future date. This avoids locking already released anime.
-    const hasSourceBackedMetadata = Boolean(ep.malUrl || ep.thumbnail || ep.vote_count || ep.runtime);
-    return hasSourceBackedMetadata;
-  }
-
-  // ── Fetch episodes for a specific season by its AniList ID ─────────────
-  // NOTE: Must be defined before the meta useEffect that calls it
-  const loadSeasonEpisodes = useCallback(async (
-    seasonId: string, 
-    forceReload = false,
-    clientTmdbId?: number | null,
-    clientTmdbSeason?: number | null,
-    clientEpisodeOffset?: number | null
-  ) => {
-    if (!forceReload && loadedSeasonIds.current.has(seasonId)) return;
-
-    setEpisodesLoading(true);
-    setSeasonOverview(null);
-
-    const tmdbIdQuery = clientTmdbId != null ? `&tmdbId=${clientTmdbId}` : "";
-    // Always send tmdbSeason and episodeOffset when known — never skip on 0 (falsy)
-    const tmdbSeasonQuery = clientTmdbSeason != null ? `&tmdbSeason=${clientTmdbSeason}` : "";
-    const episodeOffsetQuery = clientEpisodeOffset != null ? `&episodeOffset=${clientEpisodeOffset}` : "";
-
-    try {
-      const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
-      );
-      const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
-      const activeSeasonStatus = matchingSeason?.status || anime?.status || "";
-      const statusNorm = activeSeasonStatus.toLowerCase().replace(/_/g, " ").trim();
-      const isUnreleasedAnime = 
-        statusNorm.includes("not yet") || 
-        statusNorm.includes("upcoming") || 
-        statusNorm.includes("to be aired") ||
-        statusNorm.includes("unreleased");
-      const isFinishedSeason = statusNorm.includes("finished") || statusNorm.includes("completed");
-
-      const hasEpisodes = epData.success && epData.data?.episodes && epData.data.episodes.length > 0;
-      if (hasEpisodes) {
-        const sorted = epData.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
-        const nextEpNum = anime?.nextAiringEpisode?.episode || null;
-
-        let encounteredUnreleased = false;
-        const nowMs = Date.now();
-        const withRelease: Episode[] = sorted.map((ep) => {
-          let released = ep.isReleased !== false;
-
-          if (isUnreleasedAnime) {
-            released = false;
-          } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextEpNum) {
-            released = false;
-          } else if (ep.releasedDate) {
-            const epDateMs = new Date(ep.releasedDate).getTime();
-            if (!isNaN(epDateMs) && epDateMs > nowMs) {
-              released = false;
-            }
-          }
-
-          if (encounteredUnreleased) {
-            released = false;
-          }
-
-          if (!released) {
-            encounteredUnreleased = true;
-          }
-
-          return {
-            ...ep,
-            isReleased: released,
-          };
-        });
-
-        setEpisodes(prev => {
-          const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
-          const merged = [...otherSeasons, ...withRelease].sort((a, b) => {
-            if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
-            return a.episodeNum - b.episodeNum;
-          });
-          return merged;
-        });
-        setSeasonOverview(epData.data.seasonOverview || null);
-        loadedSeasonIds.current.add(seasonId);
-        return;
-      }
-    } catch (err) {
-      console.warn(`[AnimeClient] Server episode API failed for seasonId=${seasonId}, attempting client-side fallback...`, err);
-    }
-
-    // Client-side fallback: fetch directly from browser APIs (AniZip, TMDB proxy, Kitsu)
-    const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
-    const epCount = (matchingSeason?.totalEpisodes && matchingSeason.totalEpisodes < 1499)
-      ? matchingSeason.totalEpisodes
-      : ((anime?.totalEpisodes && anime.totalEpisodes < 1499 && anime.id === seasonId) ? anime.totalEpisodes : 0);
-    const clientEpsRaw = await fetchEpisodesClientSide(
-      seasonId,
-      matchingSeason?.name || anime?.name || "",
-      epCount,
-      clientTmdbId ?? matchingSeason?.tmdbId,
-      clientTmdbSeason ?? matchingSeason?.tmdbSeasonNumber,
-      clientEpisodeOffset ?? matchingSeason?.episodeOffset
-    );
-
-    const nextEpNum = anime?.nextAiringEpisode?.episode || null;
-    const isNotYet = anime?.status === "NOT_YET_RELEASED";
-    const nowMs = Date.now();
-
-    let clientEncounteredUnreleased = false;
-    const clientEps: Episode[] = clientEpsRaw.map((ep) => {
-      let released = ep.isReleased !== false;
-
-      if (isNotYet) {
-        released = false;
-      } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextEpNum) {
-        released = false;
-      } else if (ep.releasedDate) {
-        const epDateMs = new Date(ep.releasedDate).getTime();
-        if (!isNaN(epDateMs) && epDateMs > nowMs) {
-          released = false;
-        }
-      }
-
-      if (clientEncounteredUnreleased) {
-        released = false;
-      }
-
-      if (!released) {
-        clientEncounteredUnreleased = true;
-      }
-
-      return {
-        ...ep,
-        isReleased: released,
-      };
-    });
-
-    if (clientEps.length > 0) {
-      setEpisodes(prev => {
-        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
-        return [...otherSeasons, ...clientEps].sort((a, b) => a.episodeNum - b.episodeNum);
-      });
-      loadedSeasonIds.current.add(seasonId);
-    } else {
-      // Final fallback: generate basic cards if browser also couldn't reach APIs
-      let fallbackEncounteredUnreleased = false;
-      const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => {
-        const epNum = i + 1;
-        let released = true;
-
-        if (isNotYet) {
-          released = false;
-        } else if (nextEpNum && epNum >= nextEpNum) {
-          released = false;
-        }
-
-        if (fallbackEncounteredUnreleased) {
-          released = false;
-        }
-
-        if (!released) {
-          fallbackEncounteredUnreleased = true;
-        }
-
-        return {
-          episodeId: `${seasonId}-${epNum}`,
-          episodeNum: epNum,
-          title: `Episode ${epNum}`,
-          description: undefined,
-          thumbnail: undefined,
-          malUrl: undefined,
-          isFiller: false,
-          isReleased: released,
-          seasonId: seasonId,
-          seasonNum: 1,
-        };
-      });
-      setEpisodes(prev => {
-        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
-        return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
-      });
-    }
-    setEpisodesLoading(false);
-  }, [id]);
-
-  // Ref to ensure loadMeta only runs ONCE per anime ID (prevents NextAuth session focus re-runs from wiping state).
-  const metaLoadedIdRef = useRef<string | null>(null);
-
-  // ── 1) Immediate Episode & Watch Order Hydration on Mount ───────────────
+  // ── Restore state (URL params > localStorage) ────────────────────────────
   useEffect(() => {
-    if (!id) return;
-    const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-    const targetSeasonId = searchParams.get("seasonId") || id;
-    setCurrentSeasonId(targetSeasonId);
-
-    // Fire episode loading immediately on mount — no waiting for server meta
-    loadSeasonEpisodes(targetSeasonId, false);
-
-    // Fire fast client-side Watch Order graph fetch immediately on mount
-    fetchFranchiseClientSide(Number(id))
-      .then((clientNodes) => {
-        if (clientNodes && clientNodes.length > 0) {
-          setFranchiseNodes((prev) => (clientNodes.length >= prev.length ? clientNodes : prev));
-          const mappedSeasons = mapNodesToSeasons(clientNodes, Number(id));
-          setAnime((prev) => {
-            if (!prev) return prev;
-            const currentSeasons = prev.seasons || [];
-            return {
-              ...prev,
-              seasons: mappedSeasons.length >= currentSeasons.length ? mappedSeasons : currentSeasons,
-            };
-          });
-        }
-      })
-      .catch(() => {});
-  }, [id, loadSeasonEpisodes]);
-
-  // ── 2) Background Server Meta & TMDB Mapping Enrichment ─────────────────
-  useEffect(() => {
-    if (!id) return;
-    if (metaLoadedIdRef.current === id && anime && anime.id === id) return;
-
-    metaLoadedIdRef.current = id;
-    let cancelled = false;
-    loadedSeasonIds.current.clear();
-    tmdbIdRef.current = null;
-
-    if (authStatus === "loading") return;
-
-    const loadMeta = async () => {
-      if (!initialData) setIsLoading(true);
-      setError(null);
-      try {
-        let data: any = null;
-        try {
-          data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
-            `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
-            { signal: AbortSignal.timeout(15000) }
-          );
-        } catch (e) {
-          console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
-        }
-
-        if (!data || !data.success || !data.data?.anime) {
-          const fallbackData = await fetchAnimeMetaClientSide(id);
-          if (fallbackData) data = fallbackData;
-        }
-
-        if (cancelled) return;
-        if (data && data.success && data.data?.anime) {
-          const a = data.data.anime;
-          animeStatusRef.current = a.status || null;
-          setIsLoading(false);
-          setAnime(prev => {
-            if (!prev) return a;
-            const serverSeasons = a.seasons || [];
-            const currentSeasons = prev.seasons || [];
-            const mergedSeasons = currentSeasons.map(ps => {
-              const serverMatch = serverSeasons.find((ss: any) => ss.id === ps.id);
-              if (serverMatch) {
-                return {
-                  ...ps,
-                  status: serverMatch.status || ps.status,
-                  totalEpisodes: Math.max(serverMatch.totalEpisodes || 0, ps.totalEpisodes || 0),
-                  seasonYear: serverMatch.seasonYear || ps.seasonYear,
-                  tmdbId: serverMatch.tmdbId != null ? serverMatch.tmdbId : ps.tmdbId,
-                  tmdbSeasonNumber: serverMatch.tmdbSeasonNumber != null ? serverMatch.tmdbSeasonNumber : ps.tmdbSeasonNumber,
-                  episodeOffset: serverMatch.episodeOffset != null ? serverMatch.episodeOffset : ps.episodeOffset,
-                };
-              }
-              return ps;
-            });
-            for (const ss of serverSeasons) {
-              if (!mergedSeasons.find((ms: any) => ms.id === ss.id)) {
-                mergedSeasons.push(ss);
-              }
-            }
-            return {
-              ...prev,
-              ...a,
-              totalEpisodes: Math.max(a.totalEpisodes || 0, prev.totalEpisodes || 0),
-              seasons: mergedSeasons,
-            };
-          });
-          setFranchiseNodes(prev => {
-            const serverNodes = data.data.franchiseNodes || [];
-            if (serverNodes.length >= prev.length) return serverNodes;
-            return prev;
-          });
-          tmdbIdRef.current = a.tmdbId || null;
-
-          const seasons = a.seasons || [];
-          let urlSeasonId: string | null = null;
-          const searchParams = new URLSearchParams(window.location.search);
-          const urlSeasonNum = Number(searchParams.get("season") || "");
-
-          if (urlSeasonNum > 0 && data.data.tmdbSeasonMap) {
-            const entry = Object.entries(data.data.tmdbSeasonMap).find(([_, num]) => num === urlSeasonNum);
-            if (entry) urlSeasonId = entry[0];
-          } else if (searchParams.get("seasonId")) {
-            urlSeasonId = searchParams.get("seasonId");
-          }
-
-          if (urlSeasonId) {
-            const matchingSeason = seasons.find((s: SeasonInfo) => s.id === urlSeasonId);
-            if (matchingSeason) {
-              setCurrentSeasonId(matchingSeason.id);
-              loadSeasonEpisodes(
-                matchingSeason.id,
-                true,
-                (matchingSeason as any).tmdbId,
-                matchingSeason.tmdbSeasonNumber,
-                (matchingSeason as any).episodeOffset
-              );
-            }
-          }
-        } else {
-          throw new Error("Anime not found");
-        }
-      } catch (e) {
-        if (!cancelled) {
-          if (!anime) {
-            setError(e instanceof Error ? e.message : "Failed to load anime");
-          }
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadMeta();
-    return () => { cancelled = true; };
-  }, [id, loadSeasonEpisodes, authStatus, initialData, anime]);
-
-  // ── Fetch You May Like recommendations (client-side AniList + server route fallback) ────────────
-  useEffect(() => {
-    if (!id) return;
-    setRecsLoading(true);
-    const franchiseIds = new Set(franchiseNodes.map(n => String(n.id)).filter(Boolean));
-    const excludeIds = new Set([id, ...franchiseIds]);
-    const numericId = parseInt(anime?.id || initialData?.id || id.replace(/\D/g, ""), 10);
-    const validAnilistId = !isNaN(numericId) ? numericId : 1;
-
-    const currentGenres = anime?.genres || initialData?.genres || [];
-
-    fetchAnilistRecommendations(validAnilistId, excludeIds, 12, currentGenres)
-      .then(async (items) => {
-        if (items.length === 0 && validAnilistId > 1) {
-          // Server route fallback if client GraphQL query returned no items
-          try {
-            const res = await fetch(`/api/anime/recommendations/${validAnilistId}?genres=${encodeURIComponent(currentGenres.join(","))}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data?.items?.length > 0) items = data.items;
-            }
-          } catch { /* fallback failed */ }
-        }
-
-        if (items.length > 0) {
-          const withReasons = items.map((item: any) => ({
-            ...item,
-            reason: getRecommendationReason(currentGenres.map((g: string) => g.charCodeAt(0)), item.genres?.map((g: string) => g.charCodeAt(0)) || [])
-          }));
-          setRecommendations(withReasons);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setRecsLoading(false));
-  }, [anime?.id, id, franchiseNodes, initialData]);
-
-  // ── Background Mapping Verification & Suspicious Mapping Corrector ─────
-  useEffect(() => {
-    if (isLoading || !anime || !anime.seasons || anime.seasons.length <= 1) return;
-
-    let active = true;
-
-    const isMappingSuspicious = (s: SeasonInfo) => {
-      if (s.tmdbSeasonNumber === undefined || s.tmdbSeasonNumber === null || s.tmdbSeasonNumber === 1) {
-        const label = s.seasonLabel.toLowerCase();
-        if (
-          label.includes("season 2") || 
-          label.includes("season 3") || 
-          label.includes("season 4") || 
-          label.includes("season 5") || 
-          label.includes("season 6") || 
-          label.includes("final season")
-        ) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    const verifyMappings = async () => {
-      const updatedSeasons = [...anime.seasons];
-      let changed = false;
-
-      await Promise.all(
-        anime.seasons.map(async (s, idx) => {
-          const needsVerify = s.tmdbSeasonNumber === undefined || 
-                              s.tmdbSeasonNumber === null || 
-                              (s as any).episodeOffset === undefined ||
-                              isMappingSuspicious(s);
-          if (needsVerify) {
-            const mapping = await getAniZipMappingClientSide(Number(s.id));
-            if (mapping?.hasEpisodeMapping && active) {
-              const current = updatedSeasons[idx];
-              // Resolve effective values — mapping values win only if they are not null
-              const resolvedTmdbId = mapping.tmdbId ?? (current as any).tmdbId;
-              const resolvedTmdbSeason = mapping.tmdbSeasonNumber;
-              const resolvedOffset = mapping.episodeOffset;
-              const currentOffset = (current as any).episodeOffset ?? 0;
-              
-              const effectivelyChanged = 
-                resolvedTmdbSeason !== current.tmdbSeasonNumber ||
-                resolvedOffset !== currentOffset ||
-                resolvedTmdbId !== (current as any).tmdbId;
-
-              if (effectivelyChanged && resolvedTmdbSeason != null && resolvedOffset != null) {
-                console.log(`[Anime Mappings] Background correction for "${s.name}": tmdbSeasonNumber=${resolvedTmdbSeason}, episodeOffset=${resolvedOffset}`);
-                updatedSeasons[idx] = {
-                  ...current,
-                  tmdbId: resolvedTmdbId,
-                  tmdbSeasonNumber: resolvedTmdbSeason,
-                  episodeOffset: resolvedOffset,
-                } as any;
-                changed = true;
-              }
-            }
-          }
-        })
-      );
-
-      if (changed && active) {
-        setAnime(prev => prev ? { ...prev, seasons: updatedSeasons } : prev);
-        
-        // Also force a reload of the current season episodes if they are currently loaded
-        // but might have used the incorrect mapping earlier
-        const currentActiveSeason = updatedSeasons.find(s => s.id === currentSeasonId);
-        if (currentActiveSeason) {
-          loadSeasonEpisodes(
-            currentSeasonId,
-            true, // forceReload = true
-            (currentActiveSeason as any).tmdbId,
-            currentActiveSeason.tmdbSeasonNumber,
-            (currentActiveSeason as any).episodeOffset
-          );
-        }
-      }
-    };
-
-    verifyMappings();
-    return () => { active = false; };
-  }, [isLoading, anime?.id, anime?.seasons?.length, currentSeasonId, loadSeasonEpisodes]);
-
-  // ── Autoplay via URL params & LocalStorage ────────────────────────────
-  useEffect(() => {
-    if (episodes.length === 0 || typeof window === "undefined") return;
-
-    const searchParams = new URLSearchParams(window.location.search);
-    const autoPlay = searchParams.get("autoplay") === "1";
-    const episodeParam = Number(searchParams.get("episode") || "");
-    const seasonIdParam = searchParams.get("seasonId") || "";
-    const legacySeasonParam = Number(searchParams.get("season") || "");
-
-    let target: Episode | undefined;
-
-    if (episodeParam > 0) {
-      target = episodes.find(ep => {
-        const matchesSeasonId = seasonIdParam ? ep.seasonId === seasonIdParam : true;
-        const matchesLegacySeason = legacySeasonParam ? ep.seasonNum === legacySeasonParam : true;
-        return matchesSeasonId && matchesLegacySeason && ep.episodeNum === episodeParam;
-      });
-    }
-
-    // Fallback to localStorage if no URL params specify an episode
-    if (!target && !episodeParam) {
-      try {
-        const userId = session?.user?.id || "guest";
-        const saved = localStorage.getItem(`sv_anime_state_${userId}_${id}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed?.episodeId) {
-            target = episodes.find(ep => ep.episodeId === parsed.episodeId);
-          }
-        }
-      } catch {}
-    }
-
-    if (target && !selectedEp) {
-      setSelectedEp(target);
-      if (autoPlay) {
-        if (authStatus === "authenticated" && anime) {
-          const numericId = parseInt(anime.id, 10);
-          if (!Number.isNaN(numericId)) {
-            fetch("/api/watch-history", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mediaId: numericId,
-                mediaType: "anime",
-                title: anime.name,
-                posterPath: anime.poster || null,
-                backdropPath: null,
-                season: target.seasonNum || 1,
-                episode: target.episodeNum,
-                episodeName: target.title || `Episode ${target.episodeNum}`,
-              }),
-            }).catch(() => {});
-          }
-        }
-        setIsPlaying(true);
-      }
-    }
-
-    if (!hasRestoredState) {
-      setHasRestoredState(true);
-    }
-  }, [episodes, id, anime, hasRestoredState]);
-
-  // Persist State
-  useEffect(() => {
-    if (typeof window !== "undefined" && currentSeasonId && hasRestoredState) {
-      try {
-        const userId = session?.user?.id || "guest";
-        localStorage.setItem(`sv_anime_state_${userId}_${id}`, JSON.stringify({
-          seasonId: currentSeasonId,
-          episodeId: selectedEp?.episodeId || null
-        }));
-      } catch {}
-    }
-  }, [id, currentSeasonId, selectedEp, session?.user?.id, hasRestoredState]);
-
-  // ── Scroll to player on play ────────────────────────────────────────────
-  useEffect(() => {
-    if (!selectedEp || !isPlaying || episodesLoading) return;
-    const timer = setTimeout(() => {
-      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [selectedEp?.episodeId, isPlaying, episodesLoading]);
-
-  // Keep the player queue aligned with the active episode for long seasons.
-  useEffect(() => {
-    if (!selectedEp || !isPlaying || episodesLoading) return;
-    const timer = setTimeout(() => {
-      selectedQueueEpRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [selectedEp?.episodeId, isPlaying, episodesLoading, currentSeasonId]);
-
-  // ── Season overview text from TMDB (included in episodes response) ────
-  // The episodes endpoint now returns TMDB-enriched data directly with seasonOverview
-
-  // ── Season click handler ────────────────────────────────────────────────
-  const handleSeasonClick = useCallback((season: SeasonInfo) => {
-    if (season.id === currentSeasonId) return;
-    setCurrentSeasonId(season.id);
-    setIsPlaying(false);
-    setSelectedEp(null);
-    setEpisodeNotice(null);
-    // Always force-reload when the user explicitly clicks a season tab.
-    // This ensures placeholder episodes (loaded without TMDB params during
-    // the initial pre-fetch race) are replaced with real metadata now that
-    // the client has the correct tmdbId / tmdbSeason / episodeOffset from meta.
-    loadSeasonEpisodes(
-      season.id,
-      true,
-      (season as any).tmdbId,
-      season.tmdbSeasonNumber,
-      (season as any).episodeOffset
-    );
-
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("seasonId", season.id);
-      url.searchParams.delete("episode");
-      window.history.replaceState({}, "", url.toString());
-    }
-  }, [currentSeasonId, loadSeasonEpisodes]);
-
-  // ── Watch episode handler ───────────────────────────────────────────────
-  const handleWatchEpisode = useCallback((ep: Episode) => {
-    if (ep.isReleased === false) {
-      setEpisodeNotice(`Episode ${ep.episodeNum} hasn't been released yet.`);
+    if (!catalog || isStateLoaded) return;
+    setIsLoading(false);
+    if (!catalog.openedSeasonId) {
+      setIsStateLoaded(true);
       return;
     }
-    setEpisodeNotice(null);
-    setSelectedEp(ep);
-    setIsPlaying(true);
+
+    let initSeasonId = catalog.openedSeasonId;
+    let initEp = 1;
+    let hadSavedState = false;
 
     if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (ep.seasonId) {
-        url.searchParams.set("seasonId", ep.seasonId);
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlSeasonId = searchParams.get("seasonId");
+      const urlSeasonNum = Number(searchParams.get("season") || "");
+      const urlEpisode = Number(searchParams.get("episode") || "");
+
+      if (urlSeasonNum > 0) {
+        const match = catalog.seasons.find((s) => s.tmdbSeasonNumber === urlSeasonNum);
+        if (match) initSeasonId = match.id;
+        hadSavedState = true;
+      } else if (urlSeasonId) {
+        const match = catalog.seasons.find((s) => s.id === urlSeasonId);
+        if (match) initSeasonId = match.id;
+        hadSavedState = true;
       }
-      url.searchParams.set("episode", ep.episodeNum.toString());
-      window.history.replaceState({}, "", url.toString());
+      if (urlEpisode > 0) initEp = urlEpisode;
+
+      if (!hadSavedState) {
+        try {
+          const userId = session?.user?.id || "guest";
+          const savedKey = `sv_anime_state_${userId}_${rawId}`;
+          const saved = localStorage.getItem(savedKey);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed?.hasEverWatched === true && parsed?.episode) {
+              if (parsed?.seasonId && catalog.seasons.some((s) => s.id === parsed.seasonId)) {
+                initSeasonId = parsed.seasonId;
+              }
+              initEp = parsed.episode;
+              hadSavedState = true;
+            } else {
+              localStorage.removeItem(savedKey);
+            }
+          }
+        } catch {}
+      }
     }
 
-    if (authStatus === "authenticated" && anime) {
-      const numericId = parseInt(anime.id, 10);
+    setSelectedSeasonId(initSeasonId);
+    setPlayingSeasonId(initSeasonId);
+    setPlayingEpisode(initEp);
+    setHasEverWatched(hadSavedState);
+    setIsStateLoaded(true);
+  }, [catalog, isStateLoaded, rawId, session]);
+
+  // ── Load episodes for the selected season ────────────────────────────────
+  useEffect(() => {
+    if (!catalog || !selectedSeasonId) return;
+    let isActive = true;
+
+    const loadSeason = async () => {
+      setSeasonLoading(true);
+      setEpisodesError(null);
+      try {
+        const data = await fetchJson<EpisodesResponse>(
+          `/api/anime/${encodeURIComponent(rawId)}/episodes?seasonId=${encodeURIComponent(selectedSeasonId)}`
+        );
+        if (!isActive) return;
+        if (data.success && data.data) {
+          setSeasonData(data.data);
+        } else {
+          throw new Error("Season not found");
+        }
+      } catch (e) {
+        if (isActive) {
+          setSeasonData(null);
+          setEpisodesError(e instanceof Error ? e.message : "Failed to load episodes");
+        }
+      } finally {
+        if (isActive) setSeasonLoading(false);
+      }
+    };
+
+    loadSeason();
+    return () => {
+      isActive = false;
+    };
+  }, [catalog, rawId, selectedSeasonId]);
+
+  // ── Autoplay from URL (?autoplay=1&seasonId=...&episode=...) ─────────────
+  useEffect(() => {
+    if (!catalog || !isStateLoaded || autoplayHandledRef.current) return;
+    if (status === "loading") return;
+    if (typeof window === "undefined") return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("autoplay") !== "1") return;
+
+    autoplayHandledRef.current = true;
+    setIsPlaying(true);
+
+    if (status === "authenticated") {
+      const numericId = Number(catalog.anime.id);
       if (!Number.isNaN(numericId)) {
+        const autoSeason = catalog.seasons.find((s) => s.id === playingSeasonId);
         fetch("/api/watch-history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mediaId: numericId,
             mediaType: "anime",
-            title: anime.name,
-            posterPath: anime.poster || null,
-            backdropPath: null,
-            season: ep.seasonNum || 1,
-            episode: ep.episodeNum,
-            episodeName: ep.title || `Episode ${ep.episodeNum}`,
+            title: catalog.anime.name,
+            posterPath: autoSeason?.coverImage || catalog.anime.poster || null,
+            backdropPath: autoSeason?.bannerImage || catalog.anime.bannerImage || null,
+            season: autoSeason?.tmdbSeasonNumber ?? 1,
+            episode: playingEpisode,
+            episodeName: `Episode ${playingEpisode}`,
           }),
         }).catch(() => {});
       }
     }
-  }, [authStatus, anime]);
+  }, [catalog, isStateLoaded, status, playingEpisode, playingSeasonId]);
 
-  const [gridMode, setGridMode] = useState(() => {
-    if (typeof window !== "undefined") {
+  // ── Persist state ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!catalog || !isStateLoaded || status === "loading" || !hasEverWatched) return;
+    if (typeof window !== "undefined") return;
+    try {
+      const userId = session?.user?.id || "guest";
+      localStorage.setItem(
+        `sv_anime_state_${userId}_${rawId}`,
+        JSON.stringify({ seasonId: playingSeasonId, episode: playingEpisode, hasEverWatched: true })
+      );
+    } catch {}
+  }, [catalog, isStateLoaded, status, session, rawId, playingSeasonId, playingEpisode, hasEverWatched]);
+
+  // ── Fetch recommendations ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!catalog) return;
+    let isActive = true;
+    const franchiseIds = catalog.seasons.map((s) => s.id).join(",");
+    const genres = (catalog.anime.genres || []).slice(0, 4).join(",");
+
+    (async () => {
       try {
-        return localStorage.getItem("sv_anime_grid_mode") === "true";
-      } catch {}
+        const res = await fetch(
+          `/api/anime/recommendations/${catalog.anime.id}?genres=${encodeURIComponent(genres)}&excludeIds=${encodeURIComponent(franchiseIds)}`,
+          { signal: AbortSignal.timeout(15000) }
+        );
+        const data = await res.json();
+        if (isActive && data.success && Array.isArray(data.items)) {
+          setRecommendations(data.items);
+        }
+      } catch {
+        /* recommendations are non-critical */
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [catalog]);
+
+  // ── Derived values ───────────────────────────────────────────────────────
+  const seasons = useMemo(() => catalog?.seasons || [], [catalog]);
+  const mainSeasons = useMemo(() => seasons.filter((s) => !isSpecialSeason(s) && !isMovieSeason(s)), [seasons]);
+  const specialSeasons = useMemo(() => seasons.filter((s) => isSpecialSeason(s)), [seasons]);
+  const movieSeasons = useMemo(() => seasons.filter((s) => isMovieSeason(s)), [seasons]);
+
+  // ── Auto-open Specials/Movies when such a season is selected ─────────────
+  useEffect(() => {
+    if (!selectedSeasonId) return;
+    const selected = seasons.find((s) => s.id === selectedSeasonId);
+    if (!selected) return;
+    if (isSpecialSeason(selected)) setSpecialsOpen(true);
+    if (isMovieSeason(selected)) setMoviesOpen(true);
+  }, [selectedSeasonId, seasons]);
+
+  const selectedSeason = useMemo(
+    () => seasons.find((s) => s.id === selectedSeasonId) ?? seasons.find((s) => s.id === catalog?.openedSeasonId),
+    [seasons, selectedSeasonId, catalog]
+  );
+  const playingSeason =
+    seasons.find((s) => s.id === playingSeasonId) ?? selectedSeason;
+
+  // Announce when the next episode airs for ongoing TV seasons. Prefers the
+  // authoritative AniList nextAiringEpisode (only known for the opened entry);
+  // otherwise falls back to the first unaired episode in the loaded list.
+  const nextAiringText = useMemo(() => {
+    if (!selectedSeason) return null;
+    if (!isOngoingStatus(selectedSeason.status || catalog?.anime.status)) return null;
+
+    if (selectedSeason.id === catalog?.openedSeasonId && catalog?.anime.nextAiringEpisode?.airingAt) {
+      return {
+        episode: catalog.anime.nextAiringEpisode.episode,
+        airingAt: catalog.anime.nextAiringEpisode.airingAt,
+      };
     }
-    return false;
-  });
+    const upcoming = seasonData?.episodes?.find((e) => e.isReleased === false && e.releasedDate);
+    if (upcoming?.releasedDate) {
+      const t = new Date(upcoming.releasedDate).getTime();
+      if (!Number.isNaN(t)) return { episode: upcoming.episodeNum, airingAt: t };
+    }
+    return null;
+  }, [selectedSeason, catalog, seasonData]);
 
-  const toggleGridMode = () => {
-    setGridMode(prev => {
-      const next = !prev;
-      try { localStorage.setItem("sv_anime_grid_mode", String(next)); } catch {}
-      return next;
-    });
-  };
-
-  // ── Derived state ───────────────────────────────────────────────────────
-  const INITIAL_EPISODES_PER_PAGE = 50;
-
-  const seasons = useMemo(() => anime?.seasons || [], [anime]);
-
-  // Group all loaded episodes by seasonId
-  const episodesBySeason = useMemo(() => {
-    return episodes.reduce((acc, ep) => {
-      const key = ep.seasonId || "unknown";
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(ep);
-      return acc;
-    }, {} as Record<string, Episode[]>);
-  }, [episodes]);
-
-  const currentSeasonEps = useMemo(
-    () => (episodesBySeason[currentSeasonId] || []).sort((a, b) => a.episodeNum - b.episodeNum),
-    [episodesBySeason, currentSeasonId]
+  const isUpcomingEpisode = useCallback(
+    (episode?: EpisodeDetail | null) => {
+      if (!episode) return false;
+      // Gate on the OPENED season's status (not just the show) — a finished
+      // main entry with an ongoing special must still tag its unaired eps.
+      const seasonStatus = selectedSeason?.status || catalog?.anime.status;
+      if (!isOngoingStatus(seasonStatus)) return false;
+      if (episode.isReleased === false) return true;
+      if (episode.isUpcoming === true) return true;
+      const isFutureDate = (dateValue?: string | null) => {
+        if (!dateValue) return false;
+        const dateOnlyStr = dateValue.split("T")[0];
+        const t = new Date(`${dateOnlyStr}T00:00:00`).getTime();
+        if (Number.isNaN(t)) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return t > today.getTime();
+      };
+      if (isFutureDate(episode.releasedDate)) return true;
+      // Cascade: if any earlier episode in this season hasn't aired yet, this
+      // one can't be out either (matches the TV section's behaviour).
+      if (!seasonData?.episodes) return false;
+      const idx = seasonData.episodes.findIndex((e) => e.episodeNum === episode.episodeNum);
+      if (idx <= 0) return false;
+      for (let i = 0; i < idx; i++) {
+        if (isFutureDate(seasonData.episodes[i].releasedDate)) return true;
+      }
+      return false;
+    },
+    [catalog, selectedSeason, seasonData]
   );
 
-  const upcomingAnimeThisWeek = useMemo(
-    () => currentSeasonEps
-      .filter(ep => ep.isReleased === false && isWithinNextDays(ep.releasedDate, 7))
-      .sort((a, b) => new Date(a.releasedDate || "").getTime() - new Date(b.releasedDate || "").getTime())[0] || null,
-    [currentSeasonEps]
-  );
-
-  const [visibleCount, setVisibleCount] = useState(INITIAL_EPISODES_PER_PAGE);
-
-  // Reset visible count when season changes
-  useEffect(() => {
-    setVisibleCount(INITIAL_EPISODES_PER_PAGE);
-  }, [currentSeasonId]);
-
-  // Expand visible count so the selected episode is always rendered in the queue
-  useEffect(() => {
-    if (!selectedEp || !hasRestoredState) return;
-    const idx = currentSeasonEps.findIndex(e => e.episodeId === selectedEp.episodeId);
-    if (idx >= 0 && idx >= visibleCount) {
-      setVisibleCount(Math.min(idx + 1, currentSeasonEps.length));
-    }
-  }, [selectedEp?.episodeId, hasRestoredState, currentSeasonId]);
+  const currentEpisode =
+    playingSeasonId === selectedSeasonId
+      ? seasonData?.episodes.find((ep) => ep.episodeNum === playingEpisode) ?? null
+      : null;
+  const nextEpisode =
+    playingSeasonId === selectedSeasonId && seasonData
+      ? seasonData.episodes.find((ep) => ep.episodeNum === playingEpisode + 1) ?? null
+      : null;
 
   const currentIdx = useMemo(
-    () => currentSeasonEps.findIndex(e => e.episodeId === selectedEp?.episodeId),
-    [currentSeasonEps, selectedEp]
-  );
-  const nextEp = useMemo(
-    () => (currentIdx >= 0 && currentIdx < currentSeasonEps.length - 1 ? currentSeasonEps[currentIdx + 1] : null),
-    [currentIdx, currentSeasonEps]
-  );
-  const currentSeasonInfo = useMemo(
-    () => seasons.find(s => String(s.id) === String(currentSeasonId)) || franchiseNodes.find(n => String(n.id) === String(currentSeasonId)) || null,
-    [seasons, franchiseNodes, currentSeasonId]
+    () => (seasonData?.episodes.findIndex((ep) => ep.episodeNum === playingEpisode) ?? -1),
+    [seasonData, playingEpisode]
   );
 
-  const isSpecialFormat = useMemo(
-    () =>
-      anime?.format === "MOVIE" ||
-      anime?.type === "MOVIE" ||
-      (currentSeasonInfo as any)?.seasonLabel?.toLowerCase().startsWith("movie") ||
-      (currentSeasonInfo as any)?.seasonLabel?.toLowerCase().startsWith("ova") ||
-      (currentSeasonInfo as any)?.seasonLabel?.toLowerCase().startsWith("special"),
-    [anime?.format, anime?.type, currentSeasonInfo]
+  // ── Watch an episode ─────────────────────────────────────────────────────
+  const handleWatchEpisode = useCallback(
+    (seasonId: string, episodeNum: number, episodeName?: string) => {
+      const targetEp =
+        seasonId === selectedSeasonId ? seasonData?.episodes.find((ep) => ep.episodeNum === episodeNum) : undefined;
+
+      if (isUpcomingEpisode(targetEp)) {
+        setSelectedSeasonId(seasonId);
+        setEpisodeNotice(`Episode ${episodeNum} hasn't been released yet.`);
+        return;
+      }
+
+      setEpisodeNotice(null);
+      setHasEverWatched(true);
+      setSelectedSeasonId(seasonId);
+      setPlayingSeasonId(seasonId);
+      setPlayingEpisode(episodeNum);
+
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("seasonId", seasonId);
+        url.searchParams.set("episode", episodeNum.toString());
+        window.history.replaceState({}, "", url.toString());
+      }
+
+      if (status === "authenticated" && catalog) {
+        const targetSeason = seasons.find((s) => s.id === seasonId);
+        const targetMediaId = Number(targetSeason?.id || catalog.anime.id);
+        const targetTitle = targetSeason?.name || catalog.anime.name;
+        if (!Number.isNaN(targetMediaId)) {
+          fetch("/api/watch-history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mediaId: targetMediaId,
+              mediaType: "anime",
+              title: targetTitle,
+              posterPath: targetSeason?.coverImage || catalog.anime.poster || null,
+              backdropPath: targetSeason?.bannerImage || catalog.anime.bannerImage || null,
+              season: targetSeason?.tmdbSeasonNumber ?? 1,
+              episode: episodeNum,
+              episodeName: episodeName || `Episode ${episodeNum}`,
+            }),
+          }).catch(() => {});
+        }
+      }
+
+      setIsPlaying(true);
+    },
+    [catalog, isUpcomingEpisode, seasonData, selectedSeasonId, seasons, status]
   );
 
-  const isMovieFormat = anime?.format === "MOVIE" || anime?.type === "MOVIE" || isSpecialFormat;
-  const isSingleItem = (currentSeasonEps.length <= 1 && isSpecialFormat) || isMovieFormat;
-
-  const streamingAnimeId = useMemo(() => {
-    const sId = selectedEp?.seasonId || currentSeasonId;
-    if (sId && sId.startsWith("tmdb-")) return anime?.id || sId;
-    return sId || "";
-  }, [selectedEp?.seasonId, currentSeasonId, anime?.id]);
-
-  const streamingMalId = useMemo(() => {
-    if (selectedEp?.seasonMalId != null) return String(selectedEp.seasonMalId);
-    return anime?.idMal || null;
-  }, [selectedEp?.seasonMalId, anime?.idMal]);
-
-  const rootSeason = useMemo(() => {
-    return seasons[0] || null;
-  }, [seasons]);
-
-  const currentSeason = useMemo(() => {
-    return seasons.find(s => String(s.id) === String(currentSeasonId)) || null;
-  }, [seasons, currentSeasonId]);
-
-  const currentEpisodeOffset = useMemo(() => {
-    return currentSeason?.episodeOffset || 0;
-  }, [currentSeason]);
-
-  const displayPoster = (currentSeasonInfo as any)?.coverImage || (currentSeason as any)?.coverImage || anime?.poster || "";
-  const displayBanner = (currentSeasonInfo as any)?.bannerImage || (currentSeasonInfo as any)?.coverImage || (currentSeason as any)?.coverImage || anime?.poster || "";
-  const displayTitle = (currentSeasonInfo as any)?.name || (currentSeasonInfo as any)?.title || currentSeason?.name || anime?.name || "";
-  const displayStatus = currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "";
-
-  const franchiseAbsoluteEp = useMemo(() => {
-    const currentIdx = seasons.findIndex(s => s.id === currentSeasonId);
-    if (currentIdx < 0) return 0;
-    const prevTotal = seasons.slice(0, currentIdx).reduce((sum, s) => sum + (s.totalEpisodes || 0), 0);
-    return prevTotal + (selectedEp?.episodeNum || 0);
-  }, [seasons, currentSeasonId, selectedEp?.episodeNum]);
-
-  // ── Prev / Next episode ─────────────────────────────────────────────────
+  // ── Prev / Next ──────────────────────────────────────────────────────────
   const handlePrev = useCallback(() => {
-    if (currentIdx > 0) {
-      const prev = currentSeasonEps[currentIdx - 1];
-      if (prev.isReleased === false) return;
-      handleWatchEpisode(prev);
-    }
-  }, [currentIdx, currentSeasonEps, handleWatchEpisode]);
+    const eps = seasonData?.episodes || [];
+    if (currentIdx <= 0) return;
+    const prev = eps[currentIdx - 1];
+    if (!prev || prev.isReleased === false) return;
+    handleWatchEpisode(selectedSeasonId, prev.episodeNum, prev.title);
+  }, [seasonData, currentIdx, selectedSeasonId, handleWatchEpisode]);
 
   const handleNext = useCallback(() => {
-    if (currentIdx < currentSeasonEps.length - 1) {
-      const next = currentSeasonEps[currentIdx + 1];
-      if (next.isReleased === false) return;
-      handleWatchEpisode(next);
-    }
-  }, [currentIdx, currentSeasonEps, handleWatchEpisode]);
+    const eps = seasonData?.episodes || [];
+    if (currentIdx >= eps.length - 1) return;
+    const next = eps[currentIdx + 1];
+    if (!next || next.isReleased === false) return;
+    handleWatchEpisode(selectedSeasonId, next.episodeNum, next.title);
+  }, [seasonData, currentIdx, selectedSeasonId, handleWatchEpisode]);
 
-  const handleAutoNext = useCallback(() => handleNext(), [handleNext]);
-
-  // ── Lazy thumbnail loading ──────────────────────────────────────────────
-  const thumbnailFetchingRef = useRef(new Set<string>());
-  const thumbEpVersionRef = useRef(0);
-
-  useEffect(() => {
-    thumbEpVersionRef.current++;
-    thumbnailFetchingRef.current.clear();
-  }, [currentSeasonId]);
-
-  useEffect(() => {
-    const loading = thumbnailFetchingRef.current;
-    const currentEps = currentSeasonEps.slice(0, visibleCount);
-    const needThumb = currentEps.filter(ep => !ep.thumbnail && ep.malUrl && !loading.has(ep.episodeId));
-    if (needThumb.length === 0) return;
-
-    const selectedEpId = selectedEp?.episodeId;
-    if (selectedEpId) {
-      const selIdx = needThumb.findIndex(ep => ep.episodeId === selectedEpId);
-      if (selIdx > 0) {
-        const [sel] = needThumb.splice(selIdx, 1);
-        needThumb.unshift(sel);
+  // ── Autoplay next episode / next season ──────────────────────────────────
+  const handleAutoPlayNext = useCallback(() => {
+    if (playingSeasonId === selectedSeasonId && seasonData) {
+      const eps = seasonData.episodes;
+      const next = eps[currentIdx + 1];
+      if (next && next.isReleased !== false) {
+        handleWatchEpisode(playingSeasonId, next.episodeNum, next.title);
+        return;
       }
+    } else if (playingSeasonId !== selectedSeasonId) {
+      // Watcher navigated to another season tab while playing — increment boldly.
+      handleWatchEpisode(playingSeasonId, playingEpisode + 1);
+      return;
     }
+    const order = [...mainSeasons, ...movieSeasons, ...specialSeasons];
+    const idx = order.findIndex((s) => s.id === playingSeasonId);
+    if (idx >= 0 && idx < order.length - 1) {
+      handleWatchEpisode(order[idx + 1].id, 1);
+    }
+  }, [seasonData, currentIdx, mainSeasons, movieSeasons, specialSeasons, playingSeasonId, selectedSeasonId, playingEpisode, handleWatchEpisode]);
 
-    const BATCH = 6;
-    let pos = 0;
-    const total = needThumb.length;
+  // ── Scroll to player on play ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!isPlaying) return;
+    const timer = setTimeout(() => {
+      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [isPlaying]);
 
-    const tick = () => {
-      const batch = needThumb.slice(pos, pos + BATCH);
-      pos += BATCH;
-      for (const ep of batch) {
-        loading.add(ep.episodeId);
-        fetch(`/api/anime/thumbnail?url=${encodeURIComponent(ep.malUrl!)}`)
-          .then(r => r.json())
-          .then(data => {
-            if (data.success && data.thumbnail) {
-              setEpisodes(prev => prev.map(e =>
-                e.episodeId === ep.episodeId ? { ...e, thumbnail: data.thumbnail } : e
-              ));
-            }
-          })
-          .catch(() => {})
-          .finally(() => loading.delete(ep.episodeId));
+  // ── Keep the episode queue anchored at the current episode ───────────────
+  // When jumping into (say) episode 100, the queue scrolls so that episode is
+  // at the top instead of forcing the user to scroll down from episode 1.
+  // Scrolls ONLY the queue container so the page stays anchored at the player.
+  useEffect(() => {
+    if (!isPlaying || seasonLoading) return;
+    const timer = setTimeout(() => {
+      const container = queueScrollRef.current;
+      const item = selectedEpRef.current;
+      if (container && item) {
+        const offset = item.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        container.scrollTo({ top: container.scrollTop + offset, behavior: "smooth" });
       }
-      if (pos < total) setTimeout(tick, 200);
-    };
-    tick();
-  }, [visibleCount, currentSeasonId, id, currentSeasonEps.length]);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isPlaying, seasonLoading, playingEpisode, playingSeasonId]);
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Stop playback if the playing episode is (or becomes) upcoming ────────
+  useEffect(() => {
+    if (!isPlaying || seasonLoading) return;
+    const activeEpisode = seasonData?.episodes.find((ep) => ep.episodeNum === playingEpisode);
+    if (!activeEpisode || !isUpcomingEpisode(activeEpisode)) return;
+    setIsPlaying(false);
+    setEpisodeNotice(`Episode ${playingEpisode} hasn't been released yet.`);
+  }, [isPlaying, seasonLoading, playingEpisode, playingSeasonId, seasonData, isUpcomingEpisode]);
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  if (!catalog) {
+    return (
+      <div className="min-h-screen bg-background text-foreground pb-24">
+        <Sidebar />
+        <main className="md:pl-56 lg:pl-64">
+          <div className="pt-0 px-6 md:px-12 max-w-screen-2xl mx-auto">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-white/80">
+              <div className="text-lg font-bold text-white mb-1">Couldn&apos;t load this anime</div>
+              {error ? (
+                <div className="text-sm text-white/50 break-words">{error}</div>
+              ) : (
+                <div className="text-sm text-white/50">Not found.</div>
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const anime = catalog.anime;
+  const activeCover = selectedSeason?.coverImage || anime.poster;
+  const activeBackdrop = selectedSeason?.bannerImage || anime.bannerImage || activeCover;
+  const backdrop = activeBackdrop;
+  const score = Number(anime.rating || 0);
+  const scoreColor = score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
+  const seasonCount = mainSeasons.length;
+  const isMovieEntry = anime.format === "MOVIE" || anime.format === "SPECIAL";
+
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20">
+    <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-0 bleed-header select-none">
-        {isLoading ? (
-          <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
-            <div className="w-full h-[55vh] md:h-[65vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
-              <div className="flex gap-6 items-end w-full">
-                <div className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl bg-white/[0.06]" />
-                <div className="flex-1 space-y-3 max-w-2xl pb-2">
-                  <div className="h-3 w-16 rounded-full bg-white/[0.06]" />
-                  <div className="h-8 w-3/4 rounded-lg bg-white/[0.06]" />
-                  <div className="h-4 w-1/2 rounded-lg bg-white/[0.04]" />
-                  <div className="flex gap-2 mt-2">
-                    <div className="h-5 w-14 rounded-full bg-white/[0.05]" />
-                    <div className="h-5 w-16 rounded-full bg-white/[0.05]" />
-                    <div className="h-5 w-12 rounded-full bg-white/[0.05]" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : error ? (
-          <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl">
-              <div className="text-6xl mb-4">😔</div>
-              <div className="text-xl font-bold text-white mb-2">Couldn&apos;t load anime</div>
-              <div className="text-sm text-white/50 mb-4">{error}</div>
-              <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4B5694] hover:bg-[#4B5694] text-white rounded-xl text-sm font-bold transition-all">
-                <ArrowLeft className="w-4 h-4" /> Back to Anime
-              </Link>
-            </div>
-          </div>
-        ) : anime ? (
-          <>
-            {/* ── Hero Banner ── */}
-            <CinematicHero
-              backdropPath={displayBanner}
-              trailerId={anime.trailerId}
-              title={displayTitle}
-              theme="anime"
-            >
-              <div className="relative z-10 pb-6 md:pb-16 px-5 md:px-12 flex flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-10 max-w-screen-2xl mx-auto w-full">
-                <div
-                  className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
-                >
-                  <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
-                </div>
+      <main className="md:pl-56 lg:pl-64 bleed-header select-none">
+        <CinematicHero
+          backdropPath={backdrop || undefined}
+          trailerId={anime.trailerId}
+          title={anime.name}
+          theme="anime"
+        >
+          <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
+            {activeCover && (
+              <img
+                src={activeCover}
+                alt={anime.name}
+                className="hidden md:block w-48 lg:w-60 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10"
+                fetchPriority="high"
+                decoding="async"
+                width={240}
+                height={360}
+              />
+            )}
 
-                <div
-                  className="flex flex-col gap-2 md:gap-3 max-w-3xl"
-                >
-                  <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
-                    <span className="bg-gradient-to-r from-[#111844] to-[#7288AE] text-white text-[9px] md:text-[10px] font-extrabold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase shadow-lg shadow-[#4B5694]/25">Anime</span>
-                    {anime.type && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.type}</span>}
-                    {anime.rating && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.rating}</span>}
-                    {displayStatus && (() => {
-                      const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
-                      return (
-                        <span className={`text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase ${
-                          formatted.style === "airing"
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                            : formatted.style === "upcoming"
-                            ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
-                            : "bg-white/10 text-white/60 border border-white/20"
-                        }`}>{formatted.label}</span>
-                      );
-                    })()}
-                  </div>
-                  <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
-                  {anime.jname && <p className="text-white/40 text-xs sm:text-sm font-medium select-text">{anime.jname}</p>}
-
-                  {anime.genres && anime.genres.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {anime.genres.slice(0, 5).map(g => (
-                        <span key={g} className="text-[9px] text-[#7288AE] bg-[#4B5694]/10 border border-[#7288AE]/20 px-2 py-0.5 rounded-full font-bold backdrop-blur-sm">{g}</span>
-                      ))}
-                    </div>
-                  )}
-
-                    <div>
-                      {currentSeasonEps.length > 0 ? (
-                        <div className="flex items-center flex-wrap gap-4 w-full">
-                          <button
-                            onClick={() => {
-                              const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
-                              if (first) handleWatchEpisode(first);
-                            }}
-                            className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-black/30"
-                          >
-                            <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
-                            {isMovieFormat
-                              ? `Watch ${currentSeasonEps.length > 1 ? `Movie ${currentSeasonEps[0]?.episodeNum || 1}` : "Movie"}`
-                              : `Watch Ep ${selectedEp?.episodeNum || currentSeasonEps[0]?.episodeNum || 1}`
-                            }
-                          </button>
-
-                          <WatchlistButton
-                            mediaId={Number(anime.id)}
-                            mediaType="anime"
-                            title={anime.name}
-                            posterPath={anime.poster || null}
-                          />
-
-                          <AnimeHeroTrailerButton />
-                        </div>
-                      ) : episodesLoading ? (
-                        <div className="flex items-center gap-4 w-full">
-                          <div className="h-12 w-36 rounded-xl bg-white/10 animate-pulse" />
-                          <AnimeHeroTrailerButton />
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 w-full">
-                          <button disabled className="flex items-center gap-2.5 bg-white/10 text-white/30 font-bold px-8 py-4 rounded-xl text-sm cursor-not-allowed">
-                            No Episodes Available
-                          </button>
-                          <AnimeHeroTrailerButton />
-                        </div>
-                      )}
-                    </div>
-                </div>
-              </div>
-            </CinematicHero>
-
-            {/* ── Main Content ── */}
-            <div className="px-5 md:px-12 max-w-screen-2xl mx-auto mt-6 space-y-6">
-              <Link href="/anime" className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
-                <ArrowLeft className="w-4 h-4" /> Back to Anime
-              </Link>
-
-              <div className="flex flex-col gap-6">
-                {episodeNotice && (
-                  <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">
-                    {episodeNotice}
+            <div className="flex-1 space-y-4">
+              <div>
+                <h1 className="font-bold text-5xl md:text-7xl text-white leading-none tracking-wide mb-2 select-text">
+                  {selectedSeason && selectedSeason.name && selectedSeason.name !== anime.name
+                    ? selectedSeason.name
+                    : anime.name}
+                </h1>
+                {anime.jname && (
+                  <p className="text-primary/90 font-semibold italic text-base md:text-lg select-text">
+                    {anime.jname}
+                  </p>
+                )}
+                {selectedSeason && selectedSeason.name !== anime.name && (
+                  <div className="mt-2">
+                    <span className="inline-block px-2.5 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary text-[11px] font-extrabold uppercase tracking-wider">
+                      {selectedSeason.seasonLabel}
+                    </span>
                   </div>
                 )}
-                {/* ── Player + Queue ── */}
-                {isPlaying && selectedEp && (
-                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 select-none">
-                    <div ref={playerRef} className="w-full min-w-0">
-                      <AnimePlayer
-                        key={selectedEp.episodeId}
-                        animeId={streamingAnimeId}
-                        malId={streamingMalId}
-                        animeTitle={selectedEp.seasonName || anime.name}
-                        episode={selectedEp.episodeNum}
-                        rootAnimeId={rootSeason?.id || anime?.id}
-                        rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
-                        episodeOffset={currentEpisodeOffset}
-                        tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
-                        tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
-                        isMovie={anime?.format === 'MOVIE' || anime?.format === 'SPECIAL'}
-                        startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
-                        onAutoNext={handleAutoNext}
-                      />
-
-                      <div className="mt-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          {isSingleItem ? (
-                            <span className="text-lg font-black text-white">{selectedEp.title || (currentSeasonInfo as any)?.name || anime?.name}</span>
-                          ) : (
-                            <>
-                              <span className="text-lg font-black text-white">Episode {selectedEp.episodeNum}</span>
-                              {selectedEp.title && <span className="text-sm text-white/50">— {selectedEp.title}</span>}
-                            </>
-                          )}
-                          {selectedEp.isFiller && (
-                            <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded font-bold uppercase">Filler</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={handlePrev}
-                            disabled={currentIdx <= 0 || (currentSeasonEps[currentIdx - 1]?.isReleased === false)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-30 text-white/60 hover:text-white text-xs font-bold transition-all"
-                          >
-                            <ChevronLeft className="w-4 h-4" /> Prev
-                          </button>
-                          {currentSeasonEps.length > 0 && (
-                            <span className="text-sm text-white/40 px-2 font-medium">{Math.max(currentIdx + 1, 1)} / {currentSeasonEps.length}</span>
-                          )}
-                          <button
-                            onClick={handleNext}
-                            disabled={currentIdx >= currentSeasonEps.length - 1 || (currentSeasonEps[currentIdx + 1]?.isReleased === false)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#4B5694] hover:bg-[#7288AE] disabled:opacity-30 text-white text-xs font-bold transition-all shadow-lg"
-                          >
-                            Next <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      {nextEp && nextEp.isReleased !== false && (
-                        <button
-                          onClick={() => handleWatchEpisode(nextEp)}
-                          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Play Next: E{nextEp.episodeNum}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* ── Episode Queue Sidebar ── */}
-                    <aside className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col max-h-[60vh] xl:max-h-[70vh]">
-                      <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
-                        <div className="text-sm font-bold text-white flex items-center justify-between gap-2">
-                          <span className="truncate">
-                            {franchiseNodes.find(n => String(n.id) === currentSeasonId)?.title || (currentSeasonInfo as any)?.seasonLabel || "Episodes"}
-                          </span>
-                          <span className="text-xs font-normal text-white/40 whitespace-nowrap">{currentSeasonEps.length} eps</span>
-                        </div>
-                      </div>
-                      <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
-                        {currentSeasonEps.map((ep) => {
-                          const isSelected = selectedEp?.episodeId === ep.episodeId;
-                          const displayTitle = ep.title || `Episode ${ep.episodeNum}`;
-                          return (
-                            <button
-                              key={ep.episodeId}
-                              ref={isSelected ? selectedQueueEpRef : undefined}
-                              onClick={() => {
-                                handleWatchEpisode(ep);
-                              }}
-                              className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-3 ${
-                                isSelected
-                                  ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
-                                  : ep.isReleased === false
-                                  ? "bg-white/[0.025] text-white/30 hover:bg-amber-400/10 hover:text-amber-200 border border-amber-400/10"
-                                  : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
-                              }`}
-                            >
-                              <span className="text-sm font-black w-10 shrink-0">E{ep.episodeNum}</span>
-                              <span className="text-xs truncate flex-1 line-clamp-1">{displayTitle}</span>
-                              {ep.runtime && ep.runtime > 0 && (
-                                <span className="text-[10px] text-white/40 font-medium shrink-0">{ep.runtime}m</span>
-                              )}
-                              {ep.isFiller && (
-                                <span className="text-[9px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded shrink-0">Filler</span>
-                              )}
-                              {ep.isReleased === false && (
-                                <span className="text-[9px] text-sky-300 font-extrabold uppercase bg-sky-300/10 border border-sky-300/20 px-1.5 py-0.5 rounded shrink-0">Upcoming</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </aside>
-                  </div>
-                )}
-
-                {/* ── Details ── */}
-                <div className="w-full">
-                  <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl space-y-5">
-                    <h3 className="text-base font-bold text-white">Details</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-6 gap-x-4 text-xs">
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Format</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg uppercase">{anime.format || anime.type || "TV"}</span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Rating</span>
-                        <span className="text-amber-400 font-bold text-sm bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-max">
-                          <Star className="w-4 h-4 fill-current" /> 
-                          {anime.rating || anime.score ? (Number(anime.rating || anime.score) > 10 ? (Number(anime.rating || anime.score) / 10).toFixed(1) : Number(anime.rating || anime.score).toFixed(1)) : "N/A"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">{isMovieFormat ? "Parts" : "Episodes"}</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{isMovieFormat ? (currentSeasonEps.length || 1) : (currentSeason?.totalEpisodes || currentSeasonEps.length || anime?.totalEpisodes || 1)}</span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Status</span>
-                        {(() => {
-                          const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
-                          return (
-                            <span className={`font-bold text-sm px-3 py-1.5 rounded-lg uppercase inline-block shadow-sm ${
-                              formatted.style === "airing"
-                                ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20"
-                                : formatted.style === "upcoming"
-                                ? "text-sky-300 bg-sky-400/10 border border-sky-400/20"
-                                : "text-white/80 bg-white/[0.06] border border-white/[0.05]"
-                            }`}>
-                              {formatted.label}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Year</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{currentSeason?.seasonYear || anime?.seasonYear || "N/A"}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
 
-              {/* ── Episodes Section ── */}
-              <section className="max-w-5xl mx-auto space-y-4 mt-10">
-                {/* ── Watch Order Section (franchise order reference) ── */}
-                {(() => {
-                  const curatedNodes = getCuratedAnimeFranchiseNodes(Number(id), anime?.name);
-                  const nodesToUse: FranchiseNode[] = (franchiseNodes && franchiseNodes.length > 1)
-                    ? franchiseNodes
-                    : (curatedNodes && curatedNodes.length > 1)
-                      ? (curatedNodes as FranchiseNode[])
-                      : (anime?.seasons && anime.seasons.length > 1)
-                        ? anime.seasons.map(s => ({
-                            id: Number(s.id) || Number(id),
-                            idMal: s.idMal || null,
-                            title: s.name,
-                            episodes: s.totalEpisodes,
-                            season: null,
-                            seasonLabel: s.seasonLabel,
-                            totalEpisodes: s.totalEpisodes,
-                            seasonYear: s.seasonYear || null,
-                            format: "TV",
-                          }))
-                        : (franchiseNodes || []);
-
-                  const visibleFranchiseNodes = nodesToUse.filter(node => {
-                    if (!node.title) return false;
-                    if (String(node.id) === anime?.id) return true;
-                    
-                    const format = node.format;
-                    if (!format || format === "TV" || format === "TV_SHORT" || format === "ONA" || format === "MOVIE") {
-                      return true;
-                    }
-                    
-                    if (format === "SPECIAL" || format === "OVA") {
-                      const lowerTitle = node.title.toLowerCase();
-                      const plotKeywords = ["final", "part", "chapter", "season", "arc", "prologue", "epilogue", "special"];
-                      return plotKeywords.some(kw => lowerTitle.includes(kw));
-                    }
-                    
-                    return true;
-                  });
-                  if (visibleFranchiseNodes.length <= 1) return null;
-                  return (
-                  <div className="bg-gradient-to-br from-white/[0.045] to-white/[0.015] border border-white/[0.08] rounded-2xl overflow-hidden shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
-                    <button
-                      onClick={() => setShowSeasonGuide(!showSeasonGuide)}
-                      className="flex items-center justify-between w-full text-left px-5 py-4 hover:bg-white/[0.035] transition-colors"
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px]">
+                {score > 0 && (
+                  <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
+                    <Star className="w-4 h-4 fill-current" />
+                    <span className="text-base">{score.toFixed(1)}</span>
+                    <span className="text-white/50 font-normal text-xs">/ 10</span>
+                  </div>
+                )}
+                {anime.seasonYear && (
+                  <span className="text-white/80 font-bold">{anime.seasonYear}</span>
+                )}
+                {!isMovieEntry && seasonCount > 0 && (
+                  <span className="text-white/80 font-bold">
+                    {seasonCount} Season{seasonCount > 1 ? "s" : ""}
+                  </span>
+                )}
+                {anime.duration && (
+                  <span className="text-white/80 font-bold">{anime.duration} min</span>
+                )}
+                <div className="flex flex-wrap gap-1.5 ml-1">
+                  {anime.genres?.map((g) => (
+                    <span
+                      key={g}
+                      className="px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-[#7288AE]/15 border border-[#7288AE]/25 flex items-center justify-center shrink-0">
-                          <BookOpen className="w-4 h-4 text-[#9EB2D1]" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-black text-white">Watch Order</h3>
-                            <span className="text-[10px] text-[#9EB2D1] font-black uppercase tracking-wide bg-[#7288AE]/10 border border-[#7288AE]/20 px-2 py-0.5 rounded-full">
-                              {visibleFranchiseNodes.length} parts
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/40 mt-0.5 truncate">Follow the franchise in the recommended order</p>
-                        </div>
-                      </div>
-                      <ChevronRight className={`w-4 h-4 text-white/40 transition-transform ${showSeasonGuide ? "rotate-90" : ""}`} />
-                    </button>
-
-                    {showSeasonGuide && (
-                      <div className="px-4 sm:px-5 pb-5 border-t border-white/[0.06] pt-4">
-                        <div className="relative space-y-2">
-                        {visibleFranchiseNodes.map((node, orderIndex) => {
-                          const nodeId = String(node.id);
-                          const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
-                          const formatLabel = node.format === "TV" ? "TV" : node.format || "";
-                          const nodeEpCount = (isActive && currentSeasonEps.length > 0) ? currentSeasonEps.length : (node.totalEpisodes || node.episodes || "?");
-                          return (
-                            <Link
-                              key={node.id}
-                              href={`/anime/${node.id}`}
-                              className={`w-full grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 rounded-xl text-xs font-medium transition-all ${
-                                isActive
-                                  ? "bg-gradient-to-r from-[#111844]/45 to-[#7288AE]/25 border border-[#7288AE]/40 text-white shadow-lg shadow-[#111844]/20"
-                                  : "bg-white/[0.035] hover:bg-white/[0.075] border border-white/[0.06] text-white/60 hover:text-white"
-                              }`}
-                            >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[11px] border ${
-                                isActive ? "bg-[#7288AE]/25 border-[#7288AE]/45 text-white" : "bg-white/[0.04] border-white/[0.07] text-white/35"
-                              }`}>
-                                {orderIndex + 1}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="truncate font-bold">{node.title}</span>
-                                  {isActive && <span className="shrink-0 text-[9px] uppercase tracking-wide bg-[#7288AE]/20 text-[#C7D4EA] border border-[#7288AE]/30 px-1.5 py-0.5 rounded">Current</span>}
-                                </div>
-                                <div className="flex items-center gap-2 mt-1 text-[10px] text-white/35">
-                                  <span className="uppercase font-black text-[#9EB2D1]">{formatLabel || "Entry"}</span>
-                                  {node.seasonYear && <span>{node.seasonYear}</span>}
-                                  <span>{nodeEpCount} eps</span>
-                                </div>
-                              </div>
-                              <ChevronRight className="w-3.5 h-3.5 text-white/25" />
-                            </Link>
-                          );
-                        })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  );
-                })()}
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg" />
-                      <h2 className="text-2xl font-black text-white tracking-tight">Episodes</h2>
-                    </div>
-
-                  {/* ── Right Side Controls ── */}
-                  <div className="flex items-center gap-3 flex-wrap max-w-xl justify-end">
-                    {currentSeasonEps.length > 0 && (
-                      <button
-                        onClick={toggleGridMode}
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
-                          gridMode 
-                            ? "bg-white/[0.06] text-white/60 hover:text-white border-white/[0.06] hover:bg-white/[0.10]" 
-                            : "bg-[#7288AE]/20 text-white border-[#7288AE]/50 hover:bg-[#7288AE]/40"
-                        )}
-                        title={gridMode ? "Switch to list view" : "Switch to compact grid view (Recommended for long anime)"}
-                      >
-                        {gridMode ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5 text-blue-400" />}
-                        {gridMode ? "List View" : "Grid View"}
-                      </button>
-                    )}
-
-                  </div>
-                </div>
-
-                {/* ── Source disclaimer ── */}
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300/90 text-xs leading-relaxed mb-4">
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
-                  </svg>
-                  <span>If an episode doesn&apos;t load, try switching to a different source &mdash; some sources may not have every title.</span>
-                </div>
-
-                {/* ── Episode Display (TMDB-enriched data from server) ── */}
-                {(() => {
-                  // Episodes are already TMDB-enriched from the server endpoint
-                  // currentSeasonEps has titles, thumbnails, descriptions, ratings, runtimes from TMDB
-                  if (episodesLoading && currentSeasonEps.length === 0) {
-                    return (
-                      <div className="flex flex-col items-center justify-center p-12 rounded-2xl border border-white/[0.06] bg-white/[0.02] min-h-[260px] text-center backdrop-blur-md relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-tr from-[#4B5694]/5 via-transparent to-[#7288AE]/5 animate-pulse" />
-                        <div className="relative z-10 space-y-4">
-                          <div className="relative w-16 h-16 mx-auto animate-spin">
-                            <div className="absolute inset-0 border-4 border-[#7288AE]/10 rounded-full" />
-                            <div className="absolute inset-0 border-4 border-t-primary rounded-full" />
-                          </div>
-                          <div className="space-y-1">
-                            <h3 className="text-lg font-bold text-white tracking-wide animate-pulse">Episodes Loading</h3>
-                            <p className="text-sm text-white/40">Please wait while we fetch the latest episodes...</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  if (currentSeasonEps.length === 0) {
-                    const isNotYet = anime?.status === "NOT_YET_RELEASED" || anime?.status === "NOT_YET_AIRED" || anime?.status === "Not Yet Aired";
-                    return (
-                      <div className="p-10 text-center rounded-2xl border border-emerald-500/25 bg-emerald-950/20 backdrop-blur-md my-4">
-                        <div className="text-4xl mb-3">📅</div>
-                        <h3 className="text-lg font-black text-emerald-300 mb-1">
-                          {isNotYet ? "Not Yet Released" : "No Episodes Available"}
-                        </h3>
-                        <p className="text-xs text-zinc-300/80 max-w-md mx-auto leading-relaxed">
-                          {isNotYet
-                            ? `This anime season (${anime?.seasonYear || "Upcoming"}) has not started broadcasting yet. Episodes will become available as soon as it begins airing!`
-                            : "No episodes are currently available for this season."}
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  const sliceEps = currentSeasonEps.slice(0, visibleCount);
-                  const hasMore = visibleCount < currentSeasonEps.length;
-                  const remainingEps = currentSeasonEps.length - visibleCount;
-                  const loadMoreCount = remainingEps >= 100 ? 100 : remainingEps >= 50 ? 50 : Math.min(20, remainingEps);
-
-                  if (gridMode) {
-                    return (
-                        <div
-                          key={`grid-${currentSeasonId}`}
-                        >
-                          <div className="flex items-center gap-2 mb-4 text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-md w-fit">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                            <span>Yellow dot indicates a filler episode</span>
-                          </div>
-                          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-1.5">
-                            {sliceEps.map((ep) => {
-                              const isSelected = selectedEp?.episodeId === ep.episodeId;
-                              const isUnreleased = ep.isReleased === false;
-                              return (
-                                <button
-                                  key={ep.episodeId}
-                                  onClick={() => handleWatchEpisode(ep)}
-                                  className={cn(
-                                    "aspect-square rounded-lg text-xs font-bold transition-all flex items-center justify-center relative",
-                                    isSelected
-                                      ? "bg-gradient-to-br from-[#4B5694] to-[#7288AE] text-white shadow-md shadow-[#4B5694]/30 scale-105"
-                                      : isUnreleased
-                                      ? "bg-white/[0.03] text-white/20 cursor-not-allowed"
-                                      : "bg-white/[0.06] hover:bg-white/[0.12] text-white/70 hover:text-white border border-white/[0.06] hover:border-white/20"
-                                  )}
-                                >
-                                  {isSelected && isPlaying && (
-                                    <div className="absolute -top-2 z-20 px-1.5 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
-                                      Playing
-                                    </div>
-                                  )}
-                                  {ep.isFiller && !isSelected && (
-                                    <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-amber-400" />
-                                  )}
-                                  {isUnreleased && (
-                                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded bg-sky-400/90 px-1 text-[7px] font-black uppercase text-white">
-                                      Soon
-                                    </span>
-                                  )}
-                                  {ep.episodeNum}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {hasMore && (
-                            <div className="flex justify-center pt-4 pb-2">
-                              <button
-                                onClick={() => setVisibleCount(c => c + loadMoreCount)}
-                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
-                              >
-                                Show {loadMoreCount} More Episodes
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                    );
-                  }
-
-                  return (
-                      <div
-                        key={currentSeasonId}
-                      >
-                        {/* Season description (TMDB overview from episodes response) */}
-                        {seasonOverview && (
-                          <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
-                            {seasonOverview}
-                          </p>
-                        )}
-
-                        <div className="space-y-3">
-                          {sliceEps.map((ep, i) => {
-                            const isSelected = selectedEp?.episodeId === ep.episodeId;
-                            const isUnreleased = ep.isReleased === false;
-                            const backdropFallback = (anime as any)?.bannerImage || initialData?.bannerImage || displayPoster || null;
-                            const thumbSrc = isUnreleased
-                              ? (ep.thumbnail || null)
-                              : (ep.thumbnail || (isSingleItem && displayPoster) || backdropFallback);
-                            const displayEpTitle = ep.title || (isSingleItem ? displayTitle : `Episode ${ep.episodeNum}`);
-                            return (
-                              <div
-                                key={`${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`}
-                                onClick={() => {
-                                  handleWatchEpisode(ep);
-                                }}
-                                className={cn(
-                                  "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
-                                  isSelected
-                                    ? "ring-2 ring-[#7288AE] bg-gradient-to-br from-[#4B5694]/15 to-[#7288AE]/10 border-transparent shadow-lg shadow-[#4B5694]/20"
-                                    : isUnreleased
-                                    ? "opacity-50 cursor-not-allowed bg-white/[0.01] border-white/[0.03]"
-                                    : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
-                                )}
-                              >
-                                {/* Episode Number — show for any season with 2+ episodes */}
-                                {currentSeasonEps.length > 1 && (
-                                  <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
-                                    <span className="text-sm font-bold text-white/40">{ep.episodeNum}</span>
-                                  </div>
-                                )}
-
-                                {/* Thumbnail */}
-                                <div className={`${isSingleItem ? "w-44 md:w-52 aspect-[2/3]" : "w-40 sm:w-48 md:w-52 lg:w-56 aspect-video"} shrink-0 rounded-xl overflow-hidden bg-muted relative self-start`}>
-                                  {thumbSrc ? (
-                                    <img
-                                      src={thumbSrc}
-                                      alt={displayEpTitle || `Episode ${ep.episodeNum}`}
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-card">
-                                      <Play className="w-6 h-6 text-white/20" />
-                                    </div>
-                                  )}
-                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
-                                    <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                                      <Play className="w-4 h-4 fill-white text-white ml-0.5" />
-                                    </div>
-                                  </div>
-                                  {isSelected && isPlaying && (
-                                    <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase">
-                                      Playing
-                                    </div>
-                                  )}
-                                  {isUnreleased && (
-                                    <div className="absolute inset-0 z-20 bg-black/75 flex flex-col items-center justify-center gap-1">
-                                      <Lock className="w-5 h-5 text-sky-300" />
-                                      <span className="text-[9px] font-black uppercase tracking-wide text-sky-200">Upcoming</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Episode Info */}
-                                <div className="flex-1 min-w-0 py-0.5">
-                                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                                    <div className="flex flex-col gap-1.5 flex-1 pr-2">
-                                      <h4 className="text-[13px] md:text-sm font-bold text-white/90 leading-tight line-clamp-2">
-                                        {displayEpTitle}
-                                      </h4>
-                                      {ep.description && (
-                                        <p className="text-white/40 text-xs leading-relaxed line-clamp-2">
-                                          {ep.description}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      {ep.vote_average && ep.vote_average > 0 && ep.vote_count && ep.vote_count > 5 ? (
-                                        <div className="flex items-center gap-0.5 text-amber-400">
-                                          <Star className="w-3 h-3 fill-current" />
-                                          <span className="font-bold text-xs">{ep.vote_average.toFixed(1)}</span>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                  {ep.releasedDate && (
-                                    <p className="text-[10px] text-white/30 mb-1 font-medium">
-                                      {new Date(ep.releasedDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                                    </p>
-                                  )}
-
-                                  {ep.runtime && ep.runtime > 0 && (
-                                    <p className="text-white/30 text-xs mt-1.5">{ep.runtime} min</p>
-                                  )}
-                                  {isUnreleased && (
-                                    <p className="mt-2 w-fit rounded-md border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">
-                                      Not released yet
-                                    </p>
-                                  )}
-                                </div>
-
-                                {/* Right side end of the episode card: Tags (Upcoming / Filler) */}
-                                <div className="flex items-center gap-1.5 shrink-0 self-center pl-2">
-                                  {isUnreleased && (
-                                    <span className="text-[10px] text-sky-400 font-extrabold uppercase bg-sky-400/10 border border-sky-400/20 px-2.5 py-1 rounded-xl shadow-lg shadow-sky-400/5">
-                                      Upcoming
-                                    </span>
-                                  )}
-                                  {ep.isFiller && (
-                                    <span className="text-[10px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-xl shadow-lg shadow-amber-400/5">
-                                      Filler
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                          {hasMore && (
-                            <div className="flex justify-center pt-2 pb-4">
-                              <button
-                                onClick={() => setVisibleCount(c => c + loadMoreCount)}
-                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
-                              >
-                                Show {loadMoreCount} More Episodes
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                  );
-                })()}
-              </section>
-
-              {recommendations.length > 0 && (
-                <>
-                <div className="mt-16 mb-6 px-5 md:px-0">
-                  <h2 className="text-lg md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
-                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
-                    You May Like
-                  </h2>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8 px-5 md:px-0">
-                  {recommendations.map((item: any, i: number) => (
-                    <AnimeCard key={item.id} item={item} index={i} />
+                      {g}
+                    </span>
                   ))}
                 </div>
-                </>
+              </div>
+
+              {anime.description && (
+                <div>
+                  <p
+                    className={cn(
+                      "text-white/65 text-base leading-relaxed max-w-2xl select-text",
+                      !descExpanded && "line-clamp-3"
+                    )}
+                  >
+                    {anime.description}
+                  </p>
+                  <button
+                    onClick={() => setDescExpanded((v) => !v)}
+                    className="mt-2 text-xs font-bold text-primary/90 hover:text-primary transition-colors"
+                  >
+                    {descExpanded ? "Read less" : "Read more"}
+                  </button>
+                </div>
               )}
 
-              {recsLoading && !recommendations.length && (
-                <>
-                <div className="mt-16 mb-6 px-5 md:px-0">
-                  <h2 className="text-lg md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
-                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
-                    You May Like
-                  </h2>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8 px-5 md:px-0">
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <div key={i} className="aspect-[2/3] w-full shrink-0 rounded-2xl shimmer" style={{ animationDelay: `${i * 80}ms` }} />
-                  ))}
-                </div>
-                </>
-              )}
+              <div className="flex items-center flex-wrap gap-4 w-full">
+                <button
+                  onClick={() => handleWatchEpisode(selectedSeasonId, playingEpisode, currentEpisode?.title)}
+                  className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-black/30"
+                >
+                  <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
+                  {isMovieEntry ? "Watch Movie" : `Watch E${playingEpisode}`}
+                </button>
+
+                <WatchlistButton
+                  key={`watchlist-${selectedSeason?.id ?? anime.id}`}
+                  mediaId={Number(selectedSeason?.id ?? anime.id)}
+                  mediaType="anime"
+                  title={selectedSeason?.name ?? anime.name}
+                  posterPath={selectedSeason?.coverImage || activeCover || null}
+                  backdropPath={selectedSeason?.bannerImage || anime.bannerImage || null}
+                />
+
+                <AnimeHeroTrailerButton />
+              </div>
             </div>
-          </>
-        ) : null}
+          </div>
+        </CinematicHero>
+
+        <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
+          {episodeNotice && (
+            <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">
+              {episodeNotice}
+            </div>
+          )}
+
+          {/* ── Player + Queue ── */}
+          {isPlaying && (
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start select-none">
+              <div ref={playerRef}>
+                <AnimePlayer
+                  key={currentEpisode?.episodeId ?? `${playingSeasonId}-${playingEpisode}`}
+                  animeId={playingSeason?.id ?? anime.id}
+                  malId={playingSeason?.idMal ? String(playingSeason.idMal) : anime.idMal}
+                  animeTitle={currentEpisode?.seasonName || anime.name}
+                  episode={playingEpisode}
+                  rootAnimeId={playingSeason?.id ?? anime.id}
+                  rootMalId={playingSeason?.idMal ? String(playingSeason.idMal) : anime.idMal}
+                  episodeOffset={playingSeason?.episodeOffset ?? 0}
+                  tmdbId={playingSeason?.tmdbId ?? catalog.tmdbId}
+                  tmdbSeason={playingSeason?.tmdbSeasonNumber ?? null}
+                  isMovie={isMovieEntry || Boolean(playingSeason?.seasonLabel?.startsWith("Movie"))}
+                  startProgress={typeof window !== "undefined" ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
+                  onAutoNext={handleAutoPlayNext}
+                />
+
+                <div className="mt-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-black text-white">Episode {playingEpisode}</span>
+                    {currentEpisode?.title && currentEpisode.title !== `Episode ${playingEpisode}` && (
+                      <span className="text-sm text-white/50">— {currentEpisode.title}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handlePrev}
+                      disabled={currentIdx <= 0}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-30 text-white/60 hover:text-white text-xs font-bold transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Prev
+                    </button>
+                    {seasonData && seasonData.episodes.length > 0 && (
+                      <span className="text-sm text-white/40 px-2 font-medium">
+                        {Math.max(currentIdx + 1, 1)} / {seasonData.episodes.length}
+                      </span>
+                    )}
+                    <button
+                      onClick={handleNext}
+                      disabled={currentIdx >= (seasonData?.episodes.length ?? 1) - 1}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#4B5694] hover:bg-[#7288AE] disabled:opacity-30 text-white text-xs font-bold transition-all shadow-lg"
+                    >
+                      Next <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                {nextEpisode && nextEpisode.isReleased !== false && (
+                  <button
+                    onClick={() => handleWatchEpisode(playingSeasonId, nextEpisode.episodeNum, nextEpisode.title)}
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Play Next: E{nextEpisode.episodeNum}
+                  </button>
+                )}
+              </div>
+
+              <aside className="w-full xl:w-80 shrink-0 rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col max-h-[60vh] xl:max-h-[70vh]">
+                <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
+                  <div className="text-sm font-bold text-white flex items-center justify-between">
+                    <span>Episode Queue</span>
+                    <span className="text-xs font-normal text-white/40">{selectedSeason?.seasonLabel || selectedSeason?.name}</span>
+                  </div>
+                </div>
+                <div ref={queueScrollRef} className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
+                  {seasonLoading ? (
+                    <div className="flex items-center justify-center py-8 text-white/30 text-xs">Loading episodes...</div>
+                  ) : !seasonData?.episodes?.length ? (
+                    <div className="flex items-center justify-center py-8 text-white/30 text-xs">No episodes found</div>
+                  ) : (
+                    seasonData.episodes.map((episode) => {
+                      const isWatching = hasEverWatched && playingSeasonId === selectedSeasonId && playingEpisode === episode.episodeNum;
+                      const isUpcoming = isUpcomingEpisode(episode);
+                      return (
+                        <button
+                          key={`queue-${episode.episodeId}`}
+                          ref={isWatching ? selectedEpRef : undefined}
+                          onClick={() => handleWatchEpisode(selectedSeasonId, episode.episodeNum, episode.title)}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
+                            isWatching
+                              ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
+                              : isUpcoming
+                              ? "bg-white/[0.025] text-white/30 hover:bg-amber-400/10 hover:text-amber-200 border border-amber-400/10"
+                              : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
+                          }`}
+                        >
+                          <span className={`text-sm font-black w-10 shrink-0 ${isWatching ? "text-white" : ""}`}>
+                            E{episode.episodeNum}
+                          </span>
+                          <span className="text-xs truncate flex-1 line-clamp-1">{episode.title}</span>
+                          {episode.isFiller && !isWatching && (
+                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-400/90 text-black text-[8px] font-black uppercase tracking-wide">
+                              Filler
+                            </span>
+                          )}
+                          {isUpcoming && (
+                            <span className="text-[9px] text-sky-300 font-extrabold uppercase bg-sky-300/10 border border-sky-300/20 px-1.5 py-0.5 rounded shrink-0">
+                              Upcoming
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </aside>
+            </div>
+          )}
+
+          {/* ── Episodes ── */}
+          <section>
+            <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-1 h-5 bg-primary rounded-full shrink-0" />
+                <h2 className="text-base font-bold text-white tracking-wide">Episodes</h2>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {mainSeasons.length > 1 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {mainSeasons.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => setSelectedSeasonId(s.id)}
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5",
+                          selectedSeasonId === s.id
+                            ? "bg-primary text-primary-foreground shadow-md shadow-black/30"
+                            : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
+                        )}
+                      >
+                        {s.seasonLabel}
+                        {selectedSeasonId === s.id && seasonLoading && (
+                          <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {specialSeasons.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSpecialsOpen((o) => !o)}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5 border",
+                        specialSeasons.some((s) => s.id === selectedSeasonId)
+                          ? "bg-primary text-primary-foreground shadow-md shadow-black/30 border-transparent"
+                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border-white/[0.06]"
+                      )}
+                    >
+                      {specialsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      Specials
+                    </button>
+                    {specialsOpen && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {specialSeasons.map((s) => (
+                          <button
+                            key={s.id}
+                            onClick={() => setSelectedSeasonId(s.id)}
+                            className={cn(
+                              "px-3 py-2 rounded-lg text-[11px] font-bold transition-all duration-200 border",
+                              selectedSeasonId === s.id
+                                ? "bg-primary text-primary-foreground shadow-md shadow-black/30 border-transparent"
+                                : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border-white/[0.06]"
+                            )}
+                          >
+                            {s.seasonLabel}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {movieSeasons.length > 0 && (mainSeasons.length > 0 || movieSeasons.length > 1) && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMoviesOpen((o) => !o)}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5 border",
+                        movieSeasons.some((s) => s.id === selectedSeasonId)
+                          ? "bg-primary text-primary-foreground shadow-md shadow-black/30 border-transparent"
+                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border-white/[0.06]"
+                      )}
+                    >
+                      {moviesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      Movies
+                    </button>
+                    {moviesOpen && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {movieSeasons.map((s) => (
+                          <button
+                            key={s.id}
+                            onClick={() => setSelectedSeasonId(s.id)}
+                            className={cn(
+                              "px-3 py-2 rounded-lg text-[11px] font-bold transition-all duration-200 border",
+                              selectedSeasonId === s.id
+                                ? "bg-primary text-primary-foreground shadow-md shadow-black/30 border-transparent"
+                                : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border-white/[0.06]"
+                            )}
+                          >
+                            {s.seasonLabel}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!isMovieEntry && (
+                  <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.05] p-0.5 gap-0.5">
+                    {(
+                      [
+                        { key: "list", label: "List", icon: <List className="w-3.5 h-3.5" /> },
+                        { key: "grid", label: "Grid", icon: <Grid2x2 className="w-3.5 h-3.5" /> },
+                        { key: "number", label: "Numbers", icon: <ListOrdered className="w-3.5 h-3.5" /> },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => {
+                          setViewMode(opt.key);
+                          try {
+                            localStorage.setItem("sv_anime_episode_view", opt.key);
+                          } catch {}
+                        }}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all duration-200 active:scale-95",
+                          viewMode === opt.key
+                            ? "bg-primary text-primary-foreground shadow-md shadow-black/20"
+                            : "text-white/50 hover:text-white hover:bg-white/[0.06]"
+                        )}
+                        aria-pressed={viewMode === opt.key}
+                      >
+                        {opt.icon}
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {selectedSeason && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-4 py-3 md:py-3.5 mb-5 shadow-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-base font-bold text-white truncate">{selectedSeason.name}</span>
+                    {selectedSeason.format && (
+                      <span className="shrink-0 px-2 py-0.5 rounded bg-white/[0.08] border border-white/[0.1] text-[10px] font-extrabold uppercase tracking-wider text-white/70">
+                        {selectedSeason.format}
+                      </span>
+                    )}
+                    {selectedSeason.seasonYear && (
+                      <span className="shrink-0 text-xs font-semibold text-white/50">{selectedSeason.seasonYear}</span>
+                    )}
+                  </div>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs md:text-sm">
+                    {selectedSeason.seasonLabel && (
+                      <span className="font-extrabold text-amber-300">{selectedSeason.seasonLabel}</span>
+                    )}
+                    {(seasonData?.episodes?.length ?? selectedSeason.totalEpisodes) ? (
+                      <>
+                        {selectedSeason.seasonLabel && <span className="text-white/40 font-medium">·</span>}
+                        <span className="font-extrabold text-emerald-300">
+                          {seasonData?.episodes?.length
+                            ? `${seasonData.episodes.length} episode${seasonData.episodes.length === 1 ? "" : "s"}`
+                            : `${selectedSeason.totalEpisodes} episodes`}
+                        </span>
+                      </>
+                    ) : null}
+                    {!selectedSeason.isCurrent && catalog.franchiseNodes.length > 1 ? (
+                      <span className="text-xs font-medium text-white/40">· Related series — opens its own page</span>
+                    ) : selectedSeason.isCurrent ? (
+                      <span className="text-xs font-medium text-white/40">· This entry</span>
+                    ) : null}
+                  </p>
+                </div>
+                {selectedSeason.status && (
+                  <span
+                    className={cn(
+                      "shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-widest border",
+                      selectedSeason.status === "FINISHED"
+                        ? "bg-emerald-400/15 border-emerald-400/30 text-emerald-300"
+                        : selectedSeason.status === "RELEASING"
+                        ? "bg-amber-400/15 border-amber-400/30 text-amber-300"
+                        : selectedSeason.status === "NOT_YET_RELEASED"
+                        ? "bg-sky-400/15 border-sky-400/30 text-sky-300"
+                        : "bg-white/[0.05] border-white/[0.08] text-white/50"
+                    )}
+                  >
+                    {selectedSeason.status === "FINISHED"
+                      ? "Completed"
+                      : selectedSeason.status === "RELEASING"
+                      ? "Ongoing"
+                      : selectedSeason.status === "NOT_YET_RELEASED"
+                      ? "Upcoming"
+                      : selectedSeason.status}
+                  </span>
+                )}
+                {nextAiringText && (
+                  <p className="w-full text-xs font-bold text-sky-300 flex items-center gap-1.5 pt-1.5 border-t border-white/[0.06]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-300 animate-pulse shrink-0" />
+                    {selectedSeason.status === "NOT_YET_RELEASED"
+                      ? `Premieres (E${nextAiringText.episode}) on ${formatAirDate(nextAiringText.airingAt)}`
+                      : `Next episode (E${nextAiringText.episode}) airs on ${formatAirDate(nextAiringText.airingAt)}`}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!seasonLoading && episodesError && (
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+                Couldn&apos;t load episodes: {episodesError}
+              </div>
+            )}
+
+            {seasonLoading && (
+              <div className="space-y-3" aria-hidden="true">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={`ep-shimmer-${i}`}
+                    className="flex gap-4 p-3.5 rounded-2xl border border-white/[0.05] bg-white/[0.015]"
+                  >
+                    <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.04] shrink-0 self-start mt-1">
+                      <div className="w-4 h-3 rounded shimmer" />
+                    </div>
+                    <div className="w-40 sm:w-48 md:w-52 lg:w-56 shrink-0 aspect-video rounded-xl shimmer" />
+                    <div className="flex-1 min-w-0 py-1 space-y-2.5">
+                      <div className="h-3.5 w-1/3 rounded shimmer" />
+                      <div className="h-3 w-3/4 rounded shimmer" />
+                      <div className="h-3 w-1/2 rounded shimmer" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!seasonLoading && seasonData && (
+              <div key={selectedSeasonId}>
+                {seasonData.seasonOverview && (
+                  <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
+                    {seasonData.seasonOverview}
+                  </p>
+                )}
+
+                <div key={viewMode} className="animate-view-in">
+                {viewMode === "grid" ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-6">
+                    {seasonData.episodes.map((episode, i) => {
+                      const isWatching = hasEverWatched && playingSeasonId === selectedSeasonId && playingEpisode === episode.episodeNum;
+                      const isUpcoming = isUpcomingEpisode(episode);
+                      const epRating = episode.vote_average && episode.vote_average > 0
+                        ? episode.vote_average
+                        : score > 0
+                        ? score
+                        : null;
+                      return (
+                        <button
+                          key={`grid-${episode.episodeId}`}
+                          onClick={() => handleWatchEpisode(selectedSeasonId, episode.episodeNum, episode.title)}
+                          className="group text-left"
+                        >
+                          <div
+                            className={cn(
+                              "relative aspect-video rounded-xl overflow-hidden bg-muted border transition-all duration-300",
+                              isWatching
+                                ? "ring-2 ring-primary border-transparent"
+                                : isUpcoming
+                                ? "opacity-50 border-amber-400/10"
+                                : "border-white/[0.06] group-hover:border-white/[0.15]"
+                            )}
+                          >
+                            {episode.thumbnail || selectedSeason?.coverImage || anime.poster ? (
+                              <img
+                                src={episode.thumbnail || selectedSeason?.coverImage || anime.poster || undefined}
+                                alt={episode.title}
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-card">
+                                <Play className="w-6 h-6 text-white/20" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                                <Play className="w-4 h-4 fill-white text-white ml-0.5" />
+                              </div>
+                            </div>
+                            {isUpcoming && (
+                              <div className="absolute inset-0 z-20 bg-black/80 backdrop-blur-[2px] flex items-center justify-center p-2">
+                                <span className="px-3 py-1.5 rounded-lg bg-sky-500/30 border border-sky-300/40 text-xs md:text-sm font-black uppercase tracking-widest text-sky-200 shadow-xl">
+                                  UPCOMING
+                                </span>
+                              </div>
+                            )}
+                            {isWatching && (
+                              <div className="absolute top-2.5 left-2.5 z-30 px-2.5 py-1 rounded-md bg-primary/90 text-white text-[10px] font-extrabold tracking-widest uppercase shadow-md">
+                                {isPlaying ? "Playing" : "Watching"}
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 z-30 px-2.5 py-1.5 bg-gradient-to-t from-black/90 to-transparent w-full">
+                              <span className="text-xs font-black text-white">EP {episode.episodeNum}</span>
+                            </div>
+                            {episode.isFiller && !isWatching && (
+                              <div className="absolute top-2.5 left-2.5 z-30 px-2.5 py-1 rounded-md bg-amber-400 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-black/60 border border-amber-300">
+                                FILLER
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-2 px-0.5">
+                            <div className="flex items-start justify-between gap-1">
+                              <p className="text-xs md:text-sm font-bold text-white/90 line-clamp-2 leading-snug flex-1">{episode.title}</p>
+                              {epRating ? (
+                                <div className="flex items-center gap-0.5 text-amber-400 shrink-0 text-xs font-extrabold mt-0.5">
+                                  <Star className="w-3 h-3 fill-current" />
+                                  <span>{epRating.toFixed(1)}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                            {episode.releasedDate && (
+                              <p className="text-[10px] md:text-xs text-white/35 mt-0.5">
+                                {episode.isReleased === false ? "Airs" : "Aired"} {formatDate(episode.releasedDate)}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : viewMode === "list" ? (
+                  <div className="space-y-2.5">
+                    {seasonData.episodes.map((episode) => {
+                      const isWatching = hasEverWatched && playingSeasonId === selectedSeasonId && playingEpisode === episode.episodeNum;
+                      const isUpcoming = isUpcomingEpisode(episode);
+                      const epRating = episode.vote_average && episode.vote_average > 0
+                        ? episode.vote_average
+                        : score > 0
+                        ? score
+                        : null;
+                      const epStill = episode.thumbnail || selectedSeason?.coverImage || anime.poster;
+
+                      return (
+                        <div
+                          key={episode.episodeId}
+                          onClick={() => handleWatchEpisode(selectedSeasonId, episode.episodeNum, episode.title)}
+                          className={cn(
+                            "group flex gap-3.5 sm:gap-4 p-3 rounded-2xl border bg-card/60 backdrop-blur-md transition-all duration-300 cursor-pointer select-none touch-manipulation hover:bg-white/[0.07] hover:border-white/20 hover:shadow-xl",
+                            isWatching
+                              ? "ring-2 ring-primary border-transparent bg-gradient-to-r from-primary/20 via-primary/5 to-card shadow-lg shadow-black/40"
+                              : isUpcoming
+                              ? "bg-white/[0.015] border-amber-400/10 hover:bg-amber-400/10 hover:border-amber-400/20"
+                              : "bg-white/[0.03] border-white/[0.08]"
+                          )}
+                        >
+                          {/* Compact HD Thumbnail */}
+                          <div className="w-36 sm:w-48 md:w-56 lg:w-60 shrink-0 aspect-video rounded-xl overflow-hidden bg-black/40 relative border border-white/10 shadow-sm group-hover:border-white/25 transition-colors self-start">
+                            {epStill ? (
+                              <img
+                                src={epStill}
+                                alt={episode.title}
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-card">
+                                <Play className="w-6 h-6 text-white/20" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
+
+                            {/* Hover Play Button */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                              <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <Play className="w-4 h-4 fill-current ml-0.5" />
+                              </div>
+                            </div>
+
+                            {/* EP Badge & Status Tags */}
+                            <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 z-20">
+                              <span className="bg-black/80 backdrop-blur-md border border-white/15 text-white text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-md shadow-md">
+                                EP {episode.episodeNum}
+                              </span>
+                              {isWatching && hasEverWatched && (
+                                <span className="bg-primary text-primary-foreground text-[9px] font-black px-1.5 py-0.5 rounded-md tracking-wider uppercase shadow-md animate-pulse">
+                                  {isPlaying ? "Playing" : "Watching"}
+                                </span>
+                              )}
+                            </div>
+
+                            {episode.isFiller && !isWatching && (
+                              <div className="absolute top-1.5 left-1.5 z-20 px-2 py-0.5 rounded-md bg-amber-400 text-black text-[10px] font-black uppercase tracking-wider shadow-md border border-amber-300">
+                                FILLER
+                              </div>
+                            )}
+
+                            {isUpcoming && (
+                              <div className="absolute inset-0 z-20 bg-black/80 backdrop-blur-[2px] flex items-center justify-center p-1.5">
+                                <span className="px-2.5 py-1 rounded-lg bg-sky-500/30 border border-sky-300/40 text-[10px] font-black uppercase tracking-widest text-sky-200 shadow-md">
+                                  UPCOMING
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Content Details */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                            <div>
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <h4 className="font-bold text-sm sm:text-base leading-snug text-white group-hover:text-primary transition-colors flex items-center flex-wrap gap-1.5">
+                                  <span>{episode.title}</span>
+                                  {episode.isFiller && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-400 text-black text-[9px] font-black uppercase tracking-wider border border-amber-300">
+                                      FILLER
+                                    </span>
+                                  )}
+                                </h4>
+
+                                {epRating ? (
+                                  <div className="flex items-center gap-1 text-amber-300 shrink-0 bg-amber-400/10 border border-amber-400/25 px-2 py-0.5 rounded-md text-xs font-bold shadow-sm">
+                                    <Star className="w-3 h-3 fill-current text-amber-300" />
+                                    <span>{epRating.toFixed(1)}</span>
+                                    <span className="text-[9px] text-white/40 font-normal">/ 10</span>
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              {episode.description && (
+                                <p className="text-xs text-white/50 leading-relaxed line-clamp-2 mt-0.5 font-normal">
+                                  {episode.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2.5 text-[11px] font-semibold text-white/35 mt-1.5 flex-wrap">
+                              {episode.releasedDate && (
+                                <span>Aired {formatDate(episode.releasedDate)}</span>
+                              )}
+                              {episode.runtime && (
+                                <span>{episode.runtime} min</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2.5">
+                    {seasonData.episodes.map((episode) => {
+                      const isWatching = hasEverWatched && playingSeasonId === selectedSeasonId && playingEpisode === episode.episodeNum;
+                      const isUpcoming = isUpcomingEpisode(episode);
+                      const epRating = episode.vote_average && episode.vote_average > 0
+                        ? episode.vote_average
+                        : score > 0
+                        ? score
+                        : null;
+                      return (
+                        <button
+                          key={`num-${episode.episodeId}`}
+                          onClick={() => handleWatchEpisode(selectedSeasonId, episode.episodeNum, episode.title)}
+                          className={cn(
+                            "relative flex items-center justify-center aspect-square rounded-xl text-base font-black transition-all duration-200 border",
+                            isWatching
+                              ? "bg-primary text-primary-foreground border-transparent shadow-md shadow-black/30"
+                              : isUpcoming
+                              ? "bg-white/[0.02] text-white/40 border-sky-300/15 hover:border-sky-300/30 hover:text-white/60"
+                              : episode.isFiller
+                              ? "bg-amber-500/20 text-amber-300 border-amber-400/50 hover:border-amber-400 hover:bg-amber-500/30"
+                              : "bg-white/[0.04] text-white/70 border-white/[0.06] hover:border-white/[0.2] hover:bg-white/[0.08]"
+                          )}
+                          title={`${episode.title}${epRating ? ` (★ ${epRating.toFixed(1)}/10)` : ""}${episode.isFiller ? " (Filler)" : ""}${isUpcoming ? " (Upcoming)" : ""}`}
+                        >
+                          {episode.episodeNum}
+                          {isUpcoming && (
+                            <span className="absolute bottom-1 inset-x-0 text-center text-[8px] font-black uppercase tracking-wider text-sky-300 leading-none">
+                              UPCOMING
+                            </span>
+                          )}
+                          {episode.isFiller && !isWatching && (
+                            <span className="absolute -top-2 -right-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-black text-[9px] font-black uppercase tracking-wider shadow-md border border-amber-300">
+                              FILLER
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                </div>
+              </div>
+            )}
+
+            {!seasonLoading && !seasonData && !episodesError && (
+              <div className="flex items-center justify-center py-12 text-white/30 text-sm">No episodes found</div>
+            )}
+          </section>
+
+          {/* ── Watch Order ── */}
+          {catalog.franchiseNodes.length > 1 && (
+            <section>
+              <button
+                onClick={() => setWatchOrderOpen((o) => !o)}
+                aria-expanded={watchOrderOpen}
+                className={cn(
+                  "flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl border text-left transition-all duration-200",
+                  watchOrderOpen
+                    ? "border-white/[0.14] bg-white/[0.05]"
+                    : "border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.16]"
+                )}
+              >
+                <div className="w-1 h-5 bg-primary rounded-full shrink-0" />
+                <div className="flex-1">
+                  <h2 className="text-base font-bold text-white tracking-wide">Watch Order</h2>
+                  <p className="text-xs text-white/35 mt-0.5">
+                    {catalog.franchiseNodes.length} titles in this franchise, ordered chronologically.
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "flex items-center justify-center w-7 h-7 rounded-lg border transition-all duration-200",
+                    watchOrderOpen
+                      ? "bg-primary/20 border-primary/40 text-white"
+                      : "bg-white/[0.04] border-white/[0.08] text-white/40 group-hover:text-white/70"
+                  )}
+                >
+                  {watchOrderOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </span>
+              </button>
+              {watchOrderOpen && (
+                <div className="mt-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                  <div className="divide-y divide-white/[0.05]">
+                    {catalog.franchiseNodes.map((node, i) => {
+                      const isCurrent = node.id === Number(anime.id);
+                      const statusText =
+                        node.status === "FINISHED"
+                          ? "Completed"
+                          : node.status === "RELEASING"
+                          ? "Ongoing"
+                          : node.status === "NOT_YET_RELEASED"
+                          ? "Upcoming"
+                          : null;
+                      return (
+                        <Link
+                          key={node.id}
+                          href={`/anime/${node.id}`}
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3 transition-all duration-200 group",
+                            isCurrent ? "bg-primary/[0.10]" : "hover:bg-white/[0.05]"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "w-6 text-center text-xs font-black shrink-0",
+                              isCurrent ? "text-primary" : "text-white/30"
+                            )}
+                          >
+                            {i + 1}
+                          </span>
+                          <span className="w-20 shrink-0 text-[10px] font-black uppercase tracking-wide text-[#7288AE] leading-tight">
+                            {node.seasonLabel || node.format || "Anime"}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span
+                              className={cn(
+                                "block text-sm font-bold truncate",
+                                isCurrent ? "text-primary" : "text-white/90"
+                              )}
+                            >
+                              {node.title}
+                            </span>
+                            <span className="block text-[10px] text-white/40 mt-0.5 truncate">
+                              {node.seasonYear || ""}
+                              {node.episodes ? ` · ${node.episodes} eps` : ""}
+                              {statusText ? ` · ${statusText}` : ""}
+                            </span>
+                          </span>
+                          {isCurrent && (
+                            <span className="shrink-0 px-2 py-0.5 rounded-md bg-primary/90 text-white text-[9px] font-extrabold tracking-widest uppercase">
+                              Watching
+                            </span>
+                          )}
+                          <ChevronRight className="w-4 h-4 text-white/25 shrink-0 group-hover:text-white/70 transition-colors" />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── You May Like ── */}
+          {recommendations.length > 0 && (
+            <section>
+              <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-1 h-5 bg-primary rounded-full" />
+                  <div>
+                    <h2 className="text-base font-bold text-white tracking-wide">You May Like</h2>
+                    <p className="text-xs text-white/35 mt-0.5">Recommended based on this anime.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
+                {recommendations.slice(0, 18).map((item, i) => (
+                  <AnimeCard key={item.id} item={item} index={i} />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
       </main>
     </div>
   );

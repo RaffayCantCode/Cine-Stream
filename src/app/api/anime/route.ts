@@ -1,62 +1,52 @@
 export const runtime = 'edge';
-export const dynamic = "force-dynamic";
-import { NextRequest } from "next/server";
-import { searchAnime, getPopularAnime, getTrendingAnime, getAiringAnime } from "@/lib/anime-fetch";
+export const dynamic = 'force-dynamic';
+
 import { cacheHeaders } from "@/lib/tmdb";
+import { browseAnime } from "@/lib/anime/anilist";
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const categoryRaw = searchParams.get("category") || "popular";
-  const page = parseInt(searchParams.get("page") || "1", 10);
-  const q = searchParams.get("q") || "";
+const noStoreHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Cloudflare-CDN-Cache-Control": "no-store",
+};
+
+const SUPPORTED_CATEGORIES = new Set(["popular", "trending", "top", "top100", "airing", "upcoming", "movie", "search"]);
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  let category = searchParams.get("category") || "popular";
+  const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
   const genre = searchParams.get("genre") || "";
+  let q = searchParams.get("q") || "";
 
-  let category = categoryRaw;
-  let searchKeyword = q;
-  if (categoryRaw.startsWith("search&q=")) {
-    category = "search";
-    try {
-      searchKeyword = decodeURIComponent(categoryRaw.substring("search&q=".length));
-    } catch {
-      searchKeyword = categoryRaw.substring("search&q=".length);
+  if (category.startsWith("search&")) {
+    const match = category.match(/^search&q=([\s\S]*)$/);
+    if (match) {
+      category = "search";
+      try {
+        q = decodeURIComponent(match[1]);
+      } catch {
+        q = match[1];
+      }
     }
   }
 
+  if (!SUPPORTED_CATEGORIES.has(category)) {
+    category = "popular";
+  }
+
   try {
-    let items: any[] = [];
-
-    if (category === "search") {
-      items = await searchAnime(searchKeyword, page, genre);
-    } else if (category === "airing") {
-      items = await getAiringAnime(page, genre);
-    } else if (category === "trending") {
-      items = await getTrendingAnime(page, genre);
-    } else {
-      items = await getPopularAnime(page, genre);
-    }
-
-    if (items.length === 0) {
-      return Response.json({
-        success: true,
-        data: { items },
-      }, { 
-        headers: {
-          "Cache-Control": "no-store, max-age=0",
-        }
-      });
-    }
-
-    return Response.json({
-      success: true,
-      data: { items },
-      hasMore: items.length > 0,
-    }, { headers: cacheHeaders(3600) });
-  } catch (error) {
-    console.error("[Anime API Route Error]:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const result = await browseAnime(category, page, genre, q);
+    const headers = result.items.length > 0 ? cacheHeaders(3600) : noStoreHeaders;
     return Response.json(
-      { error: `API Error: ${errorMessage}`, success: false },
-      { status: 500 }
+      { success: true, data: { items: result.items }, hasMore: result.hasMore },
+      { headers }
+    );
+  } catch (error) {
+    console.error("[Anime Browse Error]:", error);
+    return Response.json(
+      { success: false, data: { items: [] }, hasMore: false },
+      { headers: noStoreHeaders }
     );
   }
 }

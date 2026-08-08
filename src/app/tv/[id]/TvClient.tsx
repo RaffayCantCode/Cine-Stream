@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film } from "lucide-react";
+import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film, Grid2x2, List } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
@@ -135,6 +135,26 @@ export default function TvClient() {
   const playerRef = useRef<HTMLDivElement>(null);
   const queueRef = useRef<HTMLDivElement>(null);
   const selectedEpRef = useRef<HTMLButtonElement>(null);
+
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sv_tv_episode_view");
+      if (saved === "grid" || saved === "list") {
+        setViewMode(saved);
+      }
+    } catch {}
+  }, []);
+
+  const handleViewModeChange = (mode: "list" | "grid") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("sv_tv_episode_view", mode);
+      } catch {}
+    }
+  };
 
   const isOngoingShow = (statusValue?: string | null) => {
     const normalized = (statusValue || "").toLowerCase();
@@ -629,6 +649,36 @@ export default function TvClient() {
             <div className="flex items-center gap-3">
               <div className="w-1 h-5 bg-primary rounded-full shrink-0" />
               <h2 className="text-base font-bold text-white tracking-wide">Episodes</h2>
+              <div className="flex items-center gap-1 bg-white/[0.06] p-1 rounded-xl border border-white/[0.08] ml-2">
+                <button
+                  onClick={() => handleViewModeChange("list")}
+                  title="List View"
+                  aria-label="List View"
+                  className={cn(
+                    "p-1.5 rounded-lg transition-all text-xs flex items-center gap-1.5 font-bold",
+                    viewMode === "list"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-white/40 hover:text-white hover:bg-white/10"
+                  )}
+                >
+                  <List className="w-4 h-4" />
+                  <span className="hidden sm:inline">List</span>
+                </button>
+                <button
+                  onClick={() => handleViewModeChange("grid")}
+                  title="Grid View"
+                  aria-label="Grid View"
+                  className={cn(
+                    "p-1.5 rounded-lg transition-all text-xs flex items-center gap-1.5 font-bold",
+                    viewMode === "grid"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-white/40 hover:text-white hover:bg-white/10"
+                  )}
+                >
+                  <Grid2x2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Grid</span>
+                </button>
+              </div>
             </div>
 
             {seasons.length > 0 && (
@@ -664,85 +714,212 @@ export default function TvClient() {
                   </p>
                 )}
 
-                <div className="space-y-3">
-                  {seasonData.episodes?.map((episode, i) => {
-                    const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
-                    const isUpcoming = isUpcomingEpisode(episode);
-                    return (
-                    <div
-                      key={episode.id}
-                      onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
-                      className={cn(
-                        "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
-                        isWatching
-                          ? "ring-2 ring-primary bg-gradient-to-br from-primary/15 to-primary/5 border-transparent shadow-lg shadow-black/25"
-                          : isUpcoming
-                          ? "bg-white/[0.015] border-amber-400/10 hover:bg-amber-400/10 hover:border-amber-400/20"
-                          : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
-                      )}
-                    >
-                      <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
-                        <span className="text-sm font-bold text-white/40">{episode.episode_number}</span>
-                      </div>
+                {viewMode === "grid" ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {seasonData.episodes?.map((episode) => {
+                      const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+                      const isUpcoming = isUpcomingEpisode(episode);
+                      const epStill = episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : show?.backdrop_path ? `https://image.tmdb.org/t/p/w500${show.backdrop_path}` : null;
+                      const epScore = episode.vote_average && episode.vote_average > 0 ? episode.vote_average : (show?.vote_average || 0);
 
-                      <div className="w-40 sm:w-48 md:w-52 lg:w-56 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
-                        {episode.still_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w500${episode.still_path}`}
-                            alt={episode.name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-card">
-                            <Play className="w-6 h-6 text-white/20" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                            <Play className="w-4 h-4 fill-white text-white ml-0.5" />
-                          </div>
-                        </div>
-                        {isUpcoming && (
-                          <div className="absolute inset-0 z-20 bg-black/75 flex flex-col items-center justify-center gap-1">
-                            <Calendar className="w-5 h-5 text-sky-300" />
-                            <span className="text-[9px] font-black uppercase tracking-wide text-sky-200">Upcoming</span>
-                          </div>
-                        )}
-                        {isWatching && hasEverWatched && (
-                          <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-primary/90 backdrop-blur-md text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
-                            {isPlaying ? "Playing" : "Watching"}
-                          </div>
-                        )}
-                      </div>
+                      return (
+                        <div
+                          key={episode.id}
+                          onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
+                          className={cn(
+                            "group flex flex-col rounded-2xl border bg-card/60 overflow-hidden transition-all duration-300 cursor-pointer select-none touch-manipulation hover:scale-[1.02] hover:shadow-2xl hover:border-white/20",
+                            isWatching && hasEverWatched
+                              ? "ring-2 ring-primary border-transparent bg-gradient-to-b from-primary/20 to-card shadow-xl shadow-black/40"
+                              : isUpcoming
+                              ? "border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/10"
+                              : "border-white/[0.08] hover:bg-white/[0.06]"
+                          )}
+                        >
+                          <div className="relative aspect-video w-full overflow-hidden bg-black/40">
+                            {epStill ? (
+                              <img
+                                src={epStill}
+                                alt={episode.name || `Episode ${episode.episode_number}`}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-card text-white/20">
+                                <Film className="w-8 h-8" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-                      <div className="flex-1 min-w-0 py-0.5">
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <h4 className="font-bold text-sm leading-tight text-white">
-                            <span className="sm:hidden text-white/40 mr-1.5">E{episode.episode_number}.</span>
-                            {episode.name}
-                          </h4>
-                          {episode.vote_average && episode.vote_average > 0 && episode.vote_count && episode.vote_count > 5 ? (
-                            <div className="flex items-center gap-1 text-amber-400 shrink-0">
-                              <Star className="w-3 h-3 fill-current" />
-                              <span className="font-bold text-xs">{episode.vote_average.toFixed(1)}</span>
+                            {/* Badges */}
+                            <div className="absolute bottom-2 left-2 flex items-center gap-1.5 z-20">
+                              <span className="bg-black/75 backdrop-blur-md border border-white/10 text-white text-[11px] font-black px-2 py-0.5 rounded-md shadow-md">
+                                EP {episode.episode_number}
+                              </span>
+                              {isWatching && hasEverWatched && (
+                                <span className="bg-primary text-primary-foreground text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider uppercase shadow-lg animate-pulse">
+                                  {isPlaying ? "Playing" : "Watching"}
+                                </span>
+                              )}
                             </div>
-                          ) : null}
+
+                            {epScore > 0 && !isUpcoming && (
+                              <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md border border-amber-400/20 text-amber-300 text-[11px] font-bold px-2 py-0.5 rounded-md shadow-md">
+                                <Star className="w-3 h-3 fill-current text-amber-300" />
+                                <span>{epScore.toFixed(1)}</span>
+                                <span className="text-[9px] text-white/40 font-normal">/ 10</span>
+                              </div>
+                            )}
+
+                            {!isUpcoming && (
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                                  <Play className="w-4 h-4 fill-current ml-0.5" />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Full Thumbnail Upcoming Overlay */}
+                            {isUpcoming && (
+                              <div className="absolute inset-0 z-30 bg-black/85 backdrop-blur-[3px] flex flex-col items-center justify-center p-3 text-center gap-1.5 border border-sky-400/20">
+                                <span className="px-3.5 py-1.5 rounded-xl bg-sky-500/30 border border-sky-300/40 text-xs font-black uppercase tracking-widest text-sky-200 shadow-2xl flex items-center gap-1.5">
+                                  <Calendar className="w-4 h-4 text-sky-300" />
+                                  UPCOMING
+                                </span>
+                                {episode.air_date && (
+                                  <span className="text-[11px] font-extrabold text-sky-200/90 mt-0.5">
+                                    Airs {format(new Date(`${episode.air_date}T12:00:00`), "MMM d, yyyy")}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="p-3.5 flex flex-col justify-between flex-1">
+                            <div>
+                              <h3 className="font-bold text-sm text-white line-clamp-1 group-hover:text-primary transition-colors">
+                                {episode.name || `Episode ${episode.episode_number}`}
+                              </h3>
+                              {episode.overview && (
+                                <p className="text-xs text-white/50 line-clamp-2 mt-1 leading-relaxed">
+                                  {episode.overview}
+                                </p>
+                              )}
+                            </div>
+                            {episode.air_date && (
+                              <div className="text-[11px] font-semibold text-white/35 mt-2">
+                                Aired {format(new Date(`${episode.air_date}T12:00:00`), "MMM d, yyyy")}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {episode.overview && (
-                          <p className="text-white/40 text-xs leading-relaxed line-clamp-2">{episode.overview}</p>
-                        )}
-                        {isUpcoming && (
-                          <p className="mt-2 w-fit rounded-md border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">
-                            Not released yet
-                          </p>
-                        )}
-                        {episode.runtime && <p className="text-white/30 text-xs mt-1.5">{episode.runtime} min</p>}
-                      </div>
-                    </div>
-                  ); })}
-                </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {seasonData.episodes?.map((episode) => {
+                      const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+                      const isUpcoming = isUpcomingEpisode(episode);
+                      const epStill = episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : show?.backdrop_path ? `https://image.tmdb.org/t/p/w500${show.backdrop_path}` : null;
+                      const epScore = episode.vote_average && episode.vote_average > 0 ? episode.vote_average : (show?.vote_average || 0);
+
+                      return (
+                        <div
+                          key={episode.id}
+                          onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
+                          className={cn(
+                            "group flex gap-3.5 sm:gap-4 p-3 rounded-2xl border bg-card/60 backdrop-blur-md transition-all duration-300 cursor-pointer select-none touch-manipulation hover:bg-white/[0.07] hover:border-white/20 hover:shadow-xl",
+                            isWatching && hasEverWatched
+                              ? "ring-2 ring-primary border-transparent bg-gradient-to-r from-primary/20 via-primary/5 to-card shadow-lg shadow-black/40"
+                              : isUpcoming
+                              ? "bg-white/[0.015] border-amber-400/10 hover:bg-amber-400/10 hover:border-amber-400/20"
+                              : "bg-white/[0.03] border-white/[0.08]"
+                          )}
+                        >
+                          {/* Compact HD Still */}
+                          <div className="w-36 sm:w-48 md:w-56 lg:w-60 shrink-0 aspect-video rounded-xl overflow-hidden bg-black/40 relative border border-white/10 shadow-sm group-hover:border-white/25 transition-colors self-start">
+                            {epStill ? (
+                              <img
+                                src={epStill}
+                                alt={episode.name || `Episode ${episode.episode_number}`}
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-card text-white/20">
+                                <Film className="w-6 h-6" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
+
+                            {/* Play Button Overlay */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                              <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <Play className="w-4 h-4 fill-current ml-0.5" />
+                              </div>
+                            </div>
+
+                            {/* Badges */}
+                            <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 z-20">
+                              <span className="bg-black/80 backdrop-blur-md border border-white/15 text-white text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-md shadow-md">
+                                EP {episode.episode_number}
+                              </span>
+                              {isWatching && hasEverWatched && (
+                                <span className="bg-primary text-primary-foreground text-[9px] font-black px-1.5 py-0.5 rounded-md tracking-wider uppercase shadow-md animate-pulse">
+                                  {isPlaying ? "Playing" : "Watching"}
+                                </span>
+                              )}
+                            </div>
+
+                            {isUpcoming && (
+                              <div className="absolute inset-0 z-20 bg-black/80 backdrop-blur-[2px] flex items-center justify-center p-1.5">
+                                <span className="px-2.5 py-1 rounded-lg bg-sky-500/30 border border-sky-300/40 text-[10px] font-black uppercase tracking-widest text-sky-200 shadow-md">
+                                  UPCOMING
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Content Details */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                            <div>
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <h4 className="font-bold text-sm sm:text-base leading-snug text-white group-hover:text-primary transition-colors">
+                                  {episode.name || `Episode ${episode.episode_number}`}
+                                </h4>
+
+                                {epScore > 0 && (
+                                  <div className="flex items-center gap-1 text-amber-300 shrink-0 bg-amber-400/10 border border-amber-400/25 px-2 py-0.5 rounded-md text-xs font-bold shadow-sm">
+                                    <Star className="w-3 h-3 fill-current text-amber-300" />
+                                    <span>{epScore.toFixed(1)}</span>
+                                    <span className="text-[9px] text-white/40 font-normal">/ 10</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {episode.overview && (
+                                <p className="text-xs text-white/50 leading-relaxed line-clamp-2 mt-0.5 font-normal">
+                                  {episode.overview}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2.5 text-[11px] font-semibold text-white/35 mt-1.5 flex-wrap">
+                              {episode.air_date && (
+                                <span>Aired {format(new Date(`${episode.air_date}T12:00:00`), "MMM d, yyyy")}</span>
+                              )}
+                              {episode.runtime && (
+                                <span>{episode.runtime} min</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
         </section>

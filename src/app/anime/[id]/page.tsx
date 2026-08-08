@@ -1,211 +1,41 @@
 export const runtime = 'edge';
+
 import { Metadata } from "next";
 import { cache } from "react";
 import AnimeClient from "./AnimeClient";
+import { buildAnimeCatalog } from "@/lib/anime/catalog";
+import type { AnimeCatalog } from "@/lib/anime/types";
 
-// Shared AniList query — fetches enough fields for BOTH <head> metadata AND
-// the first-paint of AnimeClient. The result is produced once server-side and
-// serialised into the HTML payload; the client hydrates instantly with no
-// extra round-trip for the basic poster/title/description view.
-const INITIAL_QUERY = `query ($id: Int) {
-  Media(id: $id, type: ANIME, isAdult: false) {
-    id idMal
-    title { romaji english native }
-    description
-    coverImage { extraLarge large }
-    bannerImage
-    episodes genres averageScore
-    status type format season seasonYear duration
-    trailer { id site }
-    nextAiringEpisode { episode airingAt timeUntilAiring }
-  }
-}`;
-
-interface InitialAnimeData {
-  id: string;
-  idMal: string | null;
-  name: string;
-  jname: string | null;
-  poster: string;
-  description: string;
-  type: string | null;
-  rating: string | null;
-  status: string | null;
-  genres: string[];
-  totalEpisodes: number;
-  seasons: [];
-  season: string | null;
-  seasonYear: number | null;
-  format: string | null;
-  openedSeasonId: string;
-  tmdbId: null;
-  duration: number | null;
-  trailerId: string | null;
-  bannerImage: string | null;
-}
-
-const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: string): Promise<{ meta: Metadata; initialData: InitialAnimeData | null }> {
-  let targetId = id;
-  if (id.startsWith("mal-")) {
-    const malIdNum = parseInt(id.replace("mal-", ""), 10);
-    if (!isNaN(malIdNum)) {
-      try {
-        const q = `query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { id } }`;
-        const r = await fetch('https://graphql.anilist.co', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ query: q, variables: { idMal: malIdNum } }),
-          signal: AbortSignal.timeout(2000),
-        }).then(res => res.json()).catch(() => null);
-        if (r?.data?.Media?.id) targetId = String(r.data.Media.id);
-        else targetId = String(malIdNum);
-      } catch { targetId = String(malIdNum); }
-    }
-  } else if (id.startsWith("tmdb-")) {
-    const parts = id.split("-");
-    if (parts.length >= 2) {
-      const tmdbIdNum = parseInt(parts[1], 10);
-      if (!isNaN(tmdbIdNum)) {
-        try {
-          const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${tmdbIdNum}`, {
-            signal: AbortSignal.timeout(2000),
-          }).then(res => res.json()).catch(() => null);
-          if (azRes?.mappings?.anilist_id) targetId = String(azRes.mappings.anilist_id);
-        } catch { /* ignore */ }
-      }
-    }
-  }
-
-  const numId = parseInt(targetId, 10);
-  if (isNaN(numId)) {
-    return { meta: { title: "Anime - CineStream" }, initialData: null };
-  }
-
-  try {
-    const res = await fetch('https://graphql.anilist.co', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ query: INITIAL_QUERY, variables: { id: numId } }),
-      signal: AbortSignal.timeout(3500),
-      next: { revalidate: 86400 },
-    });
-
-    let json = res.ok ? await res.json().catch(() => null) : null;
-    let anime = json?.data?.Media;
-
-    if (!anime && !isNaN(numId)) {
-      // Fallback 1: Try AniList by MAL ID (in case numId was a MAL ID)
-      try {
-        const malRes = await fetch('https://graphql.anilist.co', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({
-            query: `query ($idMal: Int) {
-              Media(idMal: $idMal, type: ANIME, isAdult: false) {
-                id idMal title { romaji english native } description coverImage { extraLarge large } bannerImage episodes genres averageScore status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
-              }
-            }`,
-            variables: { idMal: numId }
-          }),
-          signal: AbortSignal.timeout(3000),
-          next: { revalidate: 86400 },
-        }).then(r => r.json()).catch(() => null);
-        if (malRes?.data?.Media) {
-          anime = malRes.data.Media;
-        }
-      } catch {}
-    }
-
-    if (!anime && !isNaN(numId)) {
-      // Fallback 2: Try AniZip mapping for TMDB ID
-      try {
-        const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
-          signal: AbortSignal.timeout(2000),
-        }).then(r => r.json()).catch(() => null);
-        const alId = azRes?.mappings?.anilist_id;
-        if (alId) {
-          const alRes = await fetch('https://graphql.anilist.co', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ query: INITIAL_QUERY, variables: { id: alId } }),
-            signal: AbortSignal.timeout(3000),
-            next: { revalidate: 86400 },
-          }).then(r => r.json()).catch(() => null);
-          if (alRes?.data?.Media) {
-            anime = alRes.data.Media;
-          }
-        }
-      } catch {}
-    }
-
-    if (!anime) throw new Error("No media found");
-
-    // Strip HTML from description
-    let desc = (anime.description || "").replace(/<[^>]*>?/gm, '');
-
-    const title = anime.title?.english || anime.title?.romaji || "Anime";
-    const poster = anime.coverImage?.extraLarge || anime.coverImage?.large || "";
-
-    const meta: Metadata = {
-      title: `${title} - CineStream`,
-      description: desc,
-      openGraph: {
-        title: `${title} - CineStream`,
-        description: desc,
-        images: poster ? [poster] : [],
-      },
-    };
-
-    const initialData: any = {
-      id: String(anime.id),
-      idMal: anime.idMal ? String(anime.idMal) : null,
-      name: title,
-      jname: anime.title?.native || null,
-      poster,
-      description: desc,
-      type: anime.format || anime.type || null,
-      rating: anime.averageScore ? String((anime.averageScore / 10).toFixed(1)) : null,
-      status: anime.status || null,
-      genres: anime.genres || [],
-      totalEpisodes: anime.episodes || 12,
-      seasons: [{
-        id: String(anime.id),
-        name: title,
-        seasonLabel: "Season 1",
-        totalEpisodes: anime.episodes || 12,
-        isCurrent: true,
-        idMal: anime.idMal ? Number(anime.idMal) : null,
-        seasonYear: anime.seasonYear || null,
-      }],
-      season: anime.season || null,
-      seasonYear: anime.seasonYear || null,
-      format: anime.format || null,
-      openedSeasonId: String(anime.id),
-      tmdbId: null,
-      duration: anime.duration || null,
-      trailerId: (anime.trailer?.site === "youtube" ? anime.trailer.id : null) ?? null,
-      bannerImage: anime.bannerImage || null,
-      nextAiringEpisode: anime.nextAiringEpisode || null,
-    };
-
-    return { meta, initialData };
-  } catch {
-    return { meta: { title: "Anime - CineStream" }, initialData: null };
-  }
+const fetchCatalog = cache(async function fetchCatalog(id: string): Promise<AnimeCatalog | null> {
+  const built = await buildAnimeCatalog(id);
+  return built?.catalog ?? null;
 });
 
 export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const { id } = await props.params;
-  const { meta } = await fetchInitialAnimeData(id);
-  return meta;
+  const catalog = await fetchCatalog(id);
+  if (!catalog) {
+    return { title: "Anime - CineStream" };
+  }
+  const anime = catalog.anime;
+  const desc = anime.description || undefined;
+  return {
+    title: `${anime.name} - CineStream`,
+    description: desc,
+    openGraph: {
+      title: `${anime.name} - CineStream`,
+      description: desc,
+      images: anime.poster ? [anime.poster] : [],
+    },
+  };
 }
 
 export default async function AnimePage(
   props: { params: Promise<{ id: string }> }
 ) {
   const { id } = await props.params;
-  const { initialData } = await fetchInitialAnimeData(id);
-  return <AnimeClient initialData={initialData} />;
+  const catalog = await fetchCatalog(id);
+  return <AnimeClient initialData={catalog} />;
 }

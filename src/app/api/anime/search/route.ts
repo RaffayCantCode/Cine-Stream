@@ -1,7 +1,7 @@
 export const runtime = 'edge';
-export const dynamic = "force-dynamic";
-import { NextRequest } from "next/server";
-import { fetchAnimeApi } from "@/lib/anime-fetch";
+export const dynamic = 'force-dynamic';
+
+import { browseAnime } from "@/lib/anime/anilist";
 
 const noStoreHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -9,9 +9,9 @@ const noStoreHeaders = {
   "Cloudflare-CDN-Cache-Control": "no-store",
 };
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const query = searchParams.get("q");
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const query = (searchParams.get("q") || "").trim();
 
   if (!query) {
     return Response.json(
@@ -21,18 +21,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const data = await fetchAnimeApi(
-      `/api/search?keyword=${encodeURIComponent(query)}`
+    const result = await browseAnime("search", 1, "", query);
+    return Response.json(
+      { success: true, data: { animes: result.items } },
+      { headers: noStoreHeaders }
     );
-
-    const rawAnimes = data?.data;
-    const animes = Array.isArray(rawAnimes) ? rawAnimes : (rawAnimes?.animes || []);
-    return Response.json({
-      success: true,
-      data: { animes },
-    }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("[Anime Search Error]:", error);
-    return Response.json({ error: "Failed to search anime", success: false }, { status: 500, headers: noStoreHeaders });
+    return Response.json(
+      { error: "Failed to search anime", success: false },
+      { status: 500, headers: noStoreHeaders }
+    );
   }
 }

@@ -1,27 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
-import { Star, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { memo } from "react";
+import type { AnimeItem } from "@/lib/anime/types";
 
-export interface AnimeItem {
-  id: string;
-  idMal?: string | null;
-  name: string;
-  jname?: string | null;
-  poster: string;
-  type?: string | null;
-  episodes?: { sub: number | null; dub: number | null };
-  rating?: string | null;
-  description?: string;
-  genres?: string[];
-  status?: string | null;
-  season?: string | null;
-  seasonYear?: number | null;
-  format?: string | null;
-  reason?: string;
-}
+export type { AnimeItem };
 
 interface AnimeCardProps {
   item: AnimeItem;

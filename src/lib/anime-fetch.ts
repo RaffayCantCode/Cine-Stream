@@ -5,6 +5,7 @@
 import { isAdultContent } from "./content-filter";
 import { tmdbFetch, searchTmdbShow, fetchTmdbEpisodeData, getCleanBaseTitle } from "./tmdb";
 import { getCuratedAnimeFranchiseNodes } from "./franchises";
+import { fetchFillerLookupFromAnimeFillerList, isEpisodeFiller, type FillerLookup } from "./anime/animefillerlist";
 
 export interface AnimeItem {
   id: string;
@@ -60,11 +61,6 @@ export interface EpisodeDetail {
   seasonName?: string;
   seasonMalId?: number | null;
   runtime?: number | null;
-}
-
-export interface FillerLookup {
-  filler: Set<number>;
-  mixed: Set<number>;
 }
 
 interface AniListMedia {
@@ -465,10 +461,41 @@ const BATCH_RELATIONS_QUERY = `query ($ids: [Int]) {
   }
 }`;
 
+// Curated franchise entries (franchises.ts) never carry a MAL ID, but Jikan
+// filler/recap enrichment depends on it. Resolve idMal in one batch query.
+const ID_MAL_BY_IDS_QUERY = `query ($ids: [Int]) {
+  Page(page: 1, perPage: 50) {
+    media(id_in: $ids, type: ANIME, isAdult: false) {
+      id idMal
+    }
+  }
+}`;
+
+/**
+ * Fill in MAL IDs for curated franchise nodes via AniList so Jikan-based
+ * filler/recap flags work on curated shows (Naruto Shippuden, Bleach, etc.).
+ */
+async function enrichCuratedIdMal(nodes: FranchiseNode[]): Promise<FranchiseNode[]> {
+  const missing = nodes.filter((n) => !n.idMal);
+  if (missing.length === 0) return nodes;
+
+  const idMalById = new Map<number, number>();
+  const ids = missing.map((n) => n.id);
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const res = await anilistQuery(ID_MAL_BY_IDS_QUERY, { ids: chunk }, 1, 86400);
+    for (const m of res?.data?.Page?.media || []) {
+      if (typeof m?.idMal === "number") idMalById.set(m.id, m.idMal);
+    }
+  }
+
+  return nodes.map((n) => (n.idMal ? n : { ...n, idMal: idMalById.get(n.id) ?? null }));
+}
+
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
   const curated = getCuratedAnimeFranchiseNodes(startId);
   if (curated && curated.length > 1) {
-    return curated as FranchiseNode[];
+    return enrichCuratedIdMal(curated as FranchiseNode[]);
   }
 
   const visited = new Map<number, FranchiseNode>();
@@ -1513,6 +1540,18 @@ export async function getAnimeDetails(
     ep.seasonMalId = openedSeason.idMal || null;
   });
 
+  const fillerLookup = await fetchFillerLookupFromAnimeFillerList(
+    openedSeason.name,
+    anime.name,
+    anime.jname
+  );
+  if (fillerLookup) {
+    const episodeOffset = openedSeason.episodeOffset || 0;
+    seasonEps.forEach((ep) => {
+      ep.isFiller = isEpisodeFiller(fillerLookup, ep.episodeNum, episodeOffset);
+    });
+  }
+
   // Validate episodes
   for (const ep of seasonEps) {
     const val = validateEpisode(ep, openedSeason, seasonEps);
@@ -1671,88 +1710,13 @@ export async function resolveTmdbMappingFromAniZip(
 
 // Fetch real episode metadata (titles, thumbnails, airdates) from Jikan
 
-function normalizeFillerSlugPart(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/&/g, " and ")
-    .replace(/\b(tv|ona|ova|special|movie)\b/g, " ")
-    .replace(/\b(part|cour)\s+\d+\b/g, " ")
-    .replace(/\bseason\s+\d+\b/g, " ")
-    .replace(/\b\d+(st|nd|rd|th)\s+season\b/g, " ")
-    .replace(/\bfinal\s+season\b/g, " ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function buildAnimeFillerListSlugCandidates(animeName: string): string[] {
-  const raw = animeName.trim();
-  const candidates = new Set<string>();
-
-  const add = (value: string) => {
-    const slug = normalizeFillerSlugPart(value);
-    if (slug.length >= 3) candidates.add(slug);
-  };
-
-  add(raw);
-
-  const splitBase = raw.split(/\s*[:|-]\s*/)[0];
-  if (splitBase && splitBase !== raw) add(splitBase);
-
-  add(raw.replace(/\bshippuuden\b/i, "shippuden"));
-  add(raw.replace(/\bboruto:\s*/i, "boruto-"));
-
-  return Array.from(candidates).slice(0, 5);
-}
-
-function parseAnimeFillerListRows(html: string): FillerLookup {
-  const filler = new Set<number>();
-  const mixed = new Set<number>();
-  const rowRegex = /<tr\b([^>]*)>([\s\S]*?)<\/tr>/gi;
-  let rowMatch: RegExpExecArray | null;
-
-  while ((rowMatch = rowRegex.exec(html))) {
-    const attrs = rowMatch[1] || "";
-    const body = rowMatch[2] || "";
-    const classMatch = attrs.match(/class=["']([^"']+)["']/i);
-    const rowClass = (classMatch?.[1] || "").toLowerCase();
-    if (!rowClass.includes("filler")) continue;
-
-    const numberMatch = body.match(/<td\b[^>]*class=["'][^"']*\bNumber\b[^"']*["'][^>]*>\s*(\d+)\s*<\/td>/i)
-      || body.match(/<td\b[^>]*>\s*(\d+)\s*<\/td>/i);
-    const episodeNum = numberMatch ? parseInt(numberMatch[1], 10) : NaN;
-    if (!episodeNum || Number.isNaN(episodeNum)) continue;
-
-    if (rowClass.includes("mixed_canon/filler")) mixed.add(episodeNum);
-    else filler.add(episodeNum);
-  }
-
-  return { filler, mixed };
-}
-
-export async function fetchFillerLookupFromAnimeFillerList(
-  animeName: string
-): Promise<FillerLookup | null> {
-  for (const slug of buildAnimeFillerListSlugCandidates(animeName)) {
-    try {
-      const res = await fetch(`${ANIME_FILLER_LIST_BASE}/${slug}`, {
-        signal: AbortSignal.timeout(4000),
-        headers: { "User-Agent": "CineStream/1.0" },
-        next: { revalidate: 86400 } as any,
-      });
-      if (!res.ok) continue;
-
-      const lookup = parseAnimeFillerListRows(await res.text());
-      if (lookup.filler.size > 0 || lookup.mixed.size > 0) {
-        return lookup;
-      }
-    } catch {
-      // Try the next slug candidate.
-    }
-  }
-  return null;
-}
+export {
+  fetchFillerLookupFromAnimeFillerList,
+  buildAnimeFillerListSlugCandidates,
+  normalizeFillerSlugPart,
+  isEpisodeFiller,
+  type FillerLookup,
+} from "./anime/animefillerlist";
 
 export async function fetchEpisodesFromJikan(
   malId: number | string,

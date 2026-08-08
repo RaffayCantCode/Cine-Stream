@@ -1,50 +1,42 @@
-export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import { NextRequest } from "next/server";
-import { fetchAnimeApi } from "@/lib/anime-fetch";
+export const dynamic = 'force-dynamic';
 
-const animeNoStoreHeaders = {
-  "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
-  "CDN-Cache-Control": "no-store",
-  "Cloudflare-CDN-Cache-Control": "no-store",
-} as const;
+import { cacheHeaders } from "@/lib/tmdb";
+import { buildAnimeCatalog, buildSeasonEpisodes } from "@/lib/anime/catalog";
 
 export async function GET(
-  _request: NextRequest,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const built = await buildAnimeCatalog(id);
+  if (!built) {
+    return Response.json({ success: false, error: "Anime not found" }, { status: 404 });
+  }
 
-  try {
-    const data = await fetchAnimeApi(`/series/${id}`, true);
+  const { catalog } = built;
+  const opened = await buildSeasonEpisodes(id, catalog.openedSeasonId);
+  const episodes = opened?.episodes || [];
 
-    if (!data || !data.success || !data.data) {
-      return Response.json(
-        { error: "Anime not found", success: false },
-        { status: 404, headers: animeNoStoreHeaders }
-      );
-    }
-
-    const episodes = data.data.episodes || [];
-    const totalEps = data.data.totalEpisodes || episodes.length || 0;
-    const seasons = data.data.seasons || [];
-
-    return Response.json({
+  return Response.json(
+    {
       success: true,
       data: {
-        anime: {
-          ...data.data,
-          episodes,
-          totalEpisodes: totalEps,
-          seasons,
-        },
+        ...catalog.anime,
+        totalEpisodes: catalog.anime.totalEpisodes ?? episodes.length,
+        seasons: catalog.seasons,
+        openedSeasonId: catalog.openedSeasonId,
+        franchiseNodes: catalog.franchiseNodes,
+        tmdbId: catalog.tmdbId,
+        tmdbSeasonMap: catalog.tmdbSeasonMap,
+        episodes,
       },
-    }, { headers: animeNoStoreHeaders });
-  } catch (error) {
-    console.error("[Anime Details Error]:", error);
-    return Response.json(
-      { error: "Failed to fetch anime details", success: false },
-      { status: 500, headers: animeNoStoreHeaders }
-    );
-  }
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "CDN-Cache-Control": "no-store",
+      },
+    }
+  );
 }
