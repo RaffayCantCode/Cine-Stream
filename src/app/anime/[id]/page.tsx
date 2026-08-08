@@ -32,9 +32,6 @@ export async function generateMetadata(
   return { title: "Anime - CineStream" };
 }
 
-export default async function AnimePage(
-  props: { params: Promise<{ id: string }> }
-) {
-  const { id } = await props.params;
-  return <AnimeClient initialData={null} />;
+export default function AnimePage() {
+  return <AnimeClient />;
 }

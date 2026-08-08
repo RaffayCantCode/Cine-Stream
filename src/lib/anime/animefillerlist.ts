@@ -70,7 +70,6 @@ async function getMasterShowMap(): Promise<Map<string, string>> {
     const res = await fetch(ANIME_FILLER_LIST_BASE, {
       signal: AbortSignal.timeout(6000),
       headers: { "User-Agent": "CineStream/1.0" },
-      next: { revalidate: 86400 } as any,
     });
     if (!res.ok) return masterShowMap || map;
     const html = await res.text();
@@ -260,7 +259,6 @@ export async function fetchFillerLookupFromAnimeFillerList(
       const res = await fetch(`${ANIME_FILLER_LIST_BASE}/${slug}`, {
         signal: AbortSignal.timeout(5000),
         headers: { "User-Agent": "CineStream/1.0" },
-        next: { revalidate: 86400 } as any,
       });
 
       if (!res.ok) {

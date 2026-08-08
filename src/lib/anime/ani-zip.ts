@@ -47,7 +47,6 @@ async function fetchAniZip(
     const res = await fetch(url, {
       headers: { "User-Agent": ANI_ZIP_USER_AGENT, Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
-      next: { revalidate: ANI_ZIP_REVALIDATE } as any,
     });
     if (!res.ok) return null;
     return await res.json();

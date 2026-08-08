@@ -78,25 +78,22 @@ interface AnimeClientProps {
   initialData: AnimeCatalog | null;
 }
 
-export default function AnimeClient({ initialData }: AnimeClientProps) {
+export default function AnimeClient() {
   const params = useParams();
   const rawId = String(params.id);
   const { data: session, status } = useSession();
-  const [catalog, setCatalog] = useState<AnimeCatalog | null>(initialData ?? null);
 
-  useEffect(() => {
-    if (initialData) {
-      setCatalog(initialData);
-    }
-  }, [initialData]);
+  const [catalog, setCatalog] = useState<AnimeCatalog | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>(() => catalog?.openedSeasonId ?? "");
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
   const [seasonData, setSeasonData] = useState<{ episodes: EpisodeDetail[]; seasonOverview: string | null } | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [episodesError, setEpisodesError] = useState<string | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playingSeasonId, setPlayingSeasonId] = useState<string>(() => catalog?.openedSeasonId ?? "");
+  const [playingSeasonId, setPlayingSeasonId] = useState<string>("");
   const [playingEpisode, setPlayingEpisode] = useState(1);
   const [hasEverWatched, setHasEverWatched] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
@@ -118,8 +115,6 @@ export default function AnimeClient({ initialData }: AnimeClientProps) {
   const [descExpanded, setDescExpanded] = useState(false);
 
   const [recommendations, setRecommendations] = useState<AnimeItem[]>([]);
-  const [isLoading, setIsLoading] = useState(() => !initialData);
-  const [error, setError] = useState<string | null>(null);
 
   const playerRef = useRef<HTMLDivElement>(null);
   const queueScrollRef = useRef<HTMLDivElement>(null);
@@ -128,14 +123,14 @@ export default function AnimeClient({ initialData }: AnimeClientProps) {
 
   usePageContentReady(!isLoading);
 
-  // Client-side catalog fetch fallback if server SSR returned null
+  // Fetch catalog on mount / id change (exactly like TvClient)
   useEffect(() => {
-    if (catalog) return;
     let isActive = true;
-
-    const loadCatalogClient = async () => {
+    const fetchCatalog = async () => {
       setIsLoading(true);
       setError(null);
+      setCatalog(null);
+      setIsStateLoaded(false);
       try {
         const res = await fetchJson<{ success: boolean; data: AnimeCatalog; error?: string }>(
           `/api/anime/${encodeURIComponent(rawId)}`
@@ -155,16 +150,9 @@ export default function AnimeClient({ initialData }: AnimeClientProps) {
       }
     };
 
-    loadCatalogClient();
+    fetchCatalog();
     return () => { isActive = false; };
-  }, [rawId, catalog]);
-
-  // Sync openedSeasonId when catalog finishes loading
-  useEffect(() => {
-    if (!catalog) return;
-    if (!selectedSeasonId) setSelectedSeasonId(catalog.openedSeasonId || "");
-    if (!playingSeasonId) setPlayingSeasonId(catalog.openedSeasonId || "");
-  }, [catalog, selectedSeasonId, playingSeasonId]);
+  }, [rawId]);
 
   // ── Scroll to top on id change ───────────────────────────────────────────
   useEffect(() => {

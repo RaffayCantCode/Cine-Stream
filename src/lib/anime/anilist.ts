@@ -147,7 +147,6 @@ export async function anilistQuery(
         },
         body: JSON.stringify({ query, variables }),
         signal: AbortSignal.timeout(timeoutMs),
-        next: { revalidate } as any,
       });
 
       if (res.status === 429) {
