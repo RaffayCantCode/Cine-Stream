@@ -15,27 +15,26 @@ export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const { id } = await props.params;
-  const catalog = await fetchCatalog(id);
-  if (!catalog) {
-    return { title: "Anime - CineStream" };
-  }
-  const anime = catalog.anime;
-  const desc = anime.description || undefined;
-  return {
-    title: `${anime.name} - CineStream`,
-    description: desc,
-    openGraph: {
-      title: `${anime.name} - CineStream`,
-      description: desc,
-      images: anime.poster ? [anime.poster] : [],
-    },
-  };
+  try {
+    const catalog = await fetchCatalog(id);
+    if (catalog?.anime) {
+      return {
+        title: `${catalog.anime.name} - CineStream`,
+        description: catalog.anime.description || undefined,
+        openGraph: {
+          title: `${catalog.anime.name} - CineStream`,
+          description: catalog.anime.description || undefined,
+          images: catalog.anime.poster ? [catalog.anime.poster] : [],
+        },
+      };
+    }
+  } catch {}
+  return { title: "Anime - CineStream" };
 }
 
 export default async function AnimePage(
   props: { params: Promise<{ id: string }> }
 ) {
   const { id } = await props.params;
-  const catalog = await fetchCatalog(id);
-  return <AnimeClient initialData={catalog} />;
+  return <AnimeClient initialData={null} />;
 }

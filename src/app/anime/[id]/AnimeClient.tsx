@@ -82,7 +82,13 @@ export default function AnimeClient({ initialData }: AnimeClientProps) {
   const params = useParams();
   const rawId = String(params.id);
   const { data: session, status } = useSession();
-  const catalog = initialData;
+  const [catalog, setCatalog] = useState<AnimeCatalog | null>(initialData ?? null);
+
+  useEffect(() => {
+    if (initialData) {
+      setCatalog(initialData);
+    }
+  }, [initialData]);
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>(() => catalog?.openedSeasonId ?? "");
   const [seasonData, setSeasonData] = useState<{ episodes: EpisodeDetail[]; seasonOverview: string | null } | null>(null);
@@ -121,6 +127,44 @@ export default function AnimeClient({ initialData }: AnimeClientProps) {
   const autoplayHandledRef = useRef(false);
 
   usePageContentReady(!isLoading);
+
+  // Client-side catalog fetch fallback if server SSR returned null
+  useEffect(() => {
+    if (catalog) return;
+    let isActive = true;
+
+    const loadCatalogClient = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await fetchJson<{ success: boolean; data: AnimeCatalog; error?: string }>(
+          `/api/anime/${encodeURIComponent(rawId)}`
+        );
+        if (!isActive) return;
+        if (res.success && res.data) {
+          setCatalog(res.data);
+          setSelectedSeasonId(res.data.openedSeasonId || "");
+          setPlayingSeasonId(res.data.openedSeasonId || "");
+        } else {
+          setError(res.error || "Anime not found");
+        }
+      } catch (e) {
+        if (isActive) setError(e instanceof Error ? e.message : "Failed to load anime");
+      } finally {
+        if (isActive) setIsLoading(false);
+      }
+    };
+
+    loadCatalogClient();
+    return () => { isActive = false; };
+  }, [rawId, catalog]);
+
+  // Sync openedSeasonId when catalog finishes loading
+  useEffect(() => {
+    if (!catalog) return;
+    if (!selectedSeasonId) setSelectedSeasonId(catalog.openedSeasonId || "");
+    if (!playingSeasonId) setPlayingSeasonId(catalog.openedSeasonId || "");
+  }, [catalog, selectedSeasonId, playingSeasonId]);
 
   // ── Scroll to top on id change ───────────────────────────────────────────
   useEffect(() => {

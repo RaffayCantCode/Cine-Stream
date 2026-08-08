@@ -14,22 +14,29 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const { searchParams } = new URL(request.url);
-  const live = searchParams.get("live") === "1";
-  const seasonId = searchParams.get("seasonId") || id;
+  try {
+    const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const seasonId = searchParams.get("seasonId") || id;
 
-  const built = await buildAnimeCatalog(id);
-  if (!built) {
-    return Response.json({ success: false, error: "Anime not found", data: null }, { status: 404 });
+    const built = await buildAnimeCatalog(id);
+    if (!built) {
+      return Response.json({ success: false, error: "Anime not found", data: null }, { status: 404 });
+    }
+
+    const result = await buildSeasonEpisodes(id, seasonId);
+    if (!result) {
+      return Response.json({ success: false, error: "Season not found", data: null }, { status: 404 });
+    }
+
+    const payload = { success: true, data: result, totalEpisodes: result.episodes.length };
+
+    return Response.json(payload, { headers: noStoreHeaders });
+  } catch (error) {
+    console.error("[api/anime/[id]/episodes] Error building episodes:", error);
+    return Response.json(
+      { success: false, error: error instanceof Error ? error.message : "Failed to load episodes", data: null },
+      { status: 500 }
+    );
   }
-
-  const result = await buildSeasonEpisodes(id, seasonId);
-  if (!result) {
-    return Response.json({ success: false, error: "Season not found", data: null }, { status: 404 });
-  }
-
-  const payload = { success: true, data: result, totalEpisodes: result.episodes.length };
-
-  return Response.json(payload, { headers: noStoreHeaders });
 }
