@@ -225,7 +225,44 @@ export function transformAnimeCore(media: any): AnimeCore | null {
 
 export async function getAnimeCore(id: number): Promise<AnimeCore | null> {
   const data = await anilistQuery(CORE_QUERY, { id }, { retries: 1 });
-  return transformAnimeCore(data?.data?.Media);
+  if (data?.data?.Media) {
+    return transformAnimeCore(data.data.Media);
+  }
+
+  // Fallback to Jikan REST API if AniList GraphQL is rate-limited/blocked on Edge Workers
+  try {
+    const jikanRes = await fetch(`https://api.jikan.moe/v4/anime/${id}`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CineStream/1.0" },
+    });
+    if (jikanRes.ok) {
+      const jikanJson = await jikanRes.json();
+      const item = jikanJson?.data;
+      if (item) {
+        return {
+          id: String(id),
+          idMal: item.mal_id ? String(item.mal_id) : String(id),
+          name: item.title_english || item.title || "Anime",
+          jname: item.title_japanese || null,
+          poster: item.images?.jpg?.large_image_url || item.images?.jpg?.image_url || "",
+          bannerImage: null,
+          description: stripHtml(item.synopsis),
+          type: item.type || "TV",
+          rating: item.score ? String(item.score.toFixed(1)) : null,
+          status: item.airing ? "RELEASING" : "FINISHED",
+          genres: Array.isArray(item.genres) ? item.genres.map((g: any) => g.name) : [],
+          totalEpisodes: item.episodes || null,
+          season: item.season || null,
+          seasonYear: item.year || null,
+          format: item.type || null,
+          duration: item.duration ? parseInt(item.duration, 10) || null : null,
+          trailerId: item.trailer?.youtube_id || null,
+          nextAiringEpisode: null,
+        };
+      }
+    }
+  } catch {}
+
+  return null;
 }
 
 export async function getAnimeIdByMal(malId: number): Promise<number | null> {

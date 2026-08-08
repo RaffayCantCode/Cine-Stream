@@ -15,7 +15,7 @@ import { getJikanEpisodes } from "./jikan";
 import { fetchFillerLookupFromAnimeFillerList, isEpisodeFiller } from "./animefillerlist";
 import { resolveAnimeId } from "./resolve-id";
 import { getTmdbShow, getTmdbSeasonEpisodes, tmdbStillUrl, type TmdbSeasonEpisodes } from "./tmdb-anime";
-import { searchTmdbShow } from "@/lib/tmdb";
+import { searchTmdbShow, tmdbFetch } from "@/lib/tmdb";
 import type { AnimeCatalog, AnimeCore, EpisodeDetail, FranchiseNode, SeasonInfo } from "./types";
 
 const MAX_EPISODES = 2000;
@@ -90,7 +90,35 @@ async function buildCatalogUncached(rawId: string): Promise<BuiltCatalog | null>
   const id = await resolveAnimeId(rawId);
   if (!id) return null;
 
-  const core = await getAnimeCore(id);
+  let core = await getAnimeCore(id);
+  if (!core) {
+    // Tier 3 TMDB fallback (same rock-solid API pipeline used by TV shows)
+    try {
+      const tmdbShow = (await tmdbFetch(`/tv/${id}`)) as any;
+      if (tmdbShow && tmdbShow.name) {
+        core = {
+          id: String(id),
+          idMal: null,
+          name: tmdbShow.name,
+          jname: tmdbShow.original_name || null,
+          poster: tmdbShow.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}` : "",
+          bannerImage: tmdbShow.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tmdbShow.backdrop_path}` : null,
+          description: tmdbShow.overview || "",
+          type: "TV",
+          rating: tmdbShow.vote_average ? String(tmdbShow.vote_average.toFixed(1)) : null,
+          status: tmdbShow.status === "Ended" ? "FINISHED" : "RELEASING",
+          genres: Array.isArray(tmdbShow.genres) ? tmdbShow.genres.map((g: any) => g.name) : [],
+          totalEpisodes: tmdbShow.number_of_episodes || null,
+          season: null,
+          seasonYear: tmdbShow.first_air_date ? new Date(tmdbShow.first_air_date).getFullYear() : null,
+          format: "TV",
+          duration: Array.isArray(tmdbShow.episode_run_time) ? tmdbShow.episode_run_time[0] || null : null,
+          trailerId: null,
+          nextAiringEpisode: null,
+        };
+      }
+    } catch {}
+  }
   if (!core) return null;
 
   const az = await getAniZipMapping(id);

@@ -23,8 +23,10 @@ export async function GET(
       {
         success: true,
         data: {
-          ...catalog.anime,
-          totalEpisodes: catalog.anime.totalEpisodes ?? episodes.length,
+          anime: {
+            ...catalog.anime,
+            totalEpisodes: catalog.anime.totalEpisodes ?? episodes.length,
+          },
           seasons: catalog.seasons,
           openedSeasonId: catalog.openedSeasonId,
           franchiseNodes: catalog.franchiseNodes,

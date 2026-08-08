@@ -33,7 +33,9 @@ export async function resolveAnimeId(raw: string): Promise<number | null> {
     if (malResolved) return malResolved;
 
     const tmdbResolved = await getAniListIdFromTmdb(numId);
-    return tmdbResolved;
+    if (tmdbResolved) return tmdbResolved;
+
+    return numId > 0 ? numId : null;
   }
 
   // Title slug — normalise to a search string.

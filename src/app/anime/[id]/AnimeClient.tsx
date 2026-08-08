@@ -137,9 +137,20 @@ export default function AnimeClient() {
         );
         if (!isActive) return;
         if (res.success && res.data) {
-          setCatalog(res.data);
-          setSelectedSeasonId(res.data.openedSeasonId || "");
-          setPlayingSeasonId(res.data.openedSeasonId || "");
+          const raw = res.data as any;
+          const normalizedCatalog: AnimeCatalog = raw.anime
+            ? (raw as AnimeCatalog)
+            : {
+                anime: raw,
+                seasons: raw.seasons || [],
+                openedSeasonId: raw.openedSeasonId || "",
+                franchiseNodes: raw.franchiseNodes || [],
+                tmdbId: raw.tmdbId || null,
+                tmdbSeasonMap: raw.tmdbSeasonMap || {},
+              };
+          setCatalog(normalizedCatalog);
+          setSelectedSeasonId(normalizedCatalog.openedSeasonId || "");
+          setPlayingSeasonId(normalizedCatalog.openedSeasonId || "");
         } else {
           setError(res.error || "Anime not found");
         }
