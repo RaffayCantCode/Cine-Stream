@@ -26,7 +26,7 @@ export default function NotFound() {
           </h2>
           
           <p className="text-muted-foreground text-lg mb-10 leading-relaxed">
-            The movie, show, or page you're looking for has been moved, deleted, or never existed in this universe.
+            The movie, show, or page you&apos;re looking for has been moved, deleted, or never existed in this universe.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">

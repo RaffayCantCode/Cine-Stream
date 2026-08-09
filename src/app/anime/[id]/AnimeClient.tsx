@@ -12,6 +12,7 @@ import { AnimeCard } from "@/components/AnimeCard";
 import { CastRow } from "@/components/CastRow";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { WatchlistButton } from "@/components/WatchlistButton";
+import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { usePageContentReady } from "@/lib/pageLoad";
 
 function AnimeHeroTrailerButton() {
@@ -29,8 +30,9 @@ function AnimeHeroTrailerButton() {
 }
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
+import { cleanAnimeDescription } from "@/lib/anime-fetch";
 import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, Lock, Play, ExternalLink, BookOpen, Loader2, LayoutGrid, List, Users, Film, CheckCircle2 } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv } from "lucide-react";
 
 interface FranchiseNode {
   id: number;
@@ -76,7 +78,7 @@ function transformRecItem(media: any): any {
     type: media.type || "ANIME",
     episodes: { sub: media.episodes || null, dub: null },
     rating: media.averageScore ? String((media.averageScore / 10).toFixed(1)) : null,
-    description: media.description?.replace(/<[^>]*>/g, "") || "",
+    description: cleanAnimeDescription(media.description),
     genres: media.genres || [],
     status: media.status || null,
     season: media.season || null,
@@ -701,6 +703,7 @@ interface AnimeDetail {
   duration?: number | null;
   trailerId?: string | null;
   nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
+  backdrop?: string | null;
 }
 
 interface Episode {
@@ -741,7 +744,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Only set once the user explicitly starts an episode (clicked to watch).
+  // Gates the "Current" badge so it never shows on a fresh page open.
+  const [watchStarted, setWatchStarted] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   // Franchise node data for Season Guide
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
@@ -765,6 +772,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     season: string | null;
     seasonYear: number | null;
     format: string | null;
+    coverImage?: string | null;
   }
 
   // currentSeasonId tracks the ACTIVE season by its AniList ID
@@ -1282,20 +1290,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       });
     }
 
-    // Fallback to localStorage if no URL params specify an episode
-    if (!target && !episodeParam) {
-      try {
-        const userId = session?.user?.id || "guest";
-        const saved = localStorage.getItem(`sv_anime_state_${userId}_${id}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed?.episodeId) {
-            target = episodes.find(ep => ep.episodeId === parsed.episodeId);
-          }
-        }
-      } catch {}
-    }
-
     if (target && !selectedEp) {
       setSelectedEp(target);
       if (autoPlay) {
@@ -1318,6 +1312,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             }).catch(() => {});
           }
         }
+        setWatchStarted(true);
         setIsPlaying(true);
       }
     }
@@ -1367,6 +1362,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setCurrentSeasonId(season.id);
     setIsPlaying(false);
     setSelectedEp(null);
+    setWatchStarted(false);
     setEpisodeNotice(null);
     // Always force-reload when the user explicitly clicks a season tab.
     // This ensures placeholder episodes (loaded without TMDB params during
@@ -1396,6 +1392,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     }
     setEpisodeNotice(null);
     setSelectedEp(ep);
+    setWatchStarted(true);
     setIsPlaying(true);
 
     if (typeof window !== "undefined") {
@@ -1428,22 +1425,23 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     }
   }, [authStatus, anime]);
 
-  const [gridMode, setGridMode] = useState(() => {
+  const [episodeView, setEpisodeView] = useState<EpisodeViewMode>(() => {
     if (typeof window !== "undefined") {
       try {
-        return localStorage.getItem("sv_anime_grid_mode") === "true";
+        const saved = localStorage.getItem("sv_anime_view_mode");
+        if (saved === "list" || saved === "grid" || saved === "numbers") return saved;
+        const legacy = localStorage.getItem("sv_anime_grid_mode");
+        if (legacy === "true") return "grid";
+        if (legacy === "false") return "list";
       } catch {}
     }
-    return false;
+    return "grid";
   });
 
-  const toggleGridMode = () => {
-    setGridMode(prev => {
-      const next = !prev;
-      try { localStorage.setItem("sv_anime_grid_mode", String(next)); } catch {}
-      return next;
-    });
-  };
+  const handleViewChange = useCallback((view: EpisodeViewMode) => {
+    setEpisodeView(view);
+    try { localStorage.setItem("sv_anime_view_mode", view); } catch {}
+  }, []);
 
   // ── Derived state ───────────────────────────────────────────────────────
   const INITIAL_EPISODES_PER_PAGE = 50;
@@ -1538,9 +1536,22 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }, [currentSeason]);
 
   const displayPoster = (currentSeasonInfo as any)?.coverImage || (currentSeason as any)?.coverImage || anime?.poster || "";
-  const displayBanner = (currentSeasonInfo as any)?.bannerImage || (currentSeasonInfo as any)?.coverImage || (currentSeason as any)?.coverImage || anime?.poster || "";
+  const tmdbBackdropPath = anime?.backdrop || null;
+  const displayBanner = tmdbBackdropPath
+    ? tmdbBackdropPath
+    : (currentSeasonInfo as any)?.bannerImage
+      || (currentSeasonInfo as any)?.coverImage
+      || (currentSeason as any)?.coverImage
+      || anime?.poster
+      || "";
   const displayTitle = (currentSeasonInfo as any)?.name || (currentSeasonInfo as any)?.title || currentSeason?.name || anime?.name || "";
   const displayStatus = currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "";
+
+  const animeDescription = anime?.description || "";
+  const animeScoreRaw = Number(anime?.rating || anime?.score || 0);
+  const animeScore = animeScoreRaw > 10 ? animeScoreRaw / 10 : animeScoreRaw;
+  const animeScoreColor = animeScore >= 7.5 ? "text-emerald-400" : animeScore >= 5 ? "text-amber-400" : "text-red-400";
+  const isLongDescription = animeDescription.length > 200;
 
   const franchiseAbsoluteEp = useMemo(() => {
     const currentIdx = seasons.findIndex(s => s.id === currentSeasonId);
@@ -1548,6 +1559,37 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const prevTotal = seasons.slice(0, currentIdx).reduce((sum, s) => sum + (s.totalEpisodes || 0), 0);
     return prevTotal + (selectedEp?.episodeNum || 0);
   }, [seasons, currentSeasonId, selectedEp?.episodeNum]);
+
+  // ── Normalize anime episodes into the shared EpisodeItem shape ──────────
+  const episodeToItem = useCallback((ep: Episode): EpisodeItem => {
+    const isUnreleased = ep.isReleased === false;
+    const backdropFallback = (anime as any)?.bannerImage || initialData?.bannerImage || displayPoster || null;
+    const thumbSrc = isUnreleased
+      ? (ep.thumbnail || null)
+      : (ep.thumbnail || (isSingleItem && displayPoster) || backdropFallback);
+    const isSelected = selectedEp?.episodeId === ep.episodeId;
+    // The "Current"/"Playing" badge only shows once the user has actually
+    // started an episode (either by clicking it or resuming with autoplay).
+    const isCurrent = isSelected && (isPlaying || watchStarted);
+    return {
+      key: `${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`,
+      number: ep.episodeNum,
+      title: ep.title || (isSingleItem ? displayTitle : `Episode ${ep.episodeNum}`),
+      description: ep.description || null,
+      thumbnail: thumbSrc || null,
+      airDate: ep.releasedDate || null,
+      runtime: ep.runtime || null,
+      rating: ep.vote_average || null,
+      hasRating: Boolean(ep.vote_average && ep.vote_average > 0 && ep.vote_count && ep.vote_count > 5),
+      isFiller: Boolean(ep.isFiller),
+      isReleased: ep.isReleased !== false,
+      isSelected: isCurrent,
+      isPlaying: isPlaying && isCurrent,
+      portrait: isSingleItem,
+      onClick: () => handleWatchEpisode(ep),
+    };
+  }, [anime, currentSeasonId, displayPoster, displayTitle, handleWatchEpisode, isPlaying, isSingleItem, selectedEp, watchStarted]);
+
 
   // ── Prev / Next episode ─────────────────────────────────────────────────
   const handlePrev = useCallback(() => {
@@ -1669,34 +1711,58 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
                 </div>
 
-                <div
-                  className="flex flex-col gap-2 md:gap-3 max-w-3xl"
-                >
-                  <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
-                    <span className="bg-gradient-to-r from-[#111844] to-[#7288AE] text-white text-[9px] md:text-[10px] font-extrabold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase shadow-lg shadow-[#4B5694]/25">Anime</span>
-                    {anime.type && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.type}</span>}
-                    {anime.rating && <span className="bg-white/10 backdrop-blur-sm text-white/70 text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase">{anime.rating}</span>}
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <h1 className="font-black text-3xl sm:text-5xl md:text-6xl text-white leading-none tracking-tight select-text">{displayTitle}</h1>
+                    {anime.jname && (
+                      <p className="text-primary/90 font-semibold italic text-base md:text-lg mt-2 select-text">{anime.jname}</p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    {animeScore > 0 && (
+                      <div className={`flex items-center gap-1.5 font-black ${animeScoreColor}`}>
+                        <Star className="w-5 h-5 fill-current" />
+                        <span className="text-2xl leading-none">{animeScore.toFixed(1)}</span>
+                        <span className="text-white/40 font-bold text-xs">/ 10</span>
+                      </div>
+                    )}
                     {displayStatus && (() => {
                       const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
                       return (
-                        <span className={`text-[9px] md:text-[10px] font-bold tracking-widest px-2.5 py-0.5 md:py-1 rounded-full uppercase ${
+                        <span className={`text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase border ${
                           formatted.style === "airing"
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30"
                             : formatted.style === "upcoming"
-                            ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
-                            : "bg-white/10 text-white/60 border border-white/20"
+                            ? "text-sky-300 bg-sky-500/20 border-sky-500/30"
+                            : "text-white/60 bg-white/10 border-white/20"
                         }`}>{formatted.label}</span>
                       );
                     })()}
-                  </div>
-                  <h1 className="font-black text-2xl sm:text-4xl md:text-5xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
-                  {anime.jname && <p className="text-white/40 text-xs sm:text-sm font-medium select-text">{anime.jname}</p>}
-
-                  {anime.genres && anime.genres.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {anime.genres.slice(0, 5).map(g => (
-                        <span key={g} className="text-[9px] text-[#7288AE] bg-[#4B5694]/10 border border-[#7288AE]/20 px-2 py-0.5 rounded-full font-bold backdrop-blur-sm">{g}</span>
+                    {anime.type && (
+                      <span className="px-2.5 py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70">{anime.type}</span>
+                    )}
+                    <div className="flex flex-wrap gap-1.5 ml-1">
+                      {anime.genres?.slice(0, 5).map(g => (
+                        <span key={g} className="px-2.5 py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70">{g}</span>
                       ))}
+                    </div>
+                  </div>
+
+                  {animeDescription && (
+                    <div>
+                      <p className={cn("text-white/65 text-base leading-relaxed max-w-2xl select-text", isLongDescription && !descExpanded && "line-clamp-3")}>
+                        {animeDescription}
+                      </p>
+                      {isLongDescription && (
+                        <button
+                          onClick={() => setDescExpanded(v => !v)}
+                          className="mt-1.5 inline-flex items-center gap-1 text-primary hover:text-primary/85 text-sm font-bold transition-colors"
+                        >
+                          {descExpanded ? "Read less" : "Read more"}
+                          <ChevronDown className={cn("w-4 h-4 transition-transform", descExpanded && "rotate-180")} />
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -1833,7 +1899,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       </div>
                       <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
                         {currentSeasonEps.map((ep) => {
-                          const isSelected = selectedEp?.episodeId === ep.episodeId;
+                          const isSelected = selectedEp?.episodeId === ep.episodeId && (isPlaying || watchStarted);
                           const displayTitle = ep.title || `Episode ${ep.episodeNum}`;
                           return (
                             <button
@@ -1869,54 +1935,35 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   </div>
                 )}
 
-                {/* ── Details ── */}
+                {/* ── Season Info Bar (Episodes · Status) ── */}
                 <div className="w-full">
-                  <div className="bg-white/[0.02] border border-white/[0.06] p-6 rounded-2xl space-y-5">
-                    <h3 className="text-base font-bold text-white">Details</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-6 gap-x-4 text-xs">
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Format</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg uppercase">{anime.format || anime.type || "TV"}</span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Rating</span>
-                        <span className="text-amber-400 font-bold text-sm bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-max">
-                          <Star className="w-4 h-4 fill-current" /> 
-                          {anime.rating || anime.score ? (Number(anime.rating || anime.score) > 10 ? (Number(anime.rating || anime.score) / 10).toFixed(1) : Number(anime.rating || anime.score).toFixed(1)) : "N/A"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">{isMovieFormat ? "Parts" : "Episodes"}</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{isMovieFormat ? (currentSeasonEps.length || 1) : (currentSeason?.totalEpisodes || currentSeasonEps.length || anime?.totalEpisodes || 1)}</span>
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Status</span>
-                        {(() => {
-                          const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
-                          return (
-                            <span className={`font-bold text-sm px-3 py-1.5 rounded-lg uppercase inline-block shadow-sm ${
-                              formatted.style === "airing"
-                                ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20"
-                                : formatted.style === "upcoming"
-                                ? "text-sky-300 bg-sky-400/10 border border-sky-400/20"
-                                : "text-white/80 bg-white/[0.06] border border-white/[0.05]"
-                            }`}>
-                              {formatted.label}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                      <div>
-                        <span className="text-white/40 block mb-2 uppercase tracking-wider font-semibold text-[10px]">Year</span>
-                        <span className="text-white font-bold text-sm bg-white/[0.06] border border-white/[0.05] px-3 py-1.5 rounded-lg">{currentSeason?.seasonYear || anime?.seasonYear || "N/A"}</span>
-                      </div>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-lg font-black text-white">
+                        {isMovieFormat ? (currentSeasonEps.length || 1) : (currentSeason?.totalEpisodes || currentSeasonEps.length || 1)}
+                      </span>
+                      <span className="text-sm font-semibold text-white/50">
+                        {isMovieFormat ? (currentSeasonEps.length > 1 ? "Parts" : "Movie") : (currentSeasonEps.length === 1 ? "Episode" : "Episodes")}
+                      </span>
                     </div>
+                    <div className="w-px h-5 bg-white/10 hidden sm:block" />
+                    {(() => {
+                      const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
+                      const statusLabel = formatted.style === "airing" ? "Ongoing" : formatted.style === "upcoming" ? "Upcoming" : "Completed";
+                      const dotColor = formatted.style === "airing" ? "bg-emerald-400" : formatted.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${dotColor} ${formatted.style === "airing" ? "animate-pulse" : ""}`} />
+                          <span className="text-sm font-bold text-white">{statusLabel}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
 
               {/* ── Episodes Section ── */}
-              <section className="max-w-5xl mx-auto space-y-4 mt-10">
+              <section className="mt-10 space-y-4">
                 {/* ── Watch Order Section (franchise order reference) ── */}
                 {(() => {
                   const curatedNodes = getCuratedAnimeFranchiseNodes(Number(id), anime?.name);
@@ -1935,6 +1982,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             totalEpisodes: s.totalEpisodes,
                             seasonYear: s.seasonYear || null,
                             format: "TV",
+                            coverImage: s.coverImage || null,
                           }))
                         : (franchiseNodes || []);
 
@@ -1956,70 +2004,157 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     return true;
                   });
                   if (visibleFranchiseNodes.length <= 1) return null;
-                  return (
-                  <div className="bg-gradient-to-br from-white/[0.045] to-white/[0.015] border border-white/[0.08] rounded-2xl overflow-hidden shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
-                    <button
-                      onClick={() => setShowSeasonGuide(!showSeasonGuide)}
-                      className="flex items-center justify-between w-full text-left px-5 py-4 hover:bg-white/[0.035] transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-[#7288AE]/15 border border-[#7288AE]/25 flex items-center justify-center shrink-0">
-                          <BookOpen className="w-4 h-4 text-[#9EB2D1]" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-black text-white">Watch Order</h3>
-                            <span className="text-[10px] text-[#9EB2D1] font-black uppercase tracking-wide bg-[#7288AE]/10 border border-[#7288AE]/20 px-2 py-0.5 rounded-full">
-                              {visibleFranchiseNodes.length} parts
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/40 mt-0.5 truncate">Follow the franchise in the recommended order</p>
-                        </div>
-                      </div>
-                      <ChevronRight className={`w-4 h-4 text-white/40 transition-transform ${showSeasonGuide ? "rotate-90" : ""}`} />
-                    </button>
+                  const totalParts = visibleFranchiseNodes.length;
+                  const activeIdx = visibleFranchiseNodes.findIndex(node => String(node.id) === currentSeasonId || String(node.id) === anime?.id);
+                  const hasActive = activeIdx >= 0;
+                  const progressPct = hasActive ? Math.round(((activeIdx + 1) / totalParts) * 100) : 0;
 
-                    {showSeasonGuide && (
-                      <div className="px-4 sm:px-5 pb-5 border-t border-white/[0.06] pt-4">
-                        <div className="relative space-y-2">
-                        {visibleFranchiseNodes.map((node, orderIndex) => {
-                          const nodeId = String(node.id);
-                          const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
-                          const formatLabel = node.format === "TV" ? "TV" : node.format || "";
-                          const nodeEpCount = (isActive && currentSeasonEps.length > 0) ? currentSeasonEps.length : (node.totalEpisodes || node.episodes || "?");
-                          return (
-                            <Link
-                              key={node.id}
-                              href={`/anime/${node.id}`}
-                              className={`w-full grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 rounded-xl text-xs font-medium transition-all ${
-                                isActive
-                                  ? "bg-gradient-to-r from-[#111844]/45 to-[#7288AE]/25 border border-[#7288AE]/40 text-white shadow-lg shadow-[#111844]/20"
-                                  : "bg-white/[0.035] hover:bg-white/[0.075] border border-white/[0.06] text-white/60 hover:text-white"
-                              }`}
-                            >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[11px] border ${
-                                isActive ? "bg-[#7288AE]/25 border-[#7288AE]/45 text-white" : "bg-white/[0.04] border-white/[0.07] text-white/35"
-                              }`}>
-                                {orderIndex + 1}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="truncate font-bold">{node.title}</span>
-                                  {isActive && <span className="shrink-0 text-[9px] uppercase tracking-wide bg-[#7288AE]/20 text-[#C7D4EA] border border-[#7288AE]/30 px-1.5 py-0.5 rounded">Current</span>}
-                                </div>
-                                <div className="flex items-center gap-2 mt-1 text-[10px] text-white/35">
-                                  <span className="uppercase font-black text-[#9EB2D1]">{formatLabel || "Entry"}</span>
-                                  {node.seasonYear && <span>{node.seasonYear}</span>}
-                                  <span>{nodeEpCount} eps</span>
-                                </div>
-                              </div>
-                              <ChevronRight className="w-3.5 h-3.5 text-white/25" />
-                            </Link>
-                          );
-                        })}
+                  const formatMeta = (fmt: string | null) => {
+                    switch (fmt) {
+                      case "MOVIE":
+                        return { label: "Movie", icon: Film, chip: "text-violet-300 bg-violet-400/10 border-violet-400/20" };
+                      case "OVA":
+                        return { label: "OVA", icon: Sparkles, chip: "text-amber-300 bg-amber-400/10 border-amber-400/20" };
+                      case "SPECIAL":
+                        return { label: "Special", icon: Sparkles, chip: "text-fuchsia-300 bg-fuchsia-400/10 border-fuchsia-400/20" };
+                      case "ONA":
+                        return { label: "ONA", icon: Tv, chip: "text-teal-300 bg-teal-400/10 border-teal-400/20" };
+                      case "TV_SHORT":
+                        return { label: "TV", icon: Tv, chip: "text-sky-300 bg-sky-400/10 border-sky-400/20" };
+                      default:
+                        return { label: fmt || "TV", icon: Tv, chip: "text-sky-300 bg-sky-400/10 border-sky-400/20" };
+                    }
+                  };
+
+                  return (
+                  <div className="relative rounded-2xl p-px bg-gradient-to-br from-primary/25 via-white/[0.06] to-primary/25 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+                    <div className="relative rounded-[15px] bg-gradient-to-br from-white/[0.05] to-white/[0.015] overflow-hidden">
+                      {/* ambient glow */}
+                      <div className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 bg-primary/[0.05] rounded-full blur-3xl" />
+                      <div className="pointer-events-none absolute -bottom-24 -left-16 w-64 h-64 bg-primary/[0.04] rounded-full blur-3xl" />
+
+                      {/* ── Header ── */}
+                      <button
+                        onClick={() => setShowSeasonGuide(!showSeasonGuide)}
+                        className="relative flex items-center justify-between w-full text-left px-4 pt-4 pb-3 hover:bg-white/[0.03] transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0 shadow-[0_4px_12px_hsl(var(--primary)/0.2)]">
+                            <Route className="w-4 h-4 text-white" />
+                            <span className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/20" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] uppercase tracking-[0.18em] font-black text-primary">Franchise Guide</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <h3 className="text-base font-black text-white tracking-tight">Watch Order</h3>
+                              <span className="text-[9px] text-white/60 font-black uppercase tracking-wide bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded-full">
+                                {totalParts} parts
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-white/40 mt-0.5 truncate">Recommended order to enjoy the whole story</p>
+                          </div>
                         </div>
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <span className="hidden sm:flex items-baseline gap-1 text-[10px] font-bold text-white/40">
+                            {hasActive ? (
+                              <>Part <span className="text-primary font-black">{activeIdx + 1}</span> of {totalParts}</>
+                            ) : (
+                              `${totalParts} parts`
+                            )}
+                          </span>
+                          <ChevronRight className={`w-4 h-4 text-white/40 transition-transform group-hover:text-white/70 ${showSeasonGuide ? "rotate-90" : ""}`} />
+                        </div>
+                      </button>
+
+                      {/* progress bar */}
+                      <div className="relative h-0.5 bg-white/[0.06]">
+                        <div className="h-full bg-gradient-to-r from-primary to-primary/60 shadow-[0_0_6px_hsl(var(--primary)/0.4)] transition-all duration-500" style={{ width: `${hasActive ? progressPct : 0}%` }} />
                       </div>
-                    )}
+
+                      {/* ── Expanded body ── */}
+                      {showSeasonGuide && (
+                        <div className="relative px-4 sm:px-5 pt-4 pb-4">
+                          <div className="relative">
+                            {/* timeline spine — passes through poster centers (36px from left, 40px from top/bottom) */}
+                            <div className="absolute left-[36px] top-10 bottom-10 w-0.5 -translate-x-1/2 bg-gradient-to-b from-primary/60 via-white/[0.08] to-transparent rounded-full" />
+                            <div className="relative space-y-2">
+                              {visibleFranchiseNodes.map((node, orderIndex) => {
+                                const nodeId = String(node.id);
+                                const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
+                                const meta = formatMeta(node.format);
+                                const FormatIcon = meta.icon;
+                                const nodeEpCount = (isActive && currentSeasonEps.length > 0) ? currentSeasonEps.length : (node.totalEpisodes || node.episodes || "?");
+                                const poster = node.coverImage || (nodeId === anime?.id ? anime?.poster : null) || null;
+                                return (
+                                  <Link
+                                    key={node.id}
+                                    href={`/anime/${node.id}`}
+                                    className={`relative flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200 ${
+                                      isActive
+                                        ? "bg-gradient-to-r from-primary/15 to-primary/[0.04] border-primary/35 shadow-[0_8px_20px_hsl(var(--primary)/0.12)]"
+                                        : "bg-white/[0.035] hover:bg-white/[0.07] border-white/[0.07] hover:border-white/[0.16] hover:-translate-y-px"
+                                    }`}
+                                  >
+                                    {/* poster / node tile */}
+                                    <div className={`relative w-12 h-16 rounded-md overflow-hidden shrink-0 ${isActive ? "shadow-[0_0_12px_hsl(var(--primary)/0.3)]" : ""}`}>
+                                      {poster ? (
+                                        <img src={poster} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+                                      ) : (
+                                        <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${
+                                          isActive ? "from-primary to-primary/60" : "from-white/[0.08] to-white/[0.03]"
+                                        }`}>
+                                          <span className={`text-xs font-black ${isActive ? "text-white" : "text-white/35"}`}>{orderIndex + 1}</span>
+                                        </div>
+                                      )}
+                                      <div className="absolute inset-0 rounded-md ring-1 ring-inset ring-white/10" />
+                                      {isActive && (
+                                        <div className="absolute inset-0 rounded-md ring-2 ring-primary/70" />
+                                      )}
+                                      {/* number badge */}
+                                      <div className={`absolute bottom-1 left-1 w-4 h-4 rounded flex items-center justify-center ${
+                                        isActive
+                                          ? "bg-gradient-to-br from-primary to-primary/60 text-white shadow-[0_0_8px_hsl(var(--primary)/0.7)]"
+                                          : "bg-black/70 text-white/80 backdrop-blur-sm"
+                                      }`}>
+                                        <span className="text-[8px] font-black leading-none">{orderIndex + 1}</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className={`truncate text-sm ${isActive ? "text-white font-black" : "text-white/80 font-bold"}`}>
+                                          {node.title}
+                                        </span>
+                                        {isActive && (
+                                          <span className="shrink-0 flex items-center gap-1.5 text-[9px] uppercase tracking-wide text-white font-black bg-primary/25 border border-primary/50 px-2 py-0.5 rounded-full">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                            Watching
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded border ${meta.chip}`}>
+                                          <FormatIcon className="w-2.5 h-2.5" />
+                                          {meta.label}
+                                        </span>
+                                        {node.seasonYear && <span className="text-[10px] text-white/35 font-semibold">{node.seasonYear}</span>}
+                                        <span className="text-[10px] text-white/35 font-semibold">· {nodeEpCount} eps</span>
+                                      </div>
+                                    </div>
+                                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-primary" : "text-white/20"}`} />
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <p className="mt-3 flex items-center gap-1.5 text-[10px] text-white/30">
+                            <Sparkles className="w-3 h-3 text-primary shrink-0" />
+                            Fan-curated viewing order · open any part to jump straight to it
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   );
                 })()}
@@ -2033,21 +2168,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   {/* ── Right Side Controls ── */}
                   <div className="flex items-center gap-3 flex-wrap max-w-xl justify-end">
                     {currentSeasonEps.length > 0 && (
-                      <button
-                        onClick={toggleGridMode}
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
-                          gridMode 
-                            ? "bg-white/[0.06] text-white/60 hover:text-white border-white/[0.06] hover:bg-white/[0.10]" 
-                            : "bg-[#7288AE]/20 text-white border-[#7288AE]/50 hover:bg-[#7288AE]/40"
-                        )}
-                        title={gridMode ? "Switch to list view" : "Switch to compact grid view (Recommended for long anime)"}
-                      >
-                        {gridMode ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5 text-blue-400" />}
-                        {gridMode ? "List View" : "Grid View"}
-                      </button>
+                      <EpisodeViewSelector mode={episodeView} onChange={handleViewChange} views={["list", "grid", "numbers"]} />
                     )}
-
                   </div>
                 </div>
 
@@ -2098,210 +2220,49 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     );
                   }
 
-                  const sliceEps = currentSeasonEps.slice(0, visibleCount);
+                  const items = currentSeasonEps.map(episodeToItem);
+
+                  // Numbers view renders the full list — it's a fast navigation
+                  // tool for long series and must never paginate.
+                  if (episodeView === "numbers") {
+                    return (
+                      <div key={`numbers-${currentSeasonId}`}>
+                        <EpisodeNumbersView items={items} />
+                      </div>
+                    );
+                  }
+
+                  const sliceItems = items.slice(0, visibleCount);
                   const hasMore = visibleCount < currentSeasonEps.length;
                   const remainingEps = currentSeasonEps.length - visibleCount;
                   const loadMoreCount = remainingEps >= 100 ? 100 : remainingEps >= 50 ? 50 : Math.min(20, remainingEps);
 
-                  if (gridMode) {
-                    return (
-                        <div
-                          key={`grid-${currentSeasonId}`}
-                        >
-                          <div className="flex items-center gap-2 mb-4 text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-md w-fit">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                            <span>Yellow dot indicates a filler episode</span>
-                          </div>
-                          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-1.5">
-                            {sliceEps.map((ep) => {
-                              const isSelected = selectedEp?.episodeId === ep.episodeId;
-                              const isUnreleased = ep.isReleased === false;
-                              return (
-                                <button
-                                  key={ep.episodeId}
-                                  onClick={() => handleWatchEpisode(ep)}
-                                  className={cn(
-                                    "aspect-square rounded-lg text-xs font-bold transition-all flex items-center justify-center relative",
-                                    isSelected
-                                      ? "bg-gradient-to-br from-[#4B5694] to-[#7288AE] text-white shadow-md shadow-[#4B5694]/30 scale-105"
-                                      : isUnreleased
-                                      ? "bg-white/[0.03] text-white/20 cursor-not-allowed"
-                                      : "bg-white/[0.06] hover:bg-white/[0.12] text-white/70 hover:text-white border border-white/[0.06] hover:border-white/20"
-                                  )}
-                                >
-                                  {isSelected && isPlaying && (
-                                    <div className="absolute -top-2 z-20 px-1.5 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
-                                      Playing
-                                    </div>
-                                  )}
-                                  {ep.isFiller && !isSelected && (
-                                    <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-amber-400" />
-                                  )}
-                                  {isUnreleased && (
-                                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded bg-sky-400/90 px-1 text-[7px] font-black uppercase text-white">
-                                      Soon
-                                    </span>
-                                  )}
-                                  {ep.episodeNum}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {hasMore && (
-                            <div className="flex justify-center pt-4 pb-2">
-                              <button
-                                onClick={() => setVisibleCount(c => c + loadMoreCount)}
-                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
-                              >
-                                Show {loadMoreCount} More Episodes
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                    );
-                  }
-
                   return (
-                      <div
-                        key={currentSeasonId}
-                      >
-                        {/* Season description (TMDB overview from episodes response) */}
-                        {seasonOverview && (
-                          <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
-                            {seasonOverview}
-                          </p>
-                        )}
+                    <div key={`${episodeView}-${currentSeasonId}`}>
+                      {/* Season description (TMDB overview from episodes response) */}
+                      {seasonOverview && (
+                        <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
+                          {seasonOverview}
+                        </p>
+                      )}
 
-                        <div className="space-y-3">
-                          {sliceEps.map((ep, i) => {
-                            const isSelected = selectedEp?.episodeId === ep.episodeId;
-                            const isUnreleased = ep.isReleased === false;
-                            const backdropFallback = (anime as any)?.bannerImage || initialData?.bannerImage || displayPoster || null;
-                            const thumbSrc = isUnreleased
-                              ? (ep.thumbnail || null)
-                              : (ep.thumbnail || (isSingleItem && displayPoster) || backdropFallback);
-                            const displayEpTitle = ep.title || (isSingleItem ? displayTitle : `Episode ${ep.episodeNum}`);
-                            return (
-                              <div
-                                key={`${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`}
-                                onClick={() => {
-                                  handleWatchEpisode(ep);
-                                }}
-                                className={cn(
-                                  "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
-                                  isSelected
-                                    ? "ring-2 ring-[#7288AE] bg-gradient-to-br from-[#4B5694]/15 to-[#7288AE]/10 border-transparent shadow-lg shadow-[#4B5694]/20"
-                                    : isUnreleased
-                                    ? "opacity-50 cursor-not-allowed bg-white/[0.01] border-white/[0.03]"
-                                    : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
-                                )}
-                              >
-                                {/* Episode Number — show for any season with 2+ episodes */}
-                                {currentSeasonEps.length > 1 && (
-                                  <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
-                                    <span className="text-sm font-bold text-white/40">{ep.episodeNum}</span>
-                                  </div>
-                                )}
+                      {episodeView === "grid" ? (
+                        <EpisodeGridView items={sliceItems} />
+                      ) : (
+                        <EpisodeListView items={sliceItems} />
+                      )}
 
-                                {/* Thumbnail */}
-                                <div className={`${isSingleItem ? "w-44 md:w-52 aspect-[2/3]" : "w-40 sm:w-48 md:w-52 lg:w-56 aspect-video"} shrink-0 rounded-xl overflow-hidden bg-muted relative self-start`}>
-                                  {thumbSrc ? (
-                                    <img
-                                      src={thumbSrc}
-                                      alt={displayEpTitle || `Episode ${ep.episodeNum}`}
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-card">
-                                      <Play className="w-6 h-6 text-white/20" />
-                                    </div>
-                                  )}
-                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
-                                    <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                                      <Play className="w-4 h-4 fill-white text-white ml-0.5" />
-                                    </div>
-                                  </div>
-                                  {isSelected && isPlaying && (
-                                    <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-[#7288AE] text-white text-[8px] font-extrabold tracking-widest uppercase">
-                                      Playing
-                                    </div>
-                                  )}
-                                  {isUnreleased && (
-                                    <div className="absolute inset-0 z-20 bg-black/75 flex flex-col items-center justify-center gap-1">
-                                      <Lock className="w-5 h-5 text-sky-300" />
-                                      <span className="text-[9px] font-black uppercase tracking-wide text-sky-200">Upcoming</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Episode Info */}
-                                <div className="flex-1 min-w-0 py-0.5">
-                                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                                    <div className="flex flex-col gap-1.5 flex-1 pr-2">
-                                      <h4 className="text-[13px] md:text-sm font-bold text-white/90 leading-tight line-clamp-2">
-                                        {displayEpTitle}
-                                      </h4>
-                                      {ep.description && (
-                                        <p className="text-white/40 text-xs leading-relaxed line-clamp-2">
-                                          {ep.description}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      {ep.vote_average && ep.vote_average > 0 && ep.vote_count && ep.vote_count > 5 ? (
-                                        <div className="flex items-center gap-0.5 text-amber-400">
-                                          <Star className="w-3 h-3 fill-current" />
-                                          <span className="font-bold text-xs">{ep.vote_average.toFixed(1)}</span>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                  {ep.releasedDate && (
-                                    <p className="text-[10px] text-white/30 mb-1 font-medium">
-                                      {new Date(ep.releasedDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                                    </p>
-                                  )}
-
-                                  {ep.runtime && ep.runtime > 0 && (
-                                    <p className="text-white/30 text-xs mt-1.5">{ep.runtime} min</p>
-                                  )}
-                                  {isUnreleased && (
-                                    <p className="mt-2 w-fit rounded-md border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">
-                                      Not released yet
-                                    </p>
-                                  )}
-                                </div>
-
-                                {/* Right side end of the episode card: Tags (Upcoming / Filler) */}
-                                <div className="flex items-center gap-1.5 shrink-0 self-center pl-2">
-                                  {isUnreleased && (
-                                    <span className="text-[10px] text-sky-400 font-extrabold uppercase bg-sky-400/10 border border-sky-400/20 px-2.5 py-1 rounded-xl shadow-lg shadow-sky-400/5">
-                                      Upcoming
-                                    </span>
-                                  )}
-                                  {ep.isFiller && (
-                                    <span className="text-[10px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-xl shadow-lg shadow-amber-400/5">
-                                      Filler
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                          {hasMore && (
-                            <div className="flex justify-center pt-2 pb-4">
-                              <button
-                                onClick={() => setVisibleCount(c => c + loadMoreCount)}
-                                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
-                              >
-                                Show {loadMoreCount} More Episodes
-                              </button>
-                            </div>
-                          )}
+                      {hasMore && (
+                        <div className="flex justify-center pt-6 pb-2">
+                          <button
+                            onClick={() => setVisibleCount(c => c + loadMoreCount)}
+                            className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
+                          >
+                            Show {loadMoreCount} More Episodes
+                          </button>
                         </div>
-                      </div>
+                      )}
+                    </div>
                   );
                 })()}
               </section>

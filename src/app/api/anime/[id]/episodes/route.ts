@@ -333,9 +333,9 @@ async function getEnrichedEpisodesList(
 // Pages cold start. Cache-control headers and next: { revalidate } on upstream
 // fetch calls handle CDN-level caching instead.
 const animeCacheHeaders = {
-  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-  "CDN-Cache-Control": "no-store",
-  "Cloudflare-CDN-Cache-Control": "no-store",
+  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
+  "CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
+  "Cloudflare-CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
 } as const;
 
 export async function GET(

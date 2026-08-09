@@ -26,6 +26,7 @@ function TvHeroTrailerButton() {
   );
 }
 import { GridMediaCard } from "@/components/GridMediaCard";
+import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { format } from "date-fns";
 import { CastRow } from "@/components/CastRow";
@@ -87,9 +88,22 @@ export default function TvClient() {
   const [playingSeason, setPlayingSeason] = useState<number>(1);
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
-  const [hasEverWatched, setHasEverWatched] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
+  const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("sv_tv_view_mode");
+        if (saved === "list" || saved === "grid") return saved;
+      } catch {}
+    }
+    return "list";
+  });
   usePageContentReady(!isLoading);
+
+  const handleTvViewChange = (view: EpisodeViewMode) => {
+    setTvViewMode(view);
+    try { localStorage.setItem("sv_tv_view_mode", view); } catch {}
+  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -99,7 +113,6 @@ export default function TvClient() {
     if (status === "loading" || isStateLoaded) return;
     let initSeason = 1;
     let initEp = 1;
-    let hadSavedState = false;
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search);
       const urlSeason = searchParams.get("season");
@@ -108,7 +121,6 @@ export default function TvClient() {
       if (urlSeason || urlEp) {
         if (urlSeason && Number(urlSeason) > 0) initSeason = Number(urlSeason);
         if (urlEp && Number(urlEp) > 0) initEp = Number(urlEp);
-        hadSavedState = true;
       } else {
         try {
           const userId = session?.user?.id || "guest";
@@ -117,7 +129,6 @@ export default function TvClient() {
             const parsed = JSON.parse(saved);
             if (parsed?.season) initSeason = parsed.season;
             if (parsed?.episode) initEp = parsed.episode;
-            hadSavedState = true;
           }
         } catch {}
       }
@@ -125,7 +136,6 @@ export default function TvClient() {
     setSelectedSeason(initSeason);
     setPlayingSeason(initSeason);
     setPlayingEpisode(initEp);
-    if (hadSavedState) setHasEverWatched(true);
     setIsStateLoaded(true);
   }, [id, status, session, isStateLoaded]);
 
@@ -290,7 +300,6 @@ export default function TvClient() {
     }
 
     setEpisodeNotice(null);
-    setHasEverWatched(true);
     setSelectedSeason(season);
     setPlayingSeason(season);
     setPlayingEpisode(episodeNumber);
@@ -424,6 +433,29 @@ export default function TvClient() {
       const nextSeasonNum = seasons[currentSeasonIndex + 1].season_number;
       handleWatchEpisode(nextSeasonNum, 1);
     }
+  };
+
+  // ── Normalize TV episodes into the shared EpisodeItem shape ──────────────
+  const episodeToItem = (episode: Episode): EpisodeItem => {
+    const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+    const isUpcoming = isUpcomingEpisode(episode);
+    return {
+      key: String(episode.id),
+      number: episode.episode_number,
+      title: episode.name,
+      description: episode.overview || null,
+      thumbnail: episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : null,
+      airDate: episode.air_date || null,
+      runtime: episode.runtime || null,
+      rating: episode.vote_average || null,
+      hasRating: Boolean(episode.vote_average && episode.vote_average > 0 && episode.vote_count && episode.vote_count > 5),
+      isFiller: false,
+      isReleased: !isUpcoming,
+      isSelected: isWatching,
+      isPlaying: isPlaying && isWatching,
+      portrait: false,
+      onClick: () => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name),
+    };
   };
 
   return (
@@ -631,32 +663,38 @@ export default function TvClient() {
               <h2 className="text-base font-bold text-white tracking-wide">Episodes</h2>
             </div>
 
-            {seasons.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                {seasons.map((s) => (
-                  <button
-                    key={s.season_number}
-                    onClick={() => setSelectedSeason(s.season_number)}
-                    className={cn(
-                      "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5",
-                      selectedSeason === s.season_number
-                        ? "bg-primary text-primary-foreground shadow-md shadow-black/30"
-                        : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
-                    )}
-                  >
-                    S{s.season_number}
-                    {selectedSeason === s.season_number && seasonLoading && (
-                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              {seasonData?.episodes && seasonData.episodes.length > 0 && (
+                <EpisodeViewSelector mode={tvViewMode} onChange={handleTvViewChange} views={["list", "grid"]} />
+              )}
+
+              {seasons.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {seasons.map((s) => (
+                    <button
+                      key={s.season_number}
+                      onClick={() => setSelectedSeason(s.season_number)}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5",
+                        selectedSeason === s.season_number
+                          ? "bg-primary text-primary-foreground shadow-md shadow-black/30"
+                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
+                      )}
+                    >
+                      S{s.season_number}
+                      {selectedSeason === s.season_number && seasonLoading && (
+                        <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
             {!seasonLoading && seasonData && (
               <div
-                key={selectedSeason}
+                key={`${tvViewMode}-${selectedSeason}`}
               >
                 {seasonData.overview && (
                   <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
@@ -664,85 +702,17 @@ export default function TvClient() {
                   </p>
                 )}
 
-                <div className="space-y-3">
-                  {seasonData.episodes?.map((episode, i) => {
-                    const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
-                    const isUpcoming = isUpcomingEpisode(episode);
-                    return (
-                    <div
-                      key={episode.id}
-                      onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
-                      className={cn(
-                        "group flex gap-4 p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
-                        isWatching
-                          ? "ring-2 ring-primary bg-gradient-to-br from-primary/15 to-primary/5 border-transparent shadow-lg shadow-black/25"
-                          : isUpcoming
-                          ? "bg-white/[0.015] border-amber-400/10 hover:bg-amber-400/10 hover:border-amber-400/20"
-                          : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]"
-                      )}
-                    >
-                      <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-white/[0.05] shrink-0 self-start mt-1">
-                        <span className="text-sm font-bold text-white/40">{episode.episode_number}</span>
-                      </div>
-
-                      <div className="w-40 sm:w-48 md:w-52 lg:w-56 shrink-0 aspect-video rounded-xl overflow-hidden bg-muted relative self-start">
-                        {episode.still_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w500${episode.still_path}`}
-                            alt={episode.name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-card">
-                            <Play className="w-6 h-6 text-white/20" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                            <Play className="w-4 h-4 fill-white text-white ml-0.5" />
-                          </div>
-                        </div>
-                        {isUpcoming && (
-                          <div className="absolute inset-0 z-20 bg-black/75 flex flex-col items-center justify-center gap-1">
-                            <Calendar className="w-5 h-5 text-sky-300" />
-                            <span className="text-[9px] font-black uppercase tracking-wide text-sky-200">Upcoming</span>
-                          </div>
-                        )}
-                        {isWatching && hasEverWatched && (
-                          <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-primary/90 backdrop-blur-md text-white text-[8px] font-extrabold tracking-widest uppercase shadow-sm">
-                            {isPlaying ? "Playing" : "Watching"}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex-1 min-w-0 py-0.5">
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <h4 className="font-bold text-sm leading-tight text-white">
-                            <span className="sm:hidden text-white/40 mr-1.5">E{episode.episode_number}.</span>
-                            {episode.name}
-                          </h4>
-                          {episode.vote_average && episode.vote_average > 0 && episode.vote_count && episode.vote_count > 5 ? (
-                            <div className="flex items-center gap-1 text-amber-400 shrink-0">
-                              <Star className="w-3 h-3 fill-current" />
-                              <span className="font-bold text-xs">{episode.vote_average.toFixed(1)}</span>
-                            </div>
-                          ) : null}
-                        </div>
-                        {episode.overview && (
-                          <p className="text-white/40 text-xs leading-relaxed line-clamp-2">{episode.overview}</p>
-                        )}
-                        {isUpcoming && (
-                          <p className="mt-2 w-fit rounded-md border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">
-                            Not released yet
-                          </p>
-                        )}
-                        {episode.runtime && <p className="text-white/30 text-xs mt-1.5">{episode.runtime} min</p>}
-                      </div>
-                    </div>
-                  ); })}
-                </div>
+                {seasonData.episodes && seasonData.episodes.length > 0 ? (
+                  tvViewMode === "grid" ? (
+                    <EpisodeGridView items={seasonData.episodes.map(episodeToItem)} />
+                  ) : (
+                    <EpisodeListView items={seasonData.episodes.map(episodeToItem)} />
+                  )
+                ) : (
+                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-white/40">
+                    No episodes available for this season.
+                  </div>
+                )}
               </div>
             )}
         </section>

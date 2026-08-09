@@ -219,7 +219,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [id, type, season, episode, onProgress]);
+  }, [id, type, season, episode, onProgress, onEpisodeChange, onVideoEnd]);
 
   useEffect(() => {
     setCurrentSource(prev => {

@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { Metadata } from "next";
 import { cache } from "react";
 import AnimeClient from "./AnimeClient";
+import { cleanAnimeDescription } from "@/lib/anime-fetch";
 
 // Shared AniList query — fetches enough fields for BOTH <head> metadata AND
 // the first-paint of AnimeClient. The result is produced once server-side and
@@ -141,7 +142,7 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
     if (!anime) throw new Error("No media found");
 
     // Strip HTML from description
-    let desc = (anime.description || "").replace(/<[^>]*>?/gm, '');
+    let desc = cleanAnimeDescription(anime.description);
 
     const title = anime.title?.english || anime.title?.romaji || "Anime";
     const poster = anime.coverImage?.extraLarge || anime.coverImage?.large || "";

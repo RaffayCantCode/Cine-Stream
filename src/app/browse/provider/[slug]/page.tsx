@@ -616,7 +616,7 @@ export default function ProviderPage() {
             <div className="flex items-center gap-3 mb-8">
               <Search className="w-5 h-5 text-primary" />
               <h2 className="text-xl font-black text-white tracking-tight">
-                Search Results for "{searchQuery}"
+                Search Results for &quot;{searchQuery}&quot;
               </h2>
               <span className="text-sm text-white/40 font-medium ml-2">
                 {isSearching ? "Searching..." : `${searchResults.length} found on ${provider.name}`}
@@ -649,7 +649,7 @@ export default function ProviderPage() {
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">No matches found</h3>
                 <p className="text-sm text-white/40 max-w-xs">
-                  We couldn't find "{searchQuery}" on {provider.name}.
+                  We couldn&apos;t find &quot;{searchQuery}&quot; on {provider.name}.
                 </p>
               </div>
             )}

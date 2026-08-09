@@ -22,13 +22,12 @@ function SkeletonCard({ index }: { index: number }) {
 }
 
 export const AnimeRow = memo(function AnimeRow({ title, items, isLoading, seeAllHref, isTop10 }: AnimeRowProps) {
-  if (!isLoading && (!items || items.length === 0)) return null;
-
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
   useEffect(() => {
+    if (!isLoading && (!items || items.length === 0)) return;
     const el = scrollerRef.current;
     if (!el) return;
 
@@ -66,6 +65,8 @@ export const AnimeRow = memo(function AnimeRow({ title, items, isLoading, seeAll
     const amount = Math.max(320, Math.floor(el.clientWidth * 0.85));
     el.scrollBy({ left: direction === "left" ? -amount : amount, behavior: "smooth" });
   };
+
+  if (!isLoading && (!items || items.length === 0)) return null;
 
   return (
     <div

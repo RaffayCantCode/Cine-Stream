@@ -1,4 +1,5 @@
 import { AnimeItem } from "@/components/AnimeCard";
+import { cleanAnimeDescription } from "@/lib/anime-fetch";
 
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
@@ -50,7 +51,7 @@ function transformAniList(media: any): AnimeItem | null {
     type: media.type || "TV",
     episodes: { sub: media.episodes || null, dub: null },
     rating: media.averageScore ? String(media.averageScore / 10) : null,
-    description: media.description?.replace(/<[^>]*>/g, "") || "",
+    description: cleanAnimeDescription(media.description),
     genres: media.genres || [],
     status: media.status || null,
     season: media.season || null,

@@ -3,6 +3,7 @@
 import React, {
   createContext,
   useContext,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -112,7 +113,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, [status, session?.user?.id]);
 
-  const toggle = (input: SaveableInput) => {
+  const toggle = useCallback((input: SaveableInput) => {
     const key = watchlistKey(input.mediaId, input.mediaType);
     const exists = keySetRef.current.has(key);
 
@@ -170,9 +171,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         refreshFromServer();
       });
-  };
+  }, [isAuthed]);
 
-  const remove = (mediaId: number, mediaType: string) => {
+  const remove = useCallback((mediaId: number, mediaType: string) => {
     const key = watchlistKey(mediaId, mediaType);
     const next = itemsRef.current.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
 
@@ -192,7 +193,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         refreshFromServer();
       });
-  };
+  }, [isAuthed]);
 
   // Re-sync UI state from the server after a failed mutation.
   const refreshFromServer = async () => {
@@ -213,7 +214,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({ items, loading, isSaved, toggle, remove }),
     // Reflect the live item list; isSaved reads a ref so it is always current.
-    [items, loading]
+    [items, loading, toggle, remove]
   );
 
   return (

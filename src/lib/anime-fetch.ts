@@ -25,6 +25,7 @@ export interface AnimeItem {
   duration?: number | null;
   trailerId?: string | null;
   nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
+  backdrop?: string | null;
 }
 
 export interface SeasonInfo {
@@ -154,6 +155,13 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
   return null;
 }
 
+export function cleanAnimeDescription(html?: string | null): string {
+  return (html || "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s*\(?\s*Source\s*[:：]\s*[^)]*\)?\s*$/i, "")
+    .trim();
+}
+
 function transformAniList(media: AniListMedia): AnimeItem | null {
   if (media.isAdult) return null;
   let status = media.status || null;
@@ -181,7 +189,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     type: media.type || "TV",
     episodes: { sub: media.episodes || null, dub: null },
     rating: media.averageScore ? String(media.averageScore / 10) : null,
-    description: media.description?.replace(/<[^>]*>/g, "") || "",
+    description: cleanAnimeDescription(media.description),
     genres: media.genres || [],
     status,
     season: media.season || null,
@@ -1335,18 +1343,26 @@ export async function getAnimeDetails(
 
   // Fetch TMDB seasons for each unique TMDB ID in parallel
   const showSeasonsMap: Record<number, { season_number: number; episode_count: number }[]> = {};
+  const showBackdropsMap: Record<number, string | null> = {};
   await Promise.all(
     Array.from(uniqueTmdbIds).map(async (tid) => {
       try {
         const showData = await tmdbFetch(`/tv/${tid}`) as {
           seasons?: { season_number: number; episode_count: number }[];
+          backdrop_path?: string | null;
         };
         showSeasonsMap[tid] = (showData?.seasons || []).filter(s => s.season_number >= 0 && s.episode_count > 0);
+        showBackdropsMap[tid] = showData?.backdrop_path || null;
       } catch {
         showSeasonsMap[tid] = [];
+        showBackdropsMap[tid] = null;
       }
     })
   );
+
+  if (tmdbId && showBackdropsMap[tmdbId]) {
+    anime.backdrop = showBackdropsMap[tmdbId];
+  }
 
   // Group and map each AniList season to its TMDB season number and episodeOffset
   const mappedEpisodesCount: Record<string, number> = {}; // key: "tmdbId-seasonNum" -> total mapped episodes count
