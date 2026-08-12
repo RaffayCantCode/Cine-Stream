@@ -1670,7 +1670,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
             <div className="w-full h-[55vh] md:h-[65vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
               <div className="flex gap-6 items-end w-full">
-                <div className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl bg-white/[0.06]" />
+                <div className="shrink-0 w-36 sm:w-48 md:w-60 lg:w-72 xl:w-80 aspect-[2/3] rounded-2xl bg-white/[0.06]" />
                 <div className="flex-1 space-y-3 max-w-2xl pb-2">
                   <div className="h-3 w-16 rounded-full bg-white/[0.06]" />
                   <div className="h-8 w-3/4 rounded-lg bg-white/[0.06]" />
@@ -1706,7 +1706,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             >
               <div className="relative z-10 pb-6 md:pb-16 px-5 md:px-12 flex flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-10 max-w-screen-2xl mx-auto w-full">
                 <div
-                  className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
+                  className="shrink-0 w-36 sm:w-48 md:w-60 lg:w-72 xl:w-80 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
                   <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
                 </div>
@@ -2096,7 +2096,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                                     }`}
                                   >
                                     {/* poster / node tile */}
-                                    <div className={`relative w-12 h-16 rounded-md overflow-hidden shrink-0 ${isActive ? "shadow-[0_0_12px_hsl(var(--primary)/0.3)]" : ""}`}>
+                                    <div className={`relative w-16 h-22 sm:w-20 sm:h-28 rounded-lg overflow-hidden shrink-0 aspect-[2/3] ${isActive ? "shadow-[0_0_12px_hsl(var(--primary)/0.3)]" : ""}`}>
                                       {poster ? (
                                         <img src={poster} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
                                       ) : (
@@ -2275,8 +2275,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8 px-5 md:px-0">
-                  {recommendations.map((item: any, i: number) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8 px-5 md:px-0">
+                  {recommendations.slice(0, 10).map((item: any, i: number) => (
                     <AnimeCard key={item.id} item={item} index={i} />
                   ))}
                 </div>
@@ -2291,8 +2291,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8 px-5 md:px-0">
-                  {Array.from({ length: 12 }).map((_, i) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8 px-5 md:px-0">
+                  {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="aspect-[2/3] w-full shrink-0 rounded-2xl shimmer" style={{ animationDelay: `${i * 80}ms` }} />
                   ))}
                 </div>

@@ -107,7 +107,7 @@ export default function WatchlistPage() {
               {/* Cards */}
               <div className="flex-1">
                 {loading && items.length === 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-5 md:gap-6">
                     {Array.from({ length: 10 }).map((_, i) => (
                       <div key={i} className="aspect-[2/3] w-full rounded-2xl bg-muted/50 animate-pulse" />
                     ))}
@@ -119,7 +119,7 @@ export default function WatchlistPage() {
                     hasItems={items.length > 0}
                   />
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-5 md:gap-6">
                     {filtered.map((item) => (
                       <div key={`${item.mediaType}-${item.mediaId}`} className="group relative">
                         <GridMediaCard

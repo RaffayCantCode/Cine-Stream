@@ -1,8 +1,8 @@
 "use client";
 
+import { useState, useMemo, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { List, LayoutGrid, Hash, Play, Lock, Star, Clock } from "lucide-react";
-import type { KeyboardEvent, ReactNode } from "react";
 
 export type EpisodeViewMode = "list" | "grid" | "numbers";
 
@@ -315,13 +315,140 @@ export function EpisodeGridView({ items }: { items: EpisodeItem[] }) {
   );
 }
 
-// ── Numbers View (fast episode navigation for long series) ─────────────────
+// ── Numbers View (Dynamic episode navigation for series of any size) ──────
+interface NumbersTierConfig {
+  tier: 1 | 2 | 3 | 4;
+  gridClass: string;
+  boxClass: string;
+  lockIconClass: string;
+  fillerDotClass: string;
+}
+
+function getTierConfig(count: number): NumbersTierConfig {
+  if (count <= 12) {
+    return {
+      tier: 1,
+      gridClass: "grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2",
+      boxClass: "rounded-lg text-xs sm:text-sm font-bold p-1 min-h-[44px]",
+      lockIconClass: "w-2.5 h-2.5 top-1 left-1",
+      fillerDotClass: "w-1.5 h-1.5 top-1.5 right-1.5",
+    };
+  }
+  if (count <= 50) {
+    return {
+      tier: 2,
+      gridClass: "grid grid-cols-[repeat(auto-fill,minmax(40px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(46px,1fr))] gap-1.5",
+      boxClass: "rounded-lg text-xs sm:text-sm font-bold p-1 min-h-[40px] sm:min-h-[46px]",
+      lockIconClass: "w-2 h-2 top-0.5 left-0.5",
+      fillerDotClass: "w-1 h-1 top-1 right-1",
+    };
+  }
+  if (count <= 100) {
+    return {
+      tier: 3,
+      gridClass: "grid grid-cols-[repeat(auto-fill,minmax(36px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(42px,1fr))] gap-1.5",
+      boxClass: "rounded-lg text-xs font-bold p-0.5 min-h-[36px] sm:min-h-[42px]",
+      lockIconClass: "w-2 h-2 top-0.5 left-0.5",
+      fillerDotClass: "w-1 h-1 top-0.5 right-0.5",
+    };
+  }
+  // Tier 4: > 100 episodes (spacious compact grid for 100 to 1000+ episode series)
+  return {
+    tier: 4,
+    gridClass: "grid grid-cols-[repeat(auto-fill,minmax(36px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(42px,1fr))] gap-1.5",
+    boxClass: "rounded-lg p-0.5 min-h-[36px] sm:min-h-[42px]",
+    lockIconClass: "w-2 h-2 top-0.5 left-0.5",
+    fillerDotClass: "w-1 h-1 top-0.5 right-0.5",
+  };
+}
+
+function getNumberFontSize(num: number, tier: 1 | 2 | 3 | 4): string {
+  if (tier === 1) {
+    if (num >= 1000) return "text-xs font-black tracking-tighter";
+    if (num >= 100) return "text-xs sm:text-sm font-bold tracking-tight";
+    return "text-xs sm:text-sm font-bold";
+  }
+  if (tier === 2) {
+    if (num >= 1000) return "text-[11px] font-black tracking-tighter";
+    if (num >= 100) return "text-xs sm:text-sm font-bold tracking-tight";
+    return "text-xs sm:text-sm font-bold";
+  }
+  if (tier === 3) {
+    if (num >= 1000) return "text-[10px] sm:text-[11px] font-black tracking-tighter leading-none";
+    if (num >= 100) return "text-[11px] sm:text-xs font-extrabold tracking-tight";
+    return "text-xs sm:text-sm font-bold";
+  }
+  // Tier 4: > 100 episodes
+  if (num >= 1000) return "text-[10px] sm:text-[11px] font-black tracking-tighter leading-none";
+  if (num >= 100) return "text-[11px] sm:text-xs font-extrabold tracking-tight";
+  return "text-xs sm:text-sm font-bold";
+}
+
 export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
+  const count = items.length;
+  const config = getTierConfig(count);
+
+  const [activeRange, setActiveRange] = useState<string>("all");
+
+  // Create range chunks for long series (over 100 episodes)
+  const ranges = useMemo(() => {
+    if (count <= 100) return [];
+    const chunkSize = 100;
+    const list: { label: string; start: number; end: number }[] = [];
+    for (let i = 0; i < count; i += chunkSize) {
+      const start = i + 1;
+      const end = Math.min(i + chunkSize, count);
+      list.push({ label: `${start}–${end}`, start, end });
+    }
+    return list;
+  }, [count]);
+
+  const displayedItems = useMemo(() => {
+    if (activeRange === "all" || ranges.length === 0) return items;
+    const selected = ranges.find((r) => r.label === activeRange);
+    if (!selected) return items;
+    return items.filter((item) => item.number >= selected.start && item.number <= selected.end);
+  }, [items, activeRange, ranges]);
+
   return (
-    <div>
-      <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
-        {items.map((item) => {
+    <div className="space-y-3">
+      {/* Range Pills for > 100 episode series */}
+      {ranges.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap overflow-x-auto pb-1 scrollbar-none">
+          <button
+            onClick={() => setActiveRange("all")}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 shrink-0",
+              activeRange === "all"
+                ? "bg-primary text-white shadow-md shadow-primary/20"
+                : "bg-white/[0.04] text-white/60 hover:text-white hover:bg-white/[0.08]"
+            )}
+          >
+            All ({count})
+          </button>
+          {ranges.map((r) => (
+            <button
+              key={r.label}
+              onClick={() => setActiveRange(r.label)}
+              className={cn(
+                "px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-150 shrink-0",
+                activeRange === r.label
+                  ? "bg-primary text-white shadow-md shadow-primary/20"
+                  : "bg-white/[0.04] text-white/60 hover:text-white hover:bg-white/[0.08]"
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Dynamic Episode Numbers Grid */}
+      <div className={config.gridClass}>
+        {displayedItems.map((item) => {
           const isUpcoming = item.isReleased === false;
+          const fontClass = getNumberFontSize(item.number, config.tier);
+
           return (
             <button
               key={item.key}
@@ -329,9 +456,11 @@ export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
               disabled={isUpcoming}
               title={`Episode ${item.number}${item.isFiller ? " (Filler)" : ""}`}
               className={cn(
-                "relative aspect-square rounded-lg text-xs sm:text-sm font-bold transition-all duration-150 flex items-center justify-center select-none",
+                "relative aspect-square transition-all duration-150 flex items-center justify-center select-none",
+                config.boxClass,
+                fontClass,
                 item.isSelected
-                  ? "bg-primary text-white shadow-lg shadow-primary/30 scale-105 ring-1 ring-white/20"
+                  ? "bg-primary text-white shadow-lg shadow-primary/30 scale-105 ring-1 ring-white/20 z-10"
                   : isUpcoming
                   ? "bg-white/[0.03] text-white/20 border border-white/[0.05] cursor-not-allowed"
                   : item.isFiller
@@ -341,23 +470,30 @@ export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
             >
               {item.number}
               {isUpcoming ? (
-                <Lock className="absolute top-1 left-1 w-2.5 h-2.5 text-white/35" />
+                <Lock className={cn("absolute text-white/35", config.lockIconClass)} />
               ) : item.isFiller && !item.isSelected ? (
-                <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-amber-400" />
+                <span className={cn("absolute rounded-full bg-amber-400", config.fillerDotClass)} />
               ) : null}
             </button>
           );
         })}
       </div>
 
-      <div className="flex items-center gap-4 mt-4 text-[10px] font-bold uppercase tracking-widest text-white/40">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm bg-amber-400/80" /> Filler
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Lock className="w-2.5 h-2.5 text-white/40" /> Upcoming
-        </span>
+      {/* Legend & Stats Footer */}
+      <div className="flex items-center justify-between gap-4 pt-1 text-[10px] font-bold uppercase tracking-widest text-white/40 flex-wrap">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-sm bg-amber-400/80" /> Filler
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Lock className="w-2.5 h-2.5 text-white/40" /> Upcoming
+          </span>
+        </div>
+        <div className="text-white/30 text-[9px]">
+          {count} {count === 1 ? "Episode" : "Episodes"} &bull; {config.tier === 1 ? "Standard View" : config.tier === 2 ? "Compact View" : config.tier === 3 ? "Dense View" : "Micro View"}
+        </div>
       </div>
     </div>
   );
 }
+

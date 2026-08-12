@@ -215,11 +215,11 @@ export default function MovieClient() {
               <img
                 src={posterUrl}
                 alt={movie.title}
-                className="w-48 lg:w-60 rounded-2xl shadow-2xl ring-1 ring-white/10"
+                className="w-56 sm:w-64 md:w-72 lg:w-80 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
                 fetchPriority="high"
                 decoding="async"
-                width={240}
-                height={360}
+                width={320}
+                height={480}
               />
             </div>
           )}
@@ -352,8 +352,8 @@ export default function MovieClient() {
                     <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
-                  {filtered.slice(0, 18).map((item: any, i: number) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8">
+                  {filtered.slice(0, 10).map((item: any, i: number) => (
                     <GridMediaCard key={item.id} item={item} index={i} />
                   ))}
                 </div>

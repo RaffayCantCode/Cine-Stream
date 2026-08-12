@@ -40,22 +40,22 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.profile_path 
-    ? (item.profile_path.startsWith("http") ? item.profile_path : `https://image.tmdb.org/t/p/w342${item.profile_path}`)
+    ? (item.profile_path.startsWith("http") ? item.profile_path : `https://image.tmdb.org/t/p/w500${item.profile_path}`)
     : item.poster_path
-    ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w342${item.poster_path}`)
+    ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w500${item.poster_path}`)
     : null;
 
   const isPriority = priority ?? (rank !== undefined && index < 4);
 
   return (
     <div
-      className="row-item"
+      className="row-item w-full"
       style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${index * 0.03}s` }}
     >
       <Link
         href={link}
         className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
-          rank ? "w-[158px] sm:w-[194px] md:w-[220px]" : "w-[136px] sm:w-[165px] md:w-[188px]"
+          rank ? "w-[158px] sm:w-[194px] md:w-[220px]" : "w-full"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >

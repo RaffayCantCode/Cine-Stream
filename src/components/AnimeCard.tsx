@@ -44,7 +44,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
       <Link
         href={`/anime/${item.id}`}
         className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
-          rank ? "w-[158px] sm:w-[194px] md:w-[220px]" : "w-[136px] sm:w-[165px] md:w-[188px]"
+          rank ? "w-[158px] sm:w-[194px] md:w-[220px]" : "w-full"
         }`}
         style={{ transformOrigin: "center bottom" }}
       >
@@ -120,13 +120,17 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           </div>
         </div>
 
-        {/* Persistent Title & Hover Genre Layer */}
+        {/* Persistent Title & Hover Genre / Reason Layer */}
         <div className="absolute bottom-0 inset-x-0 z-30 p-3 pointer-events-none flex flex-col justify-end">
-          {item.genres && item.genres.length > 0 && (
+          {item.reason ? (
+            <p className="text-[10px] font-bold text-emerald-400 line-clamp-1 drop-shadow-md mb-0.5">
+              ✨ {item.reason}
+            </p>
+          ) : item.genres && item.genres.length > 0 ? (
             <p className="text-[10px] sm:text-[11px] font-black text-fuchsia-300 line-clamp-1 uppercase tracking-widest leading-none drop-shadow-md mb-1 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
               {item.genres.slice(0, 2).join(" · ")}
             </p>
-          )}
+          ) : null}
 
           <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
             {item.name}

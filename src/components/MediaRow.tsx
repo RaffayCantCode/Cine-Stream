@@ -141,7 +141,9 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
                   <SkeletonCard key={i} index={i} />
                 ))
               : (isTop10 ? items?.slice(0, 10) : items)?.map((item, i) => (
-                  <MediaCard key={item.id} item={item} index={i} rank={isTop10 ? i + 1 : undefined} priority={isTop10 && i < 4} />
+                  <div key={item.id} className={isTop10 ? "shrink-0" : "w-[142px] sm:w-[172px] md:w-[195px] shrink-0"}>
+                    <MediaCard item={item} index={i} rank={isTop10 ? i + 1 : undefined} priority={isTop10 && i < 4} />
+                  </div>
                 ))}
           </div>
         </div>

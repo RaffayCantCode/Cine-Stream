@@ -87,6 +87,7 @@ export default function TvClient() {
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [playingSeason, setPlayingSeason] = useState<number>(1);
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
+  const [hasActiveProgress, setHasActiveProgress] = useState(false);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>(() => {
@@ -113,6 +114,7 @@ export default function TvClient() {
     if (status === "loading" || isStateLoaded) return;
     let initSeason = 1;
     let initEp = 1;
+    let hasSavedOrUrl = false;
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search);
       const urlSeason = searchParams.get("season");
@@ -121,6 +123,7 @@ export default function TvClient() {
       if (urlSeason || urlEp) {
         if (urlSeason && Number(urlSeason) > 0) initSeason = Number(urlSeason);
         if (urlEp && Number(urlEp) > 0) initEp = Number(urlEp);
+        hasSavedOrUrl = true;
       } else {
         try {
           const userId = session?.user?.id || "guest";
@@ -129,6 +132,7 @@ export default function TvClient() {
             const parsed = JSON.parse(saved);
             if (parsed?.season) initSeason = parsed.season;
             if (parsed?.episode) initEp = parsed.episode;
+            hasSavedOrUrl = true;
           }
         } catch {}
       }
@@ -136,6 +140,7 @@ export default function TvClient() {
     setSelectedSeason(initSeason);
     setPlayingSeason(initSeason);
     setPlayingEpisode(initEp);
+    setHasActiveProgress(hasSavedOrUrl);
     setIsStateLoaded(true);
   }, [id, status, session, isStateLoaded]);
 
@@ -303,6 +308,7 @@ export default function TvClient() {
     setSelectedSeason(season);
     setPlayingSeason(season);
     setPlayingEpisode(episodeNumber);
+    setHasActiveProgress(true);
 
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -437,7 +443,7 @@ export default function TvClient() {
 
   // ── Normalize TV episodes into the shared EpisodeItem shape ──────────────
   const episodeToItem = (episode: Episode): EpisodeItem => {
-    const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+    const isWatching = (hasActiveProgress || isPlaying) && playingSeason === selectedSeason && playingEpisode === episode.episode_number;
     const isUpcoming = isUpcomingEpisode(episode);
     return {
       key: String(episode.id),
@@ -475,11 +481,11 @@ export default function TvClient() {
             <img
               src={posterUrl}
               alt={show.name}
-              className="hidden md:block w-48 lg:w-60 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10"
+              className="hidden md:block w-56 sm:w-64 md:w-72 lg:w-80 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
               fetchPriority="high"
               decoding="async"
-              width={240}
-              height={360}
+              width={320}
+              height={480}
             />
           )}
 
@@ -762,8 +768,8 @@ export default function TvClient() {
                     <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
-                  {filtered.slice(0, 18).map((item: any, i: number) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8">
+                  {filtered.slice(0, 10).map((item: any, i: number) => (
                     <GridMediaCard key={item.id} item={item} index={i} />
                   ))}
                 </div>
