@@ -1145,6 +1145,26 @@ export async function getAnimeDetails(
     const curatedItem = curatedNodes?.find(n => String(n.id) === String(numId));
     if (curatedItem) {
       const epCount = curatedItem.episodes && curatedItem.episodes > 1 ? curatedItem.episodes : (curatedItem.format === "MOVIE" || curatedItem.format === "SPECIAL" ? 1 : 12);
+
+      // Try a lightweight AniList query for real description, genres, and rating
+      let realDescription = "";
+      let realGenres: string[] = [];
+      let realRating = "";
+      try {
+        const quickQ = `query ($id: Int) {
+          Media(id: $id, type: ANIME, isAdult: false) {
+            description averageScore genres title { english romaji }
+          }
+        }`;
+        const quickRes = await anilistQuery(quickQ, { id: numId });
+        const qMedia = quickRes?.data?.Media;
+        if (qMedia) {
+          realDescription = cleanAnimeDescription(qMedia.description) || "";
+          realGenres = qMedia.genres || [];
+          realRating = qMedia.averageScore ? String(qMedia.averageScore / 10) : "";
+        }
+      } catch { /* AniList still unreachable — leave blanks */ }
+
       const animeItem: AnimeItem = {
         id: String(curatedItem.id),
         idMal: curatedItem.idMal ? String(curatedItem.idMal) : null,
@@ -1153,9 +1173,9 @@ export async function getAnimeDetails(
         poster: curatedItem.coverImage || "",
         type: curatedItem.format || "TV",
         episodes: { sub: epCount, dub: null },
-        rating: "8.8",
-        description: "Attack on Titan franchise entry.",
-        genres: ["Action", "Fantasy"],
+        rating: realRating || "8.8",
+        description: realDescription,
+        genres: realGenres.length > 0 ? realGenres : [],
         status: curatedItem.status || "FINISHED",
         season: null,
         seasonYear: curatedItem.seasonYear || null,

@@ -1096,6 +1096,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             return {
               ...prev,
               ...a,
+              // Preserve previously-loaded good values if the server returned blanks
+              // (happens when the curated fallback fires during an AniList outage)
+              description: a.description || prev.description || "",
+              genres: (a.genres && a.genres.length > 0) ? a.genres : (prev.genres && prev.genres.length > 0 ? prev.genres : []),
+              rating: a.rating || prev.rating || "",
               totalEpisodes: Math.max(a.totalEpisodes || 0, prev.totalEpisodes || 0),
               seasons: mergedSeasons,
             };
@@ -1704,9 +1709,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               title={displayTitle}
               theme="anime"
             >
-              <div className="relative z-10 pb-6 md:pb-16 px-5 md:px-12 flex flex-row items-center md:items-end gap-4 sm:gap-6 md:gap-10 max-w-screen-2xl mx-auto w-full">
+              <div className="relative z-10 pb-6 md:pb-12 px-5 md:px-12 flex flex-row items-center gap-4 sm:gap-6 md:gap-8 max-w-screen-2xl mx-auto w-full">
                 <div
-                  className="shrink-0 w-36 sm:w-48 md:w-60 lg:w-72 xl:w-80 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
+                  className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
                   <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
                 </div>

@@ -476,12 +476,12 @@ export default function TvClient() {
         title={show.name}
         theme="tv"
       >
-        <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-end">
+        <div className="pb-10 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 items-center">
           {posterUrl && (
             <img
               src={posterUrl}
               alt={show.name}
-              className="hidden md:block w-56 sm:w-64 md:w-72 lg:w-80 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
+              className="hidden md:block w-40 sm:w-44 md:w-44 lg:w-52 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
               fetchPriority="high"
               decoding="async"
               width={320}
