@@ -597,7 +597,7 @@ export function CinematicHero({
 
       {/* ── Content Wrapper ────── */}
       <CinematicHeroContext.Provider value={{ playTrailer, hasTrailer: Boolean(activeTrailerId) }}>
-        <div className="relative z-20 w-full min-h-[78svh] flex items-end pt-[20svh]">
+        <div className="relative z-20 w-full min-h-[68svh] md:min-h-[72vh] flex items-end pt-12 md:pt-16 pb-4 md:pb-6">
           <div className={`w-full transition-opacity duration-1000 ${trailerVisible && isAtTop && !isMobile ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
             {children}
           </div>

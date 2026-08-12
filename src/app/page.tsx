@@ -88,7 +88,7 @@ function loadHeroPoolFromSession(): MediaItem[] {
   return [];
 }
 
-function buildHeroPool(feed: MediaItem[]): MediaItem[] {
+function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] {
   if (!Array.isArray(feed) || feed.length === 0) return [];
 
   const isValidHeroCandidate = (i: MediaItem) => {
@@ -103,9 +103,6 @@ function buildHeroPool(feed: MediaItem[]): MediaItem[] {
   const validFeed = feed.filter(isValidHeroCandidate);
   if (validFeed.length === 0) return [];
 
-  const animeCandidates = validFeed.filter(
-    (i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja")
-  );
   const movieCandidates = validFeed.filter(
     (i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
   );
@@ -113,14 +110,49 @@ function buildHeroPool(feed: MediaItem[]): MediaItem[] {
     (i) => (i.media_type === "tv" || !!i.name) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
   );
 
-  const seenIds = new Set<number>();
+  // Build anime candidates strictly from THE anime section (AniList anime items)
+  let animeCandidates: MediaItem[] = [];
+  if (Array.isArray(animeList) && animeList.length > 0) {
+    animeCandidates = animeList
+      .filter((a) => a && a.id && a.name && (a.poster || a.bannerImage) && a.description && a.description.trim().length >= 10)
+      .map((a) => ({
+        id: a.id as any,
+        anilistId: a.id,
+        title: a.name,
+        name: a.name,
+        poster_path: a.poster,
+        backdrop_path: a.bannerImage || a.poster,
+        media_type: "anime",
+        vote_average: a.rating ? parseFloat(a.rating) : 8.5,
+        vote_count: 500,
+        overview: a.description || "",
+        release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
+        original_language: "ja",
+        genre_ids: [16],
+      }));
+
+    // Prefer candidates with reasonable title length (< 55 chars) for hero slide presentation
+    const heroQualityAnime = animeCandidates.filter((a) => (a.title || "").length < 55);
+    if (heroQualityAnime.length > 0) {
+      animeCandidates = heroQualityAnime;
+    }
+  }
+
+  // Fallback if animeList has not loaded yet
+  if (animeCandidates.length === 0) {
+    animeCandidates = validFeed
+      .filter((i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja"))
+      .map((i) => ({ ...i, media_type: "anime" as const }));
+  }
+
+  const seenIds = new Set<number | string>();
   try {
     if (typeof window !== "undefined") {
       const raw = sessionStorage.getItem("sv_seen_hero_ids");
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          parsed.forEach((id: number) => seenIds.add(id));
+          parsed.forEach((id: number | string) => seenIds.add(id));
         }
       }
     }
@@ -411,7 +443,27 @@ export default function Home() {
           genres: { genres: Genre[] };
         }>("/api/tmdb/home?v=2", { cacheTtlMs: 3600000 }).catch(() => null);
 
-        const animePromise = fetchClientAnime("trending", 1).catch(() => null);
+        const animePromise = Promise.all([
+          fetchClientAnime("trending", 1).catch(() => ({ items: [] })),
+          fetchClientAnime("popular", 1).catch(() => ({ items: [] })),
+        ]).then(([tRes, pRes]) => {
+          const tItems = tRes?.items || [];
+          const pItems = pRes?.items || [];
+          const combined: AnimeItem[] = [];
+          const maxLen = Math.max(tItems.length, pItems.length);
+          const seen = new Set<string>();
+          for (let i = 0; i < maxLen; i++) {
+            if (tItems[i] && !seen.has(tItems[i].id)) {
+              seen.add(tItems[i].id);
+              combined.push(tItems[i]);
+            }
+            if (pItems[i] && !seen.has(pItems[i].id)) {
+              seen.add(pItems[i].id);
+              combined.push(pItems[i]);
+            }
+          }
+          return { items: combined };
+        }).catch(() => null);
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
         // Wait for fast hero payload first to make Hero Banner interactive instantly
@@ -484,7 +536,7 @@ export default function Home() {
 
           setHeroFeed(initialHeroFeed);
 
-          const initialPool = buildHeroPool(initialHeroFeed);
+          const initialPool = buildHeroPool(initialHeroFeed, globalHomeCache?.animeList);
           if (initialPool.length > 0) {
             activeHeroPool = initialPool;
             setHeroPool((currentPool) => (currentPool.length > 0 ? currentPool : initialPool));
@@ -588,12 +640,10 @@ export default function Home() {
 
           setHeroFeed(fullHeroFeed);
 
-          const fullHeroPool = buildHeroPool(fullHeroFeed);
-          const finalHeroPool = activeHeroPool.length > 0 ? activeHeroPool : fullHeroPool;
-
-          if (finalHeroPool.length > 0) {
-            setHeroPool((currentPool) => (currentPool.length > 0 ? currentPool : finalHeroPool));
-            saveHeroPoolToSession(finalHeroPool);
+          const fullHeroPool = buildHeroPool(fullHeroFeed, finalAnimeList);
+          if (fullHeroPool.length > 0) {
+            setHeroPool(fullHeroPool);
+            saveHeroPoolToSession(fullHeroPool);
           }
 
           globalHomeCache = {
@@ -609,7 +659,7 @@ export default function Home() {
             heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
             heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
             heroFeed: fullHeroFeed,
-            heroPool: finalHeroPool.length > 0 ? finalHeroPool : fullHeroPool,
+            heroPool: fullHeroPool,
             recommended: recPool,
             genres: (homeData.genres?.genres || []).slice(0, 18),
             animeList: finalAnimeList,

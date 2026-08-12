@@ -476,7 +476,7 @@ export default function TvClient() {
         title={show.name}
         theme="tv"
       >
-        <div className="pb-10 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 items-center">
+        <div className="pb-6 md:pb-8 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 items-center">
           {posterUrl && (
             <img
               src={posterUrl}
@@ -489,13 +489,13 @@ export default function TvClient() {
             />
           )}
 
-          <div className="flex-1 space-y-4">
+          <div className="flex-1 space-y-3">
             <div>
-              <h1 className="font-bold text-5xl md:text-7xl text-white leading-none tracking-wide mb-2 select-text">
+              <h1 className="font-bold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1.5 select-text">
                 {show.name}
               </h1>
               {show.tagline && (
-                <p className="text-primary/90 font-semibold italic text-base md:text-lg select-text">
+                <p className="text-primary/90 font-semibold italic text-sm md:text-base select-text">
                   {show.tagline}
                 </p>
               )}
@@ -535,7 +535,7 @@ export default function TvClient() {
             </div>
 
             <p
-              className="text-white/65 text-base leading-relaxed max-w-2xl select-text"
+              className="text-white/65 text-sm md:text-base leading-relaxed max-w-2xl select-text line-clamp-3"
             >
               {show.overview}
             </p>

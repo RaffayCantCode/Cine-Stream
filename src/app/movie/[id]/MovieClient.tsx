@@ -207,7 +207,7 @@ export default function MovieClient() {
           title={movie.title}
           theme="movie"
         >
-          <div className="pb-10 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 items-center">
+          <div className="pb-6 md:pb-8 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 items-center">
           {posterUrl && (
             <div
               className="hidden md:block shrink-0"
@@ -224,14 +224,14 @@ export default function MovieClient() {
             </div>
           )}
 
-          <div className="flex-1 space-y-4">
+          <div className="flex-1 space-y-3">
             <div
             >
-              <h1 className="font-bold text-5xl md:text-7xl text-white leading-none tracking-wide mb-2">
+              <h1 className="font-bold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1.5">
                 {movie.title}
               </h1>
               {movie.tagline && (
-                <p className="text-red-500 font-bold italic text-base md:text-lg tracking-wide drop-shadow-[0_2px_12px_rgba(239,68,68,0.4)]">
+                <p className="text-red-500 font-bold italic text-sm md:text-base tracking-wide drop-shadow-[0_2px_12px_rgba(239,68,68,0.4)]">
                   {movie.tagline}
                 </p>
               )}
@@ -272,7 +272,7 @@ export default function MovieClient() {
             </div>
 
             <p
-              className="text-white/65 text-base leading-relaxed max-w-2xl"
+              className="text-white/65 text-sm md:text-base leading-relaxed max-w-2xl line-clamp-3"
             >
               {movie.overview}
             </p>

@@ -7,7 +7,7 @@ const JIKAN_BASE = "https://api.jikan.moe/v4";
 const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
   Page(page: $page, perPage: 50) {
     media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC], genre: $genre, search: $q) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear
     }
   }
@@ -16,7 +16,7 @@ const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
 const SEARCH_QUERY = `query ($page: Int, $genre: String, $q: String) {
   Page(page: $page, perPage: 50) {
     media(type: ANIME, isAdult: false, genre: $genre, search: $q) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear
     }
   }
@@ -25,7 +25,7 @@ const SEARCH_QUERY = `query ($page: Int, $genre: String, $q: String) {
 const TRENDING_QUERY = `query ($page: Int, $genre: String) {
   Page(page: $page, perPage: 20) {
     media(type: ANIME, isAdult: false, sort: [TRENDING_DESC, POPULARITY_DESC], genre: $genre) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear duration
     }
   }
@@ -34,7 +34,7 @@ const TRENDING_QUERY = `query ($page: Int, $genre: String) {
 const AIRING_QUERY = `query ($page: Int, $genre: String, $season: MediaSeason, $year: Int) {
   Page(page: $page, perPage: 50) {
     media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC], genre: $genre, season: $season, seasonYear: $year) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear duration
     }
   }
@@ -48,6 +48,7 @@ function transformAniList(media: any): AnimeItem | null {
     name: media.title.english || media.title.romaji,
     jname: media.title.native || null,
     poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
+    bannerImage: media.bannerImage || null,
     type: media.type || "TV",
     episodes: { sub: media.episodes || null, dub: null },
     rating: media.averageScore ? String(media.averageScore / 10) : null,

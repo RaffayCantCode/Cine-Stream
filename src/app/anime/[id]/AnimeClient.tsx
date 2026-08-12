@@ -1709,18 +1709,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               title={displayTitle}
               theme="anime"
             >
-              <div className="relative z-10 pb-6 md:pb-12 px-5 md:px-12 flex flex-row items-center gap-4 sm:gap-6 md:gap-8 max-w-screen-2xl mx-auto w-full">
+              <div className="relative z-10 pb-6 md:pb-8 px-5 md:px-12 flex flex-row items-center gap-4 sm:gap-6 md:gap-8 max-w-screen-2xl mx-auto w-full">
                 <div
                   className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
                   <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
                 </div>
 
-                <div className="flex-1 space-y-4">
+                <div className="flex-1 space-y-3">
                   <div>
-                    <h1 className="font-black text-3xl sm:text-5xl md:text-6xl text-white leading-none tracking-tight select-text">{displayTitle}</h1>
+                    <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
                     {anime.jname && (
-                      <p className="text-primary/90 font-semibold italic text-base md:text-lg mt-2 select-text">{anime.jname}</p>
+                      <p className="text-primary/90 font-semibold italic text-sm md:text-base mt-1 select-text">{anime.jname}</p>
                     )}
                   </div>
 

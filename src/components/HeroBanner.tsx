@@ -34,18 +34,23 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   if (!item) return null;
 
   const isMovie = item.media_type === "movie" || !!item.title;
-  const isAnime = isTmdbAnime(item);
+  const isAnime = item.media_type === "anime" || !!(item as any).anilistId || isTmdbAnime(item);
   const title = item.title || item.name || "";
   let link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
 
-  if (isAnime) {
+  if (item.media_type === "anime" || (item as any).anilistId) {
+    const animeId = (item as any).anilistId || item.id;
+    link = `/anime/${animeId}`;
+  } else if (isAnime) {
     link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
   }
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const rating = item.vote_average ?? 0;
 
   const backdropUrl = item.backdrop_path
-    ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`
+    ? item.backdrop_path.startsWith("http")
+      ? item.backdrop_path
+      : `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`
     : null;
 
   return (
@@ -135,12 +140,17 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
           {/* Title */}
           <h1
-            className="text-white font-black leading-none mb-3"
+            className="text-white font-black mb-2.5 line-clamp-2"
             style={{
-              fontSize: "clamp(2rem, 5.4vw, 4.15rem)",
+              fontSize:
+                title.length > 50
+                  ? "clamp(1.5rem, 3vw, 2.4rem)"
+                  : title.length > 30
+                  ? "clamp(1.75rem, 3.8vw, 3rem)"
+                  : "clamp(2rem, 4.8vw, 3.75rem)",
               textShadow:
                 "0 2px 6px rgba(0,0,0,0.7), 0 8px 26px rgba(0,0,0,0.5)",
-              lineHeight: 1,
+              lineHeight: 1.1,
             }}
           >
             {title}
@@ -159,7 +169,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           {/* Action buttons */}
           <div className="flex flex-wrap justify-center md:justify-start items-center gap-3">
             <Link
-              href={`${link}${isAnime ? "&autoplay=1" : "?autoplay=1"}`}
+              href={`${link}${link.includes("?") ? "&autoplay=1" : "?autoplay=1"}`}
               className="inline-flex items-center gap-2.5 bg-[#D3D1CE] hover:bg-white text-[#090F15] font-extrabold px-6 py-3.5 rounded-xl text-sm transition-all duration-300 shadow-xl shadow-black/50 hover:scale-[1.03] active:scale-95 cursor-pointer"
             >
               <Play className="w-5 h-5 fill-current ml-0.5" />

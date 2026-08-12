@@ -11,6 +11,7 @@ export interface AnimeItem {
   name: string;
   jname?: string | null;
   poster: string;
+  bannerImage?: string | null;
   type?: string | null;
   episodes?: { sub: number | null; dub: number | null };
   rating?: string | null;
