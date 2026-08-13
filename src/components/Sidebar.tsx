@@ -98,13 +98,13 @@ export const Sidebar = memo(function Sidebar() {
                 {profileOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                    <div className="absolute top-full right-0 mt-2 z-50 w-44 py-1.5 rounded-xl bg-card border border-border shadow-2xl shadow-black/40 overflow-hidden">
-                      <div className="px-4 py-2.5 border-b border-white/[0.06]">
-                        <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                    <div className="absolute top-full right-0 mt-2 z-50 w-52 py-2 rounded-2xl bg-zinc-900 border border-white/15 shadow-2xl shadow-black/80 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-white/10">
+                        <p className="text-sm font-extrabold text-white truncate">{user.name}</p>
                       </div>
                       <button
                         onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
-                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors"
+                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                       >
                         <LogOut className="w-4 h-4" />
                         Log out
@@ -116,7 +116,7 @@ export const Sidebar = memo(function Sidebar() {
             ) : (
               <button
                 onClick={() => signIn()}
-                className="p-3 rounded-xl bg-[#4B5694] text-white hover:bg-[#7288AE] transition-colors flex items-center justify-center touch-manipulation"
+                className="p-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center touch-manipulation shadow-md"
                 aria-label="Log in"
               >
                 <LogIn className="w-4 h-4" />
@@ -241,34 +241,38 @@ export const Sidebar = memo(function Sidebar() {
               <>
                 <button
                   onClick={() => setProfileOpen(v => !v)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"
+                  className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08] transition-all"
                 >
-                  {user.image ? (
-                    <img
-                      src={user.image}
-                      alt={user.name ?? "User"}
-                      className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20"
-                    />
-                  ) : (
-                    <User className="w-5 h-5" />
-                  )}
-                  <span className="text-sm font-medium truncate max-w-[120px]">
-                    {user.name}
-                  </span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {user.image ? (
+                      <img
+                        src={user.image}
+                        alt={user.name ?? "User"}
+                        className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20 shrink-0"
+                      />
+                    ) : (
+                      <div className="p-1 rounded-lg bg-white/10 text-white shrink-0">
+                        <User className="w-4 h-4" />
+                      </div>
+                    )}
+                    <span className="text-xs font-extrabold text-white truncate">
+                      {user.name}
+                    </span>
+                  </div>
                 </button>
                 {profileOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                    <div className="absolute bottom-full left-0 mb-2 z-50 w-full py-1.5 rounded-xl bg-card border border-border shadow-2xl shadow-black/40 overflow-hidden">
-                      <div className="px-4 py-2.5 border-b border-white/[0.06]">
-                        <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                    <div className="absolute bottom-full left-0 mb-3 z-50 w-full py-2 rounded-2xl bg-zinc-900 border border-white/15 shadow-2xl shadow-black/90 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-white/10">
+                        <p className="text-sm font-extrabold text-white truncate">{user.name}</p>
                         {user.email && (
-                          <p className="text-[11px] text-white/40 truncate mt-0.5">{user.email}</p>
+                          <p className="text-xs text-white/60 truncate mt-0.5">{user.email}</p>
                         )}
                       </div>
                       <button
                         onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
-                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors"
+                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                       >
                         <LogOut className="w-4 h-4" />
                         Log out
@@ -280,9 +284,9 @@ export const Sidebar = memo(function Sidebar() {
             ) : (
               <button
                 onClick={() => signIn()}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-card hover:bg-card/80 border border-white/15 text-foreground hover:text-white text-xs font-extrabold transition-all shadow-md active:scale-95 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-extrabold transition-all shadow-lg shadow-black/30 active:scale-95 cursor-pointer"
               >
-                <LogIn className="w-4 h-4 text-foreground" />
+                <LogIn className="w-4 h-4" />
                 <span>Log in</span>
               </button>
             )

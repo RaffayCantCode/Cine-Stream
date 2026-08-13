@@ -352,8 +352,8 @@ export default function MovieClient() {
                     <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8">
-                  {filtered.slice(0, 10).map((item: any, i: number) => (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6">
+                  {filtered.slice(0, 12).map((item: any, i: number) => (
                     <GridMediaCard key={item.id} item={item} index={i} />
                   ))}
                 </div>

@@ -434,8 +434,8 @@ export function CinematicHero({
 
   return (
     <div ref={heroRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} className="relative w-full flex flex-col">
-      {/* ── Background layer (Fixed 85svh) ──────────────────────────────────────── */}
-      <div className={`absolute top-0 left-0 w-full ${height} min-h-[78svh] overflow-hidden z-0`}>
+      {/* ── Background layer ──────────────────────────────────────── */}
+      <div className="absolute inset-0 overflow-hidden z-0">
         {/* Backdrop image — visible when trailer is not visible */}
         {backdropUrl && (
           <img
@@ -462,7 +462,7 @@ export function CinematicHero({
               <iframe
                 ref={iframeRef}
                 src={`https://www.youtube-nocookie.com/embed/${activeTrailerId}?autoplay=1&mute=${isMuted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}&widgetid=1&loop=0&vq=hd1080&hd=1`}
-                className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[78svh] min-w-[138.67svh] -translate-x-1/2 -translate-y-1/2"
+                className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-full min-w-[177.78%] -translate-x-1/2 -translate-y-1/2"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen={false}
                 title={`${title} Trailer`}
@@ -597,7 +597,7 @@ export function CinematicHero({
 
       {/* ── Content Wrapper ────── */}
       <CinematicHeroContext.Provider value={{ playTrailer, hasTrailer: Boolean(activeTrailerId) }}>
-        <div className="relative z-20 w-full min-h-[68svh] md:min-h-[72vh] flex items-end pt-12 md:pt-16 pb-4 md:pb-6">
+        <div className={`relative z-20 w-full ${height} flex items-end pt-12 md:pt-16 pb-4 md:pb-6`}>
           <div className={`w-full transition-opacity duration-1000 ${trailerVisible && isAtTop && !isMobile ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
             {children}
           </div>

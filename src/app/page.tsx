@@ -110,8 +110,9 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     (i) => (i.media_type === "tv" || !!i.name) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
   );
 
-  // Build anime candidates strictly from THE anime section (AniList anime items)
+  // Build anime candidates combining AniList (trending + popular) AND TMDB anime titles
   let animeCandidates: MediaItem[] = [];
+
   if (Array.isArray(animeList) && animeList.length > 0) {
     const buildAnimeCard = (a: AnimeItem) => ({
       id: a.id as any,
@@ -136,23 +137,30 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
       )
     );
 
-    // Prefer widescreen banner-capable titles for the hero — a portrait-only
-    // poster stretched to a 16:9 hero looks broken. Fall back to poster-only
-    // titles only when no banner-capable anime exist.
     const bannerAnime = validAnime.filter((a) => typeof a.bannerImage === "string" && a.bannerImage.startsWith("http"));
     const heroQualityAnime = (bannerAnime.length > 0 ? bannerAnime : validAnime)
-      .filter((a) => (a.name || "").length < 55);
+      .filter((a) => (a.name || "").length < 65);
 
-    animeCandidates = (heroQualityAnime.length > 0 ? heroQualityAnime : (bannerAnime.length > 0 ? bannerAnime : validAnime))
-      .map(buildAnimeCard);
+    const aniListCards = (heroQualityAnime.length > 0 ? heroQualityAnime : validAnime).map(buildAnimeCard);
+    animeCandidates.push(...aniListCards);
   }
 
-  // Fallback if animeList has not loaded yet
-  if (animeCandidates.length === 0) {
-    animeCandidates = validFeed
-      .filter((i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja"))
-      .map((i) => ({ ...i, media_type: "anime" as const }));
+  // Include high-quality TMDB anime items (movies & TV series with animation genre + Japanese language)
+  const tmdbAnimeFeed = validFeed
+    .filter((i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja"))
+    .map((i) => ({ ...i, media_type: "anime" as const }));
+
+  animeCandidates.push(...tmdbAnimeFeed);
+
+  // Deduplicate anime candidates by normalized title so we don't repeat titles
+  const uniqueAnimeMap = new Map<string, MediaItem>();
+  for (const candidate of animeCandidates) {
+    const normTitle = (candidate.name || candidate.title || "").toLowerCase().trim();
+    if (normTitle && !uniqueAnimeMap.has(normTitle)) {
+      uniqueAnimeMap.set(normTitle, candidate);
+    }
   }
+  animeCandidates = Array.from(uniqueAnimeMap.values());
 
   const seenIds = new Set<number | string>();
   try {
@@ -452,11 +460,20 @@ export default function Home() {
           genres: { genres: Genre[] };
         }>("/api/tmdb/home?v=3", { cacheTtlMs: 3600000 }).catch(() => null);
 
-        // Top 10 Anime Today must reflect anime trending RIGHT NOW, not all-time
-        // popularity. Only the AniList "trending" feed is used here — the
-        // "popular" feed is deliberately NOT combined in, so the row never
-        // shows best-of-all-time titles (One Piece, Naruto, etc.).
-        const animePromise = fetchClientAnime("trending", 1).catch(() => ({ items: [] }));
+        // Fetch both trending and all-time popular anime to populate a rich hero pool
+        const animePromise = Promise.all([
+          fetchClientAnime("trending", 1).catch(() => ({ items: [] })),
+          fetchClientAnime("popular", 1).catch(() => ({ items: [] })),
+        ]).then(([trendingRes, popularRes]) => {
+          const combined = [...(trendingRes.items || []), ...(popularRes.items || [])];
+          const uniqueMap = new Map<string, AnimeItem>();
+          combined.forEach((item) => {
+            if (item && item.id && !uniqueMap.has(item.id)) {
+              uniqueMap.set(item.id, item);
+            }
+          });
+          return { items: Array.from(uniqueMap.values()), hasMore: true };
+        }).catch(() => ({ items: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
         // Wait for fast hero payload first to make Hero Banner interactive instantly

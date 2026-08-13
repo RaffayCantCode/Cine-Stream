@@ -25,9 +25,9 @@ export interface EpisodeItem {
 }
 
 const VIEW_ICONS: Record<EpisodeViewMode, ReactNode> = {
-  list: <List className="w-3.5 h-3.5" />,
-  grid: <LayoutGrid className="w-3.5 h-3.5" />,
-  numbers: <Hash className="w-3.5 h-3.5" />,
+  list: <List className="w-4 h-4" />,
+  grid: <LayoutGrid className="w-4 h-4" />,
+  numbers: <Hash className="w-4 h-4" />,
 };
 
 const VIEW_LABELS: Record<EpisodeViewMode, string> = {
@@ -45,14 +45,14 @@ interface EpisodeViewSelectorProps {
 
 export function EpisodeViewSelector({ mode, onChange, views = ["list", "grid"] }: EpisodeViewSelectorProps) {
   return (
-    <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.08] shadow-sm backdrop-blur-sm">
+    <div className="inline-flex items-center gap-1 p-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] shadow-sm backdrop-blur-sm">
       {views.map((view) => (
         <button
           key={view}
           onClick={() => onChange(view)}
           aria-pressed={mode === view}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200",
             mode === view
               ? "bg-white/[0.1] text-white shadow-sm ring-1 ring-white/10"
               : "text-white/45 hover:text-white/85 hover:bg-white/[0.04]"

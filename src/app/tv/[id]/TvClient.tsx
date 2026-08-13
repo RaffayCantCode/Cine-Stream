@@ -663,10 +663,10 @@ export default function TvClient() {
         </div>
       )}
         <section>
-          <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
+          <div className="flex items-center justify-between gap-4 mb-8 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="w-1 h-5 bg-primary rounded-full shrink-0" />
-              <h2 className="text-base font-bold text-white tracking-wide">Episodes</h2>
+              <div className="w-1.5 h-5 bg-primary rounded-full shrink-0" />
+              <h2 className="text-lg md:text-xl font-bold text-white tracking-wide">Episodes</h2>
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
@@ -681,15 +681,15 @@ export default function TvClient() {
                       key={s.season_number}
                       onClick={() => setSelectedSeason(s.season_number)}
                       className={cn(
-                        "px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5",
+                        "px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center gap-2 shadow-sm",
                         selectedSeason === s.season_number
-                          ? "bg-primary text-primary-foreground shadow-md shadow-black/30"
-                          : "bg-white/[0.06] text-white/50 hover:bg-white/[0.10] hover:text-white border border-white/[0.06]"
+                          ? "bg-primary text-primary-foreground shadow-md shadow-black/30 ring-1 ring-primary/40"
+                          : "bg-white/[0.06] text-white/60 hover:bg-white/[0.12] hover:text-white border border-white/[0.08]"
                       )}
                     >
                       S{s.season_number}
                       {selectedSeason === s.season_number && seasonLoading && (
-                        <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
                       )}
                     </button>
                   ))}
@@ -768,8 +768,8 @@ export default function TvClient() {
                     <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8">
-                  {filtered.slice(0, 10).map((item: any, i: number) => (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6">
+                  {filtered.slice(0, 12).map((item: any, i: number) => (
                     <GridMediaCard key={item.id} item={item} index={i} />
                   ))}
                 </div>

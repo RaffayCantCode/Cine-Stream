@@ -1700,9 +1700,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       <main className="md:pl-56 lg:pl-64 pt-0 bleed-header select-none">
         {isLoading ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
-            <div className="w-full h-[55vh] md:h-[65vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
+            <div className="w-full h-[62vh] md:h-[75vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
               <div className="flex gap-6 items-end w-full">
-                <div className="shrink-0 w-36 sm:w-48 md:w-60 lg:w-72 xl:w-80 aspect-[2/3] rounded-2xl bg-white/[0.06]" />
+                <div className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl bg-white/[0.06]" />
                 <div className="flex-1 space-y-3 max-w-2xl pb-2">
                   <div className="h-3 w-16 rounded-full bg-white/[0.06]" />
                   <div className="h-8 w-3/4 rounded-lg bg-white/[0.06]" />
@@ -2300,8 +2300,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8 px-5 md:px-0">
-                  {recommendations.slice(0, 10).map((item: any, i: number) => (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6 px-5 md:px-0">
+                  {recommendations.slice(0, 12).map((item: any, i: number) => (
                     <AnimeCard key={item.id} item={item} index={i} />
                   ))}
                 </div>
@@ -2316,7 +2316,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8 px-5 md:px-0">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6 px-5 md:px-0">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="aspect-[2/3] w-full shrink-0 rounded-2xl shimmer" style={{ animationDelay: `${i * 80}ms` }} />
                   ))}
