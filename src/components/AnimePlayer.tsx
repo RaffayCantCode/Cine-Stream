@@ -3,11 +3,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2, Play } from "lucide-react";
+import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2 } from "lucide-react";
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animeplay" | "123embed" | "vidlink" | "autoembed";
+  provider: "vidnest" | "animepahe" | "123embed" | "vidlink" | "autoembed";
   color: string;
   quality: "best" | "good" | "backup";
 }
@@ -31,7 +31,7 @@ interface AnimePlayerProps {
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Source 1", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
+  { name: "Source 1", provider: "animepahe", color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
   { name: "Source 2", provider: "vidnest",   color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
   { name: "Source 3", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20", quality: "good" },
   { name: "Source 4", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20", quality: "good" },
@@ -72,8 +72,8 @@ function buildProviderUrl(
   switch (provider) {
     case "vidnest":
       return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
-    case "animeplay":
-      return `https://megaplay.buzz/stream/ani/${aniId || ""}/${ep}/sub`;
+    case "animepahe":
+      return `https://vidnest.fun/animepahe/${aniId || malId_ || ""}/${ep}/sub`;
     case "vidlink":
       const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
       if (tmdbId) {
@@ -131,7 +131,7 @@ export function AnimePlayer({
     try {
       const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
       if (saved !== null && !forcedSource) {
-        // Key is now provider string (e.g. "animeplay", "vidnest")
+        // Key is now provider string (e.g. "animepahe", "vidnest")
         const byProvider = PROVIDERS.findIndex(p => p.provider === saved);
         if (byProvider >= 0) return byProvider;
         // Legacy: index-based fallback
@@ -180,7 +180,6 @@ export function AnimePlayer({
     setShowSources(false);
     setRetryCount(0);
     setIframeReady(false);
-    setNeedsClickUnlock(false);
     try {
       localStorage.setItem(sourcePrefKey, provider);
       localStorage.setItem(globalPrefKey, provider);
@@ -194,11 +193,6 @@ export function AnimePlayer({
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
   const [retryCount, setRetryCount] = useState(0);
   const [iframeReady, setIframeReady] = useState(false);
-  // Set when the embed confirmed playback (postMessage signal) — the embed
-  // loaded but never started playing (e.g. autoplay needs a user gesture).
-  const [needsClickUnlock, setNeedsClickUnlock] = useState(false);
-  const [playbackStarted, setPlaybackStarted] = useState(false);
-  const [unlockAttempts, setUnlockAttempts] = useState(0);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -207,7 +201,6 @@ export function AnimePlayer({
   const playbackStartedRef = useRef(false);
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
-  const isAnimeplay = currentSource.provider === "animeplay";
 
   const cancelDetectionTimer = useCallback(() => {
     if (detectTimerRef.current) {
@@ -218,26 +211,21 @@ export function AnimePlayer({
 
   const markPlaybackStarted = useCallback(() => {
     playbackStartedRef.current = true;
-    setPlaybackStarted(true);
-    setNeedsClickUnlock(false);
     setIsLoading(false);
     setShowSpinner(false);
     cancelDetectionTimer();
   }, [cancelDetectionTimer]);
 
-  // Auto-dismiss spinner (non-animeplay sources). The animeplay spinner is
-  // dismissed by real playback detection so the user never stares at a black frame.
+  // Auto-dismiss the loading spinner once the embed has had time to render.
   useEffect(() => {
-    if (isAnimeplay) return;
     setShowSpinner(true);
     const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
     return () => { clearTimeout(spinnerTimer); };
-  }, [currentUrl, isLoading, isAnimeplay]);
+  }, [currentUrl, isLoading]);
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
-      "https://megaplay.buzz",
       "https://vidnest.fun",
       "https://vidlink.pro",
       "https://player.autoembed.co",
@@ -272,13 +260,9 @@ export function AnimePlayer({
     setIsLoading(true);
     setHasError(false);
     setIframeReady(false);
-    setNeedsClickUnlock(false);
-    setUnlockAttempts(0);
   }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie]);
 
-  // When the source index or retry count changes, load the embed immediately and
-  // start playback detection. If the embed never reports playback (e.g. Source 1
-  // blocks autoplay without a user gesture), the tap-to-play overlay appears.
+  // When the source index or retry count changes, load the embed immediately.
   useEffect(() => {
     const url = resolvedUrls[currentSource.provider];
     if (!url) return;
@@ -290,8 +274,6 @@ export function AnimePlayer({
     cancelDetectionTimer();
 
     playbackStartedRef.current = false;
-    setPlaybackStarted(false);
-    setNeedsClickUnlock(false);
     setIsLoading(true);
     setHasError(false);
     setCurrentUrl(url);
@@ -299,43 +281,13 @@ export function AnimePlayer({
 
     detectTimerRef.current = setTimeout(() => {
       if (playbackStartedRef.current) return;
-      if (currentSource.provider === "animeplay") {
-        // Gesture-restricted embed: offer a tap-to-play button instead of a black frame.
-        setNeedsClickUnlock(true);
-        setIsLoading(false);
-        setShowSpinner(false);
-      } else {
-        // Any other source that never reports ready is treated as failed.
-        setHasError(true);
-        setIsLoading(false);
-        setShowSpinner(false);
-      }
-    }, PLAYBACK_DETECT_TIMEOUT);
-  }, [sourceIndex, resolvedUrls, retryCount, cancelDetectionTimer]);
-
-  // After the user taps to play (animeplay), remount the iframe inside the
-  // user gesture so autoplay is permitted, then re-run detection. If it still
-  // stays silent, surface the error state instead of looping the overlay.
-  useEffect(() => {
-    if (unlockAttempts === 0) return;
-    playbackStartedRef.current = false;
-    setPlaybackStarted(false);
-    setIframeReady(false);
-    setIsLoading(true);
-    setShowSpinner(true);
-
-    detectTimerRef.current = setTimeout(() => {
-      if (playbackStartedRef.current) return;
+      // The embed never reported ready — treat it as failed so the user can
+      // switch to another source.
       setHasError(true);
       setIsLoading(false);
       setShowSpinner(false);
     }, PLAYBACK_DETECT_TIMEOUT);
-  }, [unlockAttempts]);
-
-  const handleClickUnlock = useCallback(() => {
-    setNeedsClickUnlock(false);
-    setUnlockAttempts(a => a + 1);
-  }, []);
+  }, [sourceIndex, resolvedUrls, retryCount, cancelDetectionTimer]);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -357,33 +309,33 @@ export function AnimePlayer({
 
   // Listen to postMessage for progress + playback-detection events:
   // - VidLink emits video.ended / video.next / video.progress
-  // - MegaPlay (animeplay) emits { event: "time" | "complete" | "error" } and
-  //   { type: "watching-log", currentTime, duration }
+  // - VidNest / AnimePahe embeds emit { event: "time" | "complete" | "error" }
+  //   and { type: "watching-log", currentTime, duration }
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data) return;
 
       const data = event.data as Record<string, any>;
 
-      // ── MegaPlay playback signals ────────────────────────────────────────
-      const mpTime =
+      // ── VidNest playback signals ────────────────────────────────────────
+      const vidTime =
         data.event === "time" && typeof data.time === "number"
           ? (data.time as number)
           : data.type === "watching-log" && typeof data.currentTime === "number"
             ? (data.currentTime as number)
             : null;
-      const mpDuration =
+      const vidDuration =
         typeof data.duration === "number"
           ? (data.duration as number)
           : null;
 
-      if (mpTime !== null) {
+      if (vidTime !== null) {
         markPlaybackStarted();
 
-        if (typeof mpTime === "number") {
-          if (onProgress) onProgress(mpTime);
+        if (typeof vidTime === "number") {
+          if (onProgress) onProgress(vidTime);
 
-          if (mpDuration && mpDuration > 0 && mpTime >= mpDuration - 2) {
+          if (vidDuration && vidDuration > 0 && vidTime >= vidDuration - 2) {
             if (onAutoNext && !autoPlayTriggeredRef.current) {
               autoPlayTriggeredRef.current = true;
               onAutoNext();
@@ -404,8 +356,8 @@ export function AnimePlayer({
                   mediaType: "anime",
                   season: tmdbSeason || 1,
                   episode: episode || 1,
-                  progress: Math.floor(mpTime),
-                  duration: Math.floor(mpDuration || 0)
+                  progress: Math.floor(vidTime),
+                  duration: Math.floor(vidDuration || 0)
                 })
               }).catch(() => {});
             }
@@ -497,13 +449,11 @@ export function AnimePlayer({
     });
     setRetryCount(0);
     setIframeReady(false);
-    setNeedsClickUnlock(false);
   }, [sourcePrefKey, globalPrefKey]);
 
   const retrySource = useCallback(() => {
     setRetryCount(prev => prev + 1);
     setIframeReady(false);
-    setNeedsClickUnlock(false);
   }, []);
 
   const toggleFullscreen = async () => {
@@ -519,10 +469,6 @@ export function AnimePlayer({
       }
     } catch { /* ignore */ }
   };
-
-  // Keep the animeplay frame hidden until the player confirms playback, so a
-  // gesture-restricted embed can never flash a black screen.
-  const hideUntilPlaying = isAnimeplay && !playbackStarted && !needsClickUnlock && !hasError;
 
   return (
     <div className="w-full space-y-4">
@@ -621,24 +567,6 @@ export function AnimePlayer({
               </button>
             </div>
           </div>
-        ) : needsClickUnlock ? (
-          // ── Tap-to-play fallback (shown only when the embed loaded but
-          //    never started playback, e.g. gesture-restricted autoplay) ──
-          // Clicking remounts the iframe inside the user gesture, which lets
-          // the browser allow autoplay and prevents the black screen.
-          <button
-            onClick={handleClickUnlock}
-            className="w-full h-full flex flex-col items-center justify-center gap-4 bg-black group"
-            aria-label={`Tap to start ${currentSource.name}`}
-          >
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform duration-200 ring-4 ring-primary/20">
-              <Play className="w-9 h-9 text-white fill-white ml-1" />
-            </div>
-            <div className="text-center">
-              <p className="text-white font-bold text-base">Tap to Play</p>
-              <p className="text-white/40 text-xs mt-1">{currentSource.name} • Tap to start</p>
-            </div>
-          </button>
         ) : (
           <>
             {showSpinner && (
@@ -648,27 +576,22 @@ export function AnimePlayer({
             )}
             {currentUrl && (
               <iframe
-                key={`${currentSource.provider}-${retryCount}-${unlockAttempts}`}
+                key={`${currentSource.provider}-${retryCount}`}
                 ref={iframeRef}
                 src={currentUrl}
-                className={`w-full h-full transition-opacity duration-500 ${
-                  hideUntilPlaying ? "opacity-0 pointer-events-none" : "opacity-100"
-                }`}
+                className="w-full h-full transition-opacity duration-500"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; microphone"
                 allowFullScreen
-                referrerPolicy={isAnimeplay ? "no-referrer-when-downgrade" : "strict-origin-when-cross-origin"}
+                referrerPolicy="strict-origin-when-cross-origin"
                 title={`${animeTitle} - Episode ${episode}`}
                 onLoad={() => {
+                  // The embed is ready to play as soon as its frame loads.
                   setIsLoading(false);
                   setHasError(false);
                   setIframeReady(true);
-                  if (!isAnimeplay) {
-                    // Non-gesture sources are ready once their frame loads.
-                    setShowSpinner(false);
-                    playbackStartedRef.current = true;
-                    setPlaybackStarted(true);
-                    cancelDetectionTimer();
-                  }
+                  setShowSpinner(false);
+                  playbackStartedRef.current = true;
+                  cancelDetectionTimer();
                 }}
                 onError={() => {
                   console.warn(`[AnimePlayer] ${currentSource.name} failed to load`);
