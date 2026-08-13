@@ -434,7 +434,7 @@ export default function Home() {
           animeTv: { results: MediaItem[] };
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
-        }>("/api/tmdb/home-hero?v=2", { cacheTtlMs: 3600000 }).catch(() => null);
+        }>("/api/tmdb/home-hero?v=3", { cacheTtlMs: 3600000 }).catch(() => null);
 
         // Priority 3 background promises
         const fullHomePromise = fetchJson<{
@@ -450,7 +450,7 @@ export default function Home() {
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home?v=2", { cacheTtlMs: 3600000 }).catch(() => null);
+        }>("/api/tmdb/home?v=3", { cacheTtlMs: 3600000 }).catch(() => null);
 
         // Top 10 Anime Today must reflect anime trending RIGHT NOW, not all-time
         // popularity. Only the AniList "trending" feed is used here — the
