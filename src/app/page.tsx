@@ -114,13 +114,16 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
   let animeCandidates: MediaItem[] = [];
   if (Array.isArray(animeList) && animeList.length > 0) {
     animeCandidates = animeList
-      .filter((a) => a && a.id && a.name && (a.poster || a.bannerImage) && a.description && a.description.trim().length >= 10)
+      .filter((a) => a && a.id && a.name && a.description && a.description.trim().length >= 10 && (
+        (typeof a.poster === "string" && a.poster.startsWith("http")) ||
+        (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http"))
+      ))
       .map((a) => ({
         id: a.id as any,
         anilistId: a.id,
         title: a.name,
         name: a.name,
-        poster_path: a.poster,
+        poster_path: a.poster || a.bannerImage || "",
         backdrop_path: a.bannerImage || a.poster,
         media_type: "anime",
         vote_average: a.rating ? parseFloat(a.rating) : 8.5,
@@ -443,27 +446,11 @@ export default function Home() {
           genres: { genres: Genre[] };
         }>("/api/tmdb/home?v=2", { cacheTtlMs: 3600000 }).catch(() => null);
 
-        const animePromise = Promise.all([
-          fetchClientAnime("trending", 1).catch(() => ({ items: [] })),
-          fetchClientAnime("popular", 1).catch(() => ({ items: [] })),
-        ]).then(([tRes, pRes]) => {
-          const tItems = tRes?.items || [];
-          const pItems = pRes?.items || [];
-          const combined: AnimeItem[] = [];
-          const maxLen = Math.max(tItems.length, pItems.length);
-          const seen = new Set<string>();
-          for (let i = 0; i < maxLen; i++) {
-            if (tItems[i] && !seen.has(tItems[i].id)) {
-              seen.add(tItems[i].id);
-              combined.push(tItems[i]);
-            }
-            if (pItems[i] && !seen.has(pItems[i].id)) {
-              seen.add(pItems[i].id);
-              combined.push(pItems[i]);
-            }
-          }
-          return { items: combined };
-        }).catch(() => null);
+        // Top 10 Anime Today must reflect anime trending RIGHT NOW, not all-time
+        // popularity. Only the AniList "trending" feed is used here — the
+        // "popular" feed is deliberately NOT combined in, so the row never
+        // shows best-of-all-time titles (One Piece, Naruto, etc.).
+        const animePromise = fetchClientAnime("trending", 1).catch(() => ({ items: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
         // Wait for fast hero payload first to make Hero Banner interactive instantly
@@ -719,11 +706,12 @@ export default function Home() {
   useEffect(() => {
     const links: HTMLLinkElement[] = [];
     heroPool.forEach((item) => {
-      if (!item.backdrop_path) return;
+      const path = item.backdrop_path || item.poster_path;
+      if (!path) return;
       const link = document.createElement("link");
       link.rel = "preload";
       link.as = "image";
-      link.href = `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`;
+      link.href = path.startsWith("http") ? path : `https://image.tmdb.org/t/p/w1280${path}`;
       link.fetchPriority = "high";
       document.head.appendChild(link);
       links.push(link);

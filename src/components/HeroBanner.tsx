@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Play, Info, Star, Calendar } from "lucide-react";
@@ -31,6 +31,9 @@ const SECTION_STYLE: React.CSSProperties = {
 };
 
 export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
+  const [usePoster, setUsePoster] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
+
   if (!item) return null;
 
   const isMovie = item.media_type === "movie" || !!item.title;
@@ -47,20 +50,27 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const rating = item.vote_average ?? 0;
 
-  const backdropUrl = item.backdrop_path
-    ? item.backdrop_path.startsWith("http")
-      ? item.backdrop_path
-      : `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`
-    : null;
+  const resolveImageUrl = (path?: string) =>
+    path
+      ? path.startsWith("http")
+        ? path
+        : `https://image.tmdb.org/t/p/w1280${path}`
+      : null;
+
+  // Anime slides (3rd hero card) often have a banner-only backdrop. If that
+  // banner fails to load, gracefully fall back to the poster so the card never
+  // renders a broken/empty image.
+  const backdropUrl = resolveImageUrl(usePoster ? item.poster_path : item.backdrop_path);
+  const showBackdrop = !imgFailed && !!backdropUrl;
 
   return (
     <section className="relative w-full h-[82svh] min-h-[480px] max-h-[700px] sm:h-[58vw] sm:max-h-[610px] md:h-[72vh] flex items-end bg-background overflow-hidden">
-      {backdropUrl ? (
+      {showBackdrop ? (
         <>
           {/* Image clipped independently so gradients can bleed outside section */}
           <div className="absolute inset-0 overflow-hidden">
             <Image
-              src={backdropUrl}
+              src={backdropUrl!}
               alt={title}
               fill
               sizes="100vw"
@@ -71,6 +81,13 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
                 filter: "brightness(0.82) saturate(1.05)",
               }}
               priority
+              onError={() => {
+                if (!usePoster && item.poster_path && item.poster_path !== item.backdrop_path) {
+                  setUsePoster(true);
+                } else {
+                  setImgFailed(true);
+                }
+              }}
             />
           </div>
 
@@ -102,7 +119,11 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           />
         </>
       ) : (
-        <div className="absolute inset-0 bg-card" />
+        <div className="absolute inset-0 bg-card flex items-end justify-start p-6 md:p-10">
+          <span className="text-white/50 font-bold text-2xl md:text-4xl line-clamp-2 max-w-2xl drop-shadow-lg">
+            {title}
+          </span>
+        </div>
       )}
 
       <div className="relative z-10 w-full px-5 md:px-12 lg:px-16 xl:px-20 pb-8 sm:pb-9 md:pb-12 max-w-screen-2xl mx-auto">

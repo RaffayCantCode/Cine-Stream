@@ -1552,11 +1552,20 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const displayTitle = (currentSeasonInfo as any)?.name || (currentSeasonInfo as any)?.title || currentSeason?.name || anime?.name || "";
   const displayStatus = currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "";
 
-  const animeDescription = anime?.description || "";
+  // Single source of truth for the season description. Prefer the AniList
+  // synopsis, but fall back to the TMDB season overview so every anime always
+  // shows a description under the title (never duplicated above episodes).
+  const animeDescription = anime?.description || seasonOverview || "";
   const animeScoreRaw = Number(anime?.rating || anime?.score || 0);
   const animeScore = animeScoreRaw > 10 ? animeScoreRaw / 10 : animeScoreRaw;
   const animeScoreColor = animeScore >= 7.5 ? "text-emerald-400" : animeScore >= 5 ? "text-amber-400" : "text-red-400";
   const isLongDescription = animeDescription.length > 200;
+
+  // Collapse the read-more state whenever the description changes (e.g. the
+  // user switches season tabs, which can swap the TMDB season overview).
+  useEffect(() => {
+    setDescExpanded(false);
+  }, [currentSeasonId, seasonOverview]);
 
   const franchiseAbsoluteEp = useMemo(() => {
     const currentIdx = seasons.findIndex(s => s.id === currentSeasonId);
@@ -2244,13 +2253,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
                   return (
                     <div key={`${episodeView}-${currentSeasonId}`}>
-                      {/* Season description (TMDB overview from episodes response) */}
-                      {seasonOverview && (
-                        <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
-                          {seasonOverview}
-                        </p>
-                      )}
-
                       {episodeView === "grid" ? (
                         <EpisodeGridView items={sliceItems} />
                       ) : (
