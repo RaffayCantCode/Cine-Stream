@@ -57,6 +57,13 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
         : `https://image.tmdb.org/t/p/w1280${path}`
       : null;
 
+  // Skip the next/image optimizer for AniList / MAL CDNs: on the deployed
+  // Cloudflare site the optimizer returns 403 for these hosts, which nuked the
+  // whole anime slide (onError -> imgFailed -> black). AnimeCard already uses a
+  // plain <img> for the same reason — here we emit the src directly instead.
+  const eventuallyOptimizable = (url?: string | null) =>
+    !!url && !/(anilist\.co|myanimelist\.net)/i.test(url);
+
   const backdropPath = usePoster ? item.poster_path : item.backdrop_path;
   const backdropUrl = resolveImageUrl(backdropPath);
   const posterUrl = resolveImageUrl(item.poster_path);
@@ -119,6 +126,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               alt={title}
               fill
               sizes="100vw"
+              unoptimized={!eventuallyOptimizable(backdropUrl)}
               className="object-cover object-center md:object-top"
               style={{
                 transform: "scale(1.02)",
@@ -147,6 +155,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               alt=""
               fill
               sizes="100vw"
+              unoptimized={!eventuallyOptimizable(posterUrl)}
               className="object-cover object-center opacity-[0.16] blur-3xl scale-125"
               aria-hidden
             />
@@ -163,6 +172,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
                 alt={title}
                 fill
                 sizes="(max-width: 1024px) 200px, 270px"
+                unoptimized={!eventuallyOptimizable(posterUrl)}
                 className="object-cover"
                 priority
                 onError={() => setImgFailed(true)}
