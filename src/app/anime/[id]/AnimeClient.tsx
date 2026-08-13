@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v31-anizip-tmdb-recovery";
+const ANIME_API_VERSION = "v32-season-own-episodes";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -256,6 +256,17 @@ async function fetchEpisodesClientSide(
     // 2. If TMDB mapping is known, fetch rich metadata via TMDB proxy route
     let activeTmdbId = mappedTmdbId;
     let activeTmdbSeason = mappedTmdbSeason;
+    let tmdbFromSearch = false;
+
+    // The season's own episode count is authoritative for THIS season. TMDB
+    // sometimes merges multiple anime seasons into one TMDB season (e.g. My
+    // Dress-Up Darling S1+S2 = TMDB S1 with 24 eps), so a TMDB season's length
+    // must NEVER be trusted as this season's count. Prefer the AniList count,
+    // then AniZip's own per-season episode count.
+    const azMaxNum = aniZipEps.length > 0 ? Math.max(...aniZipEps.map(e => e.episodeNum)) : 0;
+    const seasonOwnCount = (totalEpisodes && totalEpisodes > 0 && totalEpisodes < 1499)
+      ? totalEpisodes
+      : azMaxNum;
 
     // Fallback: If TMDB ID is missing, search TMDB for the anime title directly from browser!
     if (!activeTmdbId && seasonName) {
@@ -270,6 +281,7 @@ async function fetchEpisodesClientSide(
           if (firstTv?.id) {
             activeTmdbId = firstTv.id;
             activeTmdbSeason = 1;
+            tmdbFromSearch = true;
           }
         }
       } catch { /* ignore */ }
@@ -284,32 +296,37 @@ async function fetchEpisodesClientSide(
           const tmdbData = await tmdbRes.json();
           const epsList = tmdbData?.episodes || [];
           if (epsList.length > 0) {
-            const result: Episode[] = [];
-            const remainingTmdbEps = Math.max(epsList.length - mappedOffset, 0);
-            const maxEpCount = (totalEpisodes && totalEpisodes > 0 && totalEpisodes < 1499)
-              ? totalEpisodes
-              : remainingTmdbEps;
-            const count = Math.min(maxEpCount || remainingTmdbEps, 1500);
-            for (let i = 1; i <= count; i++) {
-              const azMatch = aniZipEps.find(e => e.episodeNum === i);
-              const tmdbIdx = mappedOffset + i - 1;
-              const tmdbEp = epsList[tmdbIdx] || epsList.find((e: any) => e.episode_number === (mappedOffset + i));
+            // A title-searched TMDB season can be the merged S1 of a multi-season
+            // show (e.g. My Dress-Up Darling S1+S2 both matching TMDB S1). Only
+            // trust it as an episode SOURCE when we have some per-season count to
+            // bound it; otherwise it would show another season's episodes here.
+            const canTrustTmdbSource = !(tmdbFromSearch && azMaxNum === 0 && seasonOwnCount === 0);
+            if (canTrustTmdbSource) {
+              const result: Episode[] = [];
+              const remainingTmdbEps = Math.max(epsList.length - mappedOffset, 0);
+              const maxEpCount = seasonOwnCount > 0 ? seasonOwnCount : remainingTmdbEps;
+              const count = Math.min(maxEpCount || remainingTmdbEps, 1500);
+              for (let i = 1; i <= count; i++) {
+                const azMatch = aniZipEps.find(e => e.episodeNum === i);
+                const tmdbIdx = mappedOffset + i - 1;
+                const tmdbEp = epsList[tmdbIdx] || epsList.find((e: any) => e.episode_number === (mappedOffset + i));
 
-              if (!tmdbEp && !azMatch) continue;
+                if (!tmdbEp && !azMatch) continue;
 
-              result.push({
-                episodeId: azMatch?.episodeId || `${seasonId}-${i}`,
-                episodeNum: i,
-                title: tmdbEp?.name || azMatch?.title || `Episode ${i}`,
-                description: tmdbEp?.overview || azMatch?.description || null,
-                thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
-                releasedDate: tmdbEp?.air_date || azMatch?.releasedDate || null,
-                isFiller: false,
-                seasonId,
-                seasonNum: 1,
-              });
+                result.push({
+                  episodeId: azMatch?.episodeId || `${seasonId}-${i}`,
+                  episodeNum: i,
+                  title: tmdbEp?.name || azMatch?.title || `Episode ${i}`,
+                  description: tmdbEp?.overview || azMatch?.description || null,
+                  thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
+                  releasedDate: tmdbEp?.air_date || azMatch?.releasedDate || null,
+                  isFiller: false,
+                  seasonId,
+                  seasonNum: 1,
+                });
+              }
+              if (result.length > 0) return result.sort((a, b) => a.episodeNum - b.episodeNum);
             }
-            if (result.length > 0) return result.sort((a, b) => a.episodeNum - b.episodeNum);
           }
         }
       } catch { /* ignore */ }
@@ -327,7 +344,7 @@ async function fetchEpisodesClientSide(
         const kJson = await kSearch.json();
         const kId = kJson.data?.[0]?.id;
         if (kId) {
-          const kitsuLimit = Math.max((totalEpisodes && totalEpisodes < 1499) ? totalEpisodes : 50, 50);
+          const kitsuLimit = Math.max(seasonOwnCount || 50, 1);
           const kEpsRes = await fetch(`https://kitsu.io/api/edge/anime/${kId}/episodes?page[limit]=${kitsuLimit}`, { signal: AbortSignal.timeout(4000) });
           if (kEpsRes.ok) {
             const kEpsJson = await kEpsRes.json();
@@ -336,6 +353,7 @@ async function fetchEpisodesClientSide(
             for (const ep of kData) {
               const num = ep.attributes?.number;
               if (!num) continue;
+              if (seasonOwnCount > 0 && num > seasonOwnCount) continue;
               kEps.push({
                 episodeId: `kitsu-${kId}-${num}`,
                 episodeNum: num,
