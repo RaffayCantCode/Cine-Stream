@@ -13,6 +13,7 @@ export interface AnimeItem {
   name: string;
   jname?: string | null;
   poster: string;
+  bannerImage?: string | null;
   type?: string | null;
   episodes?: { sub: number | null; dub: number | null };
   rating?: string | null;
@@ -74,6 +75,7 @@ interface AniListMedia {
   isAdult?: boolean;
   title: { romaji: string; english: string | null; native: string | null };
   coverImage: { large: string; extraLarge: string };
+  bannerImage?: string | null;
   episodes: number | null;
   genres: string[];
   averageScore: number | null;
@@ -110,6 +112,28 @@ export const DEFAULT_FETCH_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x6
 // NOTE: No module-level Map caches here — they are wiped on every Cloudflare
 // Pages cold start (each isolate is fresh). CDN-level caching is handled by
 // passing `next: { revalidate: N }` on each individual fetch call instead.
+
+// Safe Jikan GET that tolerates non-JSON bodies (e.g. Cloudflare "error code:
+// 504" text pages). Throwing on `res.json()` here previously 500'd the whole
+// /api/anime route on edge cold starts.
+async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "CineStream/1.0" },
+      signal: AbortSignal.timeout(8000),
+      next: { revalidate: 3600 } as any,
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
 
 async function anilistQuery(query: string, variables: Record<string, any>, retries = 2, revalidate = 3600): Promise<any> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -186,6 +210,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     name: media.title.english || media.title.romaji,
     jname: media.title.native || null,
     poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
+    bannerImage: media.bannerImage || null,
     type: media.type || "TV",
     episodes: { sub: media.episodes || null, dub: null },
     rating: media.averageScore ? String(media.averageScore / 10) : null,
@@ -224,7 +249,7 @@ const TRENDING_QUERY = `query ($page: Int, $genre: String) {
       sort: [TRENDING_DESC, POPULARITY_DESC],
       genre: $genre
     ) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear duration
     }
   }
@@ -240,7 +265,7 @@ const AIRING_QUERY = `query ($page: Int, $genre: String, $season: MediaSeason, $
       season: $season,
       seasonYear: $year
     ) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear duration
     }
   }
@@ -350,7 +375,7 @@ const SEARCH_QUERY = `query ($page: Int, $genre: String, $q: String) {
       genre: $genre,
       search: $q
     ) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear trailer { id site }
     }
   }
@@ -406,9 +431,8 @@ export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeIt
     console.warn("AniList popular failed, falling back to Jikan:", e);
   }
 
-  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`, { signal: AbortSignal.timeout(8000) });
-  const data = await res.json();
-  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
+  const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`);
+  return filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
 }
 
 export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
@@ -421,9 +445,8 @@ export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeI
     console.warn("AniList trending failed, falling back to Jikan:", e);
   }
 
-  const res = await fetch(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`, { signal: AbortSignal.timeout(8000) });
-  const data = await res.json();
-  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
+  const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`);
+  return filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
 }
 
 export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
@@ -437,9 +460,8 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
     console.warn("AniList airing failed, falling back to Jikan:", e);
   }
 
-  const res = await fetch(`${JIKAN_BASE}/seasons/now?page=${page}`, { signal: AbortSignal.timeout(8000) });
-  const data = await res.json();
-  return filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
+  const data = await jikanFetchJson(`${JIKAN_BASE}/seasons/now?page=${page}`);
+  return filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

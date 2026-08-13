@@ -57,11 +57,56 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
         : `https://image.tmdb.org/t/p/w1280${path}`
       : null;
 
-  // Anime slides (3rd hero card) often have a banner-only backdrop. If that
-  // banner fails to load, gracefully fall back to the poster so the card never
-  // renders a broken/empty image.
-  const backdropUrl = resolveImageUrl(usePoster ? item.poster_path : item.backdrop_path);
-  const showBackdrop = !imgFailed && !!backdropUrl;
+  const backdropPath = usePoster ? item.poster_path : item.backdrop_path;
+  const backdropUrl = resolveImageUrl(backdropPath);
+  const posterUrl = resolveImageUrl(item.poster_path);
+
+  // A portrait poster is a poor hero backdrop — detect it so we never stretch a
+  // 2:3 poster into a 16:9 banner. AniList covers live under /cover/; any slide
+  // whose only image IS the poster is poster-only.
+  const isPortraitPoster = (url?: string | null) =>
+    !!url && (url.includes("/cover/") || url.includes("/media/anime/cover/"));
+  const isPosterOnly =
+    isAnime &&
+    (usePoster ||
+      !item.backdrop_path ||
+      item.backdrop_path === item.poster_path ||
+      isPortraitPoster(resolveImageUrl(item.backdrop_path)));
+
+  const showBackdrop = !imgFailed && !!backdropUrl && !isPosterOnly;
+  const showPosterCard = !!posterUrl && !imgFailed;
+
+  // Scrim stack shared by both image modes (keeps text readable).
+  const scrims = (
+    <>
+      {/* Bottom -> top scrim */}
+      <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
+
+      {/* Left -> right scrim */}
+      <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-background/82 via-background/35 to-transparent" />
+
+      {/* Mobile scrim */}
+      <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
+
+      {/* Soft top edge */}
+      <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/35 to-transparent" />
+
+      {/* Radial spotlight scrim */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 65% 75% at 22% 78%, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 70%)",
+        }}
+      />
+
+      {/* Bottom blend */}
+      <div
+        className="absolute inset-x-0 bg-gradient-to-t from-background via-background/70 to-transparent"
+        style={{ bottom: "0rem", height: "5rem" }}
+      />
+    </>
+  );
 
   return (
     <section className="relative w-full h-[82svh] min-h-[480px] max-h-[700px] sm:h-[58vw] sm:max-h-[610px] md:h-[72vh] flex items-end bg-background overflow-hidden">
@@ -90,39 +135,41 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               }}
             />
           </div>
-
-          {/* Bottom -> top scrim */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
-
-          {/* Left -> right scrim */}
-          <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-background/82 via-background/35 to-transparent" />
-
-          {/* Mobile scrim */}
-          <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
-
-          {/* Soft top edge */}
-          <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/35 to-transparent" />
-
-          {/* Radial spotlight scrim */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(ellipse 65% 75% at 22% 78%, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 70%)",
-            }}
-          />
-
-          {/* Bottom blend */}
-          <div
-            className="absolute inset-x-0 bg-gradient-to-t from-background via-background/70 to-transparent"
-            style={{ bottom: "0rem", height: "5rem" }}
-          />
+          {scrims}
         </>
       ) : (
-        <div className="absolute inset-0 bg-card flex items-end justify-start p-6 md:p-10">
-          <span className="text-white/50 font-bold text-2xl md:text-4xl line-clamp-2 max-w-2xl drop-shadow-lg">
-            {title}
-          </span>
+        <div className="absolute inset-0 overflow-hidden">
+          {/* Ambience: soft blurred poster as a muted background so the hero
+              never looks empty, even when the anime has no widescreen banner. */}
+          {showPosterCard && (
+            <Image
+              src={posterUrl!}
+              alt=""
+              fill
+              sizes="100vw"
+              className="object-cover object-center opacity-[0.16] blur-3xl scale-125"
+              aria-hidden
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/35" />
+          <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-background/85 via-background/40 to-transparent" />
+          <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
+
+          {/* Real poster card, right-aligned on desktop, hidden on mobile */}
+          {showPosterCard && (
+            <div className="hidden md:flex absolute right-6 lg:right-12 xl:right-16 top-1/2 -translate-y-1/2 w-[200px] lg:w-[240px] xl:w-[270px] aspect-[2/3] rounded-2xl overflow-hidden shadow-[0_25px_60px_rgba(0,0,0,0.6)] ring-1 ring-white/15 z-10">
+              <Image
+                src={posterUrl!}
+                alt={title}
+                fill
+                sizes="(max-width: 1024px) 200px, 270px"
+                className="object-cover"
+                priority
+                onError={() => setImgFailed(true)}
+              />
+            </div>
+          )}
+          {scrims}
         </div>
       )}
 

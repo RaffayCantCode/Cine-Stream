@@ -113,32 +113,38 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
   // Build anime candidates strictly from THE anime section (AniList anime items)
   let animeCandidates: MediaItem[] = [];
   if (Array.isArray(animeList) && animeList.length > 0) {
-    animeCandidates = animeList
-      .filter((a) => a && a.id && a.name && a.description && a.description.trim().length >= 10 && (
+    const buildAnimeCard = (a: AnimeItem) => ({
+      id: a.id as any,
+      anilistId: a.id,
+      title: a.name,
+      name: a.name,
+      poster_path: a.poster || a.bannerImage || "",
+      backdrop_path: a.bannerImage || a.poster,
+      media_type: "anime",
+      vote_average: a.rating ? parseFloat(a.rating) : 8.5,
+      vote_count: 500,
+      overview: a.description || "",
+      release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
+      original_language: "ja",
+      genre_ids: [16],
+    });
+
+    const validAnime = animeList.filter(
+      (a) => a && a.id && a.name && a.description && a.description.trim().length >= 10 && (
         (typeof a.poster === "string" && a.poster.startsWith("http")) ||
         (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http"))
-      ))
-      .map((a) => ({
-        id: a.id as any,
-        anilistId: a.id,
-        title: a.name,
-        name: a.name,
-        poster_path: a.poster || a.bannerImage || "",
-        backdrop_path: a.bannerImage || a.poster,
-        media_type: "anime",
-        vote_average: a.rating ? parseFloat(a.rating) : 8.5,
-        vote_count: 500,
-        overview: a.description || "",
-        release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
-        original_language: "ja",
-        genre_ids: [16],
-      }));
+      )
+    );
 
-    // Prefer candidates with reasonable title length (< 55 chars) for hero slide presentation
-    const heroQualityAnime = animeCandidates.filter((a) => (a.title || "").length < 55);
-    if (heroQualityAnime.length > 0) {
-      animeCandidates = heroQualityAnime;
-    }
+    // Prefer widescreen banner-capable titles for the hero — a portrait-only
+    // poster stretched to a 16:9 hero looks broken. Fall back to poster-only
+    // titles only when no banner-capable anime exist.
+    const bannerAnime = validAnime.filter((a) => typeof a.bannerImage === "string" && a.bannerImage.startsWith("http"));
+    const heroQualityAnime = (bannerAnime.length > 0 ? bannerAnime : validAnime)
+      .filter((a) => (a.name || "").length < 55);
+
+    animeCandidates = (heroQualityAnime.length > 0 ? heroQualityAnime : (bannerAnime.length > 0 ? bannerAnime : validAnime))
+      .map(buildAnimeCard);
   }
 
   // Fallback if animeList has not loaded yet

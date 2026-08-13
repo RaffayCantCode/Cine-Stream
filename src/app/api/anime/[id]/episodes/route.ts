@@ -2,7 +2,19 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromTatakai, fetchEpisodesFromKitsu, fetchFillerLookupFromAnimeFillerList, resolveTmdbMappingFromAniZip, DEFAULT_FETCH_USER_AGENT } from "@/lib/anime-fetch";
-import { tmdbFetch, fetchTmdbEpisodeData } from "@/lib/tmdb";
+import { tmdbFetch, fetchTmdbEpisodeData, searchTmdbShow } from "@/lib/tmdb";
+
+// An episode only counts as "real" if it carries actual metadata — a specific
+// title (not the generic "Episode N"), thumbnail, description, or MAL url.
+// Some fallbacks (Kitsu) return bare episode-number cards for brand-new shows,
+// which are effectively placeholders and should NOT block the TMDB fallback.
+function episodeHasRealMetadata(ep: any): boolean {
+  if (!ep) return false;
+  if (ep.isPlaceholder) return false;
+  if (ep.malUrl || ep.thumbnail || ep.description) return true;
+  if (ep.title && ep.title !== `Episode ${ep.episodeNum}`) return true;
+  return false;
+}
 
 interface TmdbSeasonMin {
   season_number: number;
@@ -744,42 +756,40 @@ export async function GET(
         // ── No TMDB mapping: use enriched episodes ────────────────────────────
         // getEnrichedEpisodesList already tries AniZip → Jikan → Tatakai → Kitsu in order.
         let enrichedEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
-        const lacksRealEpisodes = !enrichedEps || enrichedEps.length === 0 || enrichedEps.every((e: any) => e.isPlaceholder);
+        const lacksRealEpisodes = !enrichedEps || enrichedEps.length === 0 || enrichedEps.every((e: any) => !episodeHasRealMetadata(e));
 
         // Fallback: If primary sources failed/placeholders on edge, search TMDB by title!
+        // NOTE: This only runs for anime where every primary source returned bare
+        // placeholder cards (no title/thumbnail/description). Real TMDB episode data
+        // becomes the source so such titles at least display properly.
         if (lacksRealEpisodes && season.name) {
           try {
             const parsed = parseSeasonAndOffsetFromTitle(season.name);
             const targetTmdbSeason = parsed.tmdbSeason || 1;
             const targetOffset = parsed.episodeOffset || 0;
 
-            const cleanName = season.name.replace(/\b(season\s*\d+|part\s*\d+|cour\s*\d+|\d+(st|nd|rd|th)\s*season|final season)\b.*/gi, "").replace(/[:\-\–]/g, " ").trim() || season.name;
-            const searchData = await tmdbFetch(`/search/tv?query=${encodeURIComponent(cleanName)}&include_adult=false`).catch(() => null) as any;
-            if (searchData?.results && searchData.results.length > 0) {
-              const match = searchData.results[0];
-              if (match?.id) {
-                const searchedTmdbId = match.id;
-                console.log(`[Episodes API] TMDB Title Search found tmdbId=${searchedTmdbId} for "${season.name}". Fetching TMDB Season ${targetTmdbSeason}, offset ${targetOffset}`);
-                const tmdbSeasonData = await tmdbFetch(`/tv/${searchedTmdbId}/season/${targetTmdbSeason}`).catch(() => null) as any;
-                if (tmdbSeasonData?.episodes && tmdbSeasonData.episodes.length > 0) {
-                  const rawEps = tmdbSeasonData.episodes.slice(targetOffset);
-                  if (rawEps.length > 0) {
-                    enrichedEps = rawEps.map((ep: any, idx: number) => ({
-                      episodeId: `${season.id}-${idx + 1}`,
-                      episodeNum: idx + 1,
-                      title: ep.name || `Episode ${idx + 1}`,
-                      thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : null,
-                      description: ep.overview || null,
-                      releasedDate: ep.air_date || null,
-                      isFiller: false,
-                      isReleased: true,
-                      seasonNum: seasonNumFromList,
-                      seasonId: season.id,
-                      seasonName: season.name,
-                      seasonMalId: season.idMal || null,
-                    }));
-                    seasonOverview = tmdbSeasonData.overview || null;
-                  }
+            const searchedTmdbId = await searchTmdbShow(season.name, meta?.anime?.seasonYear || undefined);
+            if (searchedTmdbId) {
+              console.log(`[Episodes API] TMDB Title Search found tmdbId=${searchedTmdbId} for "${season.name}". Fetching TMDB Season ${targetTmdbSeason}, offset ${targetOffset}`);
+              const tmdbSeasonData = await tmdbFetch(`/tv/${searchedTmdbId}/season/${targetTmdbSeason}`).catch(() => null) as any;
+              if (tmdbSeasonData?.episodes && tmdbSeasonData.episodes.length > 0) {
+                const rawEps = tmdbSeasonData.episodes.slice(targetOffset);
+                if (rawEps.length > 0) {
+                  enrichedEps = rawEps.map((ep: any, idx: number) => ({
+                    episodeId: `${season.id}-${idx + 1}`,
+                    episodeNum: idx + 1,
+                    title: ep.name || `Episode ${idx + 1}`,
+                    thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : null,
+                    description: ep.overview || null,
+                    releasedDate: ep.air_date || null,
+                    isFiller: false,
+                    isReleased: true,
+                    seasonNum: seasonNumFromList,
+                    seasonId: season.id,
+                    seasonName: season.name,
+                    seasonMalId: season.idMal || null,
+                  }));
+                  seasonOverview = tmdbSeasonData.overview || null;
                 }
               }
             }
