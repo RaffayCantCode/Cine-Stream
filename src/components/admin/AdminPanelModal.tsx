@@ -102,6 +102,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const [usersLoading, setUsersLoading] = useState(false);
   const [userQuery, setUserQuery] = useState("");
   const [currentAdminId, setCurrentAdminId] = useState("");
+  const [currentAdminRole, setCurrentAdminRole] = useState("");
 
   // ── Franchises State ──
   const [customFranchisesList, setCustomFranchisesList] = useState<any[]>([]);
@@ -196,12 +197,14 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const loadUsers = useCallback(async (query = "") => {
     setUsersLoading(true);
     try {
-      const res = await fetch(`/api/admin/users?q=${encodeURIComponent(query)}`);
+      const url = query ? `/api/admin/users?q=${encodeURIComponent(query)}` : "/api/admin/users";
+      const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
         if (json.success) {
           setUsersList(json.users || []);
           if (json.currentUserId) setCurrentAdminId(json.currentUserId);
+          if (json.currentUserRole) setCurrentAdminRole(json.currentUserRole);
         }
       }
     } catch {} finally {
@@ -1380,9 +1383,10 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
           {usersList.map((u) => {
             const isSelf = u.id === currentAdminId;
-            const isSuperAdmin = u.email?.toLowerCase() === "asifraffy@gmail.com";
+            const isOwner = u.role === "owner";
             const isAdmin = u.role === "admin";
             const isDisabled = u.status === "disabled";
+            const isCallerOwner = currentAdminRole === "owner";
 
             return (
               <div
@@ -1407,9 +1411,9 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                           You
                         </span>
                       )}
-                      {isSuperAdmin ? (
+                      {isOwner ? (
                         <span className="text-[9px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                          Super Admin
+                          Owner
                         </span>
                       ) : (
                         <span className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded ${isAdmin ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-zinc-800 text-zinc-400"}`}>
@@ -1427,14 +1431,14 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 </div>
 
                 <div className="flex items-center gap-2 self-end sm:self-auto">
-                  {isSuperAdmin ? (
+                  {isOwner ? (
                     <span className="text-[11px] font-medium text-amber-400 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                      Fixed Super Admin
+                      Site Owner
                     </span>
                   ) : (
                     <>
-                      {/* Toggle Admin Role */}
-                      {!isSelf && (
+                      {/* Toggle Admin Role (Only visible to Site Owner) */}
+                      {!isSelf && isCallerOwner && (
                         <button
                           type="button"
                           onClick={async () => {
@@ -1464,29 +1468,28 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                         </button>
                       )}
 
-                      {/* Toggle Account Status */}
-                      {!isSelf && (
+                      {/* Delete Account Button (Only Site Owner can delete Admin accounts) */}
+                      {!isSelf && (!isAdmin || isCallerOwner) && (
                         <button
                           type="button"
                           onClick={async () => {
-                            const newStatus = isDisabled ? "active" : "disabled";
-                            const res = await fetch("/api/admin/users", {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ userId: u.id, status: newStatus }),
+                            const displayName = u.name ? `${u.name} (${u.email})` : u.email;
+                            if (!confirm(`Do you want to delete this user's "${displayName}" account?`)) return;
+                            const res = await fetch(`/api/admin/users?userId=${encodeURIComponent(u.id)}`, {
+                              method: "DELETE",
                             });
                             if (res.ok) {
                               loadUsers(userQuery);
-                              showToast("success", `Account ${newStatus === "active" ? "enabled" : "disabled"}`);
+                              showToast("success", `Deleted user account "${displayName}"`);
                             } else {
                               const errData = await res.json().catch(() => ({}));
-                              showToast("error", errData.error || "Failed to update status");
+                              showToast("error", errData.error || "Failed to delete user account");
                             }
                           }}
-                          className="p-1.5 rounded-xl text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
-                          title={isDisabled ? "Enable Account" : "Disable Account"}
+                          className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 cursor-pointer transition-colors"
+                          title={`Delete account for ${u.name || u.email}`}
                         >
-                          {isDisabled ? <ToggleLeft className="w-5 h-5 text-rose-400" /> : <ToggleRight className="w-5 h-5 text-emerald-400" />}
+                          <X className="w-4 h-4" />
                         </button>
                       )}
                     </>

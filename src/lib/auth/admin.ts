@@ -15,7 +15,7 @@ export async function verifyAdminSession() {
     columns: { id: true, email: true, name: true, role: true, status: true },
   });
 
-  if (!dbUser || dbUser.role !== "admin") {
+  if (!dbUser || (dbUser.role !== "admin" && dbUser.role !== "owner")) {
     return { error: "Forbidden: Admin privileges required", status: 403, user: null };
   }
 
