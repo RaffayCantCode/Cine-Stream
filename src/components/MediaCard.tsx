@@ -33,9 +33,21 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
 
 export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = false }: MediaCardProps) {
   const isPerson = item.media_type === "person";
-  const isMovie = item.media_type === "movie" || (!isPerson && !!item.title);
+  const isAnime = item.media_type === "anime" || (item as any).isTmdbAnime;
+  const isTv = item.media_type === "tv" || (!isPerson && !isAnime && !!item.first_air_date && !item.release_date);
+  const isMovie = item.media_type === "movie" || (!isPerson && !isAnime && !isTv);
+
   const title = item.title || item.name || "";
-  let link = isPerson ? `/person/${item.id}` : isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  let link = (item as any).targetUrl || (item as any).target_url;
+  if (!link) {
+    link = isPerson
+      ? `/person/${item.id}`
+      : isAnime
+      ? `/anime/${item.id}`
+      : isTv
+      ? `/tv/${item.id}`
+      : `/movie/${item.id}`;
+  }
 
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 

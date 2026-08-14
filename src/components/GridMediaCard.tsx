@@ -22,8 +22,13 @@ interface GridMediaCardProps {
 
 export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
   const isAnime = item.media_type === "anime";
-  const isMovie = item.media_type ? item.media_type === "movie" : !!item.title;
-  const link = isAnime ? `/anime/${item.id}` : isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const isTv = item.media_type === "tv" || (!!item.first_air_date && !item.release_date);
+  const isMovie = item.media_type === "movie" || (!isAnime && !isTv);
+
+  let link = (item as any).targetUrl || (item as any).target_url;
+  if (!link) {
+    link = isAnime ? `/anime/${item.id}` : isTv ? `/tv/${item.id}` : `/movie/${item.id}`;
+  }
   const title = item.title || item.name || "";
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 

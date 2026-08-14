@@ -705,7 +705,7 @@ export default function Home() {
     load();
 
     // Fetch dynamic admin-curated custom homepage sections
-    fetch("/api/home-sections")
+    fetch("/api/home-sections", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.sections && Array.isArray(data.sections) && !cancelled) {
@@ -1102,7 +1102,7 @@ export default function Home() {
             else if (sec.icon === "Award") IconComponent = Award;
 
             return (
-              <LazySection key={sec.id || secIdx} show={revealedSections >= 7} placeholderHeight={360}>
+              <LazySection key={sec.id || secIdx} show={true} placeholderHeight={360}>
                 <MediaRow
                   title={sec.title}
                   items={sec.items || []}

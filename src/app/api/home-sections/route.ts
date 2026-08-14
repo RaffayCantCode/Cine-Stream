@@ -14,15 +14,23 @@ export async function GET() {
       orderBy: [asc(customHomeSections.orderIndex), asc(customHomeSections.createdAt)],
     });
 
-    return NextResponse.json({
-      success: true,
-      sections: sections.map((s) => ({
-        id: s.id,
-        title: s.title,
-        subtitle: s.subtitle,
-        items: Array.isArray(s.items) ? s.items : [],
-      })),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        sections: sections.map((s) => ({
+          id: s.id,
+          title: s.title,
+          subtitle: s.subtitle,
+          icon: s.icon,
+          items: Array.isArray(s.items) ? s.items : [],
+        })),
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        },
+      }
+    );
   } catch (error) {
     console.error("[Home Sections API] GET Error:", error);
     return NextResponse.json({ success: false, sections: [] }, { status: 500 });

@@ -936,8 +936,19 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                           type="button"
                           onClick={() => {
                             const current = Array.isArray(editingSection.items) ? editingSection.items : [];
-                            setEditingSection({ ...editingSection, items: [...current, item] });
-                            showToast("success", `Added ${item.title}`);
+                            const cleanType = item.media_type || (item.first_air_date ? "tv" : "movie");
+                            const cleanTargetUrl = cleanType === "anime"
+                              ? `/anime/${item.anilistId || item.id}`
+                              : `/${cleanType}/${item.id}`;
+                            const fullItem = {
+                              ...item,
+                              id: Number(item.id) || item.id,
+                              media_type: cleanType,
+                              targetUrl: cleanTargetUrl,
+                              target_url: cleanTargetUrl,
+                            };
+                            setEditingSection({ ...editingSection, items: [...current, fullItem] });
+                            showToast("success", `Added ${item.title || item.name}`);
                           }}
                           className="p-1 rounded bg-primary text-primary-foreground cursor-pointer shrink-0"
                         >

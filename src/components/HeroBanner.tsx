@@ -38,23 +38,28 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
   if (!item) return null;
 
-  const isMovie = item.media_type === "movie" || !!item.title;
+  const title = item.title || item.name || "";
   const anilistId = (item as any).anilistId;
   const isAnime = item.media_type === "anime" || !!anilistId || isTmdbAnime(item);
-  const title = item.title || item.name || "";
-  let link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const isTv = item.media_type === "tv" || (!isAnime && !!item.first_air_date && !item.release_date);
+  const isMovie = item.media_type === "movie" || (!isAnime && !isTv);
 
-  if ((item as any).targetUrl) {
-    link = (item as any).targetUrl;
-  } else if (anilistId) {
-    // Exact AniList entry ID
-    link = `/anime/${anilistId}`;
-  } else if (item.media_type === "anime" && typeof item.id === "string" && !isNaN(Number(item.id)) && !(item as any).isTmdbAnime) {
-    // Direct string ID from AniList
-    link = `/anime/${item.id}`;
-  } else if (isAnime) {
-    // TMDB anime item: safely redirect via AniZip / title resolver so it opens the exact corresponding anime
-    link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
+  let link = (item as any).targetUrl || (item as any).target_url;
+  if (!link) {
+    if (anilistId) {
+      // Exact AniList entry ID
+      link = `/anime/${anilistId}`;
+    } else if (item.media_type === "anime" && typeof item.id === "string" && !isNaN(Number(item.id)) && !(item as any).isTmdbAnime) {
+      // Direct string ID from AniList
+      link = `/anime/${item.id}`;
+    } else if (isAnime) {
+      // TMDB anime item: safely redirect via AniZip / title resolver so it opens the exact corresponding anime
+      link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
+    } else if (isTv) {
+      link = `/tv/${item.id}`;
+    } else {
+      link = `/movie/${item.id}`;
+    }
   }
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const rating = item.vote_average ?? 0;
