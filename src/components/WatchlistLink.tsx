@@ -26,7 +26,7 @@ export function WatchlistLink({ className, compact = false }: WatchlistLinkProps
         "group relative flex items-center justify-center rounded-xl border transition-all touch-manipulation",
         "border-border bg-card/60 text-foreground hover:bg-card hover:border-primary/50",
         isActive && "border-primary/60 text-primary bg-card",
-        compact ? "p-2.5" : "h-10 w-10",
+        compact ? "w-8 h-8 p-0" : "h-10 w-10",
         className
       )}
     >

@@ -81,6 +81,25 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Invalid user ID provided" }, { status: 400 });
     }
 
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { id: true, email: true, role: true, status: true },
+    });
+
+    if (!targetUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Protection for Super Admin email (asifraffy@gmail.com)
+    if (targetUser.email?.toLowerCase() === "asifraffy@gmail.com") {
+      if (role && role !== "admin") {
+        return NextResponse.json({ error: "Super Admin role is permanent and cannot be revoked." }, { status: 403 });
+      }
+      if (status && status !== "active") {
+        return NextResponse.json({ error: "Super Admin account cannot be disabled." }, { status: 403 });
+      }
+    }
+
     // Safety check: Prevent admin self-demotion or self-disabling
     if (userId === auth.user.id) {
       if (role && role !== "admin") {

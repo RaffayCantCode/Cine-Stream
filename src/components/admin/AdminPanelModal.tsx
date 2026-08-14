@@ -1136,6 +1136,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
           {usersList.map((u) => {
             const isSelf = u.id === currentAdminId;
+            const isSuperAdmin = u.email?.toLowerCase() === "asifraffy@gmail.com";
             const isAdmin = u.role === "admin";
             const isDisabled = u.status === "disabled";
 
@@ -1153,7 +1154,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
                     </div>
                   )}
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs sm:text-sm font-bold text-white truncate max-w-[160px] sm:max-w-[200px]">
                         {u.name}
                       </span>
@@ -1162,9 +1163,15 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
                           You
                         </span>
                       )}
-                      <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded ${isAdmin ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-white/10 text-white/50"}`}>
-                        {u.role}
-                      </span>
+                      {isSuperAdmin ? (
+                        <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded bg-gradient-to-r from-amber-500/30 to-yellow-500/30 text-amber-200 border border-amber-500/40 shadow-sm">
+                          Super Admin
+                        </span>
+                      ) : (
+                        <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded ${isAdmin ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-white/10 text-white/50"}`}>
+                          {u.role}
+                        </span>
+                      )}
                       {isDisabled && (
                         <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
                           Disabled
@@ -1176,57 +1183,69 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
                 </div>
 
                 <div className="flex items-center gap-2 self-end sm:self-auto">
-                  {/* Toggle Admin Role */}
-                  {!isSelf && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const newRole = isAdmin ? "user" : "admin";
-                        if (!confirm(`Change ${u.name}'s role to ${newRole}?`)) return;
-                        const res = await fetch("/api/admin/users", {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ userId: u.id, role: newRole }),
-                        });
-                        if (res.ok) {
-                          loadUsers(userQuery);
-                          showToast("success", `${u.name} is now ${newRole}!`);
-                        } else {
-                          showToast("error", "Failed to update role");
-                        }
-                      }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isAdmin
-                          ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30"
-                          : "bg-white/10 hover:bg-white/15 text-white"
-                      }`}
-                    >
-                      {isAdmin ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                      <span>{isAdmin ? "Remove Admin" : "Make Admin"}</span>
-                    </button>
-                  )}
+                  {isSuperAdmin ? (
+                    <span className="text-[11px] font-extrabold text-amber-300/90 px-3 py-1 rounded-xl bg-amber-400/10 border border-amber-400/20 shadow-sm">
+                      Fixed Super Admin
+                    </span>
+                  ) : (
+                    <>
+                      {/* Toggle Admin Role */}
+                      {!isSelf && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const newRole = isAdmin ? "user" : "admin";
+                            if (!confirm(`Change ${u.name}'s role to ${newRole}?`)) return;
+                            const res = await fetch("/api/admin/users", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ userId: u.id, role: newRole }),
+                            });
+                            if (res.ok) {
+                              loadUsers(userQuery);
+                              showToast("success", `${u.name} is now ${newRole}!`);
+                            } else {
+                              const errData = await res.json().catch(() => ({}));
+                              showToast("error", errData.error || "Failed to update role");
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isAdmin
+                              ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30"
+                              : "bg-white/10 hover:bg-white/15 text-white"
+                          }`}
+                        >
+                          {isAdmin ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                          <span>{isAdmin ? "Remove Admin" : "Make Admin"}</span>
+                        </button>
+                      )}
 
-                  {/* Toggle Account Status */}
-                  {!isSelf && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const newStatus = isDisabled ? "active" : "disabled";
-                        const res = await fetch("/api/admin/users", {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ userId: u.id, status: newStatus }),
-                        });
-                        if (res.ok) {
-                          loadUsers(userQuery);
-                          showToast("success", `Account ${newStatus === "active" ? "enabled" : "disabled"}`);
-                        }
-                      }}
-                      className="p-1.5 rounded-xl text-xs font-bold text-white/40 hover:text-white hover:bg-white/10 cursor-pointer"
-                      title={isDisabled ? "Enable Account" : "Disable Account"}
-                    >
-                      {isDisabled ? <ToggleLeft className="w-5 h-5 text-rose-400" /> : <ToggleRight className="w-5 h-5 text-emerald-400" />}
-                    </button>
+                      {/* Toggle Account Status */}
+                      {!isSelf && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const newStatus = isDisabled ? "active" : "disabled";
+                            const res = await fetch("/api/admin/users", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ userId: u.id, status: newStatus }),
+                            });
+                            if (res.ok) {
+                              loadUsers(userQuery);
+                              showToast("success", `Account ${newStatus === "active" ? "enabled" : "disabled"}`);
+                            } else {
+                              const errData = await res.json().catch(() => ({}));
+                              showToast("error", errData.error || "Failed to update status");
+                            }
+                          }}
+                          className="p-1.5 rounded-xl text-xs font-bold text-white/40 hover:text-white hover:bg-white/10 cursor-pointer"
+                          title={isDisabled ? "Enable Account" : "Disable Account"}
+                        >
+                          {isDisabled ? <ToggleLeft className="w-5 h-5 text-rose-400" /> : <ToggleRight className="w-5 h-5 text-emerald-400" />}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

@@ -50,23 +50,23 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <>
       {/* Mobile Top Header */}
-      <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-4 transform-gpu will-change-transform">
-        <Link href="/" className="flex items-center gap-2">
-          <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-8 h-8 drop-shadow-md" />
-          <span className="font-extrabold text-lg tracking-wider">
+      <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-3 transform-gpu will-change-transform">
+        <Link href="/" className="flex items-center gap-1.5 shrink-0 min-w-0">
+          <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-md shrink-0" />
+          <span className="font-extrabold text-sm sm:text-base tracking-wider hidden min-[420px]:inline-block truncate">
             <span className="text-white">CINE</span>
             <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
           </span>
         </Link>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
           <ThemeButton compact className="md:hidden" />
           <WatchlistLink compact className="md:hidden" />
           {isAdmin && (
             <button
               type="button"
               onClick={() => setAdminPanelOpen(true)}
-              className="p-2.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-xl transition-all touch-manipulation cursor-pointer"
+              className="p-1.5 sm:p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-xl transition-all touch-manipulation cursor-pointer"
               aria-label="Admin Panel"
               title="Admin Panel"
             >
@@ -75,7 +75,7 @@ export const Sidebar = memo(function Sidebar() {
           )}
           <Link
             href="/contact"
-            className="p-2.5 text-white/30 hover:text-[#f59e0b] rounded-xl transition-all touch-manipulation"
+            className="p-1.5 sm:p-2 text-white/30 hover:text-[#f59e0b] rounded-xl transition-all touch-manipulation"
             aria-label="Report Issue"
           >
             <Bug className="w-4 h-4" />
@@ -83,12 +83,12 @@ export const Sidebar = memo(function Sidebar() {
           <Link
             href="/search"
             className={cn(
-              "p-3 text-white/50 hover:text-white rounded-xl transition-all touch-manipulation",
+              "p-1.5 sm:p-2 text-white/50 hover:text-white rounded-xl transition-all touch-manipulation",
               pathname === "/search" && "text-[#7288AE] bg-white/[0.06]"
             )}
             aria-label="Search"
           >
-            <Search className="w-5 h-5" />
+            <Search className="w-4 h-4 sm:w-5 sm:h-5" />
           </Link>
 
           {status !== "loading" && (
