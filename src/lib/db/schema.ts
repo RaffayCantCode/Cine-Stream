@@ -153,6 +153,7 @@ export const customHomeSections = pgTable("custom_home_sections", {
   id: varchar("id", { length: 64 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   title: varchar("title", { length: 255 }).notNull(),
   subtitle: varchar("subtitle", { length: 255 }),
+  icon: varchar("icon", { length: 64 }),
   enabled: boolean("enabled").default(true).notNull(),
   orderIndex: integer("order_index").default(0).notNull(),
   items: jsonb("items").notNull().$type<any[]>().default([]),

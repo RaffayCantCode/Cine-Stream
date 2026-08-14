@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     const db = auth.db;
     const body = await request.json().catch(() => ({}));
-    const { title, subtitle, items = [], enabled = true, orderIndex = 0 } = body;
+    const { title, subtitle, icon, items = [], enabled = true, orderIndex = 0 } = body;
 
     if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json({ error: "Section title is required" }, { status: 400 });
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
       .values({
         title: title.trim(),
         subtitle: subtitle && typeof subtitle === "string" ? subtitle.trim() : null,
+        icon: icon && typeof icon === "string" ? icon.trim() : null,
         items: Array.isArray(items) ? items : [],
         enabled: Boolean(enabled),
         orderIndex: Number(orderIndex) || 0,
@@ -72,8 +73,23 @@ export async function PUT(request: NextRequest) {
 
   try {
     const db = auth.db;
-    const body = await request.json().catch(() => ({}));
-    const { id, title, subtitle, items, enabled, orderIndex } = body;
+    const rawBody = await request.json().catch(() => ({}));
+    
+    // Bulk reordering of sections
+    if (Array.isArray(rawBody.sections)) {
+      for (const sec of rawBody.sections) {
+        if (sec.id) {
+          await db
+            .update(customHomeSections)
+            .set({ orderIndex: Number(sec.orderIndex) || 0, updatedAt: new Date() })
+            .where(eq(customHomeSections.id, sec.id));
+        }
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    const payload = rawBody.section ? rawBody.section : rawBody;
+    const { id, title, subtitle, description, icon, items, enabled, orderIndex } = payload;
 
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Section ID is required" }, { status: 400 });
@@ -84,7 +100,9 @@ export async function PUT(request: NextRequest) {
     };
 
     if (typeof title === "string" && title.trim()) updates.title = title.trim();
-    if (subtitle !== undefined) updates.subtitle = subtitle ? String(subtitle).trim() : null;
+    const finalSubtitle = subtitle !== undefined ? subtitle : description;
+    if (finalSubtitle !== undefined) updates.subtitle = finalSubtitle ? String(finalSubtitle).trim() : null;
+    if (icon !== undefined) updates.icon = icon ? String(icon).trim() : null;
     if (Array.isArray(items)) updates.items = items;
     if (enabled !== undefined) updates.enabled = Boolean(enabled);
     if (orderIndex !== undefined) updates.orderIndex = Number(orderIndex);

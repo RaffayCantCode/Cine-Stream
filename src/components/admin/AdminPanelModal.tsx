@@ -30,6 +30,18 @@ import {
   Flame,
   Sliders,
   Bug,
+  Tv,
+  Heart,
+  Trophy,
+  Bookmark,
+  Play,
+  Clapperboard,
+  Compass,
+  Zap,
+  Award,
+  GripVertical,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useAnnouncement } from "@/hooks/useAnnouncement";
 import { useTheme } from "@/context/ThemeContext";
@@ -126,6 +138,8 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const [pickerSearchQuery, setPickerSearchQuery] = useState("");
   const [pickerResults, setPickerResults] = useState<any[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+  const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
+  const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
 
   const showToast = (type: "success" | "error", text: string) => {
     setStatusMessage({ type, text });
@@ -753,7 +767,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     const res = await fetch("/api/admin/home-sections", {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ section: { ...sec, enabled: !sec.enabled } }),
+                      body: JSON.stringify({ id: sec.id, enabled: !sec.enabled }),
                     });
                     if (res.ok) {
                       loadSections();
@@ -842,6 +856,48 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 </div>
               </div>
 
+              {/* Optional Row Icon Picker */}
+              <div className="pt-2 border-t border-zinc-800">
+                <label className="text-xs font-semibold text-zinc-400 uppercase block mb-1.5">
+                  Optional Row Icon
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { id: "Film", label: "Film", IconComp: Film },
+                    { id: "Sparkles", label: "Sparkles", IconComp: Sparkles },
+                    { id: "Flame", label: "Flame", IconComp: Flame },
+                    { id: "Tv", label: "TV", IconComp: Tv },
+                    { id: "Star", label: "Star", IconComp: Star },
+                    { id: "Heart", label: "Heart", IconComp: Heart },
+                    { id: "Trophy", label: "Trophy", IconComp: Trophy },
+                    { id: "Bookmark", label: "Bookmark", IconComp: Bookmark },
+                    { id: "Play", label: "Play", IconComp: Play },
+                    { id: "Clapperboard", label: "Cinema", IconComp: Clapperboard },
+                    { id: "Compass", label: "Discover", IconComp: Compass },
+                    { id: "Zap", label: "Action", IconComp: Zap },
+                    { id: "Award", label: "Award", IconComp: Award },
+                  ].map((ic) => {
+                    const isSelected = (editingSection.icon || "Film") === ic.id;
+                    const IconC = ic.IconComp;
+                    return (
+                      <button
+                        key={ic.id}
+                        type="button"
+                        onClick={() => setEditingSection({ ...editingSection, icon: ic.id })}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                          isSelected
+                            ? "bg-primary/20 border-primary text-white shadow-sm"
+                            : "bg-black/40 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+                        }`}
+                      >
+                        <IconC className={`w-3.5 h-3.5 ${isSelected ? "text-primary" : "text-zinc-400"}`} />
+                        <span>{ic.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Media Picker */}
               <div className="space-y-2 pt-2 border-t border-zinc-800">
                 <label className="text-xs font-semibold text-zinc-400 uppercase flex items-center gap-1.5">
@@ -893,25 +949,83 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 )}
               </div>
 
-              {/* Items in Section */}
+              {/* Items in Section with Drag-and-Drop Re-ordering */}
               <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <label className="text-xs font-semibold text-zinc-400 uppercase">
-                  Titles in Row ({editingSection.items?.length || 0})
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-400 uppercase">
+                    Titles in Row ({editingSection.items?.length || 0})
+                  </label>
+                  <span className="text-[10px] text-zinc-500 font-mono">*Drag items or use arrows to reorder</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {editingSection.items?.map((it: any, itemIdx: number) => (
-                    <div key={itemIdx} className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                      <span className="text-xs font-semibold text-zinc-200 truncate">{it.title || it.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newItems = editingSection.items.filter((_: any, i: number) => i !== itemIdx);
-                          setEditingSection({ ...editingSection, items: newItems });
-                        }}
-                        className="text-rose-400 p-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div
+                      key={itemIdx}
+                      draggable
+                      onDragStart={() => setDraggedItemIndex(itemIdx)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (draggedItemIndex === null || draggedItemIndex === itemIdx) return;
+                        const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
+                        const [moved] = current.splice(draggedItemIndex, 1);
+                        current.splice(itemIdx, 0, moved);
+                        setEditingSection({ ...editingSection, items: current });
+                        setDraggedItemIndex(null);
+                      }}
+                      className={`flex items-center justify-between gap-2 p-2 rounded-xl border transition-all ${
+                        draggedItemIndex === itemIdx
+                          ? "bg-sky-500/10 border-sky-500/60 opacity-60"
+                          : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <GripVertical className="w-3.5 h-3.5 text-zinc-500 shrink-0 cursor-grab active:cursor-grabbing" />
+                        <span className="text-xs font-semibold text-zinc-200 truncate">{it.title || it.name}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          disabled={itemIdx === 0}
+                          onClick={() => {
+                            const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
+                            const temp = current[itemIdx];
+                            current[itemIdx] = current[itemIdx - 1];
+                            current[itemIdx - 1] = temp;
+                            setEditingSection({ ...editingSection, items: current });
+                          }}
+                          className="p-1 rounded bg-black/50 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                          title="Move Left/Up"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={itemIdx === (editingSection.items?.length || 0) - 1}
+                          onClick={() => {
+                            const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
+                            const temp = current[itemIdx];
+                            current[itemIdx] = current[itemIdx + 1];
+                            current[itemIdx + 1] = temp;
+                            setEditingSection({ ...editingSection, items: current });
+                          }}
+                          className="p-1 rounded bg-black/50 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                          title="Move Right/Down"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItems = editingSection.items.filter((_: any, i: number) => i !== itemIdx);
+                            setEditingSection({ ...editingSection, items: newItems });
+                          }}
+                          className="text-rose-400 hover:bg-rose-500/10 p-1 rounded cursor-pointer transition-colors"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -933,17 +1047,38 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     showToast("error", "Row title is required");
                     return;
                   }
+                  const isEditing = Boolean(editingSection.id);
+                  const method = isEditing ? "PUT" : "POST";
+                  const payload = isEditing
+                    ? {
+                        id: editingSection.id,
+                        title: editingSection.title,
+                        subtitle: editingSection.description || editingSection.subtitle || "",
+                        icon: editingSection.icon || "Film",
+                        items: editingSection.items || [],
+                        enabled: editingSection.enabled ?? true,
+                      }
+                    : {
+                        title: editingSection.title,
+                        subtitle: editingSection.description || editingSection.subtitle || "",
+                        icon: editingSection.icon || "Film",
+                        items: editingSection.items || [],
+                        enabled: true,
+                      };
+
                   const res = await fetch("/api/admin/home-sections", {
-                    method: "PUT",
+                    method,
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ section: editingSection }),
+                    body: JSON.stringify(payload),
                   });
+
                   if (res.ok) {
                     setSectionModalOpen(false);
                     loadSections();
-                    showToast("success", "Custom row saved!");
+                    showToast("success", `Custom row ${isEditing ? "updated" : "created"}!`);
                   } else {
-                    showToast("error", "Failed to save section");
+                    const errJson = await res.json().catch(() => ({}));
+                    showToast("error", errJson.error || "Failed to save section");
                   }
                 }}
                 className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer"

@@ -3,7 +3,7 @@ export const runtime = 'edge';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers, Film } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers, Film, Tv, Heart, Trophy, Bookmark, Play, Clapperboard, Compass, Zap, Award } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent, isTmdbAnime, filterExcludeAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import type { AnimeItem } from "@/components/AnimeCard";
@@ -1086,16 +1086,32 @@ export default function Home() {
           )}
 
           {/* ─── DYNAMIC CUSTOM HOMEPAGE SECTIONS (Admin Controlled) ─── */}
-          {customSections.map((sec, secIdx) => (
-            <LazySection key={sec.id || secIdx} show={revealedSections >= 7} placeholderHeight={360}>
-              <MediaRow
-                title={sec.title}
-                items={sec.items || []}
-                isLoading={false}
-                accentIcon={<Film className="w-4 h-4 text-primary" />}
-              />
-            </LazySection>
-          ))}
+          {customSections.map((sec, secIdx) => {
+            let IconComponent = Film;
+            if (sec.icon === "Sparkles") IconComponent = Sparkles;
+            else if (sec.icon === "Flame") IconComponent = Flame;
+            else if (sec.icon === "Tv") IconComponent = Tv;
+            else if (sec.icon === "Star") IconComponent = Star;
+            else if (sec.icon === "Heart") IconComponent = Heart;
+            else if (sec.icon === "Trophy") IconComponent = Trophy;
+            else if (sec.icon === "Bookmark") IconComponent = Bookmark;
+            else if (sec.icon === "Play") IconComponent = Play;
+            else if (sec.icon === "Clapperboard") IconComponent = Clapperboard;
+            else if (sec.icon === "Compass") IconComponent = Compass;
+            else if (sec.icon === "Zap") IconComponent = Zap;
+            else if (sec.icon === "Award") IconComponent = Award;
+
+            return (
+              <LazySection key={sec.id || secIdx} show={revealedSections >= 7} placeholderHeight={360}>
+                <MediaRow
+                  title={sec.title}
+                  items={sec.items || []}
+                  isLoading={false}
+                  accentIcon={<IconComponent className="w-4 h-4 text-primary" />}
+                />
+              </LazySection>
+            );
+          })}
 
           {/* ─── FOOTER TAG ─── */}
           <footer className="border-t border-white/10 pt-10 pb-8 flex flex-col items-center justify-center gap-4">
