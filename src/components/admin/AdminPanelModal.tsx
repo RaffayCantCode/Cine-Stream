@@ -1695,9 +1695,18 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span
-                      className="w-10 h-10 rounded-xl shrink-0 border border-zinc-700 shadow-sm"
-                      style={{ background: ct.preview || `linear-gradient(135deg, ${ct.background} 0%, ${ct.card} 50%, ${ct.primary} 100%)` }}
-                    />
+                      className="w-10 h-10 rounded-xl shrink-0 border border-zinc-700 shadow-sm relative overflow-hidden p-1 flex flex-col justify-between"
+                      style={{ backgroundColor: ct.background || "#090E17" }}
+                    >
+                      <span
+                        className="block h-1 w-full rounded-full"
+                        style={{ backgroundColor: ct.primary || ct.accent || "#38BDF8" }}
+                      />
+                      <div
+                        className="w-full h-3 rounded opacity-40"
+                        style={{ backgroundColor: ct.card || "rgba(255,255,255,0.1)" }}
+                      />
+                    </span>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold text-white truncate">{ct.label}</span>

@@ -51,20 +51,12 @@ function readLocalCustomThemes(): ThemeDefinition[] {
   }
 }
 
-function clampBackgroundToDarkHsl(hex: string): string {
+function applySmartDarkToneToBackground(hex: string): string {
   if (!hex) return "210 30% 6%";
   const { h, s, l } = parseHexToHslObj(hex);
-  const clampedS = Math.min(s, 28);
-  const clampedL = Math.min(l, 7.5);
-  return `${h} ${clampedS}% ${clampedL}%`;
-}
-
-function clampCardToDarkHsl(hex: string): string {
-  if (!hex) return "210 17% 18%";
-  const { h, s, l } = parseHexToHslObj(hex);
-  const clampedS = Math.min(s, 25);
-  const clampedL = Math.min(l, 14);
-  return `${h} ${clampedS}% ${clampedL}%`;
+  const targetS = Math.min(s, 45);
+  const targetL = Math.min(l, 18);
+  return `${h} ${targetS}% ${targetL}%`;
 }
 
 function purgeAllThemeClasses() {
@@ -92,7 +84,7 @@ function clearCustomInlineStyles() {
 function applyCustomThemeStyles(custom: Partial<ThemeDefinition>) {
   const root = document.documentElement;
   if (custom.background) {
-    root.style.setProperty("--background", clampBackgroundToDarkHsl(custom.background));
+    root.style.setProperty("--background", applySmartDarkToneToBackground(custom.background));
     if (typeof document !== "undefined" && document.body) {
       document.body.style.removeProperty("background-color");
       document.body.style.removeProperty("background");

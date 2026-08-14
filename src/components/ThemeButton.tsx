@@ -235,11 +235,11 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
                 )}
               >
                 <span
-                  className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10"
+                  className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10 relative p-1.5 shadow-inner"
                   style={{ background: t.preview }}
                 >
                   <span
-                    className="block h-1 w-full translate-y-2"
+                    className="block h-1.5 w-full rounded-full shadow-sm"
                     style={{ background: t.accent }}
                   />
                 </span>
@@ -282,12 +282,16 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
                     )}
                   >
                     <span
-                      className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10 relative"
-                      style={{ background: ct.preview }}
+                      className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10 relative p-1.5 shadow-inner"
+                      style={{ backgroundColor: ct.background || "#090E17" }}
                     >
                       <span
-                        className="block h-1 w-full translate-y-2"
-                        style={{ background: ct.primary || ct.accent }}
+                        className="block h-1.5 w-full rounded-full shadow-sm"
+                        style={{ backgroundColor: ct.primary || ct.accent || "#38BDF8" }}
+                      />
+                      <div
+                        className="w-full h-4 mt-1 rounded-md opacity-40"
+                        style={{ backgroundColor: ct.card || "rgba(255,255,255,0.1)" }}
                       />
                     </span>
                     <span className="flex items-center justify-between gap-1 px-0.5 text-[10px] font-bold">
