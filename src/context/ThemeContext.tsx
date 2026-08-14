@@ -19,6 +19,7 @@ import {
   ThemeId,
   ThemeDefinition,
   hexToHsl,
+  parseHexToHslObj,
 } from "@/lib/themes";
 
 interface ThemeContextValue {
@@ -50,6 +51,22 @@ function readLocalCustomThemes(): ThemeDefinition[] {
   }
 }
 
+function clampBackgroundToDarkHsl(hex: string): string {
+  if (!hex) return "210 30% 6%";
+  const { h, s, l } = parseHexToHslObj(hex);
+  const clampedS = Math.min(s, 28);
+  const clampedL = Math.min(l, 7.5);
+  return `${h} ${clampedS}% ${clampedL}%`;
+}
+
+function clampCardToDarkHsl(hex: string): string {
+  if (!hex) return "210 17% 18%";
+  const { h, s, l } = parseHexToHslObj(hex);
+  const clampedS = Math.min(s, 25);
+  const clampedL = Math.min(l, 14);
+  return `${h} ${clampedS}% ${clampedL}%`;
+}
+
 function purgeAllThemeClasses() {
   const el = document.documentElement;
   THEMES.forEach((t) => el.classList.remove(`theme-${t.id}`));
@@ -75,25 +92,29 @@ function clearCustomInlineStyles() {
 function applyCustomThemeStyles(custom: Partial<ThemeDefinition>) {
   const root = document.documentElement;
   if (custom.background) {
-    root.style.setProperty("--background", hexToHsl(custom.background));
+    root.style.setProperty("--background", clampBackgroundToDarkHsl(custom.background));
     if (typeof document !== "undefined" && document.body) {
-      document.body.style.setProperty("background-color", custom.background, "important");
-      document.body.style.setProperty("background", custom.background, "important");
+      document.body.style.removeProperty("background-color");
+      document.body.style.removeProperty("background");
     }
   }
   if (custom.card) {
-    root.style.setProperty("--card", hexToHsl(custom.card));
-    root.style.setProperty("--popover", hexToHsl(custom.card));
-    root.style.setProperty("--border", hexToHsl(custom.card));
+    const cardHsl = hexToHsl(custom.card);
+    root.style.setProperty("--card", cardHsl);
+    root.style.setProperty("--popover", cardHsl);
+    root.style.setProperty("--border", cardHsl);
   }
   if (custom.primary) {
-    root.style.setProperty("--primary", hexToHsl(custom.primary));
-    root.style.setProperty("--ring", hexToHsl(custom.primary));
+    const primaryHsl = hexToHsl(custom.primary);
+    root.style.setProperty("--primary", primaryHsl);
+    root.style.setProperty("--ring", primaryHsl);
   }
   if (custom.accent) root.style.setProperty("--accent", hexToHsl(custom.accent));
   if (custom.foreground) {
-    root.style.setProperty("--foreground", hexToHsl(custom.foreground));
-    root.style.setProperty("--card-foreground", hexToHsl(custom.foreground));
+    const fgHsl = hexToHsl(custom.foreground);
+    root.style.setProperty("--foreground", fgHsl);
+    root.style.setProperty("--card-foreground", fgHsl);
+    root.style.setProperty("--muted-foreground", fgHsl);
   }
 }
 

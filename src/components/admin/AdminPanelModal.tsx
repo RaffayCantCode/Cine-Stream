@@ -1631,8 +1631,6 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   // TAB 7: THEME STUDIO & SITE CUSTOMIZATION
   // ─────────────────────────────────────────────────────────────────────────────
   const renderAppearanceTab = () => {
-    const previewGradient = `linear-gradient(135deg, ${editingTheme.background} 0%, ${editingTheme.card} 45%, ${editingTheme.primary} 85%, ${editingTheme.accent} 100%)`;
-
     return (
       <div className="space-y-6">
         {/* Header & Create Theme Button */}
@@ -1848,41 +1846,6 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               </div>
 
               <div className="overflow-y-auto space-y-4 flex-1 pr-1 custom-scrollbar">
-                {/* Live Preview Card */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1">
-                    <Eye className="w-3 h-3 text-fuchsia-400" />
-                    Live Palette Preview
-                  </span>
-                  <div
-                    className="relative overflow-hidden rounded-2xl border border-white/10 p-4 shadow-md"
-                    style={{ background: previewGradient }}
-                  >
-                    <div className="flex items-center justify-between text-xs mb-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shadow" style={{ backgroundColor: editingTheme.primary, color: "#000" }}>
-                        {editingTheme.tagline || "Custom"}
-                      </span>
-                      <span className="text-[11px] font-semibold" style={{ color: editingTheme.foreground }}>
-                        {editingTheme.label || "Theme Title"}
-                      </span>
-                    </div>
-
-                    <div className="p-3 rounded-xl border border-white/10 flex items-center justify-between" style={{ backgroundColor: editingTheme.card }}>
-                      <div className="space-y-1">
-                        <div className="w-24 h-2 rounded bg-white/40" />
-                        <div className="w-16 h-1.5 rounded bg-white/20" />
-                      </div>
-                      <button
-                        type="button"
-                        className="px-3 py-1 rounded-lg text-[10px] font-semibold shadow"
-                        style={{ backgroundColor: editingTheme.primary, color: "#000" }}
-                      >
-                        Watch Now
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Name & Tagline */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -2055,31 +2018,42 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
                 {/* Color Pickers */}
                 <div className="space-y-3 pt-2 border-t border-zinc-800">
-                  <span className="text-xs font-semibold text-zinc-400 uppercase block">Fine-Tune Color Controls</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-400 uppercase block">Fine-Tune Color Controls</span>
+                    <span className="text-[10px] text-fuchsia-400 font-mono">*Updates live site in real-time</span>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-zinc-800">
                       <div>
-                        <span className="text-xs font-semibold text-white block">Background</span>
+                        <span className="text-xs font-semibold text-white block">Background Canvas</span>
                         <span className="text-[10px] text-zinc-500 font-mono">{editingTheme.background}</span>
                       </div>
                       <input
                         type="color"
                         value={editingTheme.background}
-                        onChange={(e) => setEditingTheme({ ...editingTheme, background: e.target.value })}
+                        onChange={(e) => {
+                          const updated = { ...editingTheme, background: e.target.value };
+                          setEditingTheme(updated);
+                          previewCustomTheme(updated);
+                        }}
                         className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
                       />
                     </div>
 
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-zinc-800">
                       <div>
-                        <span className="text-xs font-semibold text-white block">Card / Surface</span>
+                        <span className="text-xs font-semibold text-white block">Card & Sidebar Tiles</span>
                         <span className="text-[10px] text-zinc-500 font-mono">{editingTheme.card}</span>
                       </div>
                       <input
                         type="color"
                         value={editingTheme.card}
-                        onChange={(e) => setEditingTheme({ ...editingTheme, card: e.target.value })}
+                        onChange={(e) => {
+                          const updated = { ...editingTheme, card: e.target.value };
+                          setEditingTheme(updated);
+                          previewCustomTheme(updated);
+                        }}
                         className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
                       />
                     </div>
@@ -2092,7 +2066,11 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                       <input
                         type="color"
                         value={editingTheme.primary}
-                        onChange={(e) => setEditingTheme({ ...editingTheme, primary: e.target.value })}
+                        onChange={(e) => {
+                          const updated = { ...editingTheme, primary: e.target.value };
+                          setEditingTheme(updated);
+                          previewCustomTheme(updated);
+                        }}
                         className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
                       />
                     </div>
@@ -2105,20 +2083,28 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                       <input
                         type="color"
                         value={editingTheme.accent}
-                        onChange={(e) => setEditingTheme({ ...editingTheme, accent: e.target.value })}
+                        onChange={(e) => {
+                          const updated = { ...editingTheme, accent: e.target.value };
+                          setEditingTheme(updated);
+                          previewCustomTheme(updated);
+                        }}
                         className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
                       />
                     </div>
 
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-zinc-800 sm:col-span-2">
                       <div>
-                        <span className="text-xs font-semibold text-white block">Text / Foreground</span>
+                        <span className="text-xs font-semibold text-white block">Text & Headings</span>
                         <span className="text-[10px] text-zinc-500 font-mono">{editingTheme.foreground}</span>
                       </div>
                       <input
                         type="color"
                         value={editingTheme.foreground}
-                        onChange={(e) => setEditingTheme({ ...editingTheme, foreground: e.target.value })}
+                        onChange={(e) => {
+                          const updated = { ...editingTheme, foreground: e.target.value };
+                          setEditingTheme(updated);
+                          previewCustomTheme(updated);
+                        }}
                         className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
                       />
                     </div>
