@@ -820,10 +820,11 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
       {/* Section Editor Modal */}
       {sectionModalOpen && editingSection && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl p-6 shadow-2xl max-h-[90vh] flex flex-col space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
+          <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+              <h3 className="text-sm sm:text-base font-bold text-white">
                 {editingSection.id ? "Edit Custom Row" : "Create Custom Row"}
               </h3>
               <button
@@ -835,7 +836,8 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               </button>
             </div>
 
-            <div className="overflow-y-auto space-y-4 flex-1 pr-1 custom-scrollbar">
+            {/* Scrollable Body Container with min-h-0 */}
+            <div className="overflow-y-auto space-y-4 flex-1 min-h-0 px-4 sm:px-6 py-3.5 sm:py-4 custom-scrollbar">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-zinc-400 uppercase">Row Title</label>
@@ -864,7 +866,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 <label className="text-xs font-semibold text-zinc-400 uppercase block mb-1.5">
                   Optional Row Icon
                 </label>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 max-h-24 sm:max-h-none overflow-y-auto custom-scrollbar p-0.5">
                   {[
                     { id: "Film", label: "Film", IconComp: Film },
                     { id: "Sparkles", label: "Sparkles", IconComp: Sparkles },
@@ -925,15 +927,15 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 )}
 
                 {pickerResults.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 rounded-xl bg-black/50 border border-zinc-800/80 custom-scrollbar">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-44 sm:max-h-48 overflow-y-auto p-2 rounded-xl bg-black/50 border border-zinc-800/80 custom-scrollbar">
                     {pickerResults.map((item) => (
                       <div
                         key={`${item.media_type}_${item.id}`}
-                        className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800"
+                        className="flex items-center justify-between gap-2 p-1.5 sm:p-2 rounded-lg bg-zinc-900/60 border border-zinc-800"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           {item.poster_path && <img src={item.poster_path} alt="" className="w-6 h-8 object-cover rounded shrink-0" />}
-                          <p className="text-[11px] font-semibold text-zinc-200 truncate">{item.title}</p>
+                          <p className="text-[11px] font-semibold text-zinc-200 truncate">{item.title || item.name}</p>
                         </div>
                         <button
                           type="button"
@@ -953,9 +955,10 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                             setEditingSection({ ...editingSection, items: [...current, fullItem] });
                             showToast("success", `Added ${item.title || item.name}`);
                           }}
-                          className="p-1 rounded bg-primary text-primary-foreground cursor-pointer shrink-0"
+                          className="p-1.5 sm:p-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer shrink-0"
+                          title="Add to row"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                         </button>
                       </div>
                     ))}
@@ -969,84 +972,96 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                   <label className="text-xs font-semibold text-zinc-400 uppercase">
                     Titles in Row ({editingSection.items?.length || 0})
                   </label>
-                  <span className="text-[10px] text-zinc-500 font-mono">*Drag items or use arrows to reorder</span>
+                  <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline">*Drag items or use arrows to reorder</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {editingSection.items?.map((it: any, itemIdx: number) => (
-                    <div
-                      key={itemIdx}
-                      draggable
-                      onDragStart={() => setDraggedItemIndex(itemIdx)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => {
-                        if (draggedItemIndex === null || draggedItemIndex === itemIdx) return;
-                        const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
-                        const [moved] = current.splice(draggedItemIndex, 1);
-                        current.splice(itemIdx, 0, moved);
-                        setEditingSection({ ...editingSection, items: current });
-                        setDraggedItemIndex(null);
-                      }}
-                      className={`flex items-center justify-between gap-2 p-2 rounded-xl border transition-all ${
-                        draggedItemIndex === itemIdx
-                          ? "bg-sky-500/10 border-sky-500/60 opacity-60"
-                          : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <GripVertical className="w-3.5 h-3.5 text-zinc-500 shrink-0 cursor-grab active:cursor-grabbing" />
-                        <span className="text-xs font-semibold text-zinc-200 truncate">{it.title || it.name}</span>
-                      </div>
+                {(!editingSection.items || editingSection.items.length === 0) ? (
+                  <p className="text-xs text-zinc-500 italic py-2">No titles added yet. Search above to add items to this row.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {editingSection.items?.map((it: any, itemIdx: number) => (
+                      <div
+                        key={itemIdx}
+                        draggable
+                        onDragStart={() => setDraggedItemIndex(itemIdx)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (draggedItemIndex === null || draggedItemIndex === itemIdx) return;
+                          const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
+                          const [moved] = current.splice(draggedItemIndex, 1);
+                          current.splice(itemIdx, 0, moved);
+                          setEditingSection({ ...editingSection, items: current });
+                          setDraggedItemIndex(null);
+                        }}
+                        className={`flex items-center justify-between gap-2 p-2 rounded-xl border transition-all ${
+                          draggedItemIndex === itemIdx
+                            ? "bg-sky-500/10 border-sky-500/60 opacity-60"
+                            : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <GripVertical className="w-3.5 h-3.5 text-zinc-500 shrink-0 cursor-grab active:cursor-grabbing hidden sm:block" />
+                          {it.poster_path && (
+                            <img
+                              src={it.poster_path.startsWith('http') ? it.poster_path : `https://image.tmdb.org/t/p/w92${it.poster_path}`}
+                              alt=""
+                              className="w-6 h-8 object-cover rounded shrink-0 bg-zinc-800"
+                            />
+                          )}
+                          <span className="text-xs font-semibold text-zinc-200 truncate">{it.title || it.name}</span>
+                        </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          disabled={itemIdx === 0}
-                          onClick={() => {
-                            const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
-                            const temp = current[itemIdx];
-                            current[itemIdx] = current[itemIdx - 1];
-                            current[itemIdx - 1] = temp;
-                            setEditingSection({ ...editingSection, items: current });
-                          }}
-                          className="p-1 rounded bg-black/50 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
-                          title="Move Left/Up"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={itemIdx === (editingSection.items?.length || 0) - 1}
-                          onClick={() => {
-                            const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
-                            const temp = current[itemIdx];
-                            current[itemIdx] = current[itemIdx + 1];
-                            current[itemIdx + 1] = temp;
-                            setEditingSection({ ...editingSection, items: current });
-                          }}
-                          className="p-1 rounded bg-black/50 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
-                          title="Move Right/Down"
-                        >
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newItems = editingSection.items.filter((_: any, i: number) => i !== itemIdx);
-                            setEditingSection({ ...editingSection, items: newItems });
-                          }}
-                          className="text-rose-400 hover:bg-rose-500/10 p-1 rounded cursor-pointer transition-colors"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            disabled={itemIdx === 0}
+                            onClick={() => {
+                              const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
+                              const temp = current[itemIdx];
+                              current[itemIdx] = current[itemIdx - 1];
+                              current[itemIdx - 1] = temp;
+                              setEditingSection({ ...editingSection, items: current });
+                            }}
+                            className="p-1.5 sm:p-1 rounded bg-black/50 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                            title="Move Left/Up"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={itemIdx === (editingSection.items?.length || 0) - 1}
+                            onClick={() => {
+                              const current = Array.isArray(editingSection.items) ? [...editingSection.items] : [];
+                              const temp = current[itemIdx];
+                              current[itemIdx] = current[itemIdx + 1];
+                              current[itemIdx + 1] = temp;
+                              setEditingSection({ ...editingSection, items: current });
+                            }}
+                            className="p-1.5 sm:p-1 rounded bg-black/50 text-zinc-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                            title="Move Right/Down"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newItems = editingSection.items.filter((_: any, i: number) => i !== itemIdx);
+                              setEditingSection({ ...editingSection, items: newItems });
+                            }}
+                            className="text-rose-400 hover:bg-rose-500/10 p-1.5 sm:p-1 rounded cursor-pointer transition-colors"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-zinc-800">
+            {/* Sticky Modal Footer */}
+            <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
               <button
                 type="button"
                 onClick={() => setSectionModalOpen(false)}
@@ -1095,7 +1110,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     showToast("error", errJson.error || "Failed to save section");
                   }
                 }}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer active:scale-95 transition-all"
               >
                 <Save className="w-4 h-4" />
                 <span>Save Row</span>
@@ -1321,6 +1336,9 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 body: JSON.stringify(spotlight),
               });
               if (res.ok) {
+                try {
+                  window.dispatchEvent(new CustomEvent("sv:spotlight-updated", { detail: spotlight }));
+                } catch {}
                 showToast("success", "Spotlight settings saved!");
               } else {
                 showToast("error", "Failed to save spotlight");
@@ -1612,10 +1630,11 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
       {/* Franchise Editor Modal */}
       {franchiseModalOpen && editingFranchise && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl p-6 shadow-2xl max-h-[90vh] flex flex-col space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
+          <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+              <h3 className="text-sm sm:text-base font-bold text-white">
                 {editingFranchise.id ? "Edit Franchise Collection" : "Create Franchise Collection"}
               </h3>
               <button
@@ -1627,7 +1646,8 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               </button>
             </div>
 
-            <div className="overflow-y-auto space-y-4 flex-1 pr-1 custom-scrollbar">
+            {/* Scrollable Body */}
+            <div className="overflow-y-auto space-y-4 flex-1 min-h-0 px-4 sm:px-6 py-3.5 sm:py-4 custom-scrollbar">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-zinc-400 uppercase">Collection Name</label>
@@ -1680,7 +1700,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 />
 
                 {pickerResults.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 rounded-xl bg-black/50 border border-zinc-800/80 custom-scrollbar">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 rounded-xl bg-black/50 border border-zinc-800/80 custom-scrollbar">
                     {pickerResults.map((item) => (
                       <div
                         key={`${item.media_type}_${item.id}`}
@@ -1700,9 +1720,10 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                             }
                             showToast("success", `Added ${item.title}`);
                           }}
-                          className="p-1 rounded bg-primary text-primary-foreground cursor-pointer shrink-0"
+                          className="p-1.5 sm:p-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer shrink-0"
+                          title="Add to Franchise"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                         </button>
                       </div>
                     ))}
@@ -1715,27 +1736,33 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 <label className="text-xs font-semibold text-zinc-400 uppercase">
                   Entries in Collection ({editingFranchise.parts?.length || 0})
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {editingFranchise.parts?.map((pt: any, ptIdx: number) => (
-                    <div key={ptIdx} className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                      <span className="text-xs font-semibold text-zinc-200 truncate">{pt.title || pt.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newParts = editingFranchise.parts.filter((_: any, i: number) => i !== ptIdx);
-                          setEditingFranchise({ ...editingFranchise, parts: newParts });
-                        }}
-                        className="text-rose-400 p-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                {(!editingFranchise.parts || editingFranchise.parts.length === 0) ? (
+                  <p className="text-xs text-zinc-500 italic py-2">No entries added yet. Search above to add items.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {editingFranchise.parts?.map((pt: any, ptIdx: number) => (
+                      <div key={ptIdx} className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                        <span className="text-xs font-semibold text-zinc-200 truncate">{pt.title || pt.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newParts = editingFranchise.parts.filter((_: any, i: number) => i !== ptIdx);
+                            setEditingFranchise({ ...editingFranchise, parts: newParts });
+                          }}
+                          className="text-rose-400 hover:bg-rose-500/10 p-1.5 sm:p-1 rounded cursor-pointer transition-colors"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-zinc-800">
+            {/* Sticky Modal Footer */}
+            <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
               <button
                 type="button"
                 onClick={() => setFranchiseModalOpen(false)}
@@ -1764,7 +1791,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     showToast("error", "Failed to save collection");
                   }
                 }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer active:scale-95 transition-all"
               >
                 <Save className="w-4 h-4" />
                 <span>Save Collection</span>
@@ -1983,14 +2010,14 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
         {/* Theme Studio Modal */}
         {themeModalOpen && editingTheme && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="relative w-full max-w-2xl bg-[#0D1117] border border-zinc-800 rounded-2xl p-6 shadow-2xl max-h-[92vh] flex flex-col space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
+            <div className="relative w-full max-w-2xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
                 <div className="flex items-center gap-2.5">
                   <Palette className="w-4 h-4 text-fuchsia-400" />
                   <div>
-                    <h3 className="text-base font-bold text-white">Theme Creator Studio</h3>
-                    <p className="text-xs text-zinc-400">Build a custom color palette</p>
+                    <h3 className="text-sm sm:text-base font-bold text-white">Theme Creator Studio</h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-400">Build a custom color palette</p>
                   </div>
                 </div>
 
@@ -2003,7 +2030,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 </button>
               </div>
 
-              <div className="overflow-y-auto space-y-4 flex-1 pr-1 custom-scrollbar">
+              <div className="overflow-y-auto space-y-4 flex-1 min-h-0 px-4 sm:px-6 py-3.5 sm:py-4 custom-scrollbar">
                 {/* Name & Tagline */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -2046,21 +2073,6 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                       <span className="text-xs font-bold text-white block">Starter Pack Templates</span>
                       <span className="text-[11px] text-zinc-400">Pick a pre-harmonized starter pack base, then customize every detail below</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const harmonized = harmonizeAccentToCineStreamTheme(editingTheme.primary || "#38BDF8", "midnight");
-                        setEditingTheme({
-                          ...editingTheme,
-                          ...harmonized,
-                        });
-                        showToast("success", "Auto-harmonized current accent color!");
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Auto-Tune Accent</span>
-                    </button>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -2146,45 +2158,46 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                           onClick={() => {
                             setEditingTheme({
                               ...editingTheme,
-                              label: editingTheme.id ? editingTheme.label : pack.label,
-                              tagline: editingTheme.id ? editingTheme.tagline : pack.tagline,
-                              description: editingTheme.id ? editingTheme.description : pack.description,
                               background: pack.background,
                               card: pack.card,
                               primary: pack.primary,
                               accent: pack.accent,
                               foreground: pack.foreground,
                             });
-                            showToast("success", `Loaded ${pack.label} starter pack!`);
+                            previewCustomTheme({
+                              ...editingTheme,
+                              background: pack.background,
+                              card: pack.card,
+                              primary: pack.primary,
+                              accent: pack.accent,
+                              foreground: pack.foreground,
+                            });
                           }}
-                          className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer group ${
+                          className={`flex flex-col text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-fuchsia-500/10 border-fuchsia-500/40 text-white shadow-sm"
-                              : "bg-black/40 hover:bg-zinc-800/80 border-zinc-800 text-zinc-300"
+                              ? "border-primary bg-primary/10 shadow-sm"
+                              : "border-zinc-800 bg-black/40 hover:border-zinc-700"
                           }`}
                         >
-                          <div className="flex items-center gap-2 mb-1 w-full">
-                            <span className="w-3 h-3 rounded-full border border-white/20 shrink-0" style={{ background: pack.previewGradient }} />
-                            <span className="text-xs font-bold truncate group-hover:text-white transition-colors">{pack.label}</span>
-                          </div>
-                          <span className="text-[10px] text-zinc-400 truncate w-full">{pack.tagline}</span>
+                          <div
+                            className="w-full h-8 rounded-lg mb-2 shadow-inner"
+                            style={{ background: pack.previewGradient }}
+                          />
+                          <span className="text-xs font-bold text-white truncate">{pack.label}</span>
+                          <span className="text-[10px] text-zinc-400">{pack.tagline}</span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Color Pickers */}
-                <div className="space-y-3 pt-2 border-t border-zinc-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-zinc-400 uppercase block">Fine-Tune Color Controls</span>
-                    <span className="text-[10px] text-fuchsia-400 font-mono">*Updates live site in real-time</span>
-                  </div>
-
+                {/* Individual Color Pickers */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold text-white block">Fine-Tune Color Tokens</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-zinc-800">
                       <div>
-                        <span className="text-xs font-semibold text-white block">Background Canvas</span>
+                        <span className="text-xs font-semibold text-white block">Canvas Background</span>
                         <span className="text-[10px] text-zinc-500 font-mono">{editingTheme.background}</span>
                       </div>
                       <input
@@ -2235,7 +2248,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-zinc-800">
                       <div>
-                        <span className="text-xs font-semibold text-white block">Secondary Accent</span>
+                        <span className="text-xs font-semibold text-white block">Secondary Glow</span>
                         <span className="text-[10px] text-zinc-500 font-mono">{editingTheme.accent}</span>
                       </div>
                       <input
@@ -2249,39 +2262,22 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                         className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
                       />
                     </div>
-
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-zinc-800 sm:col-span-2">
-                      <div>
-                        <span className="text-xs font-semibold text-white block">Text & Headings</span>
-                        <span className="text-[10px] text-zinc-500 font-mono">{editingTheme.foreground}</span>
-                      </div>
-                      <input
-                        type="color"
-                        value={editingTheme.foreground}
-                        onChange={(e) => {
-                          const updated = { ...editingTheme, foreground: e.target.value };
-                          setEditingTheme(updated);
-                          previewCustomTheme(updated);
-                        }}
-                        className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
-                      />
-                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-zinc-800">
+              {/* Actions Sticky Footer */}
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
                 <button
                   type="button"
                   onClick={() => {
                     previewCustomTheme(editingTheme);
                     onClose();
                   }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer border border-zinc-700/80 transition-colors"
+                  className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer border border-zinc-700/80 transition-colors"
                 >
                   <Eye className="w-4 h-4 text-sky-400" />
-                  <span>Live Site Preview</span>
+                  <span>Live Preview</span>
                 </button>
 
                 <div className="flex items-center gap-2 ml-auto">
@@ -2443,7 +2439,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   return (
     <>
       {renderPreviewBanner()}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto">
         {/* Backdrop */}
         <div 
           className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300"
@@ -2452,32 +2448,32 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
         {/* Main Modal Shell */}
         <div 
-          className="relative w-full max-w-5xl bg-[#090D16] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-auto max-h-[92vh]"
+          className="relative w-full max-w-5xl bg-[#090D16] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-auto max-h-[96vh] sm:max-h-[92vh] h-[96vh] sm:h-auto"
           role="dialog"
           aria-modal="true"
         >
           {/* Modal Top Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/40">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                <ShieldCheck className="w-5 h-5" />
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 bg-zinc-900/40 shrink-0">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  <h2 className="text-sm sm:text-lg font-bold text-white tracking-tight truncate">
                     CineStream Admin Console
                   </h2>
-                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <span className="text-[9px] sm:text-[10px] uppercase font-mono px-1.5 sm:px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
                     Admin
                   </span>
                 </div>
-                <p className="text-xs text-zinc-400">Database-driven management & platform controls</p>
+                <p className="text-[11px] sm:text-xs text-zinc-400 truncate hidden sm:block">Database-driven management & platform controls</p>
               </div>
             </div>
 
             <button
               onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer"
+              className="p-1.5 sm:p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer shrink-0"
               aria-label="Close modal"
             >
               <X className="w-5 h-5" />
@@ -2485,9 +2481,9 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
           </div>
 
           {/* Modal Body with Sidebar Tabs + Content Area */}
-          <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+          <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
             {/* Left Tab Navigation */}
-            <div className="w-full md:w-56 lg:w-60 bg-zinc-950/60 border-b md:border-b-0 md:border-r border-zinc-800 p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto shrink-0 custom-scrollbar">
+            <div className="w-full md:w-56 lg:w-60 bg-zinc-950/60 border-b md:border-b-0 md:border-r border-zinc-800 p-2 sm:p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto shrink-0 custom-scrollbar flex-nowrap">
               {[
                 { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
                 { id: "announcements", label: "Announcements", icon: Megaphone, badge: currentAnnouncement ? "Live" : null },
@@ -2506,13 +2502,13 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id as AdminTab)}
-                    className={`flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 md:w-full ${
+                    className={`flex items-center justify-between gap-2.5 sm:gap-3 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 md:w-full ${
                       isActive
                         ? "bg-zinc-800 text-white border border-zinc-700/80 shadow-sm"
                         : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/60"
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2 sm:gap-2.5">
                       <Icon className={`w-4 h-4 ${isActive ? "text-amber-400" : "text-zinc-400"}`} />
                       <span>{tab.label}</span>
                     </div>
@@ -2528,7 +2524,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
             </div>
 
             {/* Right Content Panel */}
-            <div className="flex-1 p-5 sm:p-6 overflow-y-auto custom-scrollbar bg-black/20">
+            <div className="flex-1 min-h-0 p-3.5 sm:p-6 overflow-y-auto custom-scrollbar bg-black/20">
               {activeTab === "dashboard" && renderDashboardTab()}
               {activeTab === "announcements" && renderAnnouncementsTab()}
               {activeTab === "sections" && renderSectionsTab()}
@@ -2553,12 +2549,12 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
           </div>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-between px-6 py-3 border-t border-zinc-800 bg-zinc-900/40 text-[11px] text-zinc-500">
-            <span>Database-verified administrator console</span>
+          <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 border-t border-zinc-800 bg-zinc-900/40 text-[10px] sm:text-[11px] text-zinc-500 shrink-0">
+            <span className="truncate">Database-verified administrator console</span>
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className="px-2.5 sm:px-3 py-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer shrink-0"
             >
               Close Console
             </button>

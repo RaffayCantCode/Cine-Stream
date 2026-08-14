@@ -26,11 +26,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 3",
-    baseUrl: "https://cinesrc.st",
-    type: "cinesrc",
-    quality: "Good",
+    baseUrl: "https://player.videasy.net",
+    type: "videasy",
+    quality: "Best",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://cinesrc.st",
+    healthCheckUrl: "https://player.videasy.net",
   },
   {
     name: "Source 4",
@@ -52,6 +52,10 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
 
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): string {
   switch (api.type) {
+    case "videasy":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
     case "embedmaster":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
@@ -59,10 +63,6 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
     case "vixsrc":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
-
-    case "cinesrc":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}?quality=1080`;
-      return `${api.baseUrl}/embed/tv/${id}?s=${season ?? 1}&e=${episode ?? 1}&quality=1080`;
 
     case "vidsrc":
       if (type === "movie") return `${api.baseUrl}/embed/movie?tmdb=${id}`;

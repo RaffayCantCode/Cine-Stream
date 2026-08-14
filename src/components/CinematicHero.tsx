@@ -37,7 +37,7 @@ export function CinematicHero({
   trailerId,
   fallbackTrailerIds = [],
   title,
-  height = "h-[62vh] md:h-[75vh]",
+  height = "min-h-[560px] sm:min-h-[600px] md:h-[75vh] md:min-h-[540px]",
   theme = "movie",
   children,
 }: CinematicHeroProps) {
@@ -597,7 +597,7 @@ export function CinematicHero({
 
       {/* ── Content Wrapper ────── */}
       <CinematicHeroContext.Provider value={{ playTrailer, hasTrailer: Boolean(activeTrailerId) }}>
-        <div className={`relative z-20 w-full ${height} flex items-end pt-12 md:pt-16 pb-4 md:pb-6`}>
+        <div className={`relative z-20 w-full ${height} flex flex-col justify-end pt-20 sm:pt-24 md:pt-16 pb-6 md:pb-8`}>
           <div className={`w-full transition-opacity duration-1000 ${trailerVisible && isAtTop && !isMobile ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
             {children}
           </div>

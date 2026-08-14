@@ -80,6 +80,7 @@ interface ThemeSliderProps {
 
 function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: ThemeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const customTrackRef = useRef<HTMLDivElement>(null);
   const allThemes = useMemo(() => [...THEMES, ...customThemes], [customThemes]);
   const [index, setIndex] = useState(() => Math.max(0, allThemes.findIndex((t) => t.id === current)));
 
@@ -97,30 +98,48 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
     onSelect(allThemes[i].id);
   };
 
+  const initialOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
-    const el = trackRef.current?.querySelector<HTMLElement>(`[data-theme="${current}"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [open, index, current]);
+    if (!open) {
+      initialOpenRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      const el = trackRef.current?.querySelector<HTMLElement>(`[data-theme="${current}"]`) ||
+                 customTrackRef.current?.querySelector<HTMLElement>(`[data-theme="${current}"]`);
+      if (el) {
+        el.scrollIntoView({
+          behavior: initialOpenRef.current ? "smooth" : "auto",
+          block: "nearest",
+          inline: "center",
+        });
+        initialOpenRef.current = true;
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [open, current]);
 
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[60] flex items-center justify-center p-4 transition-opacity duration-200",
-        open ? "opacity-100" : "pointer-events-none opacity-0"
+        "fixed inset-0 z-[60] flex items-center justify-center p-4 transition-all duration-300 ease-out",
+        open ? "opacity-100 backdrop-blur-md" : "pointer-events-none opacity-0"
       )}
       role="dialog"
       aria-modal="true"
       aria-label="Theme selection"
     >
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300" onClick={onClose} />
 
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-zinc-800 bg-[#090D16] shadow-2xl backdrop-blur-xl animate-fade-in-up">
+      <div className={cn(
+        "relative w-full max-w-2xl overflow-hidden rounded-2xl border border-zinc-800 bg-[#090D16] shadow-2xl backdrop-blur-xl transition-all duration-300 ease-out",
+        open ? "scale-100 translate-y-0 opacity-100" : "scale-95 translate-y-4 opacity-0"
+      )}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-zinc-800 bg-zinc-900/40">
           <div className="flex items-center gap-3">
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-200"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-200 shadow-inner"
             >
               <Palette className="w-4 h-4" />
             </div>
@@ -134,8 +153,8 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
                 )}
               </div>
               <p className="text-xs text-zinc-400 flex items-center gap-1.5 mt-0.5">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: active.accent }} />
-                <span style={{ color: active.accent }} className="font-semibold">{active.label}</span>
+                <span className="inline-block h-2 w-2 rounded-full transition-colors duration-300" style={{ background: active.accent }} />
+                <span style={{ color: active.accent }} className="font-semibold transition-colors duration-300">{active.label}</span>
                 <span>– applies live instantly</span>
               </p>
             </div>
@@ -153,32 +172,31 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
         {/* Large live preview stage */}
         <div className="px-5 sm:px-6 pt-5">
           <div
-            key={active.id}
-            className="relative overflow-hidden rounded-xl border border-white/10 shadow-lg p-5"
+            className="relative overflow-hidden rounded-xl border border-white/10 shadow-lg p-5 transition-all duration-300 ease-out"
             style={{ background: active.preview }}
           >
             {/* Top Bar Preview */}
             <div className="flex items-center justify-between text-xs mb-4">
               <span
-                className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shadow"
+                className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shadow transition-colors duration-300"
                 style={{ backgroundColor: active.accent, color: "#000" }}
               >
                 {active.tagline || "Theme Preview"}
               </span>
-              <span className="text-xs font-semibold text-white/90">
+              <span className="text-xs font-semibold text-white/90 transition-all duration-300">
                 {active.label}
               </span>
             </div>
 
             {/* Content Card Preview */}
-            <div className="p-4 rounded-xl border border-white/10 bg-black/40 backdrop-blur-md flex items-center justify-between">
+            <div className="p-4 rounded-xl border border-white/10 bg-black/40 backdrop-blur-md flex items-center justify-between transition-all duration-300">
               <div className="space-y-1.5">
                 <div className="h-3 w-32 rounded bg-white/50" />
                 <div className="h-2 w-20 rounded bg-white/30" />
               </div>
               <button
                 type="button"
-                className="px-3.5 py-1.5 rounded-lg text-xs font-bold shadow"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-bold shadow transition-all duration-300"
                 style={{ backgroundColor: active.accent, color: "#000" }}
               >
                 Watch Now
@@ -190,21 +208,21 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
         {/* Description + controls */}
         <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-4">
           <div className="min-w-0">
-            <p className="text-sm font-bold text-white tracking-tight">{active.label}</p>
-            <p className="text-xs text-zinc-400 line-clamp-1">{active.description}</p>
+            <p className="text-sm font-bold text-white tracking-tight transition-colors duration-300">{active.label}</p>
+            <p className="text-xs text-zinc-400 line-clamp-1 transition-colors duration-300">{active.description}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               onClick={prev}
               aria-label="Previous theme"
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={next}
               aria-label="Next theme"
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -228,14 +246,14 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
                 onClick={() => onSelect(t.id)}
                 aria-pressed={isActive}
                 className={cn(
-                  "group relative flex shrink-0 snap-center flex-col gap-1.5 rounded-xl p-2 text-left transition-colors cursor-pointer",
+                  "group relative flex shrink-0 snap-center flex-col gap-1.5 rounded-xl p-2 text-left transition-all duration-200 cursor-pointer active:scale-95",
                   isActive
-                    ? "bg-zinc-900 border border-primary text-white"
+                    ? "bg-zinc-900 border border-primary ring-2 ring-primary/30 text-white shadow-lg"
                     : "bg-zinc-950/60 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200"
                 )}
               >
                 <span
-                  className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10 relative p-1.5 shadow-inner"
+                  className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10 relative p-1.5 shadow-inner transition-transform duration-200 group-hover:scale-105"
                   style={{ background: t.preview }}
                 >
                   <span
@@ -264,7 +282,7 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
                 Live Admin Creations
               </span>
             </div>
-            <div className="hide-scrollbar flex gap-2.5 overflow-x-auto pb-3 snap-x">
+            <div ref={customTrackRef} className="hide-scrollbar flex gap-2.5 overflow-x-auto pb-3 snap-x">
               {customThemes.map((ct) => {
                 const isCustomActive = current === ct.id;
                 return (
@@ -275,14 +293,14 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
                     onClick={() => onSelect(ct.id)}
                     aria-pressed={isCustomActive}
                     className={cn(
-                      "group relative flex shrink-0 snap-center flex-col gap-1.5 rounded-xl p-2 text-left transition-colors cursor-pointer",
+                      "group relative flex shrink-0 snap-center flex-col gap-1.5 rounded-xl p-2 text-left transition-all duration-200 cursor-pointer active:scale-95",
                       isCustomActive
-                        ? "bg-zinc-900 border border-amber-500 text-white"
+                        ? "bg-zinc-900 border border-amber-500 ring-2 ring-amber-500/30 text-white shadow-lg"
                         : "bg-zinc-950/60 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200"
                     )}
                   >
                     <span
-                      className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10 relative p-1.5 shadow-inner"
+                      className="block h-12 w-20 rounded-lg overflow-hidden border border-white/10 relative p-1.5 shadow-inner transition-transform duration-200 group-hover:scale-105"
                       style={{ backgroundColor: ct.background || "#090E17" }}
                     >
                       <span
@@ -312,7 +330,7 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
           </p>
           <button
             onClick={() => onSelect(DEFAULT_THEME)}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-white active:scale-95 transition-all cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {isDefault ? "Default" : "Reset to Default"}

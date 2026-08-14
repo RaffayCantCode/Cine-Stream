@@ -1484,22 +1484,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     }
   }, [authStatus, anime, id, currentSeasonId]);
 
-  const [episodeView, setEpisodeView] = useState<EpisodeViewMode>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("sv_anime_view_mode");
-        if (saved === "list" || saved === "grid" || saved === "numbers") return saved;
-        const legacy = localStorage.getItem("sv_anime_grid_mode");
-        if (legacy === "true") return "grid";
-        if (legacy === "false") return "list";
-      } catch {}
-    }
-    return "grid";
-  });
+  const [episodeView, setEpisodeView] = useState<EpisodeViewMode>("grid");
 
   const handleViewChange = useCallback((view: EpisodeViewMode) => {
     setEpisodeView(view);
-    try { localStorage.setItem("sv_anime_view_mode", view); } catch {}
   }, []);
 
   // ── Derived state ───────────────────────────────────────────────────────
@@ -1772,33 +1760,33 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               title={displayTitle}
               theme="anime"
             >
-              <div className="relative z-10 pb-6 md:pb-8 px-5 md:px-12 flex flex-row items-center gap-4 sm:gap-6 md:gap-8 max-w-screen-2xl mx-auto w-full">
+              <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-12 flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 max-w-screen-2xl mx-auto w-full">
                 <div
-                  className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
+                  className="shrink-0 w-24 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
                   <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
                 </div>
 
-                <div className="flex-1 space-y-3">
+                <div className="flex-1 space-y-2 sm:space-y-3 min-w-0">
                   <div>
                     <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
                     {anime.jname && (
-                      <p className="text-primary/90 font-semibold italic text-sm md:text-base mt-1 select-text">{anime.jname}</p>
+                      <p className="text-primary/90 font-semibold italic text-xs sm:text-sm md:text-base mt-0.5 sm:mt-1 select-text">{anime.jname}</p>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
                     {animeScore > 0 && (
                       <div className={`flex items-center gap-1.5 font-black ${animeScoreColor}`}>
-                        <Star className="w-5 h-5 fill-current" />
-                        <span className="text-2xl leading-none">{animeScore.toFixed(1)}</span>
-                        <span className="text-white/40 font-bold text-xs">/ 10</span>
+                        <Star className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+                        <span className="text-lg sm:text-2xl leading-none">{animeScore.toFixed(1)}</span>
+                        <span className="text-white/40 font-bold text-[10px] sm:text-xs">/ 10</span>
                       </div>
                     )}
                     {displayStatus && (() => {
                       const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
                       return (
-                        <span className={`text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase border ${
+                        <span className={`text-[9px] sm:text-[10px] font-bold tracking-widest px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full uppercase border ${
                           formatted.style === "airing"
                             ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30"
                             : formatted.style === "upcoming"
@@ -1808,43 +1796,43 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       );
                     })()}
                     {anime.type && (
-                      <span className="px-2.5 py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70">{anime.type}</span>
+                      <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70">{anime.type}</span>
                     )}
-                    <div className="flex flex-wrap gap-1.5 ml-1">
+                    <div className="flex flex-wrap gap-1.5 ml-0.5">
                       {anime.genres?.slice(0, 5).map(g => (
-                        <span key={g} className="px-2.5 py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70">{g}</span>
+                        <span key={g} className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70">{g}</span>
                       ))}
                     </div>
                   </div>
 
                   {animeDescription && (
                     <div>
-                      <p className={cn("text-white/65 text-base leading-relaxed max-w-2xl select-text", isLongDescription && !descExpanded && "line-clamp-3")}>
+                      <p className={cn("text-white/65 text-xs sm:text-sm md:text-base leading-relaxed max-w-2xl select-text", isLongDescription && !descExpanded && "line-clamp-2 sm:line-clamp-3")}>
                         {animeDescription}
                       </p>
                       {isLongDescription && (
                         <button
                           onClick={() => setDescExpanded(v => !v)}
-                          className="mt-1.5 inline-flex items-center gap-1 text-primary hover:text-primary/85 text-sm font-bold transition-colors"
+                          className="mt-1 inline-flex items-center gap-1 text-primary hover:text-primary/85 text-xs sm:text-sm font-bold transition-colors"
                         >
                           {descExpanded ? "Read less" : "Read more"}
-                          <ChevronDown className={cn("w-4 h-4 transition-transform", descExpanded && "rotate-180")} />
+                          <ChevronDown className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform", descExpanded && "rotate-180")} />
                         </button>
                       )}
                     </div>
                   )}
 
-                    <div>
+                    <div className="pt-1">
                       {currentSeasonEps.length > 0 ? (
-                        <div className="flex items-center flex-wrap gap-4 w-full">
+                        <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
                           <button
                             onClick={() => {
                               const first = currentSeasonEps.find(ep => ep.isReleased !== false) || currentSeasonEps[0];
                               if (first) handleWatchEpisode(first);
                             }}
-                            className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-black/30"
+                            className="group flex items-center gap-2 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm transition-all duration-200 shadow-xl shadow-black/30"
                           >
-                            <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
+                            <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current group-hover:scale-110 transition-transform" />
                             {isMovieFormat
                               ? `Watch ${currentSeasonEps.length > 1 ? `Movie ${currentSeasonEps[0]?.episodeNum || 1}` : "Movie"}`
                               : `Watch Ep ${selectedEp?.episodeNum || currentSeasonEps[0]?.episodeNum || 1}`
@@ -1867,7 +1855,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 w-full">
-                          <button disabled className="flex items-center gap-2.5 bg-white/10 text-white/30 font-bold px-8 py-4 rounded-xl text-sm cursor-not-allowed">
+                          <button disabled className="flex items-center gap-2 bg-white/10 text-white/30 font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm cursor-not-allowed">
                             No Episodes Available
                           </button>
                           <AnimeHeroTrailerButton />

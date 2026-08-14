@@ -207,7 +207,7 @@ export default function MovieClient() {
           title={movie.title}
           theme="movie"
         >
-          <div className="pb-6 md:pb-8 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 items-center">
+          <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-5 md:gap-6 items-start md:items-center">
           {posterUrl && (
             <div
               className="hidden md:block shrink-0"
@@ -224,46 +224,45 @@ export default function MovieClient() {
             </div>
           )}
 
-          <div className="flex-1 space-y-3">
-            <div
-            >
-              <h1 className="font-bold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1.5">
+          <div className="flex-1 space-y-2.5 sm:space-y-3 w-full">
+            <div>
+              <h1 className="font-bold text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1">
                 {movie.title}
               </h1>
               {movie.tagline && (
-                <p className="text-red-500 font-bold italic text-sm md:text-base tracking-wide drop-shadow-[0_2px_12px_rgba(239,68,68,0.4)]">
+                <p className="text-red-500 font-bold italic text-xs sm:text-sm md:text-base tracking-wide drop-shadow-[0_2px_12px_rgba(239,68,68,0.4)]">
                   {movie.tagline}
                 </p>
               )}
             </div>
 
             <div
-              className="flex flex-wrap items-center gap-3 text-sm"
+              className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm"
             >
               {score > 0 && movie.vote_count && movie.vote_count > 20 && (
                 <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
-                  <Star className="w-4 h-4 fill-current" />
-                  <span className="text-base">{score.toFixed(1)}</span>
-                  <span className="text-white/30 font-normal text-xs">/ 10</span>
+                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
+                  <span className="text-sm sm:text-base">{score.toFixed(1)}</span>
+                  <span className="text-white/30 font-normal text-[10px] sm:text-xs">/ 10</span>
                 </div>
               )}
               {movie.release_date && (
                 <span className="flex items-center gap-1.5 text-white/40 font-medium">
-                  <Calendar className="w-3.5 h-3.5" />
+                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   {format(new Date(movie.release_date), "yyyy")}
                 </span>
               )}
               {movie.runtime ? (
                 <span className="flex items-center gap-1.5 text-white/40 font-medium">
-                  <Clock className="w-3.5 h-3.5" />
+                  <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
                 </span>
               ) : null}
-              <div className="flex flex-wrap gap-1.5 ml-1">
+              <div className="flex flex-wrap gap-1.5 ml-0.5">
                 {movie.genres?.map((g) => (
                   <span
                     key={g.id}
-                    className="px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70"
+                    className="px-2 sm:px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70"
                   >
                     {g.name}
                   </span>
@@ -272,17 +271,17 @@ export default function MovieClient() {
             </div>
 
             <p
-              className="text-white/65 text-sm md:text-base leading-relaxed max-w-2xl line-clamp-3"
+              className="text-white/65 text-xs sm:text-sm md:text-base leading-relaxed max-w-2xl line-clamp-2 sm:line-clamp-3"
             >
               {movie.overview}
             </p>
 
-            <div className="flex items-center flex-wrap gap-4 w-full">
+            <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full pt-1">
               <button
                 onClick={handleWatch}
-                className="group flex items-center gap-2.5 bg-[#E11D48] hover:bg-[#F43F5E] text-white font-extrabold px-8 py-4 rounded-xl text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 border border-rose-400/20 cursor-pointer"
+                className="group flex items-center gap-2 bg-[#E11D48] hover:bg-[#F43F5E] text-white font-extrabold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 border border-rose-400/20 cursor-pointer"
               >
-                <Play className="w-5 h-5 fill-current ml-0.5 group-hover:scale-110 transition-transform text-white" />
+                <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 group-hover:scale-110 transition-transform text-white" />
                 Watch Now
               </button>
 

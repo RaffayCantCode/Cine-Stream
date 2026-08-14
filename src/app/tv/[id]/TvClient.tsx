@@ -90,20 +90,11 @@ export default function TvClient() {
   const [hasActiveProgress, setHasActiveProgress] = useState(false);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
-  const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("sv_tv_view_mode");
-        if (saved === "list" || saved === "grid") return saved;
-      } catch {}
-    }
-    return "list";
-  });
+  const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>("list");
   usePageContentReady(!isLoading);
 
   const handleTvViewChange = (view: EpisodeViewMode) => {
     setTvViewMode(view);
-    try { localStorage.setItem("sv_tv_view_mode", view); } catch {}
   };
 
   useEffect(() => {
@@ -498,7 +489,7 @@ export default function TvClient() {
         title={show.name}
         theme="tv"
       >
-        <div className="pb-6 md:pb-8 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 items-center">
+        <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-5 md:gap-6 items-start md:items-center">
           {posterUrl && (
             <img
               src={posterUrl}
@@ -511,31 +502,31 @@ export default function TvClient() {
             />
           )}
 
-          <div className="flex-1 space-y-3">
+          <div className="flex-1 space-y-2.5 sm:space-y-3 w-full">
             <div>
-              <h1 className="font-bold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1.5 select-text">
+              <h1 className="font-bold text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1 select-text">
                 {show.name}
               </h1>
               {show.tagline && (
-                <p className="text-primary/90 font-semibold italic text-sm md:text-base select-text">
+                <p className="text-primary/90 font-semibold italic text-xs sm:text-sm md:text-base select-text">
                   {show.tagline}
                 </p>
               )}
             </div>
 
             <div
-              className="flex flex-wrap items-center gap-3 text-sm"
+              className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm"
             >
               {score > 0 && show.vote_count && show.vote_count > 20 && (
                 <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
-                  <Star className="w-4 h-4 fill-current" />
-                  <span className="text-base">{score.toFixed(1)}</span>
-                  <span className="text-white/30 font-normal text-xs">/ 10</span>
+                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
+                  <span className="text-sm sm:text-base">{score.toFixed(1)}</span>
+                  <span className="text-white/30 font-normal text-[10px] sm:text-xs">/ 10</span>
                 </div>
               )}
               {show.first_air_date && (
                 <span className="flex items-center gap-1.5 text-white/40 font-medium">
-                  <Calendar className="w-3.5 h-3.5" />
+                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   {format(new Date(show.first_air_date), "yyyy")}
                 </span>
               )}
@@ -544,11 +535,11 @@ export default function TvClient() {
                   {show.number_of_seasons} Season{show.number_of_seasons > 1 ? "s" : ""}
                 </span>
               )}
-              <div className="flex flex-wrap gap-1.5 ml-1">
+              <div className="flex flex-wrap gap-1.5 ml-0.5">
                 {show.genres?.map((g) => (
                   <span
                     key={g.id}
-                    className="px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-xs font-semibold text-white/70"
+                    className="px-2 sm:px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70"
                   >
                     {g.name}
                   </span>
@@ -557,12 +548,12 @@ export default function TvClient() {
             </div>
 
             <p
-              className="text-white/65 text-sm md:text-base leading-relaxed max-w-2xl select-text line-clamp-3"
+              className="text-white/65 text-xs sm:text-sm md:text-base leading-relaxed max-w-2xl select-text line-clamp-2 sm:line-clamp-3"
             >
               {show.overview}
             </p>
 
-            <div className="flex items-center flex-wrap gap-4 w-full">
+            <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full pt-1">
               <button
                 onClick={() => {
                   const ep = playingSeason === selectedSeason 
@@ -570,13 +561,13 @@ export default function TvClient() {
                     : null;
                   handleWatchEpisode(playingSeason, playingEpisode, ep?.name);
                 }}
-                className="group flex items-center gap-2.5 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all duration-200 shadow-xl shadow-black/30"
+                className="group flex items-center gap-2 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm transition-all duration-200 shadow-xl shadow-black/30"
               >
-                <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
+                <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current group-hover:scale-110 transition-transform" />
                 Watch S{playingSeason} E{playingEpisode}
               </button>
 
-<WatchlistButton
+              <WatchlistButton
                 mediaId={show.id}
                 mediaType="tv"
                 title={show.name}
@@ -585,8 +576,8 @@ export default function TvClient() {
               />
 
               <TvHeroTrailerButton />
-              </div>
             </div>
+          </div>
         </div>
       </CinematicHero>
 

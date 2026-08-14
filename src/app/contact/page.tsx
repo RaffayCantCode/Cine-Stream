@@ -5,8 +5,10 @@ import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Send, Loader2, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 export default function ContactPage() {
+  const { data: session } = useSession();
   const [topic, setTopic] = useState("");
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -23,7 +25,11 @@ export default function ContactPage() {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: topic.trim(), message: message.trim() }),
+        body: JSON.stringify({
+          topic: topic.trim(),
+          message: message.trim(),
+          userEmail: session?.user?.email || session?.user?.name || undefined,
+        }),
       });
 
       if (!res.ok) {

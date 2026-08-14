@@ -287,20 +287,20 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
           title={collection.name}
           theme="movie"
         >
-          <div className="pb-12 px-5 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="pb-6 sm:pb-12 px-4 sm:px-6 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="max-w-2xl">
               <Link 
                 href="/browse/franchises"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-black/60 hover:bg-white/20 backdrop-blur-xl text-white/90 hover:text-white rounded-full text-xs font-bold transition-all mb-6 border border-white/15 hover:border-white/30 shadow-lg w-fit"
+                className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 bg-black/60 hover:bg-white/20 backdrop-blur-xl text-white/90 hover:text-white rounded-full text-xs font-bold transition-all mb-4 sm:mb-6 border border-white/15 hover:border-white/30 shadow-lg w-fit"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to Franchises
               </Link>
-              <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4 drop-shadow-md">
+              <h1 className="text-2xl sm:text-4xl md:text-6xl font-black tracking-tight text-white mb-2 sm:mb-4 drop-shadow-md">
                 {collection.name}
               </h1>
               {collection.overview && (
-                <p className="text-white/80 max-w-2xl text-sm md:text-base leading-relaxed font-medium">
+                <p className="text-white/80 max-w-2xl text-xs sm:text-sm md:text-base leading-relaxed font-medium line-clamp-3 sm:line-clamp-none">
                   {collection.overview}
                 </p>
               )}

@@ -195,23 +195,39 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Apply theme to <html>
   useEffect(() => {
-    purgeAllThemeClasses();
-    if (previewingTheme) {
-      applyCustomThemeStyles(previewingTheme);
-      syncThemeMetaColor(previewingTheme.background || "#090F15");
-      return;
-    }
+    const updateDom = () => {
+      purgeAllThemeClasses();
+      if (previewingTheme) {
+        applyCustomThemeStyles(previewingTheme);
+        syncThemeMetaColor(previewingTheme.background || "#090F15");
+        return;
+      }
 
-    if (theme.startsWith("custom_")) {
-      const custom = customThemes.find((t) => t.id === theme) || readLocalCustomThemes().find((t) => t.id === theme);
-      if (custom) {
-        applyCustomThemeStyles(custom);
-        syncThemeMetaColor(custom.background || "#090F15");
+      if (theme.startsWith("custom_")) {
+        const custom = customThemes.find((t) => t.id === theme) || readLocalCustomThemes().find((t) => t.id === theme);
+        if (custom) {
+          applyCustomThemeStyles(custom);
+          syncThemeMetaColor(custom.background || "#090F15");
+        }
+      } else {
+        clearCustomInlineStyles();
+        document.documentElement.classList.add(`theme-${theme}`);
+        syncThemeMetaColor(THEME_META_COLORS[theme] || THEME_META_COLORS.global);
+      }
+    };
+
+    if (
+      typeof document !== "undefined" &&
+      "startViewTransition" in document &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      try {
+        (document as any).startViewTransition(updateDom);
+      } catch {
+        updateDom();
       }
     } else {
-      clearCustomInlineStyles();
-      document.documentElement.classList.add(`theme-${theme}`);
-      syncThemeMetaColor(THEME_META_COLORS[theme] || THEME_META_COLORS.global);
+      updateDom();
     }
   }, [theme, customThemes, previewingTheme]);
 

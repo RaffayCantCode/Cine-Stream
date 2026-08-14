@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { motion } from "framer-motion";
 import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2 } from "lucide-react";
 
 interface ProviderSource {
@@ -62,19 +61,20 @@ function buildProviderUrl(
   const curMal = clean(malId);
   const mainAni = clean(rootAnimeId) || curAni;
   const isSequel = Boolean(curAni && mainAni && curAni !== mainAni);
-  const absEp = episodeOffset + episode;
-  const ep = isSequel ? episode : episodeOffset > 0 ? absEp : episode;
+  const absEp = (episodeOffset || 0) + episode;
+  const ep = isSequel ? episode : (episodeOffset || 0) > 0 ? absEp : episode;
   const aniId = curAni || mainAni;
   const malClean = clean(rootMalId) || curMal;
   const hasOwnMal = Boolean(curMal && curMal !== malClean);
-  const malId_ = hasOwnMal ? (isSequel ? curMal : malClean) : null;
+  const malId_ = hasOwnMal ? (isSequel ? curMal : malClean) : (curMal || malClean);
+  const primaryId = aniId || malId_ || "";
 
   switch (provider) {
     case "vidnest":
-      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
+      return `https://vidnest.fun/anime/${primaryId}/${ep}/sub`;
     case "animepahe":
-      return `https://vidnest.fun/animepahe/${aniId || malId_ || ""}/${ep}/sub`;
-    case "vidlink":
+      return `https://vidnest.fun/animepahe/${primaryId}/${ep}/sub`;
+    case "vidlink": {
       const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
       if (tmdbId) {
         return isMovie
@@ -82,27 +82,25 @@ function buildProviderUrl(
           : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
       }
       return `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?primaryColor=4b5694&autoplay=true${timeParam}`;
+    }
     case "123embed":
       if (tmdbId) {
         return isMovie
           ? `https://play2.123embed.net/movie/${tmdbId}`
           : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
       }
-      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
+      return `https://vidnest.fun/anime/${primaryId}/${ep}/sub`;
     case "autoembed":
       if (tmdbId) {
         return isMovie
           ? `https://player.autoembed.co/embed/movie/${tmdbId}`
           : `https://player.autoembed.co/embed/tv/${tmdbId}/${tmdbSeason || 1}-${absEp}`;
       }
-      return `https://vidnest.fun/anime/${aniId || malId_ || ""}/${ep}/sub`;
+      return `https://vidnest.fun/anime/${primaryId}/${ep}/sub`;
     default:
       return "";
   }
 }
-
-/** How long to wait for an embed to signal it started playing before falling back. */
-const PLAYBACK_DETECT_TIMEOUT = 5000;
 
 export function AnimePlayer({
   animeId,
@@ -177,6 +175,7 @@ export function AnimePlayer({
     setSourceIndex(index);
     setHasError(false);
     setIsLoading(true);
+    setShowSpinner(true);
     setShowSources(false);
     setRetryCount(0);
     setIframeReady(false);
@@ -196,32 +195,22 @@ export function AnimePlayer({
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
-  const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playbackStartedRef = useRef(false);
   const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
   const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
-
-  const cancelDetectionTimer = useCallback(() => {
-    if (detectTimerRef.current) {
-      clearTimeout(detectTimerRef.current);
-      detectTimerRef.current = null;
-    }
-  }, []);
 
   const markPlaybackStarted = useCallback(() => {
     playbackStartedRef.current = true;
     setIsLoading(false);
     setShowSpinner(false);
-    cancelDetectionTimer();
-  }, [cancelDetectionTimer]);
+  }, []);
 
   // Auto-dismiss the loading spinner once the embed has had time to render.
   useEffect(() => {
     setShowSpinner(true);
     const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
     return () => { clearTimeout(spinnerTimer); };
-  }, [currentUrl, isLoading]);
+  }, [currentUrl, sourceIndex, retryCount]);
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
@@ -229,7 +218,7 @@ export function AnimePlayer({
       "https://vidnest.fun",
       "https://vidlink.pro",
       "https://player.autoembed.co",
-      "https://multiembed.mov"
+      "https://play2.123embed.net"
     ];
     const links: HTMLLinkElement[] = [];
     domains.forEach(href => {
@@ -264,38 +253,19 @@ export function AnimePlayer({
 
   // When the source index or retry count changes, load the embed immediately.
   useEffect(() => {
-    const url = resolvedUrls[currentSource.provider];
+    const url = resolvedUrls[currentSource.provider] || buildProviderUrl(
+      currentSource.provider, animeId, malId, rootAnimeId, rootMalId,
+      episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current, isMovie
+    );
     if (!url) return;
-
-    if (delayTimerRef.current) {
-      clearTimeout(delayTimerRef.current);
-      delayTimerRef.current = null;
-    }
-    cancelDetectionTimer();
 
     playbackStartedRef.current = false;
     setIsLoading(true);
+    setShowSpinner(true);
     setHasError(false);
     setCurrentUrl(url);
     setIframeReady(false);
-
-    detectTimerRef.current = setTimeout(() => {
-      if (playbackStartedRef.current) return;
-      // The embed never reported ready — treat it as failed so the user can
-      // switch to another source.
-      setHasError(true);
-      setIsLoading(false);
-      setShowSpinner(false);
-    }, PLAYBACK_DETECT_TIMEOUT);
-  }, [sourceIndex, resolvedUrls, retryCount, cancelDetectionTimer]);
-
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
-      cancelDetectionTimer();
-    };
-  }, [cancelDetectionTimer]);
+  }, [sourceIndex, resolvedUrls, retryCount, currentSource.provider, animeId, malId, rootAnimeId, rootMalId, episode, episodeOffset, tmdbId, tmdbSeason, isMovie]);
 
   // Scroll player into view on episode change
   useEffect(() => {
@@ -378,7 +348,6 @@ export function AnimePlayer({
         setHasError(true);
         setIsLoading(false);
         setShowSpinner(false);
-        cancelDetectionTimer();
       }
 
       // ── VidLink events ───────────────────────────────────────────────────
@@ -428,7 +397,7 @@ export function AnimePlayer({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [animeId, episode, tmdbSeason, onProgress, onAutoNext, markPlaybackStarted, cancelDetectionTimer]);
+  }, [animeId, episode, tmdbSeason, onProgress, onAutoNext, markPlaybackStarted]);
 
   // Only send seek/play postMessages for VidLink — others don't support it
   useEffect(() => {
@@ -447,11 +416,17 @@ export function AnimePlayer({
       } catch {}
       return next;
     });
+    setHasError(false);
+    setIsLoading(true);
+    setShowSpinner(true);
     setRetryCount(0);
     setIframeReady(false);
   }, [sourcePrefKey, globalPrefKey]);
 
   const retrySource = useCallback(() => {
+    setHasError(false);
+    setIsLoading(true);
+    setShowSpinner(true);
     setRetryCount(prev => prev + 1);
     setIframeReady(false);
   }, []);
@@ -542,36 +517,48 @@ export function AnimePlayer({
         </div>
       )}
 
-      <motion.div
+      <div
         ref={playerRef}
-        key={`${episode}-${sourceIndex}-${retryCount}`}
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.2 }}
-        className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black ring-2 ring-white/10 relative"
+        className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black ring-1 ring-white/10 relative"
       >
         {hasError ? (
-          <div className="w-full h-full flex items-center justify-center bg-black/80">
-            <div className="text-center p-6">
-              <div className="w-10 h-10 mx-auto mb-3 rounded-xl bg-red-500/10 flex items-center justify-center">
-                <RotateCcw className="w-5 h-5 text-red-400/60" />
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-black via-zinc-900 to-black">
+            <div className="text-center p-8 max-w-sm">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/10 flex items-center justify-center">
+                <RotateCcw className="w-10 h-10 text-red-400/60" />
               </div>
-              <p className="text-white/50 text-sm font-medium mb-4">
-                {currentSource.name} unavailable
+              <p className="text-white/60 text-sm mb-5 font-medium">
+                {currentSource.name} failed to load
               </p>
-              <button
-                onClick={switchSource}
-                className="px-4 py-2 bg-[#4B5694] hover:bg-[#7288AE] text-white rounded-xl text-xs font-bold transition-all"
-              >
-                Next Source
-              </button>
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                <button
+                  onClick={retrySource}
+                  className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" /> Try Again
+                </button>
+                {PROVIDERS.length > 1 && (
+                  <button
+                    onClick={switchSource}
+                    className="px-5 py-2.5 bg-[#4B5694] hover:bg-[#7288AE] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+                  >
+                    <SkipForward className="w-4 h-4" /> Next Source
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowSources(true)}
+                  className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+                >
+                  <Server className="w-4 h-4" /> Browse All
+                </button>
+              </div>
             </div>
           </div>
         ) : (
           <>
             {showSpinner && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none">
-                <div className="w-10 h-10 border-3 border-white/15 border-t-primary rounded-full animate-spin" />
+                <div className="w-14 h-14 border-4 border-white/10 border-t-[#4B5694] rounded-full animate-spin" />
               </div>
             )}
             {currentUrl && (
@@ -579,32 +566,29 @@ export function AnimePlayer({
                 key={`${currentSource.provider}-${retryCount}`}
                 ref={iframeRef}
                 src={currentUrl}
-                className="w-full h-full transition-opacity duration-500"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; microphone"
-                allowFullScreen
-                referrerPolicy="strict-origin-when-cross-origin"
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
+                allowFullScreen={true}
+                referrerPolicy="no-referrer-when-downgrade"
                 title={`${animeTitle} - Episode ${episode}`}
                 onLoad={() => {
-                  // The embed is ready to play as soon as its frame loads.
                   setIsLoading(false);
                   setHasError(false);
                   setIframeReady(true);
                   setShowSpinner(false);
                   playbackStartedRef.current = true;
-                  cancelDetectionTimer();
                 }}
                 onError={() => {
                   console.warn(`[AnimePlayer] ${currentSource.name} failed to load`);
                   setHasError(true);
                   setIsLoading(false);
                   setShowSpinner(false);
-                  cancelDetectionTimer();
                 }}
               />
             )}
           </>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }

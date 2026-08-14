@@ -70,7 +70,30 @@ let globalHomeCache: {
   genres: Genre[];
   animeList: AnimeItem[];
   collections: any[];
+  spotlightBanner?: any | null;
 } | null = null;
+
+let globalSpotlightCache: { fetched: boolean; spotlight: any | null } | null = null;
+const SESSION_SPOTLIGHT_KEY = "sv_spotlight_banner_v2";
+
+function saveSpotlightToSession(spotlight: any | null): void {
+  if (typeof window === "undefined") return;
+  try { sessionStorage.setItem(SESSION_SPOTLIGHT_KEY, JSON.stringify({ fetched: true, spotlight })); } catch {}
+}
+
+function loadSpotlightFromSession(): { fetched: boolean; spotlight: any | null } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(SESSION_SPOTLIGHT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "fetched" in parsed) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
 
 const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v2";
 function saveHeroPoolToSession(pool: MediaItem[]): void {
@@ -351,7 +374,20 @@ export default function Home() {
   const [revealedSections] = useState(8);
   const [moodSeed, setMoodSeed] = useState("");
   const [customSections, setCustomSections] = useState<any[]>([]);
-  const [spotlightBanner, setSpotlightBanner] = useState<any | null>(null);
+  const [spotlightBanner, setSpotlightBanner] = useState<any | null>(() => {
+    if (globalSpotlightCache !== null) {
+      return globalSpotlightCache.spotlight;
+    }
+    if (globalHomeCache?.spotlightBanner !== undefined) {
+      return globalHomeCache.spotlightBanner;
+    }
+    const sessionCached = loadSpotlightFromSession();
+    if (sessionCached) {
+      globalSpotlightCache = sessionCached;
+      return sessionCached.spotlight;
+    }
+    return null;
+  });
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
   usePageContentReady(!isLoading && !animeLoading);
@@ -360,6 +396,37 @@ export default function Home() {
 
   useEffect(() => {
     setMoodSeed(`${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`);
+  }, []);
+
+  // Listen to spotlight updates (e.g. from Admin Panel saves)
+  useEffect(() => {
+    const handleSpotlightUpdate = (e: any) => {
+      const data = e.detail;
+      if (data?.enabled && data.title) {
+        const sp = {
+          id: data.id || "spotlight",
+          title: data.title,
+          tagline: data.tagline,
+          description: data.description,
+          backdrop_path: data.backdropPath || data.backdrop_path,
+          poster_path: data.posterPath || data.poster_path,
+          target_url: data.targetUrl || data.target_url,
+          media_type: data.mediaType || data.media_type || "movie",
+          badge: data.badge || "Spotlight",
+        };
+        globalSpotlightCache = { fetched: true, spotlight: sp };
+        if (globalHomeCache) globalHomeCache.spotlightBanner = sp;
+        saveSpotlightToSession(sp);
+        setSpotlightBanner(sp);
+      } else {
+        globalSpotlightCache = { fetched: true, spotlight: null };
+        if (globalHomeCache) globalHomeCache.spotlightBanner = null;
+        saveSpotlightToSession(null);
+        setSpotlightBanner(null);
+      }
+    };
+    window.addEventListener("sv:spotlight-updated", handleSpotlightUpdate);
+    return () => window.removeEventListener("sv:spotlight-updated", handleSpotlightUpdate);
   }, []);
 
   // Touch swipe gesture states for mobile Hero banner
@@ -686,6 +753,7 @@ export default function Home() {
             genres: (homeData.genres?.genres || []).slice(0, 18),
             animeList: finalAnimeList,
             collections: validCollections,
+            spotlightBanner: globalSpotlightCache?.spotlight ?? spotlightBanner ?? null,
           };
         }
         setAnimeLoading(false);
@@ -719,8 +787,14 @@ export default function Home() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.enabled && data.spotlight && !cancelled) {
+          globalSpotlightCache = { fetched: true, spotlight: data.spotlight };
+          if (globalHomeCache) globalHomeCache.spotlightBanner = data.spotlight;
+          saveSpotlightToSession(data.spotlight);
           setSpotlightBanner(data.spotlight);
         } else if (!cancelled) {
+          globalSpotlightCache = { fetched: true, spotlight: null };
+          if (globalHomeCache) globalHomeCache.spotlightBanner = null;
+          saveSpotlightToSession(null);
           setSpotlightBanner(null);
         }
       })

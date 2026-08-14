@@ -20,9 +20,9 @@ interface VideoPlayerProps {
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
+  videasy:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
   embedmaster: { bg: "bg-[#4B5694]", badge: "bg-[#4B5694]/20 text-[#7288AE]" },
   vixsrc:      { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
-  cinesrc:     { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
   vidsrc:      { bg: "bg-blue-600",  badge: "bg-blue-500/20 text-blue-300" },
   autoembed:   { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
 };
@@ -83,7 +83,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const [retryCount, setRetryCount] = useState(0);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.embedmaster;
+  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.videasy;
   const lastSaveTimeRef = useRef<number>(0);
 
   // Manual fallback: switch to the next source in the list (user initiated)
@@ -123,9 +123,9 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
+      "https://player.videasy.net",
       "https://embedmaster.link",
       "https://vixsrc.to",
-      "https://cinesrc.st",
       "https://vidsrc.me",
       "https://autoembed.co"
     ];
