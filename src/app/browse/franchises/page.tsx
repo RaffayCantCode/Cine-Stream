@@ -1,7 +1,7 @@
 "use client";
 export const runtime = 'edge';
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { FRANCHISES } from "@/lib/franchises";
 import { Search } from "lucide-react";
@@ -13,7 +13,20 @@ import { Sidebar } from "@/components/Sidebar";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
 export default function BrowseFranchisesPage() {
-  const filteredFranchises = FRANCHISES;
+  const [franchises, setFranchises] = useState<any[]>(() => FRANCHISES);
+
+  useEffect(() => {
+    fetch("/api/tmdb/collections")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.collections && Array.isArray(data.collections) && data.collections.length > 0) {
+          setFranchises(data.collections);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filteredFranchises = franchises;
 
   return (
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden flex-col md:flex-row">

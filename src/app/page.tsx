@@ -3,12 +3,13 @@ export const runtime = 'edge';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers, Film } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent, isTmdbAnime, filterExcludeAnime } from "@/lib/utils";
 import { PROVIDERS } from "@/lib/providers";
 import type { AnimeItem } from "@/components/AnimeCard";
 import { fetchClientAnime } from "@/lib/anilist-client";
 import { HeroBanner } from "@/components/HeroBanner";
+import { HeroAnnouncement } from "@/components/HeroAnnouncement";
 import { MediaRow } from "@/components/MediaRow";
 import { AnimeRow } from "@/components/AnimeRow";
 import { ProviderIcon } from "@/components/ProviderIcon";
@@ -110,7 +111,7 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     (i) => (i.media_type === "tv" || !!i.name) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
   );
 
-  // Build anime candidates combining AniList (trending + popular) AND TMDB anime titles
+  // Build anime candidates strictly from AniList anime items first, fallback to TMDB
   let animeCandidates: MediaItem[] = [];
 
   if (Array.isArray(animeList) && animeList.length > 0) {
@@ -128,6 +129,7 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
       release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
       original_language: "ja",
       genre_ids: [16],
+      isTmdbAnime: false,
     });
 
     const validAnime = animeList.filter(
@@ -145,12 +147,13 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     animeCandidates.push(...aniListCards);
   }
 
-  // Include high-quality TMDB anime items (movies & TV series with animation genre + Japanese language)
-  const tmdbAnimeFeed = validFeed
-    .filter((i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja"))
-    .map((i) => ({ ...i, media_type: "anime" as const }));
-
-  animeCandidates.push(...tmdbAnimeFeed);
+  // Fallback: If no AniList items are loaded yet, use high-quality TMDB anime items
+  if (animeCandidates.length === 0) {
+    const tmdbAnimeFeed = validFeed
+      .filter((i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja"))
+      .map((i) => ({ ...i, media_type: "anime" as const, isTmdbAnime: true }));
+    animeCandidates.push(...tmdbAnimeFeed);
+  }
 
   // Deduplicate anime candidates by normalized title so we don't repeat titles
   const uniqueAnimeMap = new Map<string, MediaItem>();
@@ -347,6 +350,8 @@ export default function Home() {
   const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
   const [revealedSections] = useState(8);
   const [moodSeed, setMoodSeed] = useState("");
+  const [customSections, setCustomSections] = useState<any[]>([]);
+  const [spotlightBanner, setSpotlightBanner] = useState<any | null>(null);
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
   usePageContentReady(!isLoading && !animeLoading);
@@ -476,8 +481,11 @@ export default function Home() {
         }).catch(() => ({ items: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        // Wait for fast hero payload first to make Hero Banner interactive instantly
-        const heroData = await heroDataPromise;
+        // Wait for fast hero payload and anime payload concurrently
+        const [heroData, initialAnimeRes] = await Promise.all([
+          heroDataPromise,
+          animePromise.catch(() => ({ items: [] }))
+        ]);
         if (cancelled) return;
 
         if (heroData) {
@@ -546,7 +554,11 @@ export default function Home() {
 
           setHeroFeed(initialHeroFeed);
 
-          const initialPool = buildHeroPool(initialHeroFeed, globalHomeCache?.animeList);
+          const animeListSource = (initialAnimeRes?.items && initialAnimeRes.items.length > 0)
+            ? initialAnimeRes.items
+            : globalHomeCache?.animeList;
+
+          const initialPool = buildHeroPool(initialHeroFeed, animeListSource);
           if (initialPool.length > 0) {
             activeHeroPool = initialPool;
             setHeroPool((currentPool) => (currentPool.length > 0 ? currentPool : initialPool));
@@ -652,7 +664,7 @@ export default function Home() {
 
           const fullHeroPool = buildHeroPool(fullHeroFeed, finalAnimeList);
           if (fullHeroPool.length > 0) {
-            setHeroPool(fullHeroPool);
+            setHeroPool((current) => (current && current.length >= 3 ? current : fullHeroPool));
             saveHeroPoolToSession(fullHeroPool);
           }
 
@@ -691,6 +703,29 @@ export default function Home() {
     };
 
     load();
+
+    // Fetch dynamic admin-curated custom homepage sections
+    fetch("/api/home-sections")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.sections && Array.isArray(data.sections) && !cancelled) {
+          setCustomSections(data.sections);
+        }
+      })
+      .catch(() => {});
+
+    // Fetch spotlight banner if active
+    fetch("/api/spotlight")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.enabled && data.spotlight && !cancelled) {
+          setSpotlightBanner(data.spotlight);
+        } else if (!cancelled) {
+          setSpotlightBanner(null);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
       clearTimeout(loadingTimeout);
@@ -702,7 +737,21 @@ export default function Home() {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  const hero = heroPool[heroIndex] || heroPool[0] || null;
+  const activeHeroCandidate = heroPool[heroIndex] || heroPool[0] || null;
+  const hero = spotlightBanner ? {
+    id: spotlightBanner.id || "spotlight",
+    title: spotlightBanner.title,
+    name: spotlightBanner.title,
+    overview: spotlightBanner.description || "",
+    backdrop_path: spotlightBanner.backdrop_path || spotlightBanner.backdropPath || "",
+    poster_path: spotlightBanner.poster_path || spotlightBanner.posterPath || "",
+    media_type: spotlightBanner.media_type || spotlightBanner.mediaType || "movie",
+    vote_average: 9.2,
+    release_date: "",
+    isSpotlight: true,
+    targetUrl: spotlightBanner.target_url || spotlightBanner.targetUrl || "",
+    badge: spotlightBanner.badge || "Spotlight",
+  } : activeHeroCandidate;
 
   // Keep the ref in sync for use inside callbacks (avoids stale closure)
   useEffect(() => { heroPoolLengthRef.current = heroPool.length; }, [heroPool]);
@@ -781,6 +830,9 @@ export default function Home() {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
+            {/* Top-Left Fixed Live Announcement */}
+            <HeroAnnouncement />
+
             <HeroBanner key={hero?.id || "empty"} item={hero} />
             {/* Hero dot indicators — sit just above the bottom edge of the hero */}
             {heroPool.length > 1 && (
@@ -1033,26 +1085,17 @@ export default function Home() {
             </LazySection>
           )}
 
-          {/* ─── RECENTLY ADDED ─── */}
-          <LazySection show={revealedSections >= 7} placeholderHeight={360}>
-            <MediaRow
-              title="Recently Added"
-              items={recent}
-              isLoading={isLoading}
-              seeAllHref="/browse/movies"
-              accentIcon={<Clock className="w-4 h-4 text-[#B3B7BA]" />}
-            />
-          </LazySection>
-
-          {/* ─── RECOMMENDED FOR YOU ─── */}
-          <LazySection show={revealedSections >= 8} placeholderHeight={360}>
-            <MediaRow
-              title="Recommended For You"
-              items={recommended}
-              isLoading={isLoading}
-              accentIcon={<Sparkles className="w-4 h-4 text-violet-400" />}
-            />
-          </LazySection>
+          {/* ─── DYNAMIC CUSTOM HOMEPAGE SECTIONS (Admin Controlled) ─── */}
+          {customSections.map((sec, secIdx) => (
+            <LazySection key={sec.id || secIdx} show={revealedSections >= 7} placeholderHeight={360}>
+              <MediaRow
+                title={sec.title}
+                items={sec.items || []}
+                isLoading={false}
+                accentIcon={<Film className="w-4 h-4 text-primary" />}
+              />
+            </LazySection>
+          ))}
 
           {/* ─── FOOTER TAG ─── */}
           <footer className="border-t border-white/10 pt-10 pb-8 flex flex-col items-center justify-center gap-4">

@@ -16,7 +16,8 @@ import {
   X,
   Library,
   Compass,
-  Bug
+  Bug,
+  ShieldCheck
 } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ import { motion } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ThemeButton } from "@/components/ThemeButton";
 import { WatchlistLink } from "@/components/WatchlistLink";
+import { AdminPanelModal } from "@/components/admin/AdminPanelModal";
 
 const navItems: { href: string; icon: any; label: string; subtitle?: string }[] = [
   { href: "/", icon: Home, label: "Home" },
@@ -39,7 +41,9 @@ export const Sidebar = memo(function Sidebar() {
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
   const user = session?.user;
+  const isAdmin = isAuthenticated && user?.role === "admin";
   const [profileOpen, setProfileOpen] = useState(false);
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
 
   useEffect(() => setProfileOpen(false), [pathname]);
 
@@ -58,6 +62,17 @@ export const Sidebar = memo(function Sidebar() {
         <div className="flex items-center gap-1">
           <ThemeButton compact className="md:hidden" />
           <WatchlistLink compact className="md:hidden" />
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setAdminPanelOpen(true)}
+              className="p-2.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-xl transition-all touch-manipulation cursor-pointer"
+              aria-label="Admin Panel"
+              title="Admin Panel"
+            >
+              <ShieldCheck className="w-4 h-4" />
+            </button>
+          )}
           <Link
             href="/contact"
             className="p-2.5 text-white/30 hover:text-[#f59e0b] rounded-xl transition-all touch-manipulation"
@@ -101,7 +116,22 @@ export const Sidebar = memo(function Sidebar() {
                     <div className="absolute top-full right-0 mt-2 z-50 w-52 py-2 rounded-2xl bg-zinc-900 border border-white/15 shadow-2xl shadow-black/80 overflow-hidden">
                       <div className="px-4 py-2.5 border-b border-white/10">
                         <p className="text-sm font-extrabold text-white truncate">{user.name}</p>
+                        {isAdmin && (
+                          <span className="inline-block mt-1 text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Admin
+                          </span>
+                        )}
                       </div>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => { setAdminPanelOpen(true); setProfileOpen(false); }}
+                          className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/10 transition-colors border-b border-white/10"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-amber-400" />
+                          Admin Panel
+                        </button>
+                      )}
                       <button
                         onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -210,6 +240,20 @@ export const Sidebar = memo(function Sidebar() {
           })}
         </nav>
 
+        {/* Admin Panel Button (Visible only to database role === admin) */}
+        {isAdmin && (
+          <div className="px-3 pb-2">
+            <button
+              type="button"
+              onClick={() => setAdminPanelOpen(true)}
+              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 hover:text-amber-200 font-extrabold text-xs transition-all shadow-sm cursor-pointer group"
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="truncate">Admin Panel</span>
+            </button>
+          </div>
+        )}
+
         {/* Report Issue */}
         <div className="px-3">
           <Link
@@ -269,7 +313,22 @@ export const Sidebar = memo(function Sidebar() {
                         {user.email && (
                           <p className="text-xs text-white/60 truncate mt-0.5">{user.email}</p>
                         )}
+                        {isAdmin && (
+                          <span className="inline-block mt-1 text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Admin
+                          </span>
+                        )}
                       </div>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => { setAdminPanelOpen(true); setProfileOpen(false); }}
+                          className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/10 transition-colors border-b border-white/10"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-amber-400" />
+                          Admin Panel
+                        </button>
+                      )}
                       <button
                         onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -293,6 +352,14 @@ export const Sidebar = memo(function Sidebar() {
           )}
         </div>
       </aside>
+
+      {/* Admin Panel Modal */}
+      {isAdmin && (
+        <AdminPanelModal
+          isOpen={adminPanelOpen}
+          onClose={() => setAdminPanelOpen(false)}
+        />
+      )}
     </>
   );
 });

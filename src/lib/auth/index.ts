@@ -61,6 +61,7 @@ function getAuth() {
               email: user.email,
               name: user.name,
               image: user.image,
+              role: user.role || "user",
             };
           },
         }),
@@ -82,10 +83,33 @@ function getAuth() {
         },
         session: ({ session, token }) => ({
           ...session,
-          user: { ...session.user, id: token.sub },
+          user: {
+            ...session.user,
+            id: token.sub,
+            role: (token.role as string) || "user",
+          },
         }),
-        jwt: ({ token, user }) => {
-          if (user) token.sub = user.id;
+        jwt: async ({ token, user }) => {
+          if (user) {
+            token.sub = user.id;
+            token.role = (user as any).role || "user";
+          }
+          if (token.sub) {
+            const database = getDatabase();
+            if (database) {
+              try {
+                const dbUser = await database.query.users.findFirst({
+                  where: eq(users.id, token.sub),
+                  columns: { role: true },
+                });
+                if (dbUser) {
+                  token.role = dbUser.role || "user";
+                }
+              } catch {
+                // Keep existing token.role if DB query fails
+              }
+            }
+          }
           return token;
         },
       },

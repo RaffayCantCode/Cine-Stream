@@ -9,7 +9,7 @@ import { z } from "zod";
 import { isThemeId, ThemeId, DEFAULT_THEME } from "@/lib/themes";
 
 const themeSchema = z.object({
-  theme: z.string().max(32),
+  theme: z.string().max(64),
 });
 
 export async function GET() {

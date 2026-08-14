@@ -1,7 +1,7 @@
-export type ThemeId = "global" | "glass" | "oled" | "cinema" | "wisteria" | "solaris";
+export type ThemeId = string;
 
 export interface ThemeDefinition {
-  id: ThemeId;
+  id: string;
   label: string;
   tagline: string;
   description: string;
@@ -9,11 +9,17 @@ export interface ThemeDefinition {
   preview: string;
   /** Accent color swatch used in the preview chrome. */
   accent: string;
+  isCustom?: boolean;
+  background?: string;
+  card?: string;
+  primary?: string;
+  foreground?: string;
 }
 
 export const THEME_STORAGE_KEY = "cinestream.theme";
+export const CUSTOM_THEMES_STORAGE_KEY = "cinestream.custom_themes";
 
-export const DEFAULT_THEME: ThemeId = "global";
+export const DEFAULT_THEME = "global";
 
 export const THEMES: ThemeDefinition[] = [
   {
@@ -40,7 +46,7 @@ export const THEMES: ThemeDefinition[] = [
     preview: "linear-gradient(135deg, #000000 0%, #0A0A0C 55%, #1A1A1F 100%)",
     accent: "#E63946",
   },
-{
+  {
     id: "cinema",
     label: "Cinema",
     tagline: "Theatre",
@@ -66,12 +72,46 @@ export const THEMES: ThemeDefinition[] = [
   },
 ];
 
-const VALID_THEMES = new Set<string>(THEMES.map((t) => t.id));
+export function hexToHsl(hex: string): string {
+  if (!hex) return "210 30% 6%";
+  hex = hex.replace(/^#/, "");
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  const num = parseInt(hex, 16);
+  if (isNaN(num)) return "210 30% 6%";
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
 
-export function isThemeId(value: string | null | undefined): value is ThemeId {
-  return !!value && VALID_THEMES.has(value);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
-export function getTheme(id: ThemeId): ThemeDefinition {
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+const BUILTIN_THEMES = new Set<string>(THEMES.map((t) => t.id));
+
+export function isThemeId(value: string | null | undefined): value is ThemeId {
+  return !!value && (BUILTIN_THEMES.has(value) || value.startsWith("custom_"));
+}
+
+export function getTheme(id: ThemeId, customList: ThemeDefinition[] = []): ThemeDefinition {
+  const builtin = THEMES.find((t) => t.id === id);
+  if (builtin) return builtin;
+  const custom = customList.find((t) => t.id === id);
+  if (custom) return custom;
+  return THEMES[0];
 }

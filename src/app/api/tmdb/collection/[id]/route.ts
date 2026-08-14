@@ -10,6 +10,10 @@ const noStoreHeaders = {
   "Cloudflare-CDN-Cache-Control": "no-store",
 } as const;
 
+import { getDb } from "@/lib/db";
+import { customFranchises } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,9 +21,27 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const franchise = FRANCHISES.find(f => f.id === id);
+    let franchise = FRANCHISES.find(f => f.id === id);
 
+    // If not found in static, check DB custom franchises
     if (!franchise) {
+      try {
+        const db = getDb();
+        const dbCol = await db.query.customFranchises.findFirst({
+          where: eq(customFranchises.id, id),
+        });
+        if (dbCol) {
+          return NextResponse.json({
+            id: dbCol.id,
+            name: dbCol.name,
+            overview: dbCol.overview || "",
+            poster_path: dbCol.posterPath,
+            backdrop_path: dbCol.backdropPath,
+            parts: Array.isArray(dbCol.parts) ? dbCol.parts : [],
+          }, { headers: noStoreHeaders });
+        }
+      } catch {}
+
       return NextResponse.json({ error: "Franchise not found" }, { status: 404, headers: noStoreHeaders });
     }
 

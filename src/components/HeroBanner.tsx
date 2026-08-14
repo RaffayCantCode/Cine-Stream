@@ -7,7 +7,8 @@ import { Play, Info, Star, Calendar } from "lucide-react";
 import { isTmdbAnime, cn } from "@/lib/utils";
 
 interface MediaItem {
-  id: number;
+  id: number | string;
+  anilistId?: string | number;
   title?: string;
   name?: string;
   backdrop_path?: string;
@@ -20,6 +21,7 @@ interface MediaItem {
   overview?: string;
   original_language?: string;
   genre_ids?: number[];
+  isTmdbAnime?: boolean;
 }
 
 interface HeroBannerProps {
@@ -37,14 +39,21 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   if (!item) return null;
 
   const isMovie = item.media_type === "movie" || !!item.title;
-  const isAnime = item.media_type === "anime" || !!(item as any).anilistId || isTmdbAnime(item);
+  const anilistId = (item as any).anilistId;
+  const isAnime = item.media_type === "anime" || !!anilistId || isTmdbAnime(item);
   const title = item.title || item.name || "";
   let link = isMovie ? `/movie/${item.id}` : `/tv/${item.id}`;
 
-  if (item.media_type === "anime" || (item as any).anilistId) {
-    const animeId = (item as any).anilistId || item.id;
-    link = `/anime/${animeId}`;
+  if ((item as any).targetUrl) {
+    link = (item as any).targetUrl;
+  } else if (anilistId) {
+    // Exact AniList entry ID
+    link = `/anime/${anilistId}`;
+  } else if (item.media_type === "anime" && typeof item.id === "string" && !isNaN(Number(item.id)) && !(item as any).isTmdbAnime) {
+    // Direct string ID from AniList
+    link = `/anime/${item.id}`;
   } else if (isAnime) {
+    // TMDB anime item: safely redirect via AniZip / title resolver so it opens the exact corresponding anime
     link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
   }
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);

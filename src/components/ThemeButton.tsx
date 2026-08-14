@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Palette, Check, X, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { Palette, Check, X, ChevronLeft, ChevronRight, RotateCcw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { THEMES, DEFAULT_THEME, getTheme, ThemeId } from "@/lib/themes";
+import { THEMES, DEFAULT_THEME, getTheme, ThemeId, ThemeDefinition } from "@/lib/themes";
 import { useTheme } from "@/context/ThemeContext";
 
 interface ThemeButtonProps {
@@ -13,11 +13,11 @@ interface ThemeButtonProps {
 }
 
 export function ThemeButton({ className, compact = false }: ThemeButtonProps) {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, customThemes } = useTheme();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  const active = useMemo(() => getTheme(theme), [theme]);
+  const active = useMemo(() => getTheme(theme, customThemes), [theme, customThemes]);
 
   useEffect(() => setMounted(true), []);
 
@@ -61,7 +61,13 @@ export function ThemeButton({ className, compact = false }: ThemeButtonProps) {
       {Trigger}
       {mounted &&
         createPortal(
-          <ThemeSlider open={open} onClose={() => setOpen(false)} current={theme} onSelect={setTheme} />,
+          <ThemeSlider 
+            open={open} 
+            onClose={() => setOpen(false)} 
+            current={theme} 
+            onSelect={setTheme} 
+            customThemes={customThemes}
+          />,
           document.body
         )}
     </>
@@ -73,25 +79,26 @@ interface ThemeSliderProps {
   onClose: () => void;
   current: ThemeId;
   onSelect: (theme: ThemeId) => void;
+  customThemes: ThemeDefinition[];
 }
 
-function ThemeSlider({ open, onClose, current, onSelect }: ThemeSliderProps) {
+function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: ThemeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [index, setIndex] = useState(() => Math.max(0, THEMES.findIndex((t) => t.id === current)));
+  const allThemes = useMemo(() => [...THEMES, ...customThemes], [customThemes]);
+  const [index, setIndex] = useState(() => Math.max(0, allThemes.findIndex((t) => t.id === current)));
 
-  // Keep in sync if the theme changes from elsewhere (e.g. reset to global).
   useEffect(() => {
-    setIndex(Math.max(0, THEMES.findIndex((t) => t.id === current)));
-  }, [current]);
+    setIndex(Math.max(0, allThemes.findIndex((t) => t.id === current)));
+  }, [current, allThemes]);
 
-  const active = THEMES[index] ?? THEMES[0];
+  const active = allThemes[index] ?? THEMES[0];
   const isDefault = current === DEFAULT_THEME;
 
-  const prev = () => go((index - 1 + THEMES.length) % THEMES.length);
-  const next = () => go((index + 1) % THEMES.length);
+  const prev = () => go((index - 1 + allThemes.length) % allThemes.length);
+  const next = () => go((index + 1) % allThemes.length);
   const go = (i: number) => {
     setIndex(i);
-    onSelect(THEMES[i].id);
+    onSelect(allThemes[i].id);
   };
 
   useEffect(() => {
@@ -123,8 +130,15 @@ function ThemeSlider({ open, onClose, current, onSelect }: ThemeSliderProps) {
               <Palette className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-foreground leading-tight tracking-tight">Pick your style</h2>
-              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-extrabold text-foreground leading-tight tracking-tight">Pick your style</h2>
+                {active.isCustom && (
+                  <span className="text-[9px] uppercase font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Admin Theme
+                  </span>
+                )}
+              </div>
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-0.5">
                 <span className="inline-block h-2 w-2 rounded-full" style={{ background: active.accent }} />
                 <span style={{ color: active.accent }}>{active.label}</span>
                 <span>– changes apply instantly</span>
@@ -135,7 +149,7 @@ function ThemeSlider({ open, onClose, current, onSelect }: ThemeSliderProps) {
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-card transition-colors touch-manipulation"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-card transition-colors touch-manipulation cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -204,33 +218,38 @@ function ThemeSlider({ open, onClose, current, onSelect }: ThemeSliderProps) {
             <button
               onClick={prev}
               aria-label="Previous theme"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-foreground hover:bg-card hover:border-primary/50 transition-colors touch-manipulation"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-foreground hover:bg-card hover:border-primary/50 transition-colors touch-manipulation cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={next}
               aria-label="Next theme"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-foreground hover:bg-card hover:border-primary/50 transition-colors touch-manipulation"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-foreground hover:bg-card hover:border-primary/50 transition-colors touch-manipulation cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Slider track */}
-        <div ref={trackRef} className="hide-scrollbar flex gap-2.5 overflow-x-auto px-5 sm:px-6 pt-4 pb-2 snap-x">
-          {THEMES.map((t, i) => {
-            const isActive = i === index;
+        {/* Main built-in themes track */}
+        <div className="px-5 sm:px-6 pt-3 pb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Standard Themes
+          </span>
+        </div>
+        <div ref={trackRef} className="hide-scrollbar flex gap-2.5 overflow-x-auto px-5 sm:px-6 pb-2 snap-x">
+          {THEMES.map((t) => {
+            const isActive = t.id === current;
             return (
               <button
                 key={t.id}
                 data-theme={t.id}
                 type="button"
-                onClick={() => go(i)}
+                onClick={() => onSelect(t.id)}
                 aria-pressed={isActive}
                 className={cn(
-                  "group relative flex shrink-0 snap-center flex-col gap-1.5 rounded-2xl p-2 text-left transition-all duration-200 touch-manipulation",
+                  "group relative flex shrink-0 snap-center flex-col gap-1.5 rounded-2xl p-2 text-left transition-all duration-200 touch-manipulation cursor-pointer",
                   isActive
                     ? "bg-primary/10 ring-2 ring-primary/50"
                     : "ring-1 ring-border hover:ring-primary/30 hover:bg-card"
@@ -254,14 +273,63 @@ function ThemeSlider({ open, onClose, current, onSelect }: ThemeSliderProps) {
           })}
         </div>
 
+        {/* Bonus Custom Themes Row (Created by Admins) */}
+        {customThemes.length > 0 && (
+          <div className="px-5 sm:px-6 pt-2.5 border-t border-border/50">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-foreground/80">
+                Bonus Custom Themes
+              </span>
+              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Live Admin Creations
+              </span>
+            </div>
+            <div className="hide-scrollbar flex gap-2.5 overflow-x-auto pb-2 snap-x">
+              {customThemes.map((ct) => {
+                const isCustomActive = current === ct.id;
+                return (
+                  <button
+                    key={ct.id}
+                    data-theme={ct.id}
+                    type="button"
+                    onClick={() => onSelect(ct.id)}
+                    aria-pressed={isCustomActive}
+                    className={cn(
+                      "group relative flex shrink-0 snap-center flex-col gap-1.5 rounded-2xl p-2 text-left transition-all duration-200 touch-manipulation cursor-pointer",
+                      isCustomActive
+                        ? "bg-amber-500/15 ring-2 ring-amber-500/60 shadow-lg"
+                        : "ring-1 ring-border hover:ring-amber-500/40 hover:bg-card"
+                    )}
+                  >
+                    <span
+                      className="block h-14 w-20 rounded-lg overflow-hidden relative"
+                      style={{ background: ct.preview, boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.18)` }}
+                    >
+                      <span
+                        className="block h-1 w-full translate-y-2"
+                        style={{ background: ct.primary || ct.accent }}
+                      />
+                    </span>
+                    <span className="flex items-center justify-between gap-1 px-0.5 text-[10px] font-bold text-foreground">
+                      <span className="truncate max-w-[65px]">{ct.label}</span>
+                      {isCustomActive && <Check className="h-3 w-3 shrink-0 text-amber-400" strokeWidth={3} />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-4">
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-border/50">
           <p className="text-[11px] text-muted-foreground/80">
             {isDefault ? "Default theme applied." : "Your choice is saved and applied everywhere."}
           </p>
           <button
-            onClick={() => go(Math.max(0, THEMES.findIndex((t) => t.id === DEFAULT_THEME)))}
-            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            onClick={() => onSelect(DEFAULT_THEME)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground hover:text-foreground transition-colors shrink-0 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {isDefault ? "Default" : "Reset to Global"}

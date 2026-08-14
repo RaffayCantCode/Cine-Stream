@@ -50,6 +50,7 @@ export async function POST(request: Request) {
         name,
         email: emailNormalized,
         password: hashedPassword,
+        role: "user",
       })
       .returning();
 
