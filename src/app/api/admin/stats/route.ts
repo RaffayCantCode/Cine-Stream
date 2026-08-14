@@ -12,7 +12,7 @@ import {
   watchHistory,
   watchlists
 } from "@/lib/db/schema";
-import { count, eq, sql, gt } from "drizzle-orm";
+import { count, eq, sql, gt, or } from "drizzle-orm";
 import { FRANCHISES } from "@/lib/franchises";
 
 export async function GET() {
@@ -28,7 +28,7 @@ export async function GET() {
     const totalUsersResult = await db.select({ value: count() }).from(users);
     const totalUsers = Number(totalUsersResult[0]?.value || 0);
 
-    const adminUsersResult = await db.select({ value: count() }).from(users).where(eq(users.role, "admin"));
+    const adminUsersResult = await db.select({ value: count() }).from(users).where(or(eq(users.role, "admin"), eq(users.role, "owner")));
     const adminUsers = Number(adminUsersResult[0]?.value || 0);
 
     // Active in last 24h

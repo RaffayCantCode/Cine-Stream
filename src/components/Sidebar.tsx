@@ -41,7 +41,7 @@ export const Sidebar = memo(function Sidebar() {
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
   const user = session?.user;
-  const isAdmin = isAuthenticated && user?.role === "admin";
+  const isAdmin = isAuthenticated && (user?.role === "admin" || user?.role === "owner");
   const [profileOpen, setProfileOpen] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
 
