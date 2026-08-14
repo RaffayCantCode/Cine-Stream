@@ -104,12 +104,13 @@ function ThemeSlider({ open, onClose, current, onSelect, customThemes = [] }: Th
       initialOpenRef.current = false;
       return;
     }
+    if (initialOpenRef.current) return;
     const timer = setTimeout(() => {
       const el = trackRef.current?.querySelector<HTMLElement>(`[data-theme="${current}"]`) ||
                  customTrackRef.current?.querySelector<HTMLElement>(`[data-theme="${current}"]`);
       if (el) {
         el.scrollIntoView({
-          behavior: initialOpenRef.current ? "smooth" : "auto",
+          behavior: "auto",
           block: "nearest",
           inline: "center",
         });

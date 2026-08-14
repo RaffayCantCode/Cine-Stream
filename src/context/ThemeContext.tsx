@@ -193,77 +193,66 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [theme, customThemes]);
 
-  // Apply theme to <html>
+  // Apply theme to <html> smoothly and immediately
   useEffect(() => {
-    const updateDom = () => {
-      purgeAllThemeClasses();
-      if (previewingTheme) {
-        applyCustomThemeStyles(previewingTheme);
-        syncThemeMetaColor(previewingTheme.background || "#090F15");
-        return;
-      }
+    purgeAllThemeClasses();
+    if (previewingTheme) {
+      applyCustomThemeStyles(previewingTheme);
+      syncThemeMetaColor(previewingTheme.background || "#090F15");
+      return;
+    }
 
-      if (theme.startsWith("custom_")) {
-        const custom = customThemes.find((t) => t.id === theme) || readLocalCustomThemes().find((t) => t.id === theme);
-        if (custom) {
-          applyCustomThemeStyles(custom);
-          syncThemeMetaColor(custom.background || "#090F15");
-        }
-      } else {
-        clearCustomInlineStyles();
-        document.documentElement.classList.add(`theme-${theme}`);
-        syncThemeMetaColor(THEME_META_COLORS[theme] || THEME_META_COLORS.global);
-      }
-    };
-
-    if (
-      typeof document !== "undefined" &&
-      "startViewTransition" in document &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      try {
-        (document as any).startViewTransition(updateDom);
-      } catch {
-        updateDom();
+    if (theme.startsWith("custom_")) {
+      const custom = customThemes.find((t) => t.id === theme) || readLocalCustomThemes().find((t) => t.id === theme);
+      if (custom) {
+        applyCustomThemeStyles(custom);
+        syncThemeMetaColor(custom.background || "#090F15");
       }
     } else {
-      updateDom();
+      clearCustomInlineStyles();
+      document.documentElement.classList.add(`theme-${theme}`);
+      syncThemeMetaColor(THEME_META_COLORS[theme] || THEME_META_COLORS.global);
     }
   }, [theme, customThemes, previewingTheme]);
 
-  // Sync preference with server
-  const syncWithServer = useCallback(
-    async (current: ThemeId, uid: string) => {
+  // Initial sync with server on authentication mount (runs once per login session)
+  const initialSyncedUserRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !userId) return;
+    if (initialSyncedUserRef.current === userId) return;
+    initialSyncedUserRef.current = userId;
+
+    const initServerTheme = async () => {
       try {
         const res = await fetch("/api/preferences/theme", { cache: "no-store" });
         if (!res.ok) return;
         const data: { theme?: string } = await res.json();
-        const server = isThemeId(data.theme) ? data.theme : null;
+        const serverTheme = isThemeId(data.theme) ? data.theme : null;
 
-        if (server) {
-          if (server !== current) setThemeState(server);
+        if (serverTheme) {
+          setThemeState(serverTheme);
           try {
-            window.localStorage.setItem(THEME_STORAGE_KEY, server);
+            window.localStorage.setItem(THEME_STORAGE_KEY, serverTheme);
           } catch {}
-        } else if (current !== DEFAULT_THEME) {
-          await fetch("/api/preferences/theme", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ theme: current }),
-          });
+        } else {
+          // If server has no theme saved yet, save current local theme
+          const currentLocal = readLocalTheme();
+          if (currentLocal !== DEFAULT_THEME) {
+            await fetch("/api/preferences/theme", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ theme: currentLocal }),
+            });
+          }
         }
       } catch {} finally {
         setSynced(true);
       }
-    },
-    []
-  );
+    };
 
-  useEffect(() => {
-    if (status !== "authenticated" || !userId) return;
-    setSynced(false);
-    syncWithServer(theme, userId);
-  }, [status, userId, syncWithServer, theme]);
+    initServerTheme();
+  }, [status, userId]);
 
   const setTheme = useCallback(
     (next: ThemeId) => {
