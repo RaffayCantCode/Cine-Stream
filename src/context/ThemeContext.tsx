@@ -27,6 +27,8 @@ interface ThemeContextValue {
   synced: boolean;
   customThemes: ThemeDefinition[];
   refreshCustomThemes: () => Promise<void>;
+  previewCustomTheme: (custom: Partial<ThemeDefinition> | null) => void;
+  previewingTheme: Partial<ThemeDefinition> | null;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -64,11 +66,21 @@ function clearCustomInlineStyles() {
   root.style.removeProperty("--foreground");
   root.style.removeProperty("--card-foreground");
   root.style.removeProperty("--border");
+  if (typeof document !== "undefined" && document.body) {
+    document.body.style.removeProperty("background-color");
+    document.body.style.removeProperty("background");
+  }
 }
 
-function applyCustomThemeStyles(custom: ThemeDefinition) {
+function applyCustomThemeStyles(custom: Partial<ThemeDefinition>) {
   const root = document.documentElement;
-  if (custom.background) root.style.setProperty("--background", hexToHsl(custom.background));
+  if (custom.background) {
+    root.style.setProperty("--background", hexToHsl(custom.background));
+    if (typeof document !== "undefined" && document.body) {
+      document.body.style.setProperty("background-color", custom.background, "important");
+      document.body.style.setProperty("background", custom.background, "important");
+    }
+  }
   if (custom.card) {
     root.style.setProperty("--card", hexToHsl(custom.card));
     root.style.setProperty("--popover", hexToHsl(custom.card));
@@ -113,10 +125,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [customThemes, setCustomThemes] = useState<ThemeDefinition[]>(
     () => (typeof window === "undefined" ? [] : readLocalCustomThemes())
   );
+  const [previewingTheme, setPreviewingTheme] = useState<Partial<ThemeDefinition> | null>(null);
   const [synced, setSynced] = useState(true);
   const { data: session, status } = useSession();
   const isAuthed = status === "authenticated";
   const userId = session?.user?.id ?? null;
+
+  const previewCustomTheme = useCallback((custom: Partial<ThemeDefinition> | null) => {
+    setPreviewingTheme(custom);
+  }, []);
 
   const refreshCustomThemes = useCallback(async () => {
     try {
@@ -150,9 +167,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     refreshCustomThemes();
   }, [refreshCustomThemes]);
 
+  // Auto-switch back to default theme if currently selected custom theme is deleted or disabled
+  useEffect(() => {
+    if (theme.startsWith("custom_")) {
+      const exists = customThemes.some((t) => t.id === theme) || readLocalCustomThemes().some((t) => t.id === theme);
+      if (!exists && customThemes.length > 0) {
+        setThemeState(DEFAULT_THEME);
+        try {
+          window.localStorage.setItem(THEME_STORAGE_KEY, DEFAULT_THEME);
+        } catch {}
+      }
+    }
+  }, [theme, customThemes]);
+
   // Apply theme to <html>
   useEffect(() => {
     purgeAllThemeClasses();
+    if (previewingTheme) {
+      applyCustomThemeStyles(previewingTheme);
+      syncThemeMetaColor(previewingTheme.background || "#090F15");
+      return;
+    }
+
     if (theme.startsWith("custom_")) {
       const custom = customThemes.find((t) => t.id === theme) || readLocalCustomThemes().find((t) => t.id === theme);
       if (custom) {
@@ -164,7 +200,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       document.documentElement.classList.add(`theme-${theme}`);
       syncThemeMetaColor(THEME_META_COLORS[theme] || THEME_META_COLORS.global);
     }
-  }, [theme, customThemes]);
+  }, [theme, customThemes, previewingTheme]);
 
   // Sync preference with server
   const syncWithServer = useCallback(
@@ -202,6 +238,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback(
     (next: ThemeId) => {
+      setPreviewingTheme(null);
       setThemeState(next);
       try {
         window.localStorage.setItem(THEME_STORAGE_KEY, next);
@@ -219,7 +256,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, synced, customThemes, refreshCustomThemes }}>
+    <ThemeContext.Provider value={{ theme, setTheme, synced, customThemes, refreshCustomThemes, previewCustomTheme, previewingTheme }}>
       {children}
     </ThemeContext.Provider>
   );

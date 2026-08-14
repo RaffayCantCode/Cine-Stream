@@ -834,8 +834,8 @@ export default function Home() {
             <HeroAnnouncement />
 
             <HeroBanner key={hero?.id || "empty"} item={hero} />
-            {/* Hero dot indicators — sit just above the bottom edge of the hero */}
-            {heroPool.length > 1 && (
+            {/* Hero dot indicators — ONLY show in normal auto-rotation mode (not when Spotlight Hero is active) */}
+            {!spotlightBanner && heroPool.length > 1 && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
                 {heroPool.map((_, i) => (
                   <button
@@ -851,8 +851,8 @@ export default function Home() {
                 ))}
               </div>
             )}
-            {/* Hero Left/Right navigation buttons — hidden on mobile (swipe handles it), always visible on md, hover-only on lg+ */}
-            {heroPool.length > 1 && (
+            {/* Hero Left/Right navigation buttons — ONLY show in normal auto-rotation mode */}
+            {!spotlightBanner && heroPool.length > 1 && (
               <>
                 <button
                   type="button"

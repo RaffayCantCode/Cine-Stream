@@ -197,6 +197,16 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/12 md:backdrop-blur-0 px-4 py-5 md:p-0"
           style={SECTION_STYLE}
         >
+          {/* Spotlight / Custom Badge Tagline */}
+          {(item as any).badge && (
+            <div className="mb-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-md backdrop-blur-sm">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                {(item as any).badge}
+              </span>
+            </div>
+          )}
+
           {/* Tags row */}
           <div className="flex flex-wrap justify-center md:justify-start items-center gap-2.5 mb-2.5">
             {rating > 0 && item.vote_count && item.vote_count > 20 && (
