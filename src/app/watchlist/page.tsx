@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { BookMarked, X, Compass, Clapperboard, Tv, Sparkles, Layers } from "lucide-react";
+import { BookMarked, X, Compass, Clapperboard, Tv, Sparkles, Layers, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { useWatchlist } from "@/context/WatchlistContext";
+import { useSession, signIn } from "next-auth/react";
 import type { MediaType } from "@/lib/watchlist";
 
 type Filter = "all" | MediaType;
@@ -19,6 +20,7 @@ const FILTERS: { id: Filter; label: string; icon: typeof Clapperboard }[] = [
 ];
 
 export default function WatchlistPage() {
+  const { status } = useSession();
   const { items, loading, remove } = useWatchlist();
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -61,12 +63,13 @@ export default function WatchlistPage() {
             <div className="h-0.5 w-16 bg-primary/70 rounded-full mt-3 mb-6" />
           </div>
 
-          {showEmpty ? (
+          {status === "unauthenticated" ? (
+            <UnauthenticatedState />
+          ) : showEmpty ? (
             <EmptyState />
           ) : (
             <div className="flex flex-col lg:flex-row gap-8">
-              {/* Filters — left column on desktop, top on mobile.
-                  Always visible so you can flip back even when a type has 0 items. */}
+              {/* Filters — left column on desktop, top on mobile. */}
               <nav className="lg:w-52 shrink-0" aria-label="Watchlist filters">
                 <div className="lg:sticky lg:top-20 flex lg:flex-col gap-2 lg:gap-1.5 overflow-x-auto hide-scrollbar lg:overflow-visible pb-1">
                   {FILTERS.map(({ id, label, icon: Icon }) => (
@@ -75,7 +78,7 @@ export default function WatchlistPage() {
                       onClick={() => setFilter(id)}
                       aria-pressed={filter === id}
                       className={cn(
-                        "flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all touch-manipulation whitespace-nowrap lg:whitespace-normal",
+                        "flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all touch-manipulation whitespace-nowrap lg:whitespace-normal cursor-pointer",
                         filter === id
                           ? "bg-primary text-primary-foreground shadow-lg shadow-black/30"
                           : "text-muted-foreground hover:text-foreground hover:bg-card"
@@ -133,7 +136,7 @@ export default function WatchlistPage() {
                         <button
                           onClick={() => remove(item.mediaId, item.mediaType)}
                           aria-label={`Remove ${item.title} from watchlist`}
-                          className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 backdrop-blur-md text-white shadow-lg ring-1 ring-white/20 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-rose-600 hover:scale-110"
+                          className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 backdrop-blur-md text-white shadow-lg ring-1 ring-white/20 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-rose-600 hover:scale-110 cursor-pointer"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -146,6 +149,29 @@ export default function WatchlistPage() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function UnauthenticatedState() {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-16 md:py-24">
+      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/10 border border-primary/20 text-primary mb-6 shadow-xl">
+        <BookMarked className="w-10 h-10" />
+      </div>
+      <h2 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">
+        Sign in to view your Watchlist
+      </h2>
+      <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-md">
+        Watchlist is an exclusive feature for registered accounts. Sign in or create a free account to sync your saved movies, TV shows, and anime across all your devices.
+      </p>
+      <button
+        onClick={() => signIn()}
+        className="mt-8 inline-flex items-center gap-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all active:scale-95 shadow-xl shadow-black/40 cursor-pointer"
+      >
+        <LogIn className="w-4 h-4" />
+        <span>Sign In to Continue</span>
+      </button>
     </div>
   );
 }

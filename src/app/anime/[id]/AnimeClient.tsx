@@ -1304,6 +1304,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const legacySeasonParam = Number(searchParams.get("season") || "");
 
     let target: Episode | undefined;
+    let isFromActiveShow = false;
 
     if (episodeParam > 0) {
       target = episodes.find(ep => {
@@ -1311,10 +1312,33 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         const matchesLegacySeason = legacySeasonParam ? ep.seasonNum === legacySeasonParam : true;
         return matchesSeasonId && matchesLegacySeason && ep.episodeNum === episodeParam;
       });
+      if (target && autoPlay) {
+        isFromActiveShow = true;
+      }
+    } else {
+      try {
+        const activeAnimeRaw = localStorage.getItem("cinestream_active_anime_show");
+        if (activeAnimeRaw) {
+          const activeAnime = JSON.parse(activeAnimeRaw);
+          const animeMatchId = String(anime?.id || id);
+          if (String(activeAnime?.id) === animeMatchId) {
+            target = episodes.find(ep => {
+              const matchesSeason = activeAnime.seasonId ? ep.seasonId === activeAnime.seasonId : true;
+              return matchesSeason && ep.episodeNum === activeAnime.episodeNum;
+            });
+            if (target) {
+              isFromActiveShow = true;
+            }
+          }
+        }
+      } catch {}
     }
 
     if (target && !selectedEp) {
       setSelectedEp(target);
+      if (isFromActiveShow) {
+        setWatchStarted(true);
+      }
       if (autoPlay) {
         if (authStatus === "authenticated" && anime) {
           const numericId = parseInt(anime.id, 10);
@@ -1337,6 +1361,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
         setWatchStarted(true);
         setIsPlaying(true);
+        try {
+          localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
+            id: String(anime?.id || id),
+            seasonId: target.seasonId || currentSeasonId,
+            episodeNum: target.episodeNum,
+            episodeId: target.episodeId,
+          }));
+        } catch {}
       }
     }
 
@@ -1347,16 +1379,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   // Persist State
   useEffect(() => {
-    if (typeof window !== "undefined" && currentSeasonId && hasRestoredState) {
+    if (typeof window !== "undefined" && watchStarted && selectedEp && anime) {
       try {
-        const userId = session?.user?.id || "guest";
-        localStorage.setItem(`sv_anime_state_${userId}_${id}`, JSON.stringify({
-          seasonId: currentSeasonId,
-          episodeId: selectedEp?.episodeId || null
+        localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
+          id: String(anime.id || id),
+          seasonId: selectedEp.seasonId || currentSeasonId,
+          episodeNum: selectedEp.episodeNum,
+          episodeId: selectedEp.episodeId,
         }));
       } catch {}
     }
-  }, [id, currentSeasonId, selectedEp, session?.user?.id, hasRestoredState]);
+  }, [id, anime, currentSeasonId, selectedEp, watchStarted]);
 
   // ── Scroll to player on play ────────────────────────────────────────────
   useEffect(() => {
@@ -1376,9 +1409,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     return () => clearTimeout(timer);
   }, [selectedEp?.episodeId, isPlaying, episodesLoading, currentSeasonId]);
 
-  // ── Season overview text from TMDB (included in episodes response) ────
-  // The episodes endpoint now returns TMDB-enriched data directly with seasonOverview
-
   // ── Season click handler ────────────────────────────────────────────────
   const handleSeasonClick = useCallback((season: SeasonInfo) => {
     if (season.id === currentSeasonId) return;
@@ -1388,9 +1418,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setWatchStarted(false);
     setEpisodeNotice(null);
     // Always force-reload when the user explicitly clicks a season tab.
-    // This ensures placeholder episodes (loaded without TMDB params during
-    // the initial pre-fetch race) are replaced with real metadata now that
-    // the client has the correct tmdbId / tmdbSeason / episodeOffset from meta.
     loadSeasonEpisodes(
       season.id,
       true,
@@ -1425,6 +1452,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
       url.searchParams.set("episode", ep.episodeNum.toString());
       window.history.replaceState({}, "", url.toString());
+
+      try {
+        localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
+          id: String(anime?.id || id),
+          seasonId: ep.seasonId || currentSeasonId,
+          episodeNum: ep.episodeNum,
+          episodeId: ep.episodeId,
+        }));
+      } catch {}
     }
 
     if (authStatus === "authenticated" && anime) {
@@ -1446,7 +1482,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }).catch(() => {});
       }
     }
-  }, [authStatus, anime]);
+  }, [authStatus, anime, id, currentSeasonId]);
 
   const [episodeView, setEpisodeView] = useState<EpisodeViewMode>(() => {
     if (typeof window !== "undefined") {

@@ -892,7 +892,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
             Spotlight Featured Hero Banner
           </h3>
           <p className="text-xs text-white/50">
-            Promote a special release (e.g. ONE PIECE New Arc) overriding the default dynamic 3-card carousel.
+            Search and pick any Movie, TV Show, or Anime to feature as the spotlight banner on the homepage.
           </p>
         </div>
 
@@ -909,61 +909,156 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
       </div>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-bold text-white/70 uppercase">Banner Title</label>
-            <input
-              type="text"
-              value={spotlight.title || ""}
-              onChange={(e) => setSpotlight({ ...spotlight, title: e.target.value })}
-              placeholder="e.g. ONE PIECE: Egghead Arc"
-              className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-bold focus:outline-none focus:border-primary"
-            />
+        {/* Search Media to Feature */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-white/70 uppercase flex items-center gap-1.5">
+            <Search className="w-3.5 h-3.5 text-primary" />
+            Search & Pick Media Entry (Movies, TV Shows, Anime)
+          </label>
+          <input
+            type="text"
+            value={pickerSearchQuery}
+            onChange={(e) => {
+              setPickerSearchQuery(e.target.value);
+              searchMediaItems(e.target.value);
+            }}
+            placeholder="Type to search (e.g. Inception, Attack on Titan, Solo Leveling, Breaking Bad)..."
+            className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-medium focus:outline-none focus:border-primary"
+          />
+
+          {pickerLoading && (
+            <div className="py-3 text-center text-xs text-white/40">
+              <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> Searching catalog...
+            </div>
+          )}
+
+          {pickerResults.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-56 overflow-y-auto p-2 rounded-xl bg-black/40 border border-white/10 custom-scrollbar">
+              {pickerResults.map((item) => (
+                <button
+                  key={`${item.media_type}_${item.id}`}
+                  type="button"
+                  onClick={() => {
+                    const cleanTitle = item.title || item.name || "Featured Title";
+                    const cleanType = item.media_type || "movie";
+                    const cleanTargetUrl = cleanType === "anime" 
+                      ? `/anime/${item.anilistId || item.id}` 
+                      : `/${cleanType}/${item.id}`;
+                    const cleanBackdrop = item.backdrop_path 
+                      ? (item.backdrop_path.startsWith("http") ? item.backdrop_path : `https://image.tmdb.org/t/p/original${item.backdrop_path}`)
+                      : item.poster_path;
+
+                    setSpotlight({
+                      ...spotlight,
+                      title: cleanTitle,
+                      mediaType: cleanType,
+                      backdropPath: cleanBackdrop,
+                      posterPath: item.poster_path,
+                      targetUrl: cleanTargetUrl,
+                      description: item.overview || spotlight.description || "",
+                    });
+                    setPickerResults([]);
+                    setPickerSearchQuery("");
+                    showToast("success", `Selected "${cleanTitle}" for Spotlight!`);
+                  }}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-white/5 hover:bg-primary/20 hover:border-primary/40 border border-transparent transition-all text-left group cursor-pointer"
+                >
+                  {item.poster_path ? (
+                    <img src={item.poster_path} alt="" className="w-8 h-11 object-cover rounded shrink-0" />
+                  ) : (
+                    <div className="w-8 h-11 bg-white/10 rounded flex items-center justify-center text-[9px] text-white/40">No img</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold text-white truncate group-hover:text-primary transition-colors">{item.title}</p>
+                    <span className="text-[9px] uppercase font-semibold text-white/40">{item.media_type}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Selected Media Preview Card */}
+        {spotlight.title ? (
+          <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black/40 p-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                {spotlight.backdropPath || spotlight.posterPath ? (
+                  <img
+                    src={spotlight.backdropPath || spotlight.posterPath}
+                    alt=""
+                    className="w-16 h-16 sm:w-20 sm:h-14 object-cover rounded-xl border border-white/15 shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center text-xs text-white/40">
+                    No Art
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-black text-white truncate">{spotlight.title}</h4>
+                    <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
+                      {spotlight.mediaType}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/50 truncate mt-0.5">
+                    Target Route: <span className="text-sky-300 font-mono">{spotlight.targetUrl || "/"}</span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPickerSearchQuery(spotlight.title);
+                  searchMediaItems(spotlight.title);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                Change Media
+              </button>
+            </div>
           </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-black/20 border border-white/5 text-center text-xs text-white/40 italic">
+            No media selected yet. Search above to choose a movie, TV show, or anime for the hero banner.
+          </div>
+        )}
+
+        {/* Customization overrides */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/10">
           <div>
-            <label className="text-xs font-bold text-white/70 uppercase">Badge / Tagline</label>
+            <label className="text-xs font-bold text-white/70 uppercase">Banner Badge / Tagline</label>
             <input
               type="text"
               value={spotlight.badge || ""}
               onChange={(e) => setSpotlight({ ...spotlight, badge: e.target.value })}
-              placeholder="e.g. New Episodes Streaming Now"
-              className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-medium focus:outline-none focus:border-primary"
+              placeholder="e.g. Featured Spotlight, New Episode Streaming"
+              className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-bold focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-white/70 uppercase">Title (Override)</label>
+            <input
+              type="text"
+              value={spotlight.title || ""}
+              onChange={(e) => setSpotlight({ ...spotlight, title: e.target.value })}
+              placeholder="Title override..."
+              className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-bold focus:outline-none focus:border-primary"
             />
           </div>
         </div>
 
         <div>
-          <label className="text-xs font-bold text-white/70 uppercase">Description</label>
+          <label className="text-xs font-bold text-white/70 uppercase">Description / Synopsis</label>
           <textarea
             rows={2}
             value={spotlight.description || ""}
             onChange={(e) => setSpotlight({ ...spotlight, description: e.target.value })}
-            placeholder="e.g. The Straw Hat Pirates reach the futuristic island of Egghead..."
-            className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs focus:outline-none focus:border-primary resize-none"
+            placeholder="Custom synopsis..."
+            className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs focus:outline-none focus:border-primary resize-none font-medium"
           />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-bold text-white/70 uppercase">Backdrop Image URL</label>
-            <input
-              type="text"
-              value={spotlight.backdropPath || ""}
-              onChange={(e) => setSpotlight({ ...spotlight, backdropPath: e.target.value })}
-              placeholder="https://image.tmdb.org/t/p/... or custom image URL"
-              className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white text-xs focus:outline-none focus:border-primary"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-white/70 uppercase">Watch Now Target Link</label>
-            <input
-              type="text"
-              value={spotlight.targetUrl || ""}
-              onChange={(e) => setSpotlight({ ...spotlight, targetUrl: e.target.value })}
-              placeholder="e.g. /anime/21 or /movie/550"
-              className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white text-xs focus:outline-none focus:border-primary"
-            />
-          </div>
         </div>
       </div>
 
@@ -1416,18 +1511,9 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
   );
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // TAB 7: THEME STUDIO & SITE APPEARANCE
+  // TAB 7: THEME STUDIO & SITE CUSTOMIZATION
   // ─────────────────────────────────────────────────────────────────────────────
   const renderAppearanceTab = () => {
-    const colorPresets = [
-      { name: "CineStream Classic", color: "#7288AE" },
-      { name: "Neon Cyan", color: "#06B6D4" },
-      { name: "Sunset Gold", color: "#F59E0B" },
-      { name: "Emerald Pulse", color: "#10B981" },
-      { name: "Purple Royal", color: "#8B5CF6" },
-      { name: "Rose Crimson", color: "#F43F5E" },
-    ];
-
     const previewGradient = `linear-gradient(135deg, ${editingTheme.background} 0%, ${editingTheme.card} 45%, ${editingTheme.primary} 85%, ${editingTheme.accent} 100%)`;
 
     return (
@@ -1440,7 +1526,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
               Theme Studio & Custom Themes
             </h3>
             <p className="text-xs text-white/50 mt-0.5">
-              Create real-time themes on the fly using color wheels. They automatically appear in the themes drawer for all visitors!
+              Create real-time custom themes on the fly using color wheels. They automatically appear in the themes drawer for all visitors!
             </p>
           </div>
 
@@ -1561,50 +1647,21 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
           )}
         </div>
 
-        {/* Global Accent & Tagline */}
+        {/* Site Branding Tagline */}
         <div className="pt-4 border-t border-white/10 space-y-4">
           <h4 className="text-xs font-black uppercase tracking-wider text-white/70">
-            Global Accent Preset
+            Site Branding & Tagline
           </h4>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {colorPresets.map((p) => (
-              <button
-                key={p.color}
-                type="button"
-                onClick={() => setAppearance({ ...appearance, accentColor: p.color })}
-                className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                  appearance.accentColor.toLowerCase() === p.color.toLowerCase()
-                    ? "bg-white/10 border-white text-white shadow-md"
-                    : "bg-black/30 border-white/10 text-white/60 hover:text-white"
-                }`}
-              >
-                <span className="w-4 h-4 rounded-full shadow-inner shrink-0" style={{ backgroundColor: p.color }} />
-                <span className="truncate">{p.name}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold text-white/70 uppercase">Custom Hex Code</label>
-              <input
-                type="text"
-                value={appearance.accentColor}
-                onChange={(e) => setAppearance({ ...appearance, accentColor: e.target.value })}
-                className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-bold focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-white/70 uppercase">Site Tagline</label>
-              <input
-                type="text"
-                value={appearance.tagline}
-                onChange={(e) => setAppearance({ ...appearance, tagline: e.target.value })}
-                className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-medium focus:outline-none focus:border-primary"
-              />
-            </div>
+          <div>
+            <label className="text-xs font-bold text-white/70 uppercase">Global Header Tagline</label>
+            <input
+              type="text"
+              value={appearance.tagline}
+              onChange={(e) => setAppearance({ ...appearance, tagline: e.target.value })}
+              placeholder="e.g. Movies. TV. Anime. All in one place."
+              className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs font-medium focus:outline-none focus:border-primary"
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -1619,7 +1676,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
                     body: JSON.stringify(appearance),
                   });
                   if (res.ok) {
-                    showToast("success", "Appearance settings saved!");
+                    showToast("success", "Tagline settings saved!");
                   }
                 } finally {
                   setAppearanceSaving(false);
@@ -1629,7 +1686,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
               className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-extrabold shadow-lg cursor-pointer disabled:opacity-50"
             >
               {appearanceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              <span>Save Appearance</span>
+              <span>Save Tagline</span>
             </button>
           </div>
         </div>

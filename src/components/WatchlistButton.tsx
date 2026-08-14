@@ -3,6 +3,7 @@
 import { BookmarkPlus, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWatchlist } from "@/context/WatchlistContext";
+import { useSession, signIn } from "next-auth/react";
 import type { MediaType } from "@/lib/watchlist";
 
 interface WatchlistButtonProps {
@@ -22,18 +23,26 @@ export function WatchlistButton({
   backdropPath,
   className,
 }: WatchlistButtonProps) {
+  const { status } = useSession();
   const { isSaved, toggle } = useWatchlist();
-  const saved = isSaved(mediaId, mediaType);
+  const saved = status === "authenticated" && isSaved(mediaId, mediaType);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (status !== "authenticated") {
+      signIn();
+      return;
+    }
+    toggle({ mediaId, mediaType, title, posterPath, backdropPath });
+  };
 
   return (
     <button
-      onClick={() =>
-        toggle({ mediaId, mediaType, title, posterPath, backdropPath })
-      }
+      onClick={handleClick}
       aria-pressed={saved}
       aria-label={saved ? "Remove from watchlist" : "Save to watchlist"}
       className={cn(
-        "group flex items-center gap-2.5 px-6 py-4 rounded-xl text-sm font-bold transition-all duration-200 active:scale-95 shadow-lg touch-manipulation",
+        "group flex items-center gap-2.5 px-6 py-4 rounded-xl text-sm font-bold transition-all duration-200 active:scale-95 shadow-lg touch-manipulation cursor-pointer",
         saved
           ? "bg-primary hover:bg-primary/85 text-primary-foreground border border-primary/40 shadow-lg shadow-black/30"
           : "bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md",

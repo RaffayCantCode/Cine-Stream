@@ -146,7 +146,7 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
 
         {/* Selected / playing badge */}
         {item.isSelected && (
-          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-primary text-white text-[9px] font-extrabold tracking-widest uppercase shadow-lg shadow-black/30">
+          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-black tracking-wider uppercase shadow-xl shadow-black/50 border border-white/25">
             {item.isPlaying && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
             {item.isPlaying ? "Playing" : "Current"}
           </div>
@@ -269,8 +269,8 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
 
         {/* Selected / playing badge */}
         {item.isSelected && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary text-white text-[8px] font-extrabold tracking-widest uppercase shadow-lg shadow-black/30">
-            {item.isPlaying && <span className="w-1 h-1 rounded-full bg-white animate-pulse" />}
+          <div className="absolute top-2 right-2 flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-black tracking-wider uppercase shadow-xl shadow-black/50 border border-white/25">
+            {item.isPlaying && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
             {item.isPlaying ? "Playing" : "Current"}
           </div>
         )}

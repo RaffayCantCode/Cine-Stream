@@ -114,25 +114,27 @@ export default function TvClient() {
     if (status === "loading" || isStateLoaded) return;
     let initSeason = 1;
     let initEp = 1;
-    let hasSavedOrUrl = false;
+    let hasActiveShow = false;
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search);
       const urlSeason = searchParams.get("season");
       const urlEp = searchParams.get("episode");
+      const isAutoPlay = searchParams.get("autoplay") === "1";
       
-      if (urlSeason || urlEp) {
+      if (isAutoPlay || (urlSeason && urlEp)) {
         if (urlSeason && Number(urlSeason) > 0) initSeason = Number(urlSeason);
         if (urlEp && Number(urlEp) > 0) initEp = Number(urlEp);
-        hasSavedOrUrl = true;
+        hasActiveShow = true;
       } else {
         try {
-          const userId = session?.user?.id || "guest";
-          const saved = localStorage.getItem(`sv_tv_state_${userId}_${id}`);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed?.season) initSeason = parsed.season;
-            if (parsed?.episode) initEp = parsed.episode;
-            hasSavedOrUrl = true;
+          const activeShowRaw = localStorage.getItem("cinestream_active_tv_show");
+          if (activeShowRaw) {
+            const activeShow = JSON.parse(activeShowRaw);
+            if (String(activeShow?.id) === String(id)) {
+              if (activeShow?.season) initSeason = activeShow.season;
+              if (activeShow?.episode) initEp = activeShow.episode;
+              hasActiveShow = true;
+            }
           }
         } catch {}
       }
@@ -140,7 +142,7 @@ export default function TvClient() {
     setSelectedSeason(initSeason);
     setPlayingSeason(initSeason);
     setPlayingEpisode(initEp);
-    setHasActiveProgress(hasSavedOrUrl);
+    setHasActiveProgress(hasActiveShow);
     setIsStateLoaded(true);
   }, [id, status, session, isStateLoaded]);
 
@@ -206,8 +208,6 @@ export default function TvClient() {
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(prev => {
-          // If we haven't loaded state yet, or we're on season 1 and there's no explicitly requested season,
-          // then default to the first available season (often >1 for anime/some shows).
           if (prev === 1 && firstSeason > 1 && typeof window !== "undefined" && !new URLSearchParams(window.location.search).get("season")) {
             return firstSeason;
           }
@@ -241,6 +241,15 @@ export default function TvClient() {
     if (autoPlay) {
       const targetSeason = season > 0 ? season : 1;
       const targetEpisode = episode > 0 ? episode : 1;
+      setHasActiveProgress(true);
+      try {
+        localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
+          id: String(show.id),
+          season: targetSeason,
+          episode: targetEpisode,
+        }));
+      } catch {}
+
       if (status === "authenticated") {
         fetch("/api/watch-history", {
           method: "POST",
@@ -262,13 +271,16 @@ export default function TvClient() {
 
   // Persist state
   useEffect(() => {
-    if (typeof window !== "undefined" && status !== "loading" && isStateLoaded) {
+    if (typeof window !== "undefined" && status !== "loading" && isStateLoaded && hasActiveProgress && show) {
       try {
-        const userId = session?.user?.id || "guest";
-        localStorage.setItem(`sv_tv_state_${userId}_${id}`, JSON.stringify({ season: playingSeason, episode: playingEpisode }));
+        localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
+          id: String(show.id),
+          season: playingSeason,
+          episode: playingEpisode,
+        }));
       } catch {}
     }
-  }, [id, playingSeason, playingEpisode, status, session, isStateLoaded]);
+  }, [id, show, playingSeason, playingEpisode, status, isStateLoaded, hasActiveProgress]);
 
   useEffect(() => {
     if (!selectedSeason) return;
@@ -315,6 +327,16 @@ export default function TvClient() {
       url.searchParams.set("season", season.toString());
       url.searchParams.set("episode", episodeNumber.toString());
       window.history.replaceState({}, "", url.toString());
+
+      if (show) {
+        try {
+          localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
+            id: String(show.id),
+            season,
+            episode: episodeNumber,
+          }));
+        } catch {}
+      }
     }
 
     if (status === "authenticated" && show) {
