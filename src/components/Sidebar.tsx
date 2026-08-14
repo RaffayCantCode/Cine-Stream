@@ -358,6 +358,7 @@ export const Sidebar = memo(function Sidebar() {
         <AdminPanelModal
           isOpen={adminPanelOpen}
           onClose={() => setAdminPanelOpen(false)}
+          onOpen={() => setAdminPanelOpen(true)}
         />
       )}
     </>

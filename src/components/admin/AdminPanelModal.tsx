@@ -29,13 +29,16 @@ import {
   RefreshCw,
   Flame,
   Sliders,
+  Bug,
 } from "lucide-react";
 import { useAnnouncement } from "@/hooks/useAnnouncement";
 import { useTheme } from "@/context/ThemeContext";
+import { harmonizeAccentToCineStreamTheme, ArchetypeStyle } from "@/lib/themes";
 
 interface AdminPanelModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpen?: () => void;
 }
 
 type AdminTab = 
@@ -45,9 +48,10 @@ type AdminTab =
   | "spotlight" 
   | "users" 
   | "franchises" 
-  | "appearance";
+  | "appearance"
+  | "reports";
 
-export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProps) {
+export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, onOpen }: AdminPanelModalProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const { refreshCustomThemes, previewCustomTheme, previewingTheme } = useTheme();
@@ -231,6 +235,22 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
     }
   }, []);
 
+  const [reportsList, setReportsList] = useState<any[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+
+  const loadReports = useCallback(async () => {
+    setReportsLoading(true);
+    try {
+      const res = await fetch("/api/contact");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.reports) setReportsList(json.reports);
+      }
+    } catch {} finally {
+      setReportsLoading(false);
+    }
+  }, []);
+
   // Load data when active tab changes
   useEffect(() => {
     if (!isOpen) return;
@@ -239,11 +259,12 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
     if (activeTab === "spotlight") loadSpotlight();
     if (activeTab === "users") loadUsers(userQuery);
     if (activeTab === "franchises") loadFranchises();
+    if (activeTab === "reports") loadReports();
     if (activeTab === "appearance") {
       loadAppearance();
       loadAdminThemes();
     }
-  }, [isOpen, activeTab, loadStats, loadSections, loadSpotlight, loadUsers, loadFranchises, loadAppearance, loadAdminThemes, userQuery]);
+  }, [isOpen, activeTab, loadStats, loadSections, loadSpotlight, loadUsers, loadFranchises, loadReports, loadAppearance, loadAdminThemes, userQuery]);
 
   // Handle escape key
   useEffect(() => {
@@ -293,6 +314,8 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
             onClick={() => {
               setEditingTheme(previewingTheme);
               setThemeModalOpen(true);
+              setActiveTab("appearance");
+              if (onOpen) onOpen();
             }}
             className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer border border-zinc-700/80 transition-colors"
           >
@@ -305,6 +328,8 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
                 showToast("error", "Theme name is required before publishing");
                 setEditingTheme(previewingTheme);
                 setThemeModalOpen(true);
+                setActiveTab("appearance");
+                if (onOpen) onOpen();
                 return;
               }
               const method = previewingTheme.id ? "PUT" : "POST";
@@ -1893,9 +1918,144 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
                   />
                 </div>
 
+                {/* Starter Pack Base Selector */}
+                <div className="space-y-2.5 pb-3 border-b border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-white block">Starter Pack Templates</span>
+                      <span className="text-[11px] text-zinc-400">Pick a pre-harmonized starter pack base, then customize every detail below</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const harmonized = harmonizeAccentToCineStreamTheme(editingTheme.primary || "#38BDF8", "midnight");
+                        setEditingTheme({
+                          ...editingTheme,
+                          ...harmonized,
+                        });
+                        showToast("success", "Auto-harmonized current accent color!");
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Auto-Tune Accent</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      {
+                        id: "midnight",
+                        label: "Neon Midnight",
+                        tagline: "Cyberpunk",
+                        description: "Sleek dark slate canvas with luminous cyan & fuchsia accents.",
+                        background: "#090E17",
+                        card: "#131C2E",
+                        primary: "#38BDF8",
+                        accent: "#F43F5E",
+                        foreground: "#F1F5F9",
+                        previewGradient: "linear-gradient(135deg, #090E17 0%, #131C2E 50%, #38BDF8 100%)",
+                      },
+                      {
+                        id: "glass",
+                        label: "Liquid Glass",
+                        tagline: "Frosted",
+                        description: "Deep obsidian backdrop with translucent sapphire & ice blue glows.",
+                        background: "#080B14",
+                        card: "#111827",
+                        primary: "#60A5FA",
+                        accent: "#38BDF8",
+                        foreground: "#F8FAFC",
+                        previewGradient: "linear-gradient(135deg, #080B14 0%, #111827 50%, #60A5FA 100%)",
+                      },
+                      {
+                        id: "oled",
+                        label: "AMOLED Pitch",
+                        tagline: "True Black",
+                        description: "Pure pitch black background optimized for OLED displays with vivid contrast.",
+                        background: "#000000",
+                        card: "#121212",
+                        primary: "#10B981",
+                        accent: "#34D399",
+                        foreground: "#F1F5F9",
+                        previewGradient: "linear-gradient(135deg, #000000 0%, #121212 50%, #10B981 100%)",
+                      },
+                      {
+                        id: "velvet",
+                        label: "Royal Velvet",
+                        tagline: "Luxury",
+                        description: "Deep burgundy shadow canvas with warm champagne & brass highlights.",
+                        background: "#12050A",
+                        card: "#210C14",
+                        primary: "#F43F5E",
+                        accent: "#F59E0B",
+                        foreground: "#FDF2F8",
+                        previewGradient: "linear-gradient(135deg, #12050A 0%, #210C14 50%, #F43F5E 100%)",
+                      },
+                      {
+                        id: "forest",
+                        label: "Emerald Forest",
+                        tagline: "Evergreen",
+                        description: "Atmospheric dark evergreen shadow with mint & sage streaming accents.",
+                        background: "#060F0B",
+                        card: "#112219",
+                        primary: "#10B981",
+                        accent: "#34D399",
+                        foreground: "#F1F5F9",
+                        previewGradient: "linear-gradient(135deg, #060F0B 0%, #112219 50%, #10B981 100%)",
+                      },
+                      {
+                        id: "cosmos",
+                        label: "Cosmic Space",
+                        tagline: "Celestial",
+                        description: "Deep cosmic indigo shadow with radiant violet & cyan nebulae.",
+                        background: "#090A14",
+                        card: "#14172B",
+                        primary: "#A855F7",
+                        accent: "#06B6D4",
+                        foreground: "#F8FAFC",
+                        previewGradient: "linear-gradient(135deg, #090A14 0%, #14172B 50%, #A855F7 100%)",
+                      },
+                    ].map((pack) => {
+                      const isSelected = editingTheme.background === pack.background && editingTheme.primary === pack.primary;
+                      return (
+                        <button
+                          key={pack.id}
+                          type="button"
+                          onClick={() => {
+                            setEditingTheme({
+                              ...editingTheme,
+                              label: editingTheme.id ? editingTheme.label : pack.label,
+                              tagline: editingTheme.id ? editingTheme.tagline : pack.tagline,
+                              description: editingTheme.id ? editingTheme.description : pack.description,
+                              background: pack.background,
+                              card: pack.card,
+                              primary: pack.primary,
+                              accent: pack.accent,
+                              foreground: pack.foreground,
+                            });
+                            showToast("success", `Loaded ${pack.label} starter pack!`);
+                          }}
+                          className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer group ${
+                            isSelected
+                              ? "bg-fuchsia-500/10 border-fuchsia-500/40 text-white shadow-sm"
+                              : "bg-black/40 hover:bg-zinc-800/80 border-zinc-800 text-zinc-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1 w-full">
+                            <span className="w-3 h-3 rounded-full border border-white/20 shrink-0" style={{ background: pack.previewGradient }} />
+                            <span className="text-xs font-bold truncate group-hover:text-white transition-colors">{pack.label}</span>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 truncate w-full">{pack.tagline}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Color Pickers */}
                 <div className="space-y-3 pt-2 border-t border-zinc-800">
-                  <span className="text-xs font-semibold text-zinc-400 uppercase block">Color Controls</span>
+                  <span className="text-xs font-semibold text-zinc-400 uppercase block">Fine-Tune Color Controls</span>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-zinc-800">
@@ -2025,6 +2185,117 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
     );
   };
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TAB 8: ISSUE REPORTS
+  // ─────────────────────────────────────────────────────────────────────────────
+  const renderReportsTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-white">User Bug & Issue Reports</h3>
+          <p className="text-xs text-zinc-400">Database-backed bug submissions from users. Review, resolve, or delete reports.</p>
+        </div>
+        <button
+          type="button"
+          onClick={loadReports}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer border border-zinc-700/80 transition-colors"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${reportsLoading ? "animate-spin" : ""}`} />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      {reportsLoading ? (
+        <div className="py-12 text-center text-xs text-zinc-500">
+          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" /> Loading issue reports...
+        </div>
+      ) : reportsList.length === 0 ? (
+        <div className="p-8 rounded-2xl bg-zinc-900/60 border border-zinc-800 text-center text-xs text-zinc-500">
+          No issue reports found. Submissions from /contact will appear here.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reportsList.map((rep: any) => {
+            const isResolved = rep.status === "resolved";
+            return (
+              <div key={rep.id} className={`p-4 rounded-2xl border transition-all ${
+                isResolved ? "bg-zinc-950/40 border-zinc-800/60 opacity-60" : "bg-zinc-900/60 border-zinc-800"
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-bold ${isResolved ? "line-through text-zinc-400" : "text-amber-300"}`}>
+                      {rep.topic}
+                    </span>
+                    <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                      {rep.userEmail || "user"}
+                    </span>
+                    <span className={`text-[9px] uppercase font-mono px-2 py-0.5 rounded border ${
+                      isResolved
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    }`}>
+                      {rep.status || "open"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const newStatus = isResolved ? "open" : "resolved";
+                        const res = await fetch("/api/contact", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: rep.id, status: newStatus }),
+                        });
+                        if (res.ok) {
+                          loadReports();
+                          showToast("success", `Report marked as ${newStatus}`);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] font-medium transition-colors cursor-pointer"
+                    >
+                      <CheckCircle2 className={`w-3.5 h-3.5 ${isResolved ? "text-emerald-400" : "text-zinc-400"}`} />
+                      <span>{isResolved ? "Reopen" : "Mark Done"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`Delete bug report "${rep.topic}"?`)) return;
+                        const res = await fetch("/api/contact", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: rep.id }),
+                        });
+                        if (res.ok) {
+                          loadReports();
+                          showToast("success", "Report deleted");
+                        }
+                      }}
+                      className="p-1 text-rose-400 hover:text-rose-300 rounded cursor-pointer transition-colors"
+                      title="Delete Report"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed bg-black/40 p-3 rounded-xl border border-zinc-800/80">
+                  {rep.message}
+                </p>
+
+                <div className="mt-2 text-[10px] font-mono text-zinc-500 text-right">
+                  {new Date(rep.createdAt).toLocaleString()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
       {renderPreviewBanner()}
@@ -2081,6 +2352,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
                 { id: "users", label: "User Accounts", icon: Users },
                 { id: "franchises", label: "Franchises", icon: Layers },
                 { id: "appearance", label: "Theme Studio", icon: Palette },
+                { id: "reports", label: "Issue Reports", icon: Bug, badge: reportsList.length > 0 ? String(reportsList.length) : null },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -2120,6 +2392,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose }
               {activeTab === "users" && renderUsersTab()}
               {activeTab === "franchises" && renderFranchisesTab()}
               {activeTab === "appearance" && renderAppearanceTab()}
+              {activeTab === "reports" && renderReportsTab()}
 
               {/* Feedback Toast Notification */}
               {statusMessage && (

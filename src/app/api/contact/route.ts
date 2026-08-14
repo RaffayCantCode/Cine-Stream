@@ -1,10 +1,18 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminSession } from "@/lib/auth/admin";
+import { getDb } from "@/lib/db";
+import { issueReports } from "@/lib/db/schema";
+import { desc } from "drizzle-orm";
+
+import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   try {
-    const { topic, message } = await request.json();
+    const body = await request.json();
+    const { topic, message, userEmail: rawEmail } = body;
 
     if (!topic || !message || typeof topic !== "string" || typeof message !== "string") {
       return NextResponse.json({ error: "Topic and message are required" }, { status: 400 });
@@ -12,6 +20,7 @@ export async function POST(request: NextRequest) {
 
     const trimmedTopic = topic.trim();
     const trimmedMessage = message.trim();
+    const userEmail = (typeof rawEmail === "string" && rawEmail.trim()) ? rawEmail.trim() : "user@cinestream.app";
 
     if (trimmedTopic.length < 2 || trimmedTopic.length > 200) {
       return NextResponse.json({ error: "Topic must be between 2 and 200 characters" }, { status: 400 });
@@ -21,39 +30,82 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Message must be between 5 and 5000 characters" }, { status: 400 });
     }
 
-    const apiKey = process.env.RESEND_API_KEY;
-    const recipient = process.env.CONTACT_EMAIL || "asifraffy@gmail.com";
-
-    if (!apiKey) {
-      console.error("RESEND_API_KEY not configured");
-      return NextResponse.json({ error: "Email service not configured" }, { status: 500 });
-    }
-
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "CineStream <onboarding@resend.dev>",
-        to: [recipient],
-        subject: `[CineStream Feedback] ${trimmedTopic}`,
-        text: `Topic: ${trimmedTopic}\n\nMessage:\n${trimmedMessage}`,
-        html: `<h2>${trimmedTopic}</h2><p>${trimmedMessage.replace(/\n/g, "<br>")}</p>`,
-      }),
+    const db = getDb();
+    await db.insert(issueReports).values({
+      id: crypto.randomUUID(),
+      topic: trimmedTopic,
+      message: trimmedMessage,
+      userEmail: userEmail,
+      status: "open",
+      createdAt: new Date(),
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("Resend API error:", err);
-      return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      message: "Issue report submitted successfully!",
+    });
+  } catch (error) {
+    console.error("[Contact API] Error processing issue report:", error);
+    return NextResponse.json({ error: "Failed to submit issue report" }, { status: 500 });
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await verifyAdminSession();
+    if (auth.error || !auth.db) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
-    console.log("Contact email sent");
-    return NextResponse.json({ success: true });
+    const db = auth.db;
+    const reports = await db.select().from(issueReports).orderBy(desc(issueReports.createdAt)).limit(100);
+    return NextResponse.json({ reports });
   } catch (error) {
-    console.error("Contact email error:", error);
-    return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
+    console.error("[Contact API GET] Error fetching reports:", error);
+    return NextResponse.json({ reports: [] });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await verifyAdminSession();
+    if (auth.error || !auth.db) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const { id, status } = await request.json();
+    if (!id || !status) {
+      return NextResponse.json({ error: "Report ID and status are required" }, { status: 400 });
+    }
+
+    const db = auth.db;
+    await db.update(issueReports).set({ status }).where(eq(issueReports.id, id));
+
+    return NextResponse.json({ success: true, message: `Report marked as ${status}` });
+  } catch (error) {
+    console.error("[Contact API PATCH] Error updating report:", error);
+    return NextResponse.json({ error: "Failed to update report" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await verifyAdminSession();
+    if (auth.error || !auth.db) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const { id } = await request.json();
+    if (!id) {
+      return NextResponse.json({ error: "Report ID is required" }, { status: 400 });
+    }
+
+    const db = auth.db;
+    await db.delete(issueReports).where(eq(issueReports.id, id));
+
+    return NextResponse.json({ success: true, message: "Report deleted successfully" });
+  } catch (error) {
+    console.error("[Contact API DELETE] Error deleting report:", error);
+    return NextResponse.json({ error: "Failed to delete report" }, { status: 500 });
   }
 }

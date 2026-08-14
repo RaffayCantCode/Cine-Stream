@@ -214,6 +214,16 @@ export const customThemes = pgTable("custom_themes", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Issue Reports table
+export const issueReports = pgTable("issue_reports", {
+  id: varchar("id", { length: 64 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  topic: varchar("topic", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  userEmail: varchar("user_email", { length: 255 }),
+  status: varchar("status", { length: 32 }).default("open").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type WatchHistoryItem = typeof watchHistory.$inferSelect;
@@ -232,5 +242,7 @@ export type SiteSetting = typeof siteSettings.$inferSelect;
 export type InsertSiteSetting = typeof siteSettings.$inferInsert;
 export type CustomTheme = typeof customThemes.$inferSelect;
 export type InsertCustomTheme = typeof customThemes.$inferInsert;
+export type IssueReport = typeof issueReports.$inferSelect;
+export type InsertIssueReport = typeof issueReports.$inferInsert;
 
 
