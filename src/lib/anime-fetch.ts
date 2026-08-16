@@ -1135,6 +1135,19 @@ export async function getAnimeDetails(
               }
             }
 
+            // Prefer the curated franchise mapping over AniZip-derived values when
+            // available. AniZip can report TMDB season numbers that do not exist on
+            // TMDB (e.g. Bleach TYBW  Part 4 maps to TMDB 30984 "season 17", but the
+            // show only has 2 seasons), which makes every TMDB-based embed source
+            // request a non-existent season and return 404.
+            const curatedFallbackItem = getCuratedAnimeFranchiseNodes(numId)?.find(n => String(n.id) === String(numId));
+            if (curatedFallbackItem) {
+              if (curatedFallbackItem.tmdbId) tmdbId = curatedFallbackItem.tmdbId;
+              if (curatedFallbackItem.tmdbSeasonNumber != null) tmdbSeasonNumber = curatedFallbackItem.tmdbSeasonNumber;
+              if (curatedFallbackItem.episodeOffset != null) episodeOffset = curatedFallbackItem.episodeOffset;
+              else if (curatedFallbackItem.tmdbSeasonNumber != null) episodeOffset = 0;
+            }
+
             const jikanSeason: SeasonInfo = {
               id: String(id), name: animeItem.name,
               seasonLabel: "Episodes", totalEpisodes: totalEps,
@@ -1701,6 +1714,24 @@ export async function resolveTmdbMappingFromAniZip(
       if (isNaN(tmdbId)) tmdbId = null;
     }
     if (!tmdbId) return null;
+    const effectiveTmdbId: number = tmdbId;
+
+    // Prefer the curated franchise mapping over AniZip-derived values when the
+    // anime is in a curated franchise. AniZip can report TMDB season numbers
+    // that do not exist on TMDB (e.g. Bleach TYBW Part 4 → TMDB 30984 "season
+    // 17", but the show only has 2 seasons), which 404s every TMDB-based source.
+    const curatedMappingItem = getCuratedAnimeFranchiseNodes(parseInt(anilistId, 10))
+      ?.find(n => String(n.id) === String(anilistId));
+    if (curatedMappingItem) {
+      if (curatedMappingItem.tmdbId) tmdbId = curatedMappingItem.tmdbId;
+      if (curatedMappingItem.tmdbSeasonNumber != null && curatedMappingItem.episodeOffset != null) {
+        return {
+          tmdbId: curatedMappingItem.tmdbId || effectiveTmdbId,
+          tmdbSeason: curatedMappingItem.tmdbSeasonNumber,
+          episodeOffset: curatedMappingItem.episodeOffset,
+        };
+      }
+    }
 
     const azEp1 = az?.episodes?.["1"];
     if (
@@ -1709,7 +1740,7 @@ export async function resolveTmdbMappingFromAniZip(
       azEp1.episodeNumber !== undefined
     ) {
       return {
-        tmdbId,
+        tmdbId: effectiveTmdbId,
         tmdbSeason: azEp1.seasonNumber,
         episodeOffset: Math.max(azEp1.episodeNumber - 1, 0),
       };
@@ -1717,7 +1748,7 @@ export async function resolveTmdbMappingFromAniZip(
 
     // No per-episode season mapping — still expose the tmdbId so the caller can
     // at least attempt TMDB as the primary thumbnail source.
-    return { tmdbId, tmdbSeason: 1, episodeOffset: 0 };
+    return { tmdbId: effectiveTmdbId, tmdbSeason: 1, episodeOffset: 0 };
   } catch {
     return null;
   }
