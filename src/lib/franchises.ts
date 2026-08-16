@@ -255,7 +255,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 21175, media_type: "anime", anilist_id: 21175, title: "Dragon Ball Super", episodes: 131, release_date: "2015-07-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg", tmdb_id: 62715 },
       { id: 101302, media_type: "anime", tmdb_type: "movie", anilist_id: 101302, title: "Dragon Ball Super: Broly (Movie)", episodes: 1, release_date: "2018-12-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101302-7L0lcwYeFQQM.jpg", tmdb_id: 503314 },
       { id: 133898, media_type: "anime", tmdb_type: "movie", anilist_id: 133898, title: "Dragon Ball Super: Super Hero (Movie)", episodes: 1, release_date: "2022-06-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx133898-KdQ7fWTG06n4.png", tmdb_id: 610150 },
-      { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", episodes: 20, release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png", tmdb_id: 236979 },
+      { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", episodes: 20, release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png", tmdb_id: 236994 },
     ]
   },
   {
@@ -358,10 +358,10 @@ export const FRANCHISES: FranchiseDefinition[] = [
     poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg",
     items: [
       { id: 269, media_type: "anime", anilist_id: 269, title: "Bleach (Original Series)", episodes: 366, release_date: "2004-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx269-d2GmRkJbMopq.png", tmdb_id: 30984 },
-      { id: 116674, media_type: "anime", anilist_id: 116674, title: "Bleach: Thousand-Year Blood War (Part 1)", episodes: 13, release_date: "2022-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg", tmdb_id: 126282, tmdb_season_number: 1 },
-      { id: 159322, media_type: "anime", anilist_id: 159322, title: "Bleach: Thousand-Year Blood War - The Separation (Part 2)", episodes: 13, release_date: "2023-07-08", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx159322-Sp1GflRhE6Po.jpg", tmdb_id: 126282, tmdb_season_number: 2 },
-      { id: 169755, media_type: "anime", anilist_id: 169755, title: "Bleach: Thousand-Year Blood War - The Conflict (Part 3)", episodes: 13, release_date: "2024-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx169755-Rqb7MjnzdTc6.jpg", tmdb_id: 126282, tmdb_season_number: 3 },
-      { id: 185874, media_type: "anime", anilist_id: 185874, title: "Bleach: Thousand-Year Blood War - Part 4", episodes: 13, release_date: "2025-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx185874-aU3e6tBT6wwA.jpg", tmdb_id: 126282, tmdb_season_number: 4 },
+      { id: 116674, media_type: "anime", anilist_id: 116674, title: "Bleach: Thousand-Year Blood War (Part 1)", episodes: 13, release_date: "2022-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-p3zK4PUX2Aag.jpg", tmdb_id: 30984, tmdb_season_number: 2, episode_offset: 0 },
+      { id: 159322, media_type: "anime", anilist_id: 159322, title: "Bleach: Thousand-Year Blood War - The Separation (Part 2)", episodes: 13, release_date: "2023-07-08", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx159322-Sp1GflRhE6Po.jpg", tmdb_id: 30984, tmdb_season_number: 2, episode_offset: 13 },
+      { id: 169755, media_type: "anime", anilist_id: 169755, title: "Bleach: Thousand-Year Blood War - The Conflict (Part 3)", episodes: 13, release_date: "2024-10-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx169755-Rqb7MjnzdTc6.jpg", tmdb_id: 30984, tmdb_season_number: 2, episode_offset: 26 },
+      { id: 185874, media_type: "anime", anilist_id: 185874, title: "Bleach: Thousand-Year Blood War - Part 4", episodes: 13, release_date: "2025-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx185874-aU3e6tBT6wwA.jpg", tmdb_id: 30984, tmdb_season_number: 2, episode_offset: 40 },
     ]
   },
   {
@@ -640,10 +640,10 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 101922, media_type: "anime", anilist_id: 101922, episodes: 26, title: "Demon Slayer: Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg", tmdb_id: 85937, tmdb_season_number: 1 },
       { id: 112151, media_type: "anime", tmdb_type: "movie", anilist_id: 112151, episodes: 1, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png", tmdb_id: 635302 },
       { id: 129874, media_type: "anime", anilist_id: 129874, episodes: 7, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg", tmdb_id: 85937, tmdb_season_number: 2 },
-      { id: 142329, media_type: "anime", anilist_id: 142329, episodes: 11, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg", tmdb_id: 85937, tmdb_season_number: 2, episode_offset: 7 },
-      { id: 145139, media_type: "anime", anilist_id: 145139, episodes: 11, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png", tmdb_id: 85937, tmdb_season_number: 3 },
-      { id: 166240, media_type: "anime", anilist_id: 166240, episodes: 8, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png", tmdb_id: 85937, tmdb_season_number: 4 },
-      { id: 178788, media_type: "anime", tmdb_type: "movie", anilist_id: 178788, episodes: 1, title: "Infinity Castle (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178788-zm3gtpB9TpRt.jpg", tmdb_id: 85937 },
+      { id: 142329, media_type: "anime", anilist_id: 142329, episodes: 11, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg", tmdb_id: 85937, tmdb_season_number: 3 },
+      { id: 145139, media_type: "anime", anilist_id: 145139, episodes: 11, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png", tmdb_id: 85937, tmdb_season_number: 4 },
+      { id: 166240, media_type: "anime", anilist_id: 166240, episodes: 8, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png", tmdb_id: 85937, tmdb_season_number: 5 },
+      { id: 178788, media_type: "anime", tmdb_type: "movie", anilist_id: 178788, episodes: 1, title: "Infinity Castle (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178788-zm3gtpB9TpRt.jpg", tmdb_id: 1311031 },
     ]
   },
   {
@@ -844,12 +844,12 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 356, media_type: "anime", anilist_id: 356, title: "Fate/stay night (2006)", episodes: 24, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx356-mTpMvtillumS.png", tmdb_id: 37858 },
       { id: 19603, media_type: "anime", anilist_id: 19603, title: "Unlimited Blade Works (Season 1)", episodes: 12, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx19603-ycT0pyEgDVQu.jpg", tmdb_id: 61415, tmdb_season_number: 1 },
       { id: 20792, media_type: "anime", anilist_id: 20792, title: "Unlimited Blade Works (Season 2)", episodes: 13, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20792-Q53sZsUAh5FF.jpg", tmdb_id: 61415, tmdb_season_number: 2 },
-      { id: 20791, media_type: "anime", tmdb_type: "movie", anilist_id: 20791, title: "Heaven's Feel I. presage flower", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20791-yPCX5GJuMH2k.png", tmdb_id: 441130 },
-      { id: 21718, media_type: "anime", tmdb_type: "movie", anilist_id: 21718, title: "Heaven's Feel II. lost butterfly", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21718-Hjj26Sapx1bd.jpg", tmdb_id: 530254 },
-      { id: 21719, media_type: "anime", tmdb_type: "movie", anilist_id: 21719, title: "Heaven's Feel III. spring song", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21719-MSdTlkno0Z0u.jpg", tmdb_id: 556973 },
+      { id: 20791, media_type: "anime", tmdb_type: "movie", anilist_id: 20791, title: "Heaven's Feel I. presage flower", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20791-yPCX5GJuMH2k.png", tmdb_id: 283984 },
+      { id: 21718, media_type: "anime", tmdb_type: "movie", anilist_id: 21718, title: "Heaven's Feel II. lost butterfly", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21718-Hjj26Sapx1bd.jpg", tmdb_id: 390634 },
+      { id: 21719, media_type: "anime", tmdb_type: "movie", anilist_id: 21719, title: "Heaven's Feel III. spring song", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21719-MSdTlkno0Z0u.jpg", tmdb_id: 390635 },
       { id: 98035, media_type: "anime", anilist_id: 98035, title: "Fate/Apocrypha", episodes: 25, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx98035-rdkjeqUUsG2j.jpg", tmdb_id: 72304 },
       { id: 103275, media_type: "anime", anilist_id: 103275, title: "Fate/Grand Order: Babylonia", episodes: 21, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx103275-SN0wwshS3tWA.jpg", tmdb_id: 90677 },
-      { id: 154966, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154966-eQRCmSrCh96j.png", tmdb_id: 219816 },
+      { id: 154966, media_type: "anime", anilist_id: 154966, title: "Fate/strange Fake", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154966-eQRCmSrCh96j.png", tmdb_id: 229858 },
     ]
   },
   {

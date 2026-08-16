@@ -10,14 +10,6 @@ interface StreamingAPIConfig {
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
     name: "Source 1",
-    baseUrl: "https://embedmaster.link",
-    type: "embedmaster",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://embedmaster.link",
-  },
-  {
-    name: "Source 2",
     baseUrl: "https://vixsrc.to",
     type: "vixsrc",
     quality: "Best",
@@ -25,7 +17,7 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://vixsrc.to",
   },
   {
-    name: "Source 3",
+    name: "Source 2",
     baseUrl: "https://player.videasy.net",
     type: "videasy",
     quality: "Best",
@@ -33,12 +25,20 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://player.videasy.net",
   },
   {
-    name: "Source 4",
+    name: "Source 3",
     baseUrl: "https://vidsrc.me",
     type: "vidsrc",
     quality: "Good",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://vidsrc.me",
+  },
+  {
+    name: "Source 4",
+    baseUrl: "https://embedmaster.link",
+    type: "embedmaster",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://embedmaster.link",
   },
   {
     name: "Source 5",
