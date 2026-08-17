@@ -2587,9 +2587,6 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-semibold text-zinc-200 truncate">{SOURCE_LABELS[entry.key] || entry.key}</span>
-                      {SOURCE_TAG_LABELS[entry.tag as keyof typeof SOURCE_TAG_LABELS] && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 hidden sm:inline">{entry.key}</span>
-                      )}
                     </div>
                   </div>
 

@@ -224,7 +224,7 @@ export const streamingSourceConfig = pgTable(
     category: varchar("category", { length: 16 }).notNull(),
     sourceKey: varchar("source_key", { length: 64 }).notNull(),
     position: integer("position").default(0).notNull(),
-    tag: varchar("tag", { length: 32 }).default("unknown").notNull(),
+    tag: varchar("tag", { length: 32 }).default("good").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [unique("uq_streaming_source_category_key").on(t.category, t.sourceKey)]

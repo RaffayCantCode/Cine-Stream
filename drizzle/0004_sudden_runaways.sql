@@ -1,0 +1,1 @@
+ALTER TABLE "streaming_source_config" ALTER COLUMN "tag" SET DEFAULT 'good';

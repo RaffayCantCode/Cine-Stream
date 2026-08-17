@@ -326,7 +326,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
             <Server className="w-4 h-4" />
             {currentSource?.name || "Select Source"}
             {currentSource?.tag ? (
-              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${TAG_STYLES[currentSource.tag as SourceTag] || TAG_STYLES.unknown}`}>
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${TAG_STYLES[currentSource.tag as SourceTag] || TAG_STYLES.good}`}>
                 {SOURCE_TAG_LABELS[currentSource.tag as SourceTag] || currentSource.tag}
               </span>
             ) : currentSource?.quality ? (
@@ -386,7 +386,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
                 >
                   <Server className={`w-4 h-4 shrink-0 ${isActive ? "" : "text-white/30"}`} />
                   <span className="flex-1 text-left">{source.name}</span>
-                  <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${source.tag ? (TAG_STYLES[source.tag as SourceTag] || TAG_STYLES.unknown) : QUALITY_STYLES[source.quality]}`}>
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${source.tag ? (TAG_STYLES[source.tag as SourceTag] || TAG_STYLES.good) : QUALITY_STYLES[source.quality]}`}>
                     {source.tag ? (SOURCE_TAG_LABELS[source.tag as SourceTag] || source.tag) : source.quality}
                   </span>
                   {isActive && !isLoading && !error && <Check className="w-3.5 h-3.5 text-emerald-300" />}
