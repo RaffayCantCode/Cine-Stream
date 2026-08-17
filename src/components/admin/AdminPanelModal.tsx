@@ -313,7 +313,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const renderPreviewBanner = () => {
     if (!previewingTheme) return null;
     return (
-      <div className="fixed top-0 inset-x-0 z-[100] bg-zinc-950/95 border-b border-amber-500/30 backdrop-blur-xl px-4 py-2.5 flex items-center justify-between shadow-2xl animate-fade-in-up">
+      <div className="fixed top-0 inset-x-0 z-[100] bg-zinc-950/95 border-b border-amber-500/30 backdrop-blur-xl px-4 pt-[calc(0.625rem+env(safe-area-inset-top))] pb-2.5 flex items-center justify-between shadow-2xl animate-fade-in-up">
         <div className="flex items-center gap-3">
           <span className="flex h-2.5 w-2.5 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />

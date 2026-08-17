@@ -50,7 +50,7 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <>
       {/* Mobile Top Header */}
-      <header className="md:hidden fixed top-0 inset-x-0 h-14 premium-glass z-40 flex items-center justify-between px-3 transform-gpu will-change-transform">
+      <header className="md:hidden fixed top-0 inset-x-0 h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] premium-glass z-40 flex items-center justify-between px-3 transform-gpu will-change-transform">
         <Link href="/" className="flex items-center gap-1.5 shrink-0 min-w-0">
           <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-md shrink-0" />
           <span className="font-extrabold text-sm sm:text-base tracking-wider hidden min-[420px]:inline-block truncate">
@@ -157,7 +157,7 @@ export const Sidebar = memo(function Sidebar() {
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 premium-glass z-40 flex items-center justify-around pb-[env(safe-area-inset-bottom)] px-2 transform-gpu will-change-transform">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 h-[calc(4rem+env(safe-area-inset-bottom))] premium-glass z-40 flex items-center justify-around pb-[env(safe-area-inset-bottom)] px-2 transform-gpu will-change-transform">
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
           
@@ -279,7 +279,7 @@ export const Sidebar = memo(function Sidebar() {
         </div>
 
         {/* User section */}
-        <div className="relative p-3 border-t border-white/[0.06]">
+        <div className="relative pt-3 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
           {status !== "loading" && (
             isAuthenticated && user ? (
               <>

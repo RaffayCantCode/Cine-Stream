@@ -597,7 +597,7 @@ export function CinematicHero({
 
       {/* ── Content Wrapper ────── */}
       <CinematicHeroContext.Provider value={{ playTrailer, hasTrailer: Boolean(activeTrailerId) }}>
-        <div className={`relative z-20 w-full ${height} flex flex-col justify-end pt-20 sm:pt-24 md:pt-16 pb-6 md:pb-8`}>
+        <div className={`relative z-20 w-full ${height} flex flex-col justify-end pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-[calc(6rem+env(safe-area-inset-top))] md:pt-16 pb-6 md:pb-8`}>
           <div className={`w-full transition-opacity duration-1000 ${trailerVisible && isAtTop && !isMobile ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
             {children}
           </div>

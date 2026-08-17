@@ -36,7 +36,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#07080E] text-white overflow-x-hidden font-sans">
       {/* ─── NAV ─── */}
-      <nav className="fixed top-0 inset-x-0 z-50 h-20 flex items-center px-6 md:px-12 bg-[#07080E]/80 backdrop-blur-xl border-b border-white/[0.06]">
+      <nav className="fixed top-0 inset-x-0 z-50 h-[calc(5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center px-6 md:px-12 bg-[#07080E]/80 backdrop-blur-xl border-b border-white/[0.06]">
         <div className="max-w-screen-2xl mx-auto w-full flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
             <img src="/logo-icon.svg" alt="CineStream" className="w-9 h-9 drop-shadow-[0_0_12px_rgba(124,58,237,0.4)]" />

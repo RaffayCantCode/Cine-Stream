@@ -754,13 +754,17 @@
 /* Mobile Spacing & Layout Spacing Rules */
 @media (max-width: 767px) {
   main {
-    padding-top: 3.5rem !important;
-    padding-bottom: 5rem !important;
+    padding-top: calc(3.5rem + env(safe-area-inset-top)) !important;
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom)) !important;
   }
   main.bleed-header {
     padding-top: 0 !important;
   }
 }
+
+/* Safe-area handling when the app runs as an installed PWA (viewport-fit: cover).
+   Headers and footers handle env() themselves; main's mobile padding above
+   already accounts for the insets, so no extra body-level rules are needed. */
 
 /* Touch and Click Optimizations */
 button,

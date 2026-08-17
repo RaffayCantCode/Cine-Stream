@@ -229,7 +229,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       <main className="md:pl-56 lg:pl-64 bleed-header">
         
         {/* Profile Header */}
-        <div className="w-full bg-gradient-to-b from-[#111844]/40 to-background border-b border-white/[0.05] pt-24 pb-12 px-5 md:px-10">
+        <div className="w-full bg-gradient-to-b from-[#111844]/40 to-background border-b border-white/[0.05] pt-[calc(6rem+env(safe-area-inset-top))] sm:pt-[calc(7rem+env(safe-area-inset-top))] pb-12 px-5 md:px-10">
           <div className="max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-start md:items-center">
             
             <div className="shrink-0 w-32 h-32 md:w-48 md:h-48 rounded-full overflow-hidden border-4 border-[#4B5694]/30 shadow-2xl bg-muted flex items-center justify-center relative">
