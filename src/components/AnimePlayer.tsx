@@ -61,8 +61,10 @@ function buildProviderUrl(
   const curMal = clean(malId);
   const mainAni = clean(rootAnimeId) || curAni;
   const isSequel = Boolean(curAni && mainAni && curAni !== mainAni);
+  // TMDB-based embeds use the show-wide absolute episode number
+  // (episodeOffset + episode), while anime-based embeds (vidnest/animepahe)
+  // use each season's OWN relative episode numbering (always 1-based).
   const absEp = (episodeOffset || 0) + episode;
-  const ep = isSequel ? episode : (episodeOffset || 0) > 0 ? absEp : episode;
   const aniId = curAni || mainAni;
   const malClean = clean(rootMalId) || curMal;
   const hasOwnMal = Boolean(curMal && curMal !== malClean);
@@ -71,9 +73,9 @@ function buildProviderUrl(
 
   switch (provider) {
     case "vidnest":
-      return `https://vidnest.fun/anime/${primaryId}/${ep}/sub`;
+      return `https://vidnest.fun/anime/${primaryId}/${episode}/sub`;
     case "animepahe":
-      return `https://vidnest.fun/animepahe/${primaryId}/${ep}/sub`;
+      return `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`;
     case "vidlink": {
       const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
       if (tmdbId) {
@@ -81,7 +83,7 @@ function buildProviderUrl(
           ? `https://vidlink.pro/movie/${tmdbId}?primaryColor=4b5694&autoplay=true${timeParam}`
           : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
       }
-      return `https://vidlink.pro/anime/${malId_ || aniId || ""}/${ep}/sub?primaryColor=4b5694&autoplay=true${timeParam}`;
+      return `https://vidlink.pro/anime/${malId_ || aniId || ""}/${episode}/sub?primaryColor=4b5694&autoplay=true${timeParam}`;
     }
     case "123embed":
       if (tmdbId) {
@@ -89,14 +91,14 @@ function buildProviderUrl(
           ? `https://play2.123embed.net/movie/${tmdbId}`
           : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
       }
-      return `https://vidnest.fun/anime/${primaryId}/${ep}/sub`;
+      return `https://vidnest.fun/anime/${primaryId}/${episode}/sub`;
     case "autoembed":
       if (tmdbId) {
         return isMovie
           ? `https://player.autoembed.co/embed/movie/${tmdbId}`
           : `https://player.autoembed.co/embed/tv/${tmdbId}/${tmdbSeason || 1}-${absEp}`;
       }
-      return `https://vidnest.fun/anime/${primaryId}/${ep}/sub`;
+      return `https://vidnest.fun/anime/${primaryId}/${episode}/sub`;
     default:
       return "";
   }

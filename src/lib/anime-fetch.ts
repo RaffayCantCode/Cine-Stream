@@ -1162,11 +1162,18 @@ export async function getAnimeDetails(
               tmdbSeasonMap = { [String(id)]: tmdbSeasonNumber };
             }
             let seasonsList: SeasonInfo[] = [jikanSeason];
+            // When curated franchise data is available (AniList is flaky on the
+            // edge), expose the full franchise season list so season tabs and the
+            // root/sequel episode mapping behave exactly like the normal path.
+            const jikanCuratedNodes = getCuratedAnimeFranchiseNodes(numId);
+            if (jikanCuratedNodes && jikanCuratedNodes.length > 1) {
+              seasonsList = buildSeasonList(jikanCuratedNodes, numId);
+            }
 
             return {
               anime: animeItem, episodes, totalEpisodes: totalEps,
               seasons: seasonsList, openedSeasonId: id,
-              franchiseNodes: [] as FranchiseNode[],
+              franchiseNodes: jikanCuratedNodes && jikanCuratedNodes.length > 1 ? jikanCuratedNodes : ([] as FranchiseNode[]),
               tmdbId,
               tmdbSeasonMap,
             };
