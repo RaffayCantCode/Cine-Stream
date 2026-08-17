@@ -215,6 +215,21 @@ export const customThemes = pgTable("custom_themes", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Admin-controlled streaming source order + tags (overrides only).
+// Missing rows fall back to the hard-coded default order/tags in code.
+export const streamingSourceConfig = pgTable(
+  "streaming_source_config",
+  {
+    id: serial("id").primaryKey(),
+    category: varchar("category", { length: 16 }).notNull(),
+    sourceKey: varchar("source_key", { length: 64 }).notNull(),
+    position: integer("position").default(0).notNull(),
+    tag: varchar("tag", { length: 32 }).default("unknown").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [unique("uq_streaming_source_category_key").on(t.category, t.sourceKey)]
+);
+
 // Issue Reports table
 export const issueReports = pgTable("issue_reports", {
   id: varchar("id", { length: 64 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -245,5 +260,7 @@ export type CustomTheme = typeof customThemes.$inferSelect;
 export type InsertCustomTheme = typeof customThemes.$inferInsert;
 export type IssueReport = typeof issueReports.$inferSelect;
 export type InsertIssueReport = typeof issueReports.$inferInsert;
+export type StreamingSourceConfig = typeof streamingSourceConfig.$inferSelect;
+export type InsertStreamingSourceConfig = typeof streamingSourceConfig.$inferInsert;
 
 

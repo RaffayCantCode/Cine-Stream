@@ -2,7 +2,7 @@ interface StreamingAPIConfig {
   name: string;
   baseUrl: string;
   type: string;
-  quality: "Best" | "Good" | "Backup";
+  quality: "Best" | "Stable" | "Good" | "Backup";
   supportsNativeFullscreen?: boolean;
   healthCheckUrl?: string;
 }
@@ -10,6 +10,14 @@ interface StreamingAPIConfig {
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
     name: "Source 1",
+    baseUrl: "https://vidsrc.me",
+    type: "vidsrc",
+    quality: "Stable",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidsrc.me",
+  },
+  {
+    name: "Source 2",
     baseUrl: "https://vixsrc.to",
     type: "vixsrc",
     quality: "Best",
@@ -17,7 +25,7 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://vixsrc.to",
   },
   {
-    name: "Source 2",
+    name: "Source 3",
     baseUrl: "https://player.videasy.net",
     type: "videasy",
     quality: "Best",
@@ -25,20 +33,12 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://player.videasy.net",
   },
   {
-    name: "Source 3",
-    baseUrl: "https://vidsrc.me",
-    type: "vidsrc",
+    name: "Source 4",
+    baseUrl: "https://vidlink.pro",
+    type: "vidlink",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidsrc.me",
-  },
-  {
-    name: "Source 4",
-    baseUrl: "https://embedmaster.link",
-    type: "embedmaster",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://embedmaster.link",
+    healthCheckUrl: "https://vidlink.pro",
   },
   {
     name: "Source 5",
@@ -56,11 +56,11 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "embedmaster":
+    case "vixsrc":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "vixsrc":
+    case "vidlink":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
@@ -81,8 +81,14 @@ export interface StreamingSource {
   url: string;
   name: string;
   type: string;
-  quality: "Best" | "Good" | "Backup";
+  quality: "Best" | "Stable" | "Good" | "Backup";
+  tag?: string;
   supportsNativeFullscreen?: boolean;
+}
+
+// Default provider order for movies/TV (source of truth for the admin config).
+export function getDefaultMovieOrder(): string[] {
+  return STREAMING_APIS.map((api) => api.type);
 }
 
 export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource[] {

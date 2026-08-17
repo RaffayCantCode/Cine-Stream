@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward, ExternalLink } from "lucide-react";
 import { StreamingSource, getStreamingSources } from "@/lib/streaming-fetch";
+import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 
 interface VideoPlayerProps {
   type: "movie" | "tv";
@@ -21,14 +22,15 @@ interface VideoPlayerProps {
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   videasy:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
-  embedmaster: { bg: "bg-[#4B5694]", badge: "bg-[#4B5694]/20 text-[#7288AE]" },
   vixsrc:      { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
   vidsrc:      { bg: "bg-blue-600",  badge: "bg-blue-500/20 text-blue-300" },
+  vidlink:     { bg: "bg-violet-600", badge: "bg-violet-500/20 text-violet-300" },
   autoembed:   { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
   Best:   "bg-emerald-400/15 text-emerald-300 border-emerald-300/25",
+  Stable: "bg-violet-400/15 text-violet-300 border-violet-300/25",
   Good:   "bg-cyan-400/15 text-cyan-300 border-cyan-300/25",
   Backup: "bg-amber-400/15 text-amber-300 border-amber-300/25",
 };
@@ -42,7 +44,32 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
   const initialProgressRef = useRef(startProgress);
-  const sources = useMemo(() => getStreamingSources(type, id, season, episode, initialProgressRef.current), [type, id, season, episode]);
+  const [sourceConfig, setSourceConfig] = useState<{ key: string; tag: SourceTag }[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchSourceConfig().then((cfg) => {
+      if (active) setSourceConfig(cfg.movie);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const sources = useMemo(() => {
+    const base = getStreamingSources(type, id, season, episode, initialProgressRef.current);
+    if (!sourceConfig) return base;
+    const byType = new Map(base.map((s) => [s.type, s]));
+    const ordered: StreamingSource[] = [];
+    sourceConfig.forEach((entry, index) => {
+      const src = byType.get(entry.key);
+      if (src) {
+        ordered.push({ ...src, name: `Source ${index + 1}`, tag: entry.tag });
+      }
+    });
+    base.forEach((s) => {
+      if (!ordered.find((o) => o.type === s.type)) ordered.push(s);
+    });
+    return ordered;
+  }, [type, id, season, episode, sourceConfig]);
   const sourcePrefKey = getSourcePrefKey(type, id, userId);
   const globalPrefKey = `sv_src_global_${userId}_${type}`;
 
@@ -123,10 +150,10 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
-      "https://player.videasy.net",
-      "https://embedmaster.link",
-      "https://vixsrc.to",
       "https://vidsrc.me",
+      "https://vixsrc.to",
+      "https://player.videasy.net",
+      "https://vidlink.pro",
       "https://autoembed.co"
     ];
     const links: HTMLLinkElement[] = [];
@@ -298,11 +325,15 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
           >
             <Server className="w-4 h-4" />
             {currentSource?.name || "Select Source"}
-            {currentSource?.quality && (
+            {currentSource?.tag ? (
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${TAG_STYLES[currentSource.tag as SourceTag] || TAG_STYLES.unknown}`}>
+                {SOURCE_TAG_LABELS[currentSource.tag as SourceTag] || currentSource.tag}
+              </span>
+            ) : currentSource?.quality ? (
               <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[currentSource.quality]}`}>
                 {currentSource.quality}
               </span>
-            )}
+            ) : null}
             <ChevronRight className={`w-4 h-4 transition-transform ${showSources ? "rotate-90" : ""}`} />
           </button>
           {sources.length > 1 && (
@@ -342,7 +373,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl">
               {sources.map((source, idx) => {
               const isActive = currentSource?.type === source.type;
-              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.embedmaster;
+              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.videasy;
               return (
                 <button
                   key={source.type}
@@ -355,8 +386,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
                 >
                   <Server className={`w-4 h-4 shrink-0 ${isActive ? "" : "text-white/30"}`} />
                   <span className="flex-1 text-left">{source.name}</span>
-                  <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[source.quality]}`}>
-                    {source.quality}
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${source.tag ? (TAG_STYLES[source.tag as SourceTag] || TAG_STYLES.unknown) : QUALITY_STYLES[source.quality]}`}>
+                    {source.tag ? (SOURCE_TAG_LABELS[source.tag as SourceTag] || source.tag) : source.quality}
                   </span>
                   {isActive && !isLoading && !error && <Check className="w-3.5 h-3.5 text-emerald-300" />}
                   {isActive && isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

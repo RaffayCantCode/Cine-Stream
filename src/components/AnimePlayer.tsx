@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2 } from "lucide-react";
+import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 
 interface ProviderSource {
   name: string;
   provider: "vidnest" | "animepahe" | "123embed" | "vidlink" | "autoembed";
   color: string;
   quality: "best" | "good" | "backup";
+  tag?: SourceTag;
 }
 
 interface AnimePlayerProps {
@@ -127,6 +129,31 @@ export function AnimePlayer({
   const sourcePrefKey = `sv_src_anime_${userId}_${effectiveAnimeId}`;
   const globalPrefKey = `sv_src_global_${userId}_anime`;
 
+  const [providerConfig, setProviderConfig] = useState<{ key: string; tag: SourceTag }[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchSourceConfig().then((cfg) => {
+      if (active) setProviderConfig(cfg.anime);
+    });
+    return () => { active = false; };
+  }, []);
+
+  // Effective provider list: admin order/tags when configured, else defaults.
+  const providers = useMemo<ProviderSource[]>(() => {
+    if (!providerConfig) return PROVIDERS;
+    const byKey = new Map<string, ProviderSource>(PROVIDERS.map((p) => [p.provider, p]));
+    const ordered: ProviderSource[] = [];
+    providerConfig.forEach((entry, index) => {
+      const base = byKey.get(entry.key);
+      if (base) ordered.push({ ...base, name: `Source ${index + 1}`, tag: entry.tag });
+    });
+    PROVIDERS.forEach((p) => {
+      if (!ordered.find((o) => o.provider === p.provider)) ordered.push(p);
+    });
+    return ordered;
+  }, [providerConfig]);
+
   const [sourceIndex, setSourceIndex] = useState(() => {
     try {
       const saved = localStorage.getItem(sourcePrefKey) || localStorage.getItem(globalPrefKey);
@@ -198,8 +225,26 @@ export function AnimePlayer({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const playbackStartedRef = useRef(false);
-  const currentSource = PROVIDERS[sourceIndex] || PROVIDERS[0];
-  const nextSourceName = PROVIDERS[(sourceIndex + 1) % PROVIDERS.length]?.name || "";
+  const currentProviderRef = useRef<string>(PROVIDERS[0]?.provider || "animepahe");
+  useEffect(() => {
+    const p = providers[sourceIndex];
+    if (p) currentProviderRef.current = p.provider;
+  }, [sourceIndex, providers]);
+
+  // Apply the admin-configured provider order once loaded, keeping the
+  // currently selected provider selected (by type) so playback isn't disturbed.
+  useEffect(() => {
+    if (!providerConfig) return;
+    setSourceIndex((prev) => {
+      const current = providers[prev] || providers[0];
+      const want = current?.provider || providers[0]?.provider;
+      const idx = providers.findIndex((p) => p.provider === want);
+      return idx >= 0 && idx !== prev ? idx : prev;
+    });
+  }, [providerConfig, providers]);
+
+  const currentSource = providers[sourceIndex] || providers[0];
+  const nextSourceName = providers[(sourceIndex + 1) % providers.length]?.name || "";
 
   const markPlaybackStarted = useCallback(() => {
     playbackStartedRef.current = true;
@@ -240,7 +285,7 @@ export function AnimePlayer({
   // Pre-resolve all provider URLs so switching is instant
   useEffect(() => {
     const urls: Record<string, string> = {};
-    PROVIDERS.forEach(p => {
+    providers.forEach(p => {
       urls[p.provider] = buildProviderUrl(
         p.provider, animeId, malId, rootAnimeId, rootMalId,
         episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current, isMovie
@@ -251,7 +296,7 @@ export function AnimePlayer({
     setIsLoading(true);
     setHasError(false);
     setIframeReady(false);
-  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie]);
+  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie, providers]);
 
   // When the source index or retry count changes, load the embed immediately.
   useEffect(() => {
@@ -411,10 +456,10 @@ export function AnimePlayer({
 
   const switchSource = useCallback(() => {
     setSourceIndex(prev => {
-      const next = (prev + 1) % PROVIDERS.length;
+      const next = (prev + 1) % providers.length;
       try {
-        localStorage.setItem(sourcePrefKey, PROVIDERS[next].provider);
-        localStorage.setItem(globalPrefKey, PROVIDERS[next].provider);
+        localStorage.setItem(sourcePrefKey, providers[next].provider);
+        localStorage.setItem(globalPrefKey, providers[next].provider);
       } catch {}
       return next;
     });
@@ -423,7 +468,7 @@ export function AnimePlayer({
     setShowSpinner(true);
     setRetryCount(0);
     setIframeReady(false);
-  }, [sourcePrefKey, globalPrefKey]);
+  }, [sourcePrefKey, globalPrefKey, providers]);
 
   const retrySource = useCallback(() => {
     setHasError(false);
@@ -458,14 +503,18 @@ export function AnimePlayer({
           >
             <Server className="w-4 h-4" />
             {currentSource.name}
-            {currentSource?.quality && (
+            {currentSource?.tag ? (
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${TAG_STYLES[currentSource.tag] || TAG_STYLES.unknown}`}>
+                {SOURCE_TAG_LABELS[currentSource.tag] || currentSource.tag}
+              </span>
+            ) : currentSource?.quality ? (
               <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[currentSource.quality]}`}>
                 {currentSource.quality}
               </span>
-            )}
+            ) : null}
             <ChevronRight className={`w-4 h-4 transition-transform ${showSources ? "rotate-90" : ""}`} />
           </button>
-          {PROVIDERS.length > 1 && (
+          {providers.length > 1 && (
             <button
               onClick={switchSource}
               className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-[#4B5694] border border-white/10 hover:border-[#7288AE]/40 text-white/80 hover:text-white text-xs font-bold transition-all"
@@ -494,7 +543,7 @@ export function AnimePlayer({
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl animate-fade-in-up"
           style={{ animationDuration: "0.2s" }}
         >
-          {PROVIDERS.map((source, index) => {
+          {providers.map((source, index) => {
             const isActive = sourceIndex === index;
             return (
               <button
@@ -508,8 +557,8 @@ export function AnimePlayer({
               >
                 <Server className={`w-4 h-4 shrink-0 ${isActive ? "" : "text-white/30"}`} />
                 <span className="flex-1 text-left">{source.name}</span>
-                <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[source.quality]}`}>
-                  {source.quality}
+                <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${source.tag ? (TAG_STYLES[source.tag] || TAG_STYLES.unknown) : QUALITY_STYLES[source.quality]}`}>
+                  {source.tag ? (SOURCE_TAG_LABELS[source.tag] || source.tag) : source.quality}
                 </span>
                 {isActive && !isLoading && !hasError && <Check className="w-3.5 h-3.5 text-emerald-300" />}
                 {isActive && isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -539,7 +588,7 @@ export function AnimePlayer({
                 >
                   <RotateCcw className="w-4 h-4" /> Try Again
                 </button>
-                {PROVIDERS.length > 1 && (
+                {providers.length > 1 && (
                   <button
                     onClick={switchSource}
                     className="px-5 py-2.5 bg-[#4B5694] hover:bg-[#7288AE] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2"

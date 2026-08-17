@@ -42,10 +42,12 @@ import {
   GripVertical,
   ChevronLeft,
   ChevronRight,
+  Server,
 } from "lucide-react";
 import { useAnnouncement } from "@/hooks/useAnnouncement";
 import { useTheme } from "@/context/ThemeContext";
 import { harmonizeAccentToCineStreamTheme, ArchetypeStyle } from "@/lib/themes";
+import { SOURCE_TAGS, SOURCE_TAG_LABELS } from "@/lib/streaming-config";
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -61,7 +63,8 @@ type AdminTab =
   | "users" 
   | "franchises" 
   | "appearance"
-  | "reports";
+  | "reports"
+  | "streaming";
 
 export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, onOpen }: AdminPanelModalProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
@@ -134,6 +137,15 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
     tagline: "Movies. TV. Anime. All in one place.",
   });
   const [appearanceSaving, setAppearanceSaving] = useState(false);
+
+  // ── Streaming Sources State ──
+  const [streamingConfig, setStreamingConfig] = useState<{
+    movie: { key: string; tag: string }[];
+    anime: { key: string; tag: string }[];
+  }>({ movie: [], anime: [] });
+  const [streamingLoading, setStreamingLoading] = useState(false);
+  const [streamingSaving, setStreamingSaving] = useState(false);
+  const [streamingDrag, setStreamingDrag] = useState<{ category: string; index: number } | null>(null);
 
   // ── Media Picker State (Used for Sections, Franchises, Spotlight) ──
   const [pickerSearchQuery, setPickerSearchQuery] = useState("");
@@ -268,6 +280,85 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
     }
   }, []);
 
+  // Load Streaming Sources config
+  const loadStreaming = useCallback(async () => {
+    setStreamingLoading(true);
+    try {
+      const res = await fetch("/api/admin/streaming", { cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.config) setStreamingConfig(json.config);
+      }
+    } catch {} finally {
+      setStreamingLoading(false);
+    }
+  }, []);
+
+  // Save Streaming Sources config
+  const saveStreaming = useCallback(async () => {
+    setStreamingSaving(true);
+    try {
+      const res = await fetch("/api/admin/streaming", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(streamingConfig),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        if (json.config) setStreamingConfig(json.config);
+        showToast("success", "Source order saved — applies to new page loads instantly");
+      } else {
+        showToast("error", json.error || "Failed to save source order");
+      }
+    } catch {
+      showToast("error", "Failed to save source order");
+    } finally {
+      setStreamingSaving(false);
+    }
+  }, [streamingConfig]);
+
+  // Reset Streaming Sources config to defaults
+  const resetStreaming = useCallback(async () => {
+    setStreamingSaving(true);
+    try {
+      const res = await fetch("/api/admin/streaming", { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        const refetched = await fetch("/api/admin/streaming", { cache: "no-store" });
+        const refetchedJson = await refetched.json().catch(() => ({}));
+        if (refetchedJson.success && refetchedJson.config) setStreamingConfig(refetchedJson.config);
+        showToast("success", "Restored default source order and tags");
+      } else {
+        showToast("error", json.error || "Failed to reset source order");
+      }
+    } catch {
+      showToast("error", "Failed to reset source order");
+    } finally {
+      setStreamingSaving(false);
+    }
+  }, []);
+
+  // Move a source within a category
+  const moveStreamingSource = useCallback((category: "movie" | "anime", from: number, to: number) => {
+    setStreamingConfig((prev) => {
+      const list = [...(prev[category] || [])];
+      if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to) return prev;
+      const [moved] = list.splice(from, 1);
+      list.splice(to, 0, moved);
+      return { ...prev, [category]: list };
+    });
+  }, []);
+
+  // Update a source tag within a category
+  const updateStreamingTag = useCallback((category: "movie" | "anime", index: number, tag: string) => {
+    setStreamingConfig((prev) => {
+      const list = [...(prev[category] || [])];
+      if (index < 0 || index >= list.length) return prev;
+      list[index] = { ...list[index], tag };
+      return { ...prev, [category]: list };
+    });
+  }, []);
+
   // Load data when active tab changes
   useEffect(() => {
     if (!isOpen) return;
@@ -277,11 +368,12 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
     if (activeTab === "users") loadUsers(userQuery);
     if (activeTab === "franchises") loadFranchises();
     if (activeTab === "reports") loadReports();
+    if (activeTab === "streaming") loadStreaming();
     if (activeTab === "appearance") {
       loadAppearance();
       loadAdminThemes();
     }
-  }, [isOpen, activeTab, loadStats, loadSections, loadSpotlight, loadUsers, loadFranchises, loadReports, loadAppearance, loadAdminThemes, userQuery]);
+  }, [isOpen, activeTab, loadStats, loadSections, loadSpotlight, loadUsers, loadFranchises, loadReports, loadAppearance, loadAdminThemes, userQuery, loadStreaming]);
 
   // Handle escape key
   useEffect(() => {
@@ -2436,6 +2528,170 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
     </div>
   );
 
+  const renderStreamingTab = () => {
+    const SOURCE_LABELS: Record<string, string> = {
+      vidsrc: "Vidsrc",
+      vixsrc: "Vixsrc",
+      videasy: "Videasy",
+      vidlink: "Vidlink",
+      autoembed: "AutoEmbed",
+      animepahe: "AnimePahe",
+      vidnest: "VidNest",
+      "123embed": "123Embed",
+    };
+
+    const renderCategory = (category: "movie" | "anime", title: string, description: string) => {
+      const list = streamingConfig[category] || [];
+      return (
+        <div className="rounded-2xl bg-zinc-900/60 border border-zinc-800 overflow-hidden">
+          <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/40">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <h4 className="text-xs font-bold text-white uppercase tracking-wide">{title}</h4>
+                <p className="text-[10px] text-zinc-400 mt-0.5">{description}</p>
+              </div>
+              <span className="text-[10px] font-mono text-zinc-500">{list.length} sources</span>
+            </div>
+          </div>
+
+          {list.length === 0 ? (
+            <div className="p-6 text-center text-xs text-zinc-500">No sources configured.</div>
+          ) : (
+            <div className="p-2.5 space-y-1.5">
+              {list.map((entry, index) => (
+                <div
+                  key={entry.key}
+                  draggable
+                  onDragStart={() => setStreamingDrag({ category, index })}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (!streamingDrag || streamingDrag.category !== category || streamingDrag.index === index) {
+                      setStreamingDrag(null);
+                      return;
+                    }
+                    moveStreamingSource(category, streamingDrag.index, index);
+                    setStreamingDrag(null);
+                  }}
+                  className={`flex items-center gap-2.5 p-2 rounded-xl border transition-all ${
+                    streamingDrag?.category === category && streamingDrag.index === index
+                      ? "bg-sky-500/10 border-sky-500/60 opacity-60"
+                      : "bg-zinc-950/40 border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <GripVertical className="w-4 h-4 text-zinc-500 shrink-0 cursor-grab active:cursor-grabbing hidden sm:block" />
+
+                  <span className="w-6 h-6 shrink-0 flex items-center justify-center rounded-lg bg-zinc-800 text-[10px] font-mono text-zinc-400">
+                    {index + 1}
+                  </span>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-zinc-200 truncate">{SOURCE_LABELS[entry.key] || entry.key}</span>
+                      {SOURCE_TAG_LABELS[entry.tag as keyof typeof SOURCE_TAG_LABELS] && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 hidden sm:inline">{entry.key}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <select
+                    value={entry.tag}
+                    onChange={(e) => updateStreamingTag(category, index, e.target.value)}
+                    className="px-2 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-200 font-semibold cursor-pointer focus:outline-none focus:border-zinc-500"
+                  >
+                    {SOURCE_TAGS.map((tag) => (
+                      <option key={tag} value={tag}>{SOURCE_TAG_LABELS[tag]}</option>
+                    ))}
+                  </select>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => moveStreamingSource(category, index, index - 1)}
+                      className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      aria-label="Move up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === list.length - 1}
+                      onClick={() => moveStreamingSource(category, index, index + 1)}
+                      className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      aria-label="Move down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h3 className="text-sm font-bold text-white">Streaming Sources</h3>
+            <p className="text-xs text-zinc-400">Reorder and tag playback sources. Saves apply to new page loads without interrupting active viewers.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={loadStreaming}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer border border-zinc-700/80 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${streamingLoading ? "animate-spin" : ""}`} />
+              <span>Refresh</span>
+            </button>
+            <button
+              type="button"
+              onClick={resetStreaming}
+              disabled={streamingSaving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-semibold cursor-pointer border border-rose-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Reset to Default</span>
+            </button>
+            <button
+              type="button"
+              onClick={saveStreaming}
+              disabled={streamingSaving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold cursor-pointer border border-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {streamingSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{streamingSaving ? "Saving..." : "Save Order"}</span>
+            </button>
+          </div>
+        </div>
+
+        <p className="text-[10px] text-zinc-500 font-mono">*Drag items or use the arrow buttons to reorder. Use the dropdown to set a status tag for each source.</p>
+
+        {streamingLoading ? (
+          <div className="py-12 text-center text-xs text-zinc-500">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" /> Loading streaming sources...
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {renderCategory(
+              "movie",
+              "Movies & TV Shows",
+              "Used by the movie and TV detail page players"
+            )}
+            {renderCategory(
+              "anime",
+              "Anime",
+              "Used by the anime player"
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       {renderPreviewBanner()}
@@ -2493,6 +2749,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 { id: "franchises", label: "Franchises", icon: Layers },
                 { id: "appearance", label: "Theme Studio", icon: Palette },
                 { id: "reports", label: "Issue Reports", icon: Bug, badge: reportsList.length > 0 ? String(reportsList.length) : null },
+                { id: "streaming", label: "Sources", icon: Server },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -2533,6 +2790,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               {activeTab === "franchises" && renderFranchisesTab()}
               {activeTab === "appearance" && renderAppearanceTab()}
               {activeTab === "reports" && renderReportsTab()}
+              {activeTab === "streaming" && renderStreamingTab()}
 
               {/* Feedback Toast Notification */}
               {statusMessage && (
