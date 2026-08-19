@@ -19,21 +19,45 @@ export async function GET() {
     }));
 
     let dynamicCols: any[] = [];
+    const dbMap = new Map<string, any>();
     try {
       const db = getDb();
       const dbFranchises = await db.query.customFranchises.findMany({
         where: eq(customFranchises.enabled, true),
       });
-      dynamicCols = dbFranchises.map(f => ({
-        id: f.id,
-        name: f.name,
-        overview: f.overview || "",
-        poster_path: f.posterPath || "",
-        backdrop_path: f.backdropPath || "",
-      }));
+      for (const f of dbFranchises) {
+        dbMap.set(f.id, {
+          id: f.id,
+          name: f.name,
+          overview: f.overview || "",
+          poster_path: f.posterPath || "",
+          backdrop_path: f.backdropPath || "",
+        });
+      }
     } catch {}
 
-    const collections = [...dynamicCols, ...staticCols];
+    const collections: any[] = [];
+    const seenIds = new Set<string>();
+
+    // Dynamic collections first
+    for (const [id, col] of dbMap.entries()) {
+      collections.push(col);
+      seenIds.add(id);
+    }
+
+    // Static collections (if not overridden by DB)
+    for (const f of FRANCHISES) {
+      if (!seenIds.has(f.id)) {
+        collections.push({
+          id: f.id,
+          name: f.name,
+          overview: f.overview,
+          poster_path: f.poster_path,
+          backdrop_path: f.backdrop_path,
+        });
+        seenIds.add(f.id);
+      }
+    }
 
     return NextResponse.json({ collections }, { headers: cacheHeaders(60) });
   } catch (error) {

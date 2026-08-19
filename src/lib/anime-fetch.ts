@@ -91,7 +91,7 @@ interface AniListMedia {
 }
 
 // A node in the franchise graph
-interface FranchiseNode {
+export interface FranchiseNode {
   id: number;
   idMal: number | null;
   title: string;
@@ -104,6 +104,34 @@ interface FranchiseNode {
   coverImage?: string | null;
   bannerImage?: string | null;
 }
+
+import {
+  KITSU_BASE,
+  kitsuFetchJson,
+  normalizeKitsuGenre,
+  transformKitsu,
+  searchViaKitsu,
+  getPopularAnimeViaKitsu,
+  getTrendingAnimeViaKitsu,
+  getAiringAnimeViaKitsu,
+  getUpcomingAnimeViaKitsu,
+  fetchEpisodesFromKitsu,
+  getAnimeDetailsViaKitsu,
+} from "./kitsu";
+
+export {
+  KITSU_BASE,
+  kitsuFetchJson,
+  normalizeKitsuGenre,
+  transformKitsu,
+  searchViaKitsu,
+  getPopularAnimeViaKitsu,
+  getTrendingAnimeViaKitsu,
+  getAiringAnimeViaKitsu,
+  getUpcomingAnimeViaKitsu,
+  fetchEpisodesFromKitsu,
+  getAnimeDetailsViaKitsu,
+};
 
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
@@ -418,50 +446,159 @@ export async function searchAnime(q: string, page = 1, genre?: string): Promise<
     } catch {}
   }
 
+  // Fallback 3: Kitsu search (when both AniList and Jikan are down)
+  try {
+    const kResults = await searchViaKitsu(cleanQ, page, genre);
+    if (kResults && kResults.length > 0) {
+      return filterUnreleased(deduplicateAnime(kResults));
+    }
+  } catch (e) {
+    console.warn("Kitsu search fallback failed:", e);
+  }
+
   return [];
 }
 
 export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
-    if (data?.data?.Page?.media) {
+    if (data?.data?.Page?.media && data.data.Page.media.length > 0) {
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
     console.warn("AniList popular failed, falling back to Jikan:", e);
   }
 
-  const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`);
-  return filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
+  try {
+    const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`);
+    const jikanItems = filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
+    if (jikanItems && jikanItems.length > 0) {
+      return jikanItems;
+    }
+  } catch (e) {
+    console.warn("Jikan popular failed, falling back to Kitsu:", e);
+  }
+
+  // Fallback 3: Kitsu popular (when both AniList and Jikan are down)
+  try {
+    const kitsuItems = await getPopularAnimeViaKitsu(page, genre);
+    if (kitsuItems && kitsuItems.length > 0) {
+      return filterUnreleased(deduplicateAnime(kitsuItems));
+    }
+  } catch (e) {
+    console.warn("Kitsu popular fallback failed:", e);
+  }
+
+  return [];
 }
 
 export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const data = await anilistQuery(TRENDING_QUERY, { page, genre: genre || null });
-    if (data?.data?.Page?.media) {
+    if (data?.data?.Page?.media && data.data.Page.media.length > 0) {
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
     console.warn("AniList trending failed, falling back to Jikan:", e);
   }
 
-  const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`);
-  return filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
+  try {
+    const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`);
+    const jikanItems = filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
+    if (jikanItems && jikanItems.length > 0) {
+      return jikanItems;
+    }
+  } catch (e) {
+    console.warn("Jikan trending failed, falling back to Kitsu:", e);
+  }
+
+  // Fallback 3: Kitsu trending (when both AniList and Jikan are down)
+  try {
+    const kitsuItems = await getTrendingAnimeViaKitsu(page, genre);
+    if (kitsuItems && kitsuItems.length > 0) {
+      return filterUnreleased(deduplicateAnime(kitsuItems));
+    }
+  } catch (e) {
+    console.warn("Kitsu trending fallback failed:", e);
+  }
+
+  return [];
 }
 
 export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
     const { season, year } = getCurrentSeason();
     const data = await anilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
-    if (data?.data?.Page?.media) {
+    if (data?.data?.Page?.media && data.data.Page.media.length > 0) {
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
     console.warn("AniList airing failed, falling back to Jikan:", e);
   }
 
-  const data = await jikanFetchJson(`${JIKAN_BASE}/seasons/now?page=${page}`);
-  return filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
+  try {
+    const data = await jikanFetchJson(`${JIKAN_BASE}/seasons/now?page=${page}`);
+    const jikanItems = filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
+    if (jikanItems && jikanItems.length > 0) {
+      return jikanItems;
+    }
+  } catch (e) {
+    console.warn("Jikan airing failed, falling back to Kitsu:", e);
+  }
+
+  // Fallback 3: Kitsu airing (when both AniList and Jikan are down)
+  try {
+    const kitsuItems = await getAiringAnimeViaKitsu(page, genre);
+    if (kitsuItems && kitsuItems.length > 0) {
+      return filterUnreleased(deduplicateAnime(kitsuItems));
+    }
+  } catch (e) {
+    console.warn("Kitsu airing fallback failed:", e);
+  }
+
+  return [];
+}
+
+const UPCOMING_QUERY = `query ($page: Int, $genre: String) {
+  Page(page: $page, perPage: 50) {
+    media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC], status: NOT_YET_RELEASED, genre: $genre) {
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
+      episodes genres averageScore description status type format season seasonYear duration
+    }
+  }
+}`;
+
+export async function getUpcomingAnime(page = 1, genre?: string): Promise<AnimeItem[]> {
+  try {
+    const data = await anilistQuery(UPCOMING_QUERY, { page, genre: genre || null });
+    if (data?.data?.Page?.media && data.data.Page.media.length > 0) {
+      return deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]);
+    }
+  } catch (e) {
+    console.warn("AniList upcoming failed, falling back to Jikan:", e);
+  }
+
+  try {
+    const data = await jikanFetchJson(`${JIKAN_BASE}/seasons/upcoming?page=${page}`);
+    const jikanItems = deduplicateAnime(((data as any)?.data || []).map(transformJikan));
+    if (jikanItems && jikanItems.length > 0) {
+      return jikanItems;
+    }
+  } catch (e) {
+    console.warn("Jikan upcoming failed, falling back to Kitsu:", e);
+  }
+
+  // Fallback 3: Kitsu upcoming (when both AniList and Jikan are down)
+  try {
+    const kitsuItems = await getUpcomingAnimeViaKitsu(page, genre);
+    if (kitsuItems && kitsuItems.length > 0) {
+      return deduplicateAnime(kitsuItems);
+    }
+  } catch (e) {
+    console.warn("Kitsu upcoming fallback failed:", e);
+  }
+
+  return [];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -615,7 +752,7 @@ function findFranchiseRoot(nodes: FranchiseNode[]): FranchiseNode | null {
  * Special → "Special N"
  * Movie → "Movie N"
  */
-function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[] {
+export function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[] {
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
 
   // Filter to only includable formats with some content
@@ -677,9 +814,11 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
       }
     }
 
-    const totalEp = isMovie || isActualOva || isSpecial
-      ? Math.max(node.episodes || 1, 1)
-      : (node.episodes ? Math.max(node.episodes, 1) : 0);
+    const totalEp = isMovie
+      ? 1
+      : isActualOva || isSpecial
+        ? Math.max(node.episodes || 1, 1)
+        : (node.episodes ? Math.max(node.episodes, 1) : 0);
 
     let nodeStatus: string = (node as any).status || node.status || "";
     if (!nodeStatus) {
@@ -726,7 +865,7 @@ function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[
  * ALL seasons belong to the current anime — no cross-franchise matching.
  * Uses synthetic IDs (tmdb-{tmdbId}-s{num}) to avoid linking to other anime.
  */
-function parseSeasonNumberFromTitle(title: string): number {
+export function parseSeasonNumberFromTitle(title: string): number {
   const normalized = title.toLowerCase();
   
   const seasonMatch = normalized.match(/season\s*([0-9]+)/);
@@ -863,6 +1002,10 @@ export async function getAnimeDetails(
   tmdbId?: number | null;
   tmdbSeasonMap?: Record<string, number>;
 } | null> {
+  if (id.startsWith("kitsu-")) {
+    return getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
+  }
+
   const isMalInput = id.startsWith("mal-");
   let resolvedFromMal = false;
   if (isMalInput) {
@@ -928,7 +1071,11 @@ export async function getAnimeDetails(
     } catch {}
   }
 
-  if (isNaN(numId)) return null;
+  if (isNaN(numId)) {
+    const kitsuRes = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
+    if (kitsuRes) return kitsuRes;
+    return null;
+  }
 
   // No local cache — rely on Cloudflare CDN via next: { revalidate } on fetch calls.
 
@@ -1264,6 +1411,14 @@ export async function getAnimeDetails(
       }
     } catch {}
 
+    // Fallback 3: Kitsu + AniZip + TMDB (when both AniList and Jikan are down)
+    try {
+      const kitsuFallback = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
+      if (kitsuFallback) return kitsuFallback;
+    } catch (e) {
+      console.warn("Kitsu details fallback failed:", e);
+    }
+
     return null;
   }
 
@@ -1551,9 +1706,10 @@ export async function getAnimeDetails(
 
   // Fetch real episodes for the active season
   const allCombinedEpisodes: EpisodeDetail[] = [];
-  const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel.startsWith(t));
-  const maxEp = isSpecialFormat ? Math.max(openedSeason.totalEpisodes, 1) : Math.max(openedSeason.totalEpisodes, 1);
-  const seasonCap = Math.min(maxEp, epLimit);
+  const isMovieFormat = openedSeason.seasonLabel?.startsWith("Movie") || anime.format === "MOVIE" || anime.type === "MOVIE";
+  const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel?.startsWith(t)) || isMovieFormat;
+  const maxEp = isMovieFormat ? 1 : (isSpecialFormat ? Math.max(openedSeason.totalEpisodes, 1) : Math.max(openedSeason.totalEpisodes, 1));
+  const seasonCap = isMovieFormat ? 1 : Math.min(maxEp, epLimit);
   let seasonEps: EpisodeDetail[] = [];
 
   let resolvedEps: EpisodeDetail[] | null = null;
@@ -1562,25 +1718,33 @@ export async function getAnimeDetails(
   } catch { /* ignore */ }
 
   if (resolvedEps && resolvedEps.length > 0) {
-    seasonEps = resolvedEps;
+    seasonEps = isMovieFormat ? [resolvedEps[0]] : resolvedEps;
   } else if (openedSeason.idMal) {
     const realEps = await fetchEpisodesFromJikan(openedSeason.idMal, activeSeasonId, seasonCap);
-    if (realEps) seasonEps = realEps;
+    if (realEps) seasonEps = isMovieFormat ? [realEps[0]] : realEps;
   }
 
   // Fill missing episode numbers with placeholders
   const existingNums = new Set(seasonEps.map(e => e.episodeNum));
-  const targetCount = openedSeason.totalEpisodes > 0 ? openedSeason.totalEpisodes : Math.max(seasonEps.length, 1);
+  const targetCount = isMovieFormat ? 1 : (openedSeason.totalEpisodes > 0 ? openedSeason.totalEpisodes : Math.max(seasonEps.length, 1));
   for (let i = 1; i <= targetCount; i++) {
     if (!existingNums.has(i)) {
       seasonEps.push({
         episodeId: `${activeSeasonId}-${i}`,
         episodeNum: i,
-        title: `Episode ${i}`,
-        description: null, thumbnail: null, malUrl: null,
-        releasedDate: null, isFiller: false, isRecap: false,
+        title: isMovieFormat ? (openedSeason.name || anime.name || "Complete Movie") : `Episode ${i}`,
+        description: isMovieFormat ? anime.description || null : null,
+        thumbnail: isMovieFormat ? anime.poster || null : null,
+        malUrl: null,
+        releasedDate: null,
+        isFiller: false,
+        isRecap: false,
       });
     }
+  }
+
+  if (isMovieFormat && seasonEps.length > 1) {
+    seasonEps = [seasonEps[0]];
   }
 
   seasonEps.sort((a, b) => a.episodeNum - b.episodeNum);
@@ -1660,12 +1824,15 @@ export async function fetchEpisodesFromAniZip(
     if (!json.episodes) return null;
 
     const eps: EpisodeDetail[] = [];
-    const effectiveCap = seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500;
+    const isSingleEpCap = seasonCap === 1;
+    const effectiveCap = isSingleEpCap ? 1 : (seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500);
     for (const key of Object.keys(json.episodes)) {
       const epNum = parseInt(key, 10);
       if (isNaN(epNum) || epNum > effectiveCap) continue;
 
       const ep = json.episodes[key];
+      // If single episode cap is requested or this is a multi-part movie cut, skip secondary parts
+      if (isSingleEpCap && epNum > 1) continue;
       const title = ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${epNum}`;
       const description = ep.overview || ep.summary || null;
       let thumbnail = ep.image || null;
@@ -2064,6 +2231,7 @@ export async function fetchAnimeApi(
   const isSearch = path.includes("/search") || path.includes("keyword=");
   const isAiring = path.includes("/airing") || path.includes("/latest") || path.includes("/recent");
   const isTrending = path.includes("/trending");
+  const isUpcoming = path.includes("/upcoming");
   const isSeries = path.startsWith("/series/");
 
   const cacheKey = `api:${endpoint}`;
@@ -2117,6 +2285,9 @@ export async function fetchAnimeApi(
   } else if (isTrending) {
     const items = await getTrendingAnime(page, genre);
     result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
+  } else if (isUpcoming) {
+    const items = await getUpcomingAnime(page, genre);
+    result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
   } else {
     // default: popular
     const items = await getPopularAnime(page, genre);
@@ -2162,60 +2333,6 @@ export async function fetchEpisodesFromTatakai(
     return eps.sort((a, b) => a.episodeNum - b.episodeNum);
   } catch (error) {
     console.error("[AnimeFetch] Tatakai fetch failed:", error);
-    return null;
-  }
-}
-
-// Fetch real episode metadata (titles, thumbnails, descriptions) from Kitsu as a fallback
-export async function fetchEpisodesFromKitsu(
-  animeName: string,
-  seasonCap: number
-): Promise<EpisodeDetail[] | null> {
-  try {
-    const searchRes = await fetch(
-      `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(animeName)}&page[limit]=1`,
-      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } }
-    );
-    if (!searchRes.ok) return null;
-    const searchJson = await searchRes.json();
-    const anime = searchJson.data?.[0];
-    if (!anime) return null;
-
-    const kitsuId = anime.id;
-    const limitParam = Math.min(Math.max(seasonCap || 20, 1), 20);
-    const epRes = await fetch(
-      `https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=${limitParam}`,
-      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } }
-    );
-    if (!epRes.ok) return null;
-    const epJson = await epRes.json();
-    const epsData = epJson.data || [];
-
-    const eps: EpisodeDetail[] = [];
-    const effectiveCap = seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500;
-    for (const ep of epsData) {
-      const epNum = ep.attributes?.number;
-      if (!epNum || epNum > effectiveCap) continue;
-
-      const title = ep.attributes?.canonicalTitle || ep.attributes?.title || `Episode ${epNum}`;
-      const description = ep.attributes?.synopsis || null;
-      const thumbnail = ep.attributes?.thumbnail?.original || null;
-
-      eps.push({
-        episodeId: `kitsu-${kitsuId}-${epNum}`,
-        episodeNum: epNum,
-        title,
-        description,
-        thumbnail,
-        releasedDate: ep.attributes?.airdate || null,
-        isFiller: false,
-        isRecap: false,
-      });
-    }
-
-    return eps.sort((a, b) => a.episodeNum - b.episodeNum);
-  } catch (error) {
-    console.error("[AnimeFetch] Kitsu fetch failed:", error);
     return null;
   }
 }

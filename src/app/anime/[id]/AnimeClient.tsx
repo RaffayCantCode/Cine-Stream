@@ -12,7 +12,7 @@ import { AnimeCard } from "@/components/AnimeCard";
 import { CastRow } from "@/components/CastRow";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { WatchlistButton } from "@/components/WatchlistButton";
-import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
+import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { usePageContentReady } from "@/lib/pageLoad";
 
 function AnimeHeroTrailerButton() {
@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v33-bleach-tybw-30984";
+const ANIME_API_VERSION = "v34-anime-pagination-recs-onepiece-v1";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -87,7 +87,78 @@ function transformRecItem(media: any): any {
   };
 }
 
-async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<string>, minItems = 12, animeGenres: string[] = []): Promise<any[]> {
+function cleanBaseTitle(title: string): string {
+  return (title || "")
+    .toLowerCase()
+    .replace(/^(the|a|an)\s+/i, "")
+    .replace(/[:\-\–\—].*$/, "")
+    .replace(/\b(season|part|cour|movie|film|ova|special|tv)\b.*$/i, "")
+    .trim();
+}
+
+function balanceRecommendations(
+  items: any[],
+  currentTitle: string,
+  currentId: string,
+  excludeIds: Set<string>,
+  maxFranchiseItems = 4,
+  targetTotal = 12
+): any[] {
+  const baseTitle = cleanBaseTitle(currentTitle);
+  const normalizedCurrent = (currentTitle || "").toLowerCase().trim();
+  const seen = new Set<string>([String(currentId)]);
+  excludeIds.forEach(id => seen.add(String(id)));
+
+  const sameFranchise: any[] = [];
+  const differentAnime: any[] = [];
+
+  for (const item of items) {
+    const sId = String(item.id);
+    if (seen.has(sId)) continue;
+    seen.add(sId);
+
+    const title = item.name || item.title || "";
+    const itemBase = cleanBaseTitle(title);
+    const itemNormalized = title.toLowerCase().trim();
+
+    // Strictly skip exact title matches (the same anime itself)
+    if (normalizedCurrent && itemNormalized === normalizedCurrent) continue;
+
+    const isFranchise =
+      baseTitle.length >= 3 &&
+      (itemBase.includes(baseTitle) || baseTitle.includes(itemBase) || itemNormalized.startsWith(baseTitle));
+
+    if (isFranchise) {
+      sameFranchise.push(item);
+    } else {
+      differentAnime.push(item);
+    }
+  }
+
+  const franchiseSlice = sameFranchise.slice(0, maxFranchiseItems);
+  const differentCount = Math.max(targetTotal - franchiseSlice.length, 6);
+  const differentSlice = differentAnime.slice(0, differentCount);
+
+  const result = [...franchiseSlice, ...differentSlice];
+  if (result.length < targetTotal) {
+    const remainingDiff = differentAnime.slice(differentCount);
+    result.push(...remainingDiff.slice(0, targetTotal - result.length));
+  }
+  if (result.length < targetTotal) {
+    const remainingFranchise = sameFranchise.slice(maxFranchiseItems);
+    result.push(...remainingFranchise.slice(0, targetTotal - result.length));
+  }
+
+  return result.slice(0, targetTotal);
+}
+
+async function fetchAnilistRecommendations(
+  anilistId: number,
+  animeTitle: string,
+  excludeIds: Set<string>,
+  minItems = 12,
+  animeGenres: string[] = []
+): Promise<any[]> {
   let items: any[] = [];
 
   try {
@@ -116,7 +187,7 @@ async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<st
       .filter((item: any) => !excludeIds.has(item.id) && item.id !== String(anilistId));
   } catch { /* recommendations failed */ }
 
-  if (items.length < minItems) {
+  if (items.length < 24 && animeGenres.length > 0) {
     try {
       const existingIds = new Set(items.map((i: any) => i.id));
       const seenGenres = new Set<string>();
@@ -147,38 +218,55 @@ async function fetchAnilistRecommendations(anilistId: number, excludeIds: Set<st
     } catch { /* padding failed */ }
   }
 
-  // Fallback: If still under minItems, query top popular anime
-  if (items.length < minItems) {
+  // Fallback: If still under 12, query Kitsu category popular anime
+  if (items.length < 12) {
     try {
       const existingIds = new Set(items.map((i: any) => i.id));
-      const popData = await anilistQuery(`
-        query {
-          Page(page: 1, perPage: 25) {
-            media(type: ANIME, isAdult: false, sort: [POPULARITY_DESC]) {
-              id idMal isAdult title { romaji english native }
-              coverImage { large extraLarge }
-              episodes genres averageScore description status type format season seasonYear
-            }
+      const genre = animeGenres[0] || "";
+      const kRes = await fetch(
+        `https://kitsu.io/api/edge/anime?${genre ? `filter[categories]=${encodeURIComponent(genre.toLowerCase().replace(/[^a-z0-9]+/g, "-"))}&` : ""}sort=-userCount&page[limit]=20&include=categories`,
+        { headers: { "Accept": "application/vnd.api+json" }, signal: AbortSignal.timeout(4000) }
+      );
+      if (kRes.ok) {
+        const kData = await kRes.json();
+        const categoriesMap = new Map<string, string>();
+        for (const inc of kData.included || []) {
+          if (inc.type === "categories" && inc.attributes?.title) {
+            categoriesMap.set(inc.id, inc.attributes.title);
           }
         }
-      `, {});
-
-      const popItems = (popData?.data?.Page?.media || [])
-        .map(transformRecItem)
-        .filter(Boolean)
-        .filter((item: any) => !existingIds.has(item.id) && !excludeIds.has(item.id) && item.id !== String(anilistId));
-      items = [...items, ...popItems];
-    } catch { /* popular fallback failed */ }
+        for (const kItem of kData.data || []) {
+          const catIds = kItem.relationships?.categories?.data?.map((c: any) => c.id) || [];
+          const kGenres = catIds.map((cid: string) => categoriesMap.get(cid)).filter(Boolean);
+          const kId = "kitsu-" + kItem.id;
+          if (!existingIds.has(kId) && !excludeIds.has(kId) && kItem.id !== String(anilistId)) {
+            const attr = kItem.attributes || {};
+            const titleEnglish = attr.titles?.en || null;
+            const titleRomaji = attr.canonicalTitle || attr.titles?.en_jp || "Anime";
+            items.push({
+              id: kId,
+              idMal: null,
+              name: titleEnglish || titleRomaji,
+              jname: attr.titles?.ja_jp || null,
+              poster: attr.posterImage?.large || attr.posterImage?.original || "",
+              type: (attr.subtype || "TV").toUpperCase(),
+              episodes: { sub: attr.episodeCount || null, dub: null },
+              rating: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
+              description: cleanAnimeDescription(attr.synopsis || attr.description),
+              genres: kGenres.length > 0 ? kGenres : [],
+              status: attr.status === "current" ? "RELEASING" : (attr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
+              season: null,
+              seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
+              format: (attr.subtype || "TV").toUpperCase(),
+            });
+            existingIds.add(kId);
+          }
+        }
+      }
+    } catch { /* Kitsu recs fallback failed */ }
   }
 
-  const seen = new Set<string>();
-  items = items.filter((item: any) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
-
-  return items.slice(0, Math.max(minItems, 20));
+  return balanceRecommendations(items, animeTitle, String(anilistId), excludeIds, 4, Math.max(minItems, 12));
 }
 
 async function getAniZipMappingClientSide(anilistId: number) {
@@ -234,9 +322,11 @@ async function fetchEpisodesClientSide(
       }
 
       if (azData?.episodes) {
+        const isSingleCap = totalEpisodes === 1;
         for (const k of Object.keys(azData.episodes)) {
           const num = parseInt(k, 10);
           if (isNaN(num)) continue;
+          if (isSingleCap && num > 1) continue;
           const ep = azData.episodes[k];
           aniZipEps.push({
             episodeId: `${seasonId}-${num}`,
@@ -246,7 +336,7 @@ async function fetchEpisodesClientSide(
             thumbnail: ep.image || null,
             releasedDate: ep.airDate || ep.airdate || null,
             isFiller: false,
-            seasonId,
+            seasonId: String(seasonId),
             seasonNum: 1,
           });
         }
@@ -647,6 +737,50 @@ async function fetchAnimeMetaClientSide(idStr: string) {
               }
             }
           }
+
+          // Kitsu details fallback on client
+          try {
+            const kitsuRes = await fetch(`https://kitsu.io/api/edge/mappings?filter[external_site]=${isMal ? "myanimelist/anime" : "anilist/anime"}&filter[external_id]=${parsedId}&include=item`, { headers: { "Accept": "application/vnd.api+json" }, signal: AbortSignal.timeout(4000) });
+            if (kitsuRes.ok) {
+              const kData = await kitsuRes.json();
+              const kItem = kData.included?.[0] || kData.data?.[0]?.relationships?.item?.data;
+              if (kItem?.attributes) {
+                const attr = kItem.attributes;
+                const subtype = (attr.subtype || "TV").toUpperCase();
+                const kAnime: AnimeDetail = {
+                  id: String(parsedId),
+                  idMal: isMal ? String(parsedId) : null,
+                  name: attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Unknown",
+                  jname: attr.titles?.ja_jp || null,
+                  poster: attr.posterImage?.large || attr.posterImage?.original || "",
+                  description: cleanAnimeDescription(attr.synopsis || attr.description),
+                  type: subtype,
+                  rating: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
+                  score: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
+                  status: attr.status === "current" ? "RELEASING" : (attr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
+                  genres: [],
+                  totalEpisodes: attr.episodeCount || 12,
+                  seasons: [{
+                    id: String(parsedId),
+                    name: attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Unknown",
+                    seasonLabel: "Season 1",
+                    totalEpisodes: attr.episodeCount || 12,
+                    isCurrent: true,
+                    idMal: isMal ? parsedId : null,
+                    seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
+                  }],
+                  season: null,
+                  seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
+                  format: subtype,
+                  openedSeasonId: String(parsedId),
+                  tmdbId: null,
+                  duration: attr.episodeLength || null,
+                  trailerId: attr.youtubeVideoId || null,
+                };
+                return { success: true, data: { anime: kAnime, franchiseNodes: [] } };
+              }
+            }
+          } catch {}
         }
       } catch {}
       return null;
@@ -909,8 +1043,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         });
 
         setEpisodes(prev => {
-          const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
-          const merged = [...otherSeasons, ...withRelease].sort((a, b) => {
+          const otherSeasons = prev.filter(e => String(e.seasonId) !== String(seasonId));
+          const withNormalizedSeason = withRelease.map(ep => ({
+            ...ep,
+            seasonId: String(ep.seasonId || seasonId),
+          }));
+          const merged = [...otherSeasons, ...withNormalizedSeason].sort((a, b) => {
             if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
             return a.episodeNum - b.episodeNum;
           });
@@ -918,6 +1056,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         });
         setSeasonOverview(epData.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
+        setEpisodesLoading(false);
         return;
       }
     } catch (err) {
@@ -925,10 +1064,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     }
 
     // Client-side fallback: fetch directly from browser APIs (AniZip, TMDB proxy, Kitsu)
-    const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
-    const epCount = (matchingSeason?.totalEpisodes && matchingSeason.totalEpisodes < 1499)
-      ? matchingSeason.totalEpisodes
-      : ((anime?.totalEpisodes && anime.totalEpisodes < 1499 && anime.id === seasonId) ? anime.totalEpisodes : 0);
+    const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId));
+    const isMovie = (matchingSeason?.seasonLabel || "").startsWith("Movie") || anime?.format === "MOVIE" || anime?.type === "MOVIE";
+    const epCount = isMovie
+      ? 1
+      : ((matchingSeason?.totalEpisodes && matchingSeason.totalEpisodes < 1499)
+        ? matchingSeason.totalEpisodes
+        : ((anime?.totalEpisodes && anime.totalEpisodes < 1499 && String(anime.id) === String(seasonId)) ? anime.totalEpisodes : 0));
     const clientEpsRaw = await fetchEpisodesClientSide(
       seasonId,
       matchingSeason?.name || anime?.name || "",
@@ -967,20 +1109,22 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       return {
         ...ep,
+        seasonId: String(seasonId),
         isReleased: released,
       };
     });
 
     if (clientEps.length > 0) {
       setEpisodes(prev => {
-        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
+        const otherSeasons = prev.filter(e => String(e.seasonId) !== String(seasonId));
         return [...otherSeasons, ...clientEps].sort((a, b) => a.episodeNum - b.episodeNum);
       });
       loadedSeasonIds.current.add(seasonId);
     } else {
       // Final fallback: generate basic cards if browser also couldn't reach APIs
       let fallbackEncounteredUnreleased = false;
-      const fallbackEps: Episode[] = Array.from({ length: epCount }, (_, i) => {
+      const countToGen = isMovie ? 1 : Math.max(epCount || 1, 1);
+      const fallbackEps: Episode[] = Array.from({ length: countToGen }, (_, i) => {
         const epNum = i + 1;
         let released = true;
 
@@ -1001,20 +1145,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         return {
           episodeId: `${seasonId}-${epNum}`,
           episodeNum: epNum,
-          title: `Episode ${epNum}`,
-          description: undefined,
-          thumbnail: undefined,
+          title: isMovie ? (matchingSeason?.name || anime?.name || "Complete Movie") : `Episode ${epNum}`,
+          description: isMovie ? anime?.description || undefined : undefined,
+          thumbnail: isMovie ? anime?.poster || undefined : undefined,
           malUrl: undefined,
           isFiller: false,
           isReleased: released,
-          seasonId: seasonId,
+          seasonId: String(seasonId),
           seasonNum: 1,
         };
       });
       setEpisodes(prev => {
-        const otherSeasons = prev.filter(e => e.seasonId !== seasonId);
+        const otherSeasons = prev.filter(e => String(e.seasonId) !== String(seasonId));
         return [...otherSeasons, ...fallbackEps].sort((a, b) => a.episodeNum - b.episodeNum);
       });
+      loadedSeasonIds.current.add(seasonId);
     }
     setEpisodesLoading(false);
   }, [id]);
@@ -1143,7 +1288,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           }
 
           if (urlSeasonId) {
-            const matchingSeason = seasons.find((s: SeasonInfo) => s.id === urlSeasonId);
+            const matchingSeason = seasons.find((s: SeasonInfo) => String(s.id) === String(urlSeasonId));
             if (matchingSeason) {
               setCurrentSeasonId(matchingSeason.id);
               loadSeasonEpisodes(
@@ -1152,6 +1297,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 (matchingSeason as any).tmdbId,
                 matchingSeason.tmdbSeasonNumber,
                 (matchingSeason as any).episodeOffset
+              );
+            }
+          } else {
+            const activeSeasonObj = seasons.find((s: SeasonInfo) => String(s.id) === String(currentSeasonId)) || seasons[0];
+            if (activeSeasonObj) {
+              loadSeasonEpisodes(
+                activeSeasonObj.id,
+                true,
+                (activeSeasonObj as any).tmdbId,
+                activeSeasonObj.tmdbSeasonNumber,
+                (activeSeasonObj as any).episodeOffset
               );
             }
           }
@@ -1182,13 +1338,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const validAnilistId = !isNaN(numericId) ? numericId : 1;
 
     const currentGenres = anime?.genres || initialData?.genres || [];
+    const animeTitle = anime?.name || initialData?.name || "";
 
-    fetchAnilistRecommendations(validAnilistId, excludeIds, 12, currentGenres)
+    fetchAnilistRecommendations(validAnilistId, animeTitle, excludeIds, 12, currentGenres)
       .then(async (items) => {
         if (items.length === 0 && validAnilistId > 1) {
           // Server route fallback if client GraphQL query returned no items
           try {
-            const res = await fetch(`/api/anime/recommendations/${validAnilistId}?genres=${encodeURIComponent(currentGenres.join(","))}`);
+            const excludeParam = [...excludeIds].join(",");
+            const res = await fetch(`/api/anime/recommendations/${validAnilistId}?title=${encodeURIComponent(animeTitle)}&genres=${encodeURIComponent(currentGenres.join(","))}&excludeIds=${encodeURIComponent(excludeParam)}`);
             if (res.ok) {
               const data = await res.json();
               if (data?.items?.length > 0) items = data.items;
@@ -1206,7 +1364,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       })
       .catch(() => {})
       .finally(() => setRecsLoading(false));
-  }, [anime?.id, id, franchiseNodes, initialData]);
+  }, [anime?.id, anime?.name, id, franchiseNodes, initialData]);
 
   // ── Background Mapping Verification & Suspicious Mapping Corrector ─────
   useEffect(() => {
@@ -1498,17 +1656,24 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // Group all loaded episodes by seasonId
   const episodesBySeason = useMemo(() => {
     return episodes.reduce((acc, ep) => {
-      const key = ep.seasonId || "unknown";
+      const key = String(ep.seasonId || "unknown");
       if (!acc[key]) acc[key] = [];
       acc[key].push(ep);
       return acc;
     }, {} as Record<string, Episode[]>);
   }, [episodes]);
 
-  const currentSeasonEps = useMemo(
-    () => (episodesBySeason[currentSeasonId] || []).sort((a, b) => a.episodeNum - b.episodeNum),
-    [episodesBySeason, currentSeasonId]
-  );
+  const currentSeasonEps = useMemo(() => {
+    const list = episodesBySeason[String(currentSeasonId)] || [];
+    if (list.length > 0) {
+      return [...list].sort((a, b) => a.episodeNum - b.episodeNum);
+    }
+    // Resilient fallback: If episodes were loaded and there's only 1 season or all loaded episodes match
+    if (episodes.length > 0 && (!seasons || seasons.length <= 1)) {
+      return [...episodes].sort((a, b) => a.episodeNum - b.episodeNum);
+    }
+    return [];
+  }, [episodesBySeason, currentSeasonId, episodes, seasons]);
 
   const upcomingAnimeThisWeek = useMemo(
     () => currentSeasonEps
@@ -1517,21 +1682,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     [currentSeasonEps]
   );
 
-  const [visibleCount, setVisibleCount] = useState(INITIAL_EPISODES_PER_PAGE);
+  const EPISODES_PER_PAGE = 50;
+  const [episodePage, setEpisodePage] = useState(1);
 
-  // Reset visible count when season changes
+  // Reset page when season changes
   useEffect(() => {
-    setVisibleCount(INITIAL_EPISODES_PER_PAGE);
+    setEpisodePage(1);
   }, [currentSeasonId]);
 
-  // Expand visible count so the selected episode is always rendered in the queue
+  // Automatically sync page so the selected episode is on the active page
   useEffect(() => {
-    if (!selectedEp || !hasRestoredState) return;
-    const idx = currentSeasonEps.findIndex(e => e.episodeId === selectedEp.episodeId);
-    if (idx >= 0 && idx >= visibleCount) {
-      setVisibleCount(Math.min(idx + 1, currentSeasonEps.length));
-    }
-  }, [selectedEp?.episodeId, hasRestoredState, currentSeasonId]);
+    if (!selectedEp) return;
+    const epNum = selectedEp.episodeNum;
+    const targetPage = Math.floor((epNum - 1) / EPISODES_PER_PAGE) + 1;
+    setEpisodePage(targetPage);
+  }, [selectedEp?.episodeId, selectedEp?.episodeNum]);
 
   const currentIdx = useMemo(
     () => currentSeasonEps.findIndex(e => e.episodeId === selectedEp?.episodeId),
@@ -1677,7 +1842,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   useEffect(() => {
     const loading = thumbnailFetchingRef.current;
-    const currentEps = currentSeasonEps.slice(0, visibleCount);
+    const startIndex = (Math.max(1, episodePage) - 1) * EPISODES_PER_PAGE;
+    const currentEps = currentSeasonEps.slice(startIndex, startIndex + EPISODES_PER_PAGE);
     const needThumb = currentEps.filter(ep => !ep.thumbnail && ep.malUrl && !loading.has(ep.episodeId));
     if (needThumb.length === 0) return;
 
@@ -1714,7 +1880,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       if (pos < total) setTimeout(tick, 200);
     };
     tick();
-  }, [visibleCount, currentSeasonId, id, currentSeasonEps.length]);
+  }, [episodePage, currentSeasonId, id, currentSeasonEps.length]);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -1740,12 +1906,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               </div>
             </div>
           </div>
-        ) : error ? (
+        ) : (error || (anime as any)?.isHidden) ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl">
-              <div className="text-6xl mb-4">😔</div>
-              <div className="text-xl font-bold text-white mb-2">Couldn&apos;t load anime</div>
-              <div className="text-sm text-white/50 mb-4">{error}</div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl max-w-lg mx-auto space-y-3">
+              <div className="text-xl font-bold text-white mb-2">Title Unavailable</div>
+              <div className="text-sm text-white/50 mb-4">
+                This anime is currently not available to view. Please check back later or explore other anime.
+              </div>
               <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4B5694] hover:bg-[#4B5694] text-white rounded-xl text-sm font-bold transition-all">
                 <ArrowLeft className="w-4 h-4" /> Back to Anime
               </Link>
@@ -1823,7 +1990,35 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   )}
 
                     <div className="pt-1">
-                      {currentSeasonEps.length > 0 ? (
+                      {(anime as any)?.isUpcoming || (anime as any)?.status === "upcoming" ? (
+                        <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
+                          <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs sm:text-sm font-semibold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                            <span>This entry is upcoming. Please check back later.</span>
+                          </div>
+                          <WatchlistButton
+                            mediaId={Number(anime.id)}
+                            mediaType="anime"
+                            title={anime.name}
+                            posterPath={anime.poster || null}
+                          />
+                          <AnimeHeroTrailerButton />
+                        </div>
+                      ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" ? (
+                        <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
+                          <div className="flex items-center gap-2.5 px-4 py-3 bg-zinc-800/80 border border-zinc-700/60 rounded-xl text-zinc-300 text-xs sm:text-sm font-semibold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 shrink-0" />
+                            <span>This title is currently unavailable on this site. Please check back later.</span>
+                          </div>
+                          <WatchlistButton
+                            mediaId={Number(anime.id)}
+                            mediaType="anime"
+                            title={anime.name}
+                            posterPath={anime.poster || null}
+                          />
+                          <AnimeHeroTrailerButton />
+                        </div>
+                      ) : currentSeasonEps.length > 0 ? (
                         <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
                           <button
                             onClick={() => {
@@ -2019,7 +2214,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               </div>
 
               {/* ── Episodes Section ── */}
-              <section className="mt-10 space-y-4">
+              <section id="anime-episodes-section" className="mt-10 space-y-4">
                 {/* ── Watch Order Section (franchise order reference) ── */}
                 {(() => {
                   const curatedNodes = getCuratedAnimeFranchiseNodes(Number(id), anime?.name);
@@ -2288,29 +2483,43 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     );
                   }
 
-                  const sliceItems = items.slice(0, visibleCount);
-                  const hasMore = visibleCount < currentSeasonEps.length;
-                  const remainingEps = currentSeasonEps.length - visibleCount;
-                  const loadMoreCount = remainingEps >= 100 ? 100 : remainingEps >= 50 ? 50 : Math.min(20, remainingEps);
+                  const totalPages = Math.ceil(items.length / EPISODES_PER_PAGE);
+                  const activePage = Math.min(Math.max(1, episodePage), Math.max(1, totalPages));
+                  const startIndex = (activePage - 1) * EPISODES_PER_PAGE;
+                  const sliceItems = items.slice(startIndex, startIndex + EPISODES_PER_PAGE);
+
+                  const handlePageChange = (newPage: number) => {
+                    setEpisodePage(newPage);
+                    const el = document.getElementById("anime-episodes-section");
+                    if (el) {
+                      el.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                  };
 
                   return (
                     <div key={`${episodeView}-${currentSeasonId}`}>
+                      <EpisodePagination
+                        currentPage={activePage}
+                        totalPages={totalPages}
+                        totalItems={items.length}
+                        itemsPerPage={EPISODES_PER_PAGE}
+                        onPageChange={handlePageChange}
+                        className="pt-0 pb-4 border-t-0 border-b border-white/[0.06] mb-5 mt-0"
+                      />
+
                       {episodeView === "grid" ? (
                         <EpisodeGridView items={sliceItems} />
                       ) : (
                         <EpisodeListView items={sliceItems} />
                       )}
 
-                      {hasMore && (
-                        <div className="flex justify-center pt-6 pb-2">
-                          <button
-                            onClick={() => setVisibleCount(c => c + loadMoreCount)}
-                            className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white text-sm font-bold hover:shadow-xl hover:shadow-[#4B5694]/25 transition-all"
-                          >
-                            Show {loadMoreCount} More Episodes
-                          </button>
-                        </div>
-                      )}
+                      <EpisodePagination
+                        currentPage={activePage}
+                        totalPages={totalPages}
+                        totalItems={items.length}
+                        itemsPerPage={EPISODES_PER_PAGE}
+                        onPageChange={handlePageChange}
+                      />
                     </div>
                   );
                 })()}

@@ -1,5 +1,6 @@
 import { AnimeItem } from "@/components/AnimeCard";
 import { cleanAnimeDescription } from "@/lib/anime-fetch";
+import { fetchKitsuClientAnime } from "@/lib/kitsu";
 
 const ANILIST_API = "https://graphql.anilist.co";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
@@ -201,21 +202,44 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     return result;
   } catch (e) {
     console.warn("AniList direct fetch failed, falling back to Jikan:", e);
-    let url = `${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`;
-    if (category === "search" || q) {
-      url = `${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`;
-    } else if (category === "airing") {
-      url = `${JIKAN_BASE}/seasons/now?page=${page}`;
-    } else if (category === "trending") {
-      url = `${JIKAN_BASE}/top/anime?filter=airing&page=${page}`;
+    try {
+      let url = `${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`;
+      if (category === "search" || q) {
+        url = `${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`;
+      } else if (category === "airing") {
+        url = `${JIKAN_BASE}/seasons/now?page=${page}`;
+      } else if (category === "trending") {
+        url = `${JIKAN_BASE}/top/anime?filter=airing&page=${page}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Jikan returned ${res.status}`);
+      const data = await res.json();
+      const items = filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
+      const fallbackResult = { items, hasMore: items.length > 0 };
+      if (items.length > 0) {
+        clientAnimeCache.set(cacheKey, { data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+          } catch {}
+        }
+        return fallbackResult;
+      }
+    } catch (jikanErr) {
+      console.warn("Jikan direct fetch failed, falling back to Kitsu:", jikanErr);
     }
-    const res = await fetch(url);
-    const data = await res.json();
-    const items = filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
-    const fallbackResult = { items, hasMore: items.length > 0 };
-    if (items.length > 0) {
-      clientAnimeCache.set(cacheKey, { data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+
+    // 5) Direct browser Kitsu query fallback (when both AniList and Jikan are down)
+    const kitsuResult = await fetchKitsuClientAnime(category, page, genre, q);
+    if (kitsuResult.items.length > 0) {
+      clientAnimeCache.set(cacheKey, { data: kitsuResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: kitsuResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+        } catch {}
+      }
     }
-    return fallbackResult;
+    return kitsuResult;
   }
 }
+

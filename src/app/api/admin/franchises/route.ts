@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { customFranchises } from "@/lib/db/schema";
 import { desc, eq } from "drizzle-orm";
+import { FRANCHISES } from "@/lib/franchises";
 
 export async function GET() {
   const auth = await verifyAdminSession();
@@ -14,17 +15,66 @@ export async function GET() {
 
   try {
     const db = auth.db;
-    const franchises = await db.query.customFranchises.findMany({
+    const dbFranchises = await db.query.customFranchises.findMany({
       orderBy: [desc(customFranchises.createdAt)],
     });
 
+    const dbMap = new Map<string, any>();
+    for (const f of dbFranchises) {
+      dbMap.set(f.id, f);
+    }
+
+    // Build unified list of all franchises (Presets + DB Custom/Overrides)
+    const presetIds = new Set(FRANCHISES.map(f => f.id));
+
+    const presets = FRANCHISES.map((preset) => {
+      const dbOverride = dbMap.get(preset.id);
+      if (dbOverride) {
+        return {
+          id: preset.id,
+          name: dbOverride.name || preset.name,
+          overview: dbOverride.overview ?? preset.overview,
+          posterPath: dbOverride.posterPath ?? preset.poster_path,
+          backdropPath: dbOverride.backdropPath ?? preset.backdrop_path,
+          parts: Array.isArray(dbOverride.parts) && dbOverride.parts.length > 0 ? dbOverride.parts : (preset.items || []),
+          enabled: dbOverride.enabled ?? true,
+          isPreset: true,
+          isOverridden: true,
+          createdAt: dbOverride.createdAt,
+          updatedAt: dbOverride.updatedAt,
+        };
+      }
+
+      return {
+        id: preset.id,
+        name: preset.name,
+        overview: preset.overview || "",
+        posterPath: preset.poster_path || "",
+        backdropPath: preset.backdrop_path || "",
+        parts: preset.items || [],
+        enabled: true,
+        isPreset: true,
+        isOverridden: false,
+      };
+    });
+
+    const customList = dbFranchises
+      .filter((f) => !presetIds.has(f.id))
+      .map((f) => ({
+        ...f,
+        isPreset: false,
+        isOverridden: false,
+      }));
+
+    const unifiedFranchises = [...customList, ...presets];
+
     return NextResponse.json({
       success: true,
-      franchises,
+      franchises: unifiedFranchises,
     });
   } catch (error) {
     console.error("[Admin Franchises API] GET Error:", error);
-    return NextResponse.json({ error: "Failed to fetch custom franchises" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch franchises" }, { status: 500 });
   }
 }
 
@@ -37,31 +87,58 @@ export async function POST(request: NextRequest) {
   try {
     const db = auth.db;
     const body = await request.json().catch(() => ({}));
-    const { name, overview = "", posterPath = "", backdropPath = "", parts = [], enabled = true } = body;
+    const { id, name, overview = "", posterPath = "", backdropPath = "", parts = [], enabled = true } = body;
 
     if (!name || typeof name !== "string" || !name.trim()) {
       return NextResponse.json({ error: "Franchise collection name is required" }, { status: 400 });
     }
 
-    const [newFranchise] = await db
-      .insert(customFranchises)
-      .values({
-        name: name.trim(),
-        overview: overview && typeof overview === "string" ? overview.trim() : null,
-        posterPath: posterPath && typeof posterPath === "string" ? posterPath.trim() : null,
-        backdropPath: backdropPath && typeof backdropPath === "string" ? backdropPath.trim() : null,
-        parts: Array.isArray(parts) ? parts : [],
-        enabled: Boolean(enabled),
-      })
-      .returning();
+    const cleanId = id && typeof id === "string" && id.trim() ? id.trim() : crypto.randomUUID();
+
+    // Check if row already exists (e.g. for preset override)
+    const existing = await db.query.customFranchises.findFirst({
+      where: eq(customFranchises.id, cleanId),
+    });
+
+    let savedFranchise;
+    if (existing) {
+      const [updated] = await db
+        .update(customFranchises)
+        .set({
+          name: name.trim(),
+          overview: overview && typeof overview === "string" ? overview.trim() : null,
+          posterPath: posterPath && typeof posterPath === "string" ? posterPath.trim() : null,
+          backdropPath: backdropPath && typeof backdropPath === "string" ? backdropPath.trim() : null,
+          parts: Array.isArray(parts) ? parts : [],
+          enabled: Boolean(enabled),
+          updatedAt: new Date(),
+        })
+        .where(eq(customFranchises.id, cleanId))
+        .returning();
+      savedFranchise = updated;
+    } else {
+      const [inserted] = await db
+        .insert(customFranchises)
+        .values({
+          id: cleanId,
+          name: name.trim(),
+          overview: overview && typeof overview === "string" ? overview.trim() : null,
+          posterPath: posterPath && typeof posterPath === "string" ? posterPath.trim() : null,
+          backdropPath: backdropPath && typeof backdropPath === "string" ? backdropPath.trim() : null,
+          parts: Array.isArray(parts) ? parts : [],
+          enabled: Boolean(enabled),
+        })
+        .returning();
+      savedFranchise = inserted;
+    }
 
     return NextResponse.json({
       success: true,
-      franchise: newFranchise,
+      franchise: savedFranchise,
     });
   } catch (error) {
     console.error("[Admin Franchises API] POST Error:", error);
-    return NextResponse.json({ error: "Failed to create custom franchise" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to save franchise" }, { status: 500 });
   }
 }
 
@@ -80,34 +157,57 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Franchise ID is required" }, { status: 400 });
     }
 
-    const updates: Record<string, any> = {
-      updatedAt: new Date(),
-    };
+    const cleanId = id.trim();
 
-    if (typeof name === "string" && name.trim()) updates.name = name.trim();
-    if (overview !== undefined) updates.overview = overview ? String(overview).trim() : null;
-    if (posterPath !== undefined) updates.posterPath = posterPath ? String(posterPath).trim() : null;
-    if (backdropPath !== undefined) updates.backdropPath = backdropPath ? String(backdropPath).trim() : null;
-    if (Array.isArray(parts)) updates.parts = parts;
-    if (enabled !== undefined) updates.enabled = Boolean(enabled);
+    // Check if franchise exists in DB
+    const existing = await db.query.customFranchises.findFirst({
+      where: eq(customFranchises.id, cleanId),
+    });
 
-    const [updatedFranchise] = await db
-      .update(customFranchises)
-      .set(updates)
-      .where(eq(customFranchises.id, id))
-      .returning();
+    let savedFranchise;
+    if (existing) {
+      const updates: Record<string, any> = {
+        updatedAt: new Date(),
+      };
 
-    if (!updatedFranchise) {
-      return NextResponse.json({ error: "Franchise not found" }, { status: 404 });
+      if (typeof name === "string" && name.trim()) updates.name = name.trim();
+      if (overview !== undefined) updates.overview = overview ? String(overview).trim() : null;
+      if (posterPath !== undefined) updates.posterPath = posterPath ? String(posterPath).trim() : null;
+      if (backdropPath !== undefined) updates.backdropPath = backdropPath ? String(backdropPath).trim() : null;
+      if (Array.isArray(parts)) updates.parts = parts;
+      if (enabled !== undefined) updates.enabled = Boolean(enabled);
+
+      const [updated] = await db
+        .update(customFranchises)
+        .set(updates)
+        .where(eq(customFranchises.id, cleanId))
+        .returning();
+      savedFranchise = updated;
+    } else {
+      // First time saving an override for a preset franchise
+      const preset = FRANCHISES.find(f => f.id === cleanId);
+      const [inserted] = await db
+        .insert(customFranchises)
+        .values({
+          id: cleanId,
+          name: typeof name === "string" && name.trim() ? name.trim() : (preset?.name || cleanId),
+          overview: overview !== undefined ? (overview ? String(overview).trim() : null) : (preset?.overview || null),
+          posterPath: posterPath !== undefined ? (posterPath ? String(posterPath).trim() : null) : (preset?.poster_path || null),
+          backdropPath: backdropPath !== undefined ? (backdropPath ? String(backdropPath).trim() : null) : (preset?.backdrop_path || null),
+          parts: Array.isArray(parts) ? parts : (preset?.items || []),
+          enabled: enabled !== undefined ? Boolean(enabled) : true,
+        })
+        .returning();
+      savedFranchise = inserted;
     }
 
     return NextResponse.json({
       success: true,
-      franchise: updatedFranchise,
+      franchise: savedFranchise,
     });
   } catch (error) {
     console.error("[Admin Franchises API] PUT Error:", error);
-    return NextResponse.json({ error: "Failed to update custom franchise" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update franchise" }, { status: 500 });
   }
 }
 
@@ -125,7 +225,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Franchise ID is required" }, { status: 400 });
     }
 
-    await db.delete(customFranchises).where(eq(customFranchises.id, id));
+    await db.delete(customFranchises).where(eq(customFranchises.id, id.trim()));
 
     return NextResponse.json({
       success: true,
@@ -133,6 +233,6 @@ export async function DELETE(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Admin Franchises API] DELETE Error:", error);
-    return NextResponse.json({ error: "Failed to delete custom franchise" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete/reset franchise" }, { status: 500 });
   }
 }

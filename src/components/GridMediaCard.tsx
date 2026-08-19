@@ -61,6 +61,17 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
           </div>
         )}
 
+        {/* Top left status badge */}
+        {(item as any).isUpcoming || (item as any).status === "upcoming" ? (
+          <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-amber-950 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md backdrop-blur-sm">
+            Upcoming
+          </div>
+        ) : (item as any).isUnavailable || (item as any).status === "unavailable" ? (
+          <div className="absolute top-2 left-2 flex items-center gap-1 bg-zinc-700/90 text-zinc-200 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md backdrop-blur-sm">
+            Unavailable
+          </div>
+        ) : null}
+
         {/* Top right rating badge */}
         {item.vote_average ? (
           <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/10">

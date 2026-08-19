@@ -110,6 +110,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 822119, media_type: "movie", title: "Captain America: Brave New World", poster_path: "/pzIddUEMWhWzfvLI3TwxUG2wGoi.jpg" },
       { id: 986056, media_type: "movie", title: "Thunderbolts*", poster_path: "/hqcexYHbiTBfDIdDWxrxPtVndBX.jpg" },
       { id: 617126, media_type: "movie", title: "The Fantastic Four: First Steps", poster_path: "/nf5qaSEvyYSNeFH0YhSs5EsBLX9.jpg" },
+      { id: 969681, media_type: "movie", title: "Spider-Man: Brand New Day", poster_path: "/iPOn6DinuVyLY17YM9mKuPofV08.jpg" },
       { id: 198178, media_type: "tv", title: "Wonder Man", poster_path: "/6yy9nQlFt2l6UVWzrfhszFCaZ5C.jpg" },
       { id: 1439930, media_type: "movie", title: "The Punisher: One Last Kill", poster_path: "/qQclTgLMDvGBuUBFGHRipxkEwWR.jpg" }
     ],
@@ -458,6 +459,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
           { id: 315635, media_type: "movie" }, // Homecoming
           { id: 429617, media_type: "movie" }, // Far From Home
           { id: 634649, media_type: "movie" }, // No Way Home
+          { id: 969681, media_type: "movie", title: "Spider-Man: Brand New Day", poster_path: "/iPOn6DinuVyLY17YM9mKuPofV08.jpg" }, // Brand New Day
         ]
       },
       {
@@ -694,7 +696,7 @@ export const FRANCHISES: FranchiseDefinition[] = [
     items: [
       { id: 1858, media_type: "movie" },
       { id: 8373, media_type: "movie" },
-      { id: 37834, media_type: "movie" },
+      { id: 38356, media_type: "movie" }, // Transformers: Dark of the Moon
       { id: 91314, media_type: "movie" },
       { id: 335988, media_type: "movie" },
       { id: 424783, media_type: "movie" },

@@ -108,6 +108,56 @@ async function directClientJikanSearch(queryTerm: string): Promise<AnimeItem[]> 
   return [];
 }
 
+async function directClientKitsuSearch(queryTerm: string): Promise<AnimeItem[]> {
+  try {
+    const res = await fetch(`https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(queryTerm)}&page[limit]=25&include=categories`, {
+      headers: { "Accept": "application/vnd.api+json" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const list = data?.data || [];
+      const categoriesMap = new Map<string, string>();
+      for (const inc of data.included || []) {
+        if (inc.type === "categories" && inc.attributes?.title) {
+          categoriesMap.set(inc.id, inc.attributes.title);
+        }
+      }
+      return list.map((k: any) => {
+        const attr = k.attributes || {};
+        const catIds = k.relationships?.categories?.data?.map((c: any) => c.id) || [];
+        const genres = catIds.map((cid: string) => categoriesMap.get(cid)).filter(Boolean);
+        const subtype = (attr.subtype || "TV").toUpperCase();
+        const titleEnglish = attr.titles?.en || null;
+        const titleRomaji = attr.canonicalTitle || attr.titles?.en_jp || "Anime";
+        let rating: string | null = null;
+        if (attr.averageRating) {
+          const r = parseFloat(attr.averageRating);
+          if (!isNaN(r)) rating = (r / 10).toFixed(1);
+        }
+        return {
+          id: `kitsu-${k.id}`,
+          name: titleEnglish || titleRomaji,
+          jname: attr.titles?.ja_jp || null,
+          poster: attr.posterImage?.large || attr.posterImage?.original || "",
+          bannerImage: attr.coverImage?.large || null,
+          type: subtype,
+          episodes: { sub: attr.episodeCount || null, dub: null },
+          rating,
+          description: attr.synopsis || attr.description || "",
+          genres,
+          status: attr.status === "current" ? "RELEASING" : (attr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
+          season: null,
+          seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
+          format: subtype,
+          duration: attr.episodeLength || null,
+        } as AnimeItem;
+      });
+    }
+  } catch {}
+  return [];
+}
+
 function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -205,6 +255,12 @@ function SearchContent() {
           const clientJikanResults = await directClientJikanSearch(qTerm);
           if (clientJikanResults.length > 0) {
             return clientJikanResults;
+          }
+
+          // Tier 5: Direct browser client Kitsu search (when AniList and Jikan are down)
+          const clientKitsuResults = await directClientKitsuSearch(qTerm);
+          if (clientKitsuResults.length > 0) {
+            return clientKitsuResults;
           }
 
           return [];

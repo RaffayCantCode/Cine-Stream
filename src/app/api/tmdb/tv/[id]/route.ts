@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { tmdbFetch } from "@/lib/tmdb";
+import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";
 
 export async function GET(
   request: Request,
@@ -9,13 +10,27 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const [data, extraRecs, extraSimilar] = await Promise.all([
-      tmdbFetch(`/tv/${id}`, {
-        append_to_response: "credits,videos,similar,recommendations",
-      }),
-      tmdbFetch(`/tv/${id}/recommendations`, { page: "2" }).catch(() => null),
-      tmdbFetch(`/tv/${id}/similar`, { page: "2" }).catch(() => null),
-    ]);
+    const override = await getMediaOverride("tv", id);
+
+    let data: any = null;
+    let extraRecs: any = null;
+    let extraSimilar: any = null;
+
+    try {
+      [data, extraRecs, extraSimilar] = await Promise.all([
+        tmdbFetch(`/tv/${id}`, {
+          append_to_response: "credits,videos,similar,recommendations",
+        }),
+        tmdbFetch(`/tv/${id}/recommendations`, { page: "2" }).catch(() => null),
+        tmdbFetch(`/tv/${id}/similar`, { page: "2" }).catch(() => null),
+      ]);
+    } catch (fetchErr) {
+      if (override) {
+        const synthetic = applyMediaOverride(null, override);
+        return Response.json(synthetic);
+      }
+      throw fetchErr;
+    }
 
     const result = data as Record<string, unknown>;
     const recs = result.recommendations as { results?: unknown[] } | undefined;
@@ -52,8 +67,14 @@ export async function GET(
       }
     }
 
-    return Response.json(result);
+    const finalResult = applyMediaOverride(result, override);
+    return Response.json(finalResult);
   } catch (error) {
+    const fallbackOverride = await getMediaOverride("tv", id).catch(() => null);
+    if (fallbackOverride) {
+      const synthetic = applyMediaOverride(null, fallbackOverride);
+      return Response.json(synthetic);
+    }
     return Response.json({ error: "Failed to fetch TV show details" }, { status: 500 });
   }
 }

@@ -42,4 +42,9 @@ function createBuildProxy(): NeonHttpDatabase<typeof schema> {
   return new Proxy({} as NeonHttpDatabase<typeof schema>, handler);
 }
 
-export const db = getDb();
+export const db = new Proxy({} as NeonHttpDatabase<typeof schema>, {
+  get: (_target, prop) => {
+    const realDb = getDb();
+    return (realDb as any)[prop];
+  }
+});

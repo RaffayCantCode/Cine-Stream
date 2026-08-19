@@ -43,6 +43,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Server,
+  EyeOff,
+  Clock,
+  Ban,
+  RotateCcw,
+  Edit3,
+  Filter,
+  Tag,
+  Globe,
 } from "lucide-react";
 import { useAnnouncement } from "@/hooks/useAnnouncement";
 import { useTheme } from "@/context/ThemeContext";
@@ -62,6 +70,7 @@ type AdminTab =
   | "spotlight" 
   | "users" 
   | "franchises" 
+  | "overrides"
   | "appearance"
   | "reports"
   | "streaming";
@@ -112,6 +121,22 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const [franchisesLoading, setFranchisesLoading] = useState(false);
   const [editingFranchise, setEditingFranchise] = useState<any | null>(null);
   const [franchiseModalOpen, setFranchiseModalOpen] = useState(false);
+  const [franchiseFilterTab, setFranchiseFilterTab] = useState<"all" | "presets" | "custom">("all");
+  const [franchiseSearchQuery, setFranchiseSearchQuery] = useState("");
+
+  // ── Entry Overrides State ──
+  const [overridesList, setOverridesList] = useState<any[]>([]);
+  const [overridesLoading, setOverridesLoading] = useState(false);
+  const [overrideSearchQuery, setOverrideSearchQuery] = useState("");
+  const [overrideSearchType, setOverrideSearchType] = useState<"all" | "movie" | "tv" | "anime">("all");
+  const [overrideSearchResults, setOverrideSearchResults] = useState<any[]>([]);
+  const [overrideSearchLoading, setOverrideSearchLoading] = useState(false);
+  const [selectedOverrideItem, setSelectedOverrideItem] = useState<any | null>(null);
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false);
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideFilterTab, setOverrideFilterTab] = useState<"all" | "upcoming" | "unavailable" | "hidden" | "customized">("all");
+  const [overrideFilterQuery, setOverrideFilterQuery] = useState("");
+  const [overrideGenreInput, setOverrideGenreInput] = useState("");
 
   // ── Custom Themes State ──
   const [adminCustomThemes, setAdminCustomThemes] = useState<any[]>([]);
@@ -237,6 +262,52 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
       setFranchisesLoading(false);
     }
   }, []);
+
+  // Load Entry Overrides
+  const loadOverrides = useCallback(async (filter = overrideFilterTab, query = overrideFilterQuery) => {
+    setOverridesLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filter && filter !== "all") params.set("status", filter);
+      if (query && query.trim()) params.set("q", query.trim());
+      const res = await fetch(`/api/admin/entry-overrides?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setOverridesList(json.overrides || []);
+      }
+    } catch {} finally {
+      setOverridesLoading(false);
+    }
+  }, [overrideFilterTab, overrideFilterQuery]);
+
+  // Search Media for Entry Overrides
+  const searchOverrideMedia = useCallback(async (query: string, type = overrideSearchType) => {
+    if (!query || !query.trim()) {
+      setOverrideSearchResults([]);
+      return;
+    }
+    setOverrideSearchLoading(true);
+    try {
+      const trimmed = query.trim();
+      let explicitType = type;
+      if (trimmed.includes("-")) {
+        const [p1] = trimmed.split("-");
+        if (["movie", "tv", "anime"].includes(p1.toLowerCase())) {
+          explicitType = p1.toLowerCase() as any;
+        }
+      }
+
+      const res = await fetch(`/api/media/search?q=${encodeURIComponent(trimmed)}&type=${explicitType}`);
+      if (res.ok) {
+        const json = await res.json();
+        setOverrideSearchResults(json.results || []);
+      }
+    } catch {
+      setOverrideSearchResults([]);
+    } finally {
+      setOverrideSearchLoading(false);
+    }
+  }, [overrideSearchType]);
 
   // Load Appearance & Admin Custom Themes
   const loadAppearance = useCallback(async () => {
@@ -367,13 +438,14 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
     if (activeTab === "spotlight") loadSpotlight();
     if (activeTab === "users") loadUsers(userQuery);
     if (activeTab === "franchises") loadFranchises();
+    if (activeTab === "overrides") loadOverrides();
     if (activeTab === "reports") loadReports();
     if (activeTab === "streaming") loadStreaming();
     if (activeTab === "appearance") {
       loadAppearance();
       loadAdminThemes();
     }
-  }, [isOpen, activeTab, loadStats, loadSections, loadSpotlight, loadUsers, loadFranchises, loadReports, loadAppearance, loadAdminThemes, userQuery, loadStreaming]);
+  }, [isOpen, activeTab, loadStats, loadSections, loadSpotlight, loadUsers, loadFranchises, loadOverrides, loadReports, loadAppearance, loadAdminThemes, userQuery, loadStreaming]);
 
   // Handle escape key
   useEffect(() => {
@@ -1616,284 +1688,1166 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   // ─────────────────────────────────────────────────────────────────────────────
   // TAB 6: FRANCHISES & COLLECTIONS
   // ─────────────────────────────────────────────────────────────────────────────
-  const renderFranchisesTab = () => (
-    <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
-        <div>
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Layers className="w-4 h-4 text-amber-400" />
-            Dynamic Franchises & Collections
-          </h3>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Build custom collections (e.g. "Best Anime Movies", "Spider-Man Saga") rendered on the Franchises page.
-          </p>
+  const renderFranchisesTab = () => {
+    const filteredFranchises = customFranchisesList.filter((col) => {
+      if (franchiseFilterTab === "presets" && !col.isPreset) return false;
+      if (franchiseFilterTab === "custom" && col.isPreset) return false;
+      if (franchiseSearchQuery.trim()) {
+        const q = franchiseSearchQuery.toLowerCase().trim();
+        return col.name.toLowerCase().includes(q) || (col.overview && col.overview.toLowerCase().includes(q));
+      }
+      return true;
+    });
+
+    const presetCount = customFranchisesList.filter(c => c.isPreset).length;
+    const customCount = customFranchisesList.filter(c => !c.isPreset).length;
+
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-400" />
+              Franchise Collections & Sagas
+            </h3>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Manage both preset built-in sagas (Transformers, Marvel, DC) and custom dynamic collections rendered on `/browse/franchises`.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setEditingFranchise({
+                id: "",
+                name: "",
+                overview: "",
+                posterPath: "",
+                backdropPath: "",
+                enabled: true,
+                parts: [],
+              });
+              setFranchiseModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow transition-colors cursor-pointer self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Custom Collection</span>
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setEditingFranchise({
-              id: "",
-              name: "",
-              overview: "",
-              posterPath: "",
-              backdropPath: "",
-              enabled: true,
-              parts: [],
-            });
-            setFranchiseModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow transition-colors cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Collection</span>
-        </button>
-      </div>
+        {/* Filter Chips & Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            {[
+              { id: "all", label: `All (${customFranchisesList.length})` },
+              { id: "presets", label: `Preset Franchises (${presetCount})` },
+              { id: "custom", label: `Custom Collections (${customCount})` },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFranchiseFilterTab(f.id as any)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                  franchiseFilterTab === f.id
+                    ? "bg-zinc-700 text-white shadow-sm"
+                    : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
-      {franchisesLoading ? (
-        <div className="flex items-center justify-center py-16 text-zinc-400">
-          <Loader2 className="w-6 h-6 animate-spin mr-2" />
-          <span className="text-xs font-medium">Loading collections...</span>
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+            <input
+              type="text"
+              value={franchiseSearchQuery}
+              onChange={(e) => setFranchiseSearchQuery(e.target.value)}
+              placeholder="Filter franchises..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-white text-xs placeholder:text-zinc-500 focus:outline-none focus:border-primary"
+            />
+          </div>
         </div>
-      ) : customFranchisesList.length === 0 ? (
-        <div className="text-center py-12 px-4 rounded-2xl bg-black/40 border border-zinc-800/80 space-y-3">
-          <Layers className="w-10 h-10 mx-auto text-zinc-600" />
-          <p className="text-sm font-semibold text-zinc-300">No dynamic collections created yet</p>
-          <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-            Create collections without code edits. They automatically render on `/browse/franchises`.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {customFranchisesList.map((col) => (
-            <div
-              key={col.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                {col.posterPath ? (
-                  <img src={col.posterPath} alt="" className="w-10 h-14 object-cover rounded-lg shrink-0" />
-                ) : (
-                  <div className="w-10 h-14 bg-zinc-800 rounded-lg flex items-center justify-center text-[10px] text-zinc-500">No img</div>
-                )}
+
+        {franchisesLoading ? (
+          <div className="flex items-center justify-center py-16 text-zinc-400">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" />
+            <span className="text-xs font-medium">Loading collections...</span>
+          </div>
+        ) : filteredFranchises.length === 0 ? (
+          <div className="text-center py-12 px-4 rounded-2xl bg-black/40 border border-zinc-800/80 space-y-3">
+            <Layers className="w-10 h-10 mx-auto text-zinc-600" />
+            <p className="text-sm font-semibold text-zinc-300">No franchises found matching your filter</p>
+            <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+              Create a new custom collection or clear your filter to browse existing franchises.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredFranchises.map((col) => (
+              <div
+                key={col.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {col.posterPath ? (
+                    <img src={col.posterPath.startsWith("http") ? col.posterPath : `https://image.tmdb.org/t/p/w200${col.posterPath}`} alt="" className="w-10 h-14 object-cover rounded-lg shrink-0" />
+                  ) : (
+                    <div className="w-10 h-14 bg-zinc-800 rounded-lg flex items-center justify-center text-[10px] text-zinc-500">No img</div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-white truncate">{col.name}</h4>
+                      {col.isPreset ? (
+                        <span className="px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-400 border border-sky-500/30 text-[10px] font-bold">
+                          Preset
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px] font-bold">
+                          Custom
+                        </span>
+                      )}
+                      {col.isOverridden && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+                          Modified Override
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 line-clamp-1 mt-0.5">{col.overview || "No description"}</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      {Array.isArray(col.parts) ? col.parts.length : 0} items in collection • ID: <code className="text-zinc-400 font-mono">{col.id}</code>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingFranchise({ ...col });
+                      setFranchiseModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Edit Collection
+                  </button>
+
+                  {col.isPreset && col.isOverridden && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`Reset "${col.name}" back to default code configuration? This will remove custom overrides.`)) return;
+                        const res = await fetch("/api/admin/franchises", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: col.id }),
+                        });
+                        if (res.ok) {
+                          loadFranchises();
+                          showToast("success", `Reset "${col.name}" to code defaults.`);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-medium cursor-pointer border border-amber-500/20"
+                      title="Reset to code default"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset</span>
+                    </button>
+                  )}
+
+                  {!col.isPreset && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`Delete custom collection "${col.name}"?`)) return;
+                        const res = await fetch("/api/admin/franchises", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: col.id }),
+                        });
+                        if (res.ok) {
+                          loadFranchises();
+                          showToast("success", "Collection deleted.");
+                        }
+                      }}
+                      className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 cursor-pointer"
+                      title="Delete Collection"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Franchise Editor Modal */}
+        {franchiseModalOpen && editingFranchise && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
+            <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-bold text-white">
+                    {editingFranchise.id ? `Edit Franchise: ${editingFranchise.name}` : "Create Franchise Collection"}
+                  </h3>
+                  {editingFranchise.isPreset && (
+                    <span className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[10px] font-bold">
+                      Built-in Preset
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFranchiseModalOpen(false)}
+                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div className="overflow-y-auto space-y-4 flex-1 min-h-0 px-4 sm:px-6 py-3.5 sm:py-4 custom-scrollbar">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-zinc-400 uppercase">Collection Name</label>
+                    <input
+                      type="text"
+                      value={editingFranchise.name || ""}
+                      onChange={(e) => setEditingFranchise({ ...editingFranchise, name: e.target.value })}
+                      placeholder="e.g. Transformers Collection"
+                      className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs font-semibold focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-zinc-400 uppercase">Poster Image URL</label>
+                    <input
+                      type="text"
+                      value={editingFranchise.posterPath || ""}
+                      onChange={(e) => setEditingFranchise({ ...editingFranchise, posterPath: e.target.value })}
+                      placeholder="https://... or /path.jpg"
+                      className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-zinc-400 uppercase">Backdrop Image URL</label>
+                    <input
+                      type="text"
+                      value={editingFranchise.backdropPath || ""}
+                      onChange={(e) => setEditingFranchise({ ...editingFranchise, backdropPath: e.target.value })}
+                      placeholder="https://... or /path.jpg"
+                      className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-zinc-400 uppercase">Franchise ID (Slug)</label>
+                    <input
+                      type="text"
+                      value={editingFranchise.id || ""}
+                      disabled={Boolean(editingFranchise.id)}
+                      onChange={(e) => setEditingFranchise({ ...editingFranchise, id: e.target.value })}
+                      placeholder="e.g. custom-saga"
+                      className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs disabled:opacity-60 font-mono focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <h4 className="text-sm font-bold text-white">{col.name}</h4>
-                  <p className="text-xs text-zinc-400 line-clamp-1">{col.overview || "No description"}</p>
-                  <p className="text-[11px] text-zinc-500 mt-1">
-                    {Array.isArray(col.parts) ? col.parts.length : 0} items in collection
-                  </p>
+                  <label className="text-xs font-semibold text-zinc-400 uppercase">Overview / Description</label>
+                  <textarea
+                    rows={2}
+                    value={editingFranchise.overview || ""}
+                    onChange={(e) => setEditingFranchise({ ...editingFranchise, overview: e.target.value })}
+                    placeholder="e.g. The war between the heroic Autobots and the evil Decepticons."
+                    className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary resize-none"
+                  />
+                </div>
+
+                {/* Media Picker */}
+                <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  <label className="text-xs font-semibold text-zinc-400 uppercase flex items-center gap-1.5">
+                    <Search className="w-3.5 h-3.5 text-sky-400" />
+                    Search & Add Entries (Movies, TV Shows, Anime)
+                  </label>
+                  <input
+                    type="text"
+                    value={pickerSearchQuery}
+                    onChange={(e) => {
+                      setPickerSearchQuery(e.target.value);
+                      searchMediaItems(e.target.value);
+                    }}
+                    placeholder="Search titles to add to franchise..."
+                    className="w-full px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                  />
+
+                  {pickerResults.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 rounded-xl bg-black/50 border border-zinc-800/80 custom-scrollbar">
+                      {pickerResults.map((item) => (
+                        <div
+                          key={`${item.media_type}_${item.id}`}
+                          className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {item.poster_path && <img src={item.poster_path} alt="" className="w-6 h-8 object-cover rounded shrink-0" />}
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-zinc-200 truncate">{item.title}</p>
+                              <span className="text-[9px] uppercase font-mono text-zinc-500">{item.media_type} • ID {item.id}</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const current = Array.isArray(editingFranchise.parts) ? editingFranchise.parts : [];
+                              const cleanId = isNaN(Number(item.id)) ? item.id : Number(item.id);
+                              const newPart = {
+                                id: cleanId,
+                                media_type: item.media_type || "movie",
+                                title: item.title,
+                                poster_path: item.poster_path,
+                              };
+                              setEditingFranchise({ ...editingFranchise, parts: [...current, newPart] });
+                              if (!editingFranchise.posterPath && item.poster_path) {
+                                setEditingFranchise((prev: any) => ({ ...prev, posterPath: item.poster_path, backdropPath: item.backdrop_path }));
+                              }
+                              showToast("success", `Added ${item.title}`);
+                            }}
+                            className="p-1.5 sm:p-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer shrink-0"
+                            title="Add to Franchise"
+                          >
+                            <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Items in Collection */}
+                <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  <label className="text-xs font-semibold text-zinc-400 uppercase">
+                    Entries in Collection ({editingFranchise.parts?.length || 0})
+                  </label>
+                  {(!editingFranchise.parts || editingFranchise.parts.length === 0) ? (
+                    <p className="text-xs text-zinc-500 italic py-2">No entries added yet. Search above to add items.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {editingFranchise.parts?.map((pt: any, ptIdx: number) => (
+                        <div key={ptIdx} className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-zinc-200 truncate block">{pt.title || pt.name || `Item ${pt.id}`}</span>
+                            <span className="text-[10px] text-zinc-500 font-mono">#{ptIdx + 1} • {pt.media_type || "movie"} ({pt.id})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newParts = editingFranchise.parts.filter((_: any, i: number) => i !== ptIdx);
+                              setEditingFranchise({ ...editingFranchise, parts: newParts });
+                            }}
+                            className="text-rose-400 hover:bg-rose-500/10 p-1.5 sm:p-1 rounded cursor-pointer transition-colors shrink-0"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 self-end sm:self-auto">
+              {/* Sticky Modal Footer */}
+              <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditingFranchise({ ...col });
-                    setFranchiseModalOpen(true);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+                  onClick={() => setFranchiseModalOpen(false)}
+                  className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white cursor-pointer"
                 >
-                  Edit Collection
+                  Cancel
                 </button>
                 <button
                   type="button"
                   onClick={async () => {
-                    if (!confirm(`Delete collection "${col.name}"?`)) return;
+                    if (!editingFranchise.name?.trim()) {
+                      showToast("error", "Collection name is required");
+                      return;
+                    }
+                    const method = editingFranchise.id ? "PUT" : "POST";
                     const res = await fetch("/api/admin/franchises", {
-                      method: "DELETE",
+                      method,
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id: col.id }),
+                      body: JSON.stringify(editingFranchise),
                     });
                     if (res.ok) {
+                      setFranchiseModalOpen(false);
                       loadFranchises();
-                      showToast("success", "Collection deleted.");
+                      showToast("success", "Franchise collection saved!");
+                    } else {
+                      showToast("error", "Failed to save collection");
                     }
                   }}
-                  className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer active:scale-95 transition-all"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Save className="w-4 h-4" />
+                  <span>Save Franchise</span>
                 </button>
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
-      {/* Franchise Editor Modal */}
-      {franchiseModalOpen && editingFranchise && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
-          <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
-              <h3 className="text-sm sm:text-base font-bold text-white">
-                {editingFranchise.id ? "Edit Franchise Collection" : "Create Franchise Collection"}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setFranchiseModalOpen(false)}
-                className="p-1.5 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TAB: ENTRY OVERRIDES & CUSTOMIZATION SYSTEM
+  // ─────────────────────────────────────────────────────────────────────────────
+  const renderOverridesTab = () => {
+    const activeCount = overridesList.length;
+    const upcomingCount = overridesList.filter((o) => o.isUpcoming || o.status === "upcoming").length;
+    const unavailableCount = overridesList.filter((o) => o.isUnavailable || o.status === "unavailable").length;
+    const hiddenCount = overridesList.filter((o) => o.isHidden || o.status === "hidden").length;
+    const customizedCount = overridesList.filter(
+      (o) => Boolean(o.customTitle || o.customDescription || (o.customGenres && o.customGenres.length > 0) || o.customPoster || o.customBackdrop)
+    ).length;
+
+    const filteredOverrides = overridesList.filter((item) => {
+      if (overrideFilterTab === "upcoming" && !(item.isUpcoming || item.status === "upcoming")) return false;
+      if (overrideFilterTab === "unavailable" && !(item.isUnavailable || item.status === "unavailable")) return false;
+      if (overrideFilterTab === "hidden" && !(item.isHidden || item.status === "hidden")) return false;
+      if (overrideFilterTab === "customized" && !Boolean(item.customTitle || item.customDescription || (item.customGenres && item.customGenres.length > 0) || item.customPoster || item.customBackdrop)) return false;
+
+      if (overrideFilterQuery.trim()) {
+        const q = overrideFilterQuery.toLowerCase().trim();
+        return (
+          item.mediaId.toLowerCase().includes(q) ||
+          item.id.toLowerCase().includes(q) ||
+          (item.customTitle && item.customTitle.toLowerCase().includes(q)) ||
+          (item.customDescription && item.customDescription.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+
+    const openEditorForMedia = (item: any) => {
+      const cleanType = (item.media_type || item.mediaType || "movie").toLowerCase();
+      const cleanId = String(item.id || item.mediaId).trim();
+      const compoundId = `${cleanType}-${cleanId}`;
+
+      // Check if existing override exists
+      const existing = overridesList.find((o) => o.id === compoundId || (o.mediaType === cleanType && o.mediaId === cleanId));
+
+      setSelectedOverrideItem({
+        id: compoundId,
+        mediaType: cleanType,
+        mediaId: cleanId,
+        defaultTitle: item.title || item.name || `Title (${cleanType} ${cleanId})`,
+        defaultPoster: item.poster_path || item.poster || "",
+        defaultBackdrop: item.backdrop_path || item.backdrop || "",
+        defaultOverview: item.overview || item.description || "",
+        status: existing?.status || "default",
+        isHidden: existing?.isHidden ?? false,
+        isUpcoming: existing?.isUpcoming ?? false,
+        isUnavailable: existing?.isUnavailable ?? false,
+        customTitle: existing?.customTitle || "",
+        customDescription: existing?.customDescription || "",
+        customGenres: Array.isArray(existing?.customGenres) ? existing.customGenres : [],
+        customReleaseDate: existing?.customReleaseDate || "",
+        customPoster: existing?.customPoster || "",
+        customBackdrop: existing?.customBackdrop || "",
+        notes: existing?.notes || "",
+      });
+      setOverrideModalOpen(true);
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Banner Section */}
+        <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <Sliders className="w-5 h-5 text-amber-400" />
+            <h3 className="text-sm font-bold text-white">Entry Management & Overrides</h3>
+          </div>
+          <p className="text-xs text-zinc-400">
+            Control individual Movies, TV Shows, and Anime behavior on the public site. Mark titles as <span className="text-amber-400 font-semibold">Upcoming</span> or <span className="text-zinc-300 font-semibold">Unavailable</span> to prevent broken player crashes, hide entries completely, or customize metadata non-destructively.
+          </p>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
+            <div className="p-2.5 rounded-xl bg-black/40 border border-zinc-800 text-center">
+              <span className="text-[10px] text-zinc-500 uppercase font-mono block">Total Overrides</span>
+              <span className="text-sm font-black text-white">{activeCount}</span>
             </div>
-
-            {/* Scrollable Body */}
-            <div className="overflow-y-auto space-y-4 flex-1 min-h-0 px-4 sm:px-6 py-3.5 sm:py-4 custom-scrollbar">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-zinc-400 uppercase">Collection Name</label>
-                  <input
-                    type="text"
-                    value={editingFranchise.name}
-                    onChange={(e) => setEditingFranchise({ ...editingFranchise, name: e.target.value })}
-                    placeholder="e.g. Best Anime Movies"
-                    className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs font-semibold focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-zinc-400 uppercase">Poster Image URL</label>
-                  <input
-                    type="text"
-                    value={editingFranchise.posterPath || ""}
-                    onChange={(e) => setEditingFranchise({ ...editingFranchise, posterPath: e.target.value })}
-                    placeholder="https://..."
-                    className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-zinc-400 uppercase">Overview</label>
-                <textarea
-                  rows={2}
-                  value={editingFranchise.overview || ""}
-                  onChange={(e) => setEditingFranchise({ ...editingFranchise, overview: e.target.value })}
-                  placeholder="e.g. A handpicked collection of acclaimed theatrical films..."
-                  className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary resize-none"
-                />
-              </div>
-
-              {/* Media Picker */}
-              <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <label className="text-xs font-semibold text-zinc-400 uppercase flex items-center gap-1.5">
-                  <Search className="w-3.5 h-3.5 text-sky-400" />
-                  Search & Add Entries
-                </label>
-                <input
-                  type="text"
-                  value={pickerSearchQuery}
-                  onChange={(e) => {
-                    setPickerSearchQuery(e.target.value);
-                    searchMediaItems(e.target.value);
-                  }}
-                  placeholder="Search titles..."
-                  className="w-full px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
-                />
-
-                {pickerResults.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 rounded-xl bg-black/50 border border-zinc-800/80 custom-scrollbar">
-                    {pickerResults.map((item) => (
-                      <div
-                        key={`${item.media_type}_${item.id}`}
-                        className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {item.poster_path && <img src={item.poster_path} alt="" className="w-6 h-8 object-cover rounded" />}
-                          <p className="text-[11px] font-semibold text-zinc-200 truncate">{item.title}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const current = Array.isArray(editingFranchise.parts) ? editingFranchise.parts : [];
-                            setEditingFranchise({ ...editingFranchise, parts: [...current, item] });
-                            if (!editingFranchise.posterPath && item.poster_path) {
-                              setEditingFranchise((prev: any) => ({ ...prev, posterPath: item.poster_path, backdropPath: item.backdrop_path }));
-                            }
-                            showToast("success", `Added ${item.title}`);
-                          }}
-                          className="p-1.5 sm:p-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer shrink-0"
-                          title="Add to Franchise"
-                        >
-                          <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Items in Collection */}
-              <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <label className="text-xs font-semibold text-zinc-400 uppercase">
-                  Entries in Collection ({editingFranchise.parts?.length || 0})
-                </label>
-                {(!editingFranchise.parts || editingFranchise.parts.length === 0) ? (
-                  <p className="text-xs text-zinc-500 italic py-2">No entries added yet. Search above to add items.</p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                    {editingFranchise.parts?.map((pt: any, ptIdx: number) => (
-                      <div key={ptIdx} className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                        <span className="text-xs font-semibold text-zinc-200 truncate">{pt.title || pt.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newParts = editingFranchise.parts.filter((_: any, i: number) => i !== ptIdx);
-                            setEditingFranchise({ ...editingFranchise, parts: newParts });
-                          }}
-                          className="text-rose-400 hover:bg-rose-500/10 p-1.5 sm:p-1 rounded cursor-pointer transition-colors"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+              <span className="text-[10px] text-amber-400 uppercase font-mono block">Upcoming</span>
+              <span className="text-sm font-black text-amber-300">{upcomingCount}</span>
             </div>
-
-            {/* Sticky Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
-              <button
-                type="button"
-                onClick={() => setFranchiseModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!editingFranchise.name?.trim()) {
-                    showToast("error", "Collection name is required");
-                    return;
-                  }
-                  const method = editingFranchise.id ? "PUT" : "POST";
-                  const res = await fetch("/api/admin/franchises", {
-                    method,
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(editingFranchise),
-                  });
-                  if (res.ok) {
-                    setFranchiseModalOpen(false);
-                    loadFranchises();
-                    showToast("success", "Franchise collection saved!");
-                  } else {
-                    showToast("error", "Failed to save collection");
-                  }
-                }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer active:scale-95 transition-all"
-              >
-                <Save className="w-4 h-4" />
-                <span>Save Collection</span>
-              </button>
+            <div className="p-2.5 rounded-xl bg-zinc-800/40 border border-zinc-700/50 text-center">
+              <span className="text-[10px] text-zinc-400 uppercase font-mono block">Unavailable</span>
+              <span className="text-sm font-black text-zinc-200">{unavailableCount}</span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-center">
+              <span className="text-[10px] text-rose-400 uppercase font-mono block">Hidden</span>
+              <span className="text-sm font-black text-rose-300">{hiddenCount}</span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-center col-span-2 sm:col-span-1">
+              <span className="text-[10px] text-sky-400 uppercase font-mono block">Custom Metadata</span>
+              <span className="text-sm font-black text-sky-300">{customizedCount}</span>
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
+
+        {/* Section 1: Search & Override Finder */}
+        <div className="p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 space-y-3">
+          <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Search className="w-4 h-4 text-sky-400" />
+            Find Title to Customize / Override
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <select
+              value={overrideSearchType}
+              onChange={(e) => {
+                const t = e.target.value as any;
+                setOverrideSearchType(t);
+                if (overrideSearchQuery) searchOverrideMedia(overrideSearchQuery, t);
+              }}
+              className="px-3 py-2 rounded-xl bg-black/60 border border-zinc-800 text-white text-xs font-semibold focus:outline-none focus:border-primary"
+            >
+              <option value="all">All Media</option>
+              <option value="movie">Movies</option>
+              <option value="tv">TV Shows</option>
+              <option value="anime">Anime</option>
+            </select>
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={overrideSearchQuery}
+                onChange={(e) => {
+                  setOverrideSearchQuery(e.target.value);
+                  searchOverrideMedia(e.target.value);
+                }}
+                placeholder="Search title by name or enter ID (e.g. movie-1858, tv-1399, anime-16498, 38356)..."
+                className="w-full pl-3.5 pr-10 py-2 rounded-xl bg-black/60 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+              />
+              {overrideSearchLoading && (
+                <Loader2 className="w-4 h-4 text-zinc-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+              )}
+            </div>
+          </div>
+
+          {/* Search Results Grid */}
+          {overrideSearchResults.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-zinc-800/80">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase">Search Results ({overrideSearchResults.length})</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto custom-scrollbar p-1">
+                {overrideSearchResults.map((item) => {
+                  const cleanType = (item.media_type || overrideSearchType).toLowerCase();
+                  const cleanId = String(item.id);
+                  const compoundId = `${cleanType}-${cleanId}`;
+                  const existing = overridesList.find((o) => o.id === compoundId || (o.mediaType === cleanType && o.mediaId === cleanId));
+
+                  return (
+                    <div
+                      key={`${cleanType}-${cleanId}`}
+                      className="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/40 border border-zinc-800 hover:border-zinc-700 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {item.poster_path ? (
+                          <img src={item.poster_path} alt="" className="w-8 h-11 object-cover rounded-lg shrink-0" />
+                        ) : (
+                          <div className="w-8 h-11 bg-zinc-800 rounded-lg flex items-center justify-center text-[8px] text-zinc-500">No img</div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{item.title || item.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300">
+                              {cleanType}
+                            </span>
+                            {item.release_date && (
+                              <span className="text-[10px] text-zinc-500">{item.release_date.slice(0, 4)}</span>
+                            )}
+                            {existing && (
+                              <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                Overridden
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditorForMedia(item)}
+                        className="px-2.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-semibold transition-colors cursor-pointer shrink-0"
+                      >
+                        Customize
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section 2: Active Overrides List */}
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              {[
+                { id: "all", label: `All (${activeCount})` },
+                { id: "upcoming", label: `Upcoming (${upcomingCount})` },
+                { id: "unavailable", label: `Unavailable (${unavailableCount})` },
+                { id: "hidden", label: `Hidden (${hiddenCount})` },
+                { id: "customized", label: `Customized (${customizedCount})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setOverrideFilterTab(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    overrideFilterTab === tab.id
+                      ? "bg-zinc-700 text-white shadow-sm"
+                      : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Filter input */}
+            <div className="relative w-full sm:w-60">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+              <input
+                type="text"
+                value={overrideFilterQuery}
+                onChange={(e) => setOverrideFilterQuery(e.target.value)}
+                placeholder="Search overrides..."
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-white text-xs placeholder:text-zinc-500 focus:outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {overridesLoading ? (
+            <div className="flex items-center justify-center py-16 text-zinc-400">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              <span className="text-xs font-medium">Loading overrides...</span>
+            </div>
+          ) : filteredOverrides.length === 0 ? (
+            <div className="text-center py-12 px-4 rounded-2xl bg-black/40 border border-zinc-800/80 space-y-3">
+              <Sliders className="w-10 h-10 mx-auto text-zinc-600" />
+              <p className="text-sm font-semibold text-zinc-300">No active overrides found</p>
+              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                Use the search box above to find any movie, TV show, or anime and configure custom behavior.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredOverrides.map((item) => {
+                const isUpcoming = Boolean(item.isUpcoming || item.status === "upcoming");
+                const isUnavailable = Boolean(item.isUnavailable || item.status === "unavailable");
+                const isHidden = Boolean(item.isHidden || item.status === "hidden");
+                const hasCustomMeta = Boolean(item.customTitle || item.customDescription || (item.customGenres && item.customGenres.length > 0) || item.customPoster || item.customBackdrop);
+
+                return (
+                  <div
+                    key={item.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {item.customPoster ? (
+                        <img src={item.customPoster} alt="" className="w-10 h-14 object-cover rounded-lg shrink-0" />
+                      ) : (
+                        <div className="w-10 h-14 bg-zinc-800 rounded-lg flex items-center justify-center text-[10px] text-zinc-500">
+                          {item.mediaType}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-bold text-white truncate">
+                            {item.customTitle || `Title (${item.mediaType} ${item.mediaId})`}
+                          </h4>
+                          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                            {item.mediaType} • ID {item.mediaId}
+                          </span>
+                          {isUpcoming && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+                              Upcoming
+                            </span>
+                          )}
+                          {isUnavailable && (
+                            <span className="px-2 py-0.5 rounded-md bg-zinc-700/50 text-zinc-300 border border-zinc-600/50 text-[10px] font-bold">
+                              Unavailable
+                            </span>
+                          )}
+                          {isHidden && (
+                            <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-400 border border-rose-500/30 text-[10px] font-bold">
+                              Hidden
+                            </span>
+                          )}
+                          {hasCustomMeta && (
+                            <span className="px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-400 border border-sky-500/30 text-[10px] font-bold">
+                              Custom Meta
+                            </span>
+                          )}
+                        </div>
+
+                        {item.customDescription && (
+                          <p className="text-xs text-zinc-400 line-clamp-1 mt-1">{item.customDescription}</p>
+                        )}
+
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          Last updated by <span className="text-zinc-400">{item.updatedBy || "Admin"}</span> • {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : "Recently"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openEditorForMedia(item)}
+                        className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+                      >
+                        Edit Override
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm(`Reset all overrides for "${item.customTitle || item.mediaId}"?`)) return;
+                          const res = await fetch("/api/admin/entry-overrides", {
+                            method: "DELETE",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: item.id }),
+                          });
+                          if (res.ok) {
+                            loadOverrides();
+                            showToast("success", "Override reset to default.");
+                          }
+                        }}
+                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 cursor-pointer"
+                        title="Reset all overrides"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Override Editor Modal */}
+        {overrideModalOpen && selectedOverrideItem && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
+            <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Sliders className="w-5 h-5 text-amber-400 shrink-0" />
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-white truncate">
+                      Manage Entry: {selectedOverrideItem.customTitle || selectedOverrideItem.defaultTitle}
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 font-mono">
+                      Type: {selectedOverrideItem.mediaType} • ID: {selectedOverrideItem.mediaId}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOverrideModalOpen(false)}
+                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div className="overflow-y-auto space-y-5 flex-1 min-h-0 px-4 sm:px-6 py-4 custom-scrollbar">
+                {/* 1. Status Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white uppercase tracking-wider">
+                    Entry Visibility & Availability Status
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* Default */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOverrideItem({
+                          ...selectedOverrideItem,
+                          status: "default",
+                          isUpcoming: false,
+                          isUnavailable: false,
+                          isHidden: false,
+                        });
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                        !selectedOverrideItem.isUpcoming && !selectedOverrideItem.isUnavailable && !selectedOverrideItem.isHidden
+                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 ring-1 ring-emerald-500/20"
+                          : "bg-black/40 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="text-xs font-bold block mb-1">Live / Default</span>
+                      <span className="text-[10px] text-zinc-500 leading-tight">Standard playback & active streaming</span>
+                    </button>
+
+                    {/* Upcoming */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOverrideItem({
+                          ...selectedOverrideItem,
+                          status: "upcoming",
+                          isUpcoming: true,
+                          isUnavailable: false,
+                          isHidden: false,
+                        });
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                        selectedOverrideItem.isUpcoming
+                          ? "bg-amber-500/15 border-amber-500/50 text-amber-300 ring-1 ring-amber-500/30"
+                          : "bg-black/40 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="text-xs font-bold block mb-1">Upcoming</span>
+                      <span className="text-[10px] text-zinc-500 leading-tight">Expected soon; suppresses broken player</span>
+                    </button>
+
+                    {/* Unavailable */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOverrideItem({
+                          ...selectedOverrideItem,
+                          status: "unavailable",
+                          isUpcoming: false,
+                          isUnavailable: true,
+                          isHidden: false,
+                        });
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                        selectedOverrideItem.isUnavailable
+                          ? "bg-zinc-700/40 border-zinc-500 text-zinc-200 ring-1 ring-zinc-500/30"
+                          : "bg-black/40 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="text-xs font-bold block mb-1">Unavailable</span>
+                      <span className="text-[10px] text-zinc-500 leading-tight">Shows clean unavailable notice</span>
+                    </button>
+
+                    {/* Hidden */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOverrideItem({
+                          ...selectedOverrideItem,
+                          status: "hidden",
+                          isUpcoming: false,
+                          isUnavailable: false,
+                          isHidden: true,
+                        });
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                        selectedOverrideItem.isHidden
+                          ? "bg-rose-500/15 border-rose-500/50 text-rose-300 ring-1 ring-rose-500/30"
+                          : "bg-black/40 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="text-xs font-bold block mb-1">Hide Completely</span>
+                      <span className="text-[10px] text-zinc-500 leading-tight">Filtered from search & recommendations</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Metadata Overrides */}
+                <div className="space-y-4 pt-3 border-t border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-white uppercase tracking-wider">
+                      Metadata Overrides (Non-Destructive)
+                    </label>
+                    <span className="text-[11px] text-zinc-500">Leave blank to use default API metadata</span>
+                  </div>
+
+                  {/* Custom Title */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
+                      <span>Custom Title</span>
+                      {selectedOverrideItem.customTitle && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOverrideItem({ ...selectedOverrideItem, customTitle: "" })}
+                          className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                        >
+                          Clear override
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={selectedOverrideItem.customTitle}
+                      onChange={(e) => setSelectedOverrideItem({ ...selectedOverrideItem, customTitle: e.target.value })}
+                      placeholder={selectedOverrideItem.defaultTitle || "Override title..."}
+                      className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary font-semibold"
+                    />
+                  </div>
+
+                  {/* Custom Description */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
+                      <span>Custom Overview / Description</span>
+                      {selectedOverrideItem.customDescription && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOverrideItem({ ...selectedOverrideItem, customDescription: "" })}
+                          className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                        >
+                          Clear override
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={selectedOverrideItem.customDescription}
+                      onChange={(e) => setSelectedOverrideItem({ ...selectedOverrideItem, customDescription: e.target.value })}
+                      placeholder={selectedOverrideItem.defaultOverview || "Override plot summary / overview..."}
+                      className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary resize-none"
+                    />
+                  </div>
+
+                  {/* Custom Genres */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
+                      <span>Custom Genres</span>
+                      {selectedOverrideItem.customGenres?.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOverrideItem({ ...selectedOverrideItem, customGenres: [] })}
+                          className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                        >
+                          Clear all genres
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Tag list */}
+                    <div className="flex flex-wrap gap-1.5 mt-1.5 mb-2">
+                      {selectedOverrideItem.customGenres?.map((g: string, i: number) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 text-zinc-200 text-xs font-medium border border-zinc-700"
+                        >
+                          {g}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = selectedOverrideItem.customGenres.filter((_: any, idx: number) => idx !== i);
+                              setSelectedOverrideItem({ ...selectedOverrideItem, customGenres: next });
+                            }}
+                            className="hover:text-rose-400 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={overrideGenreInput}
+                        onChange={(e) => setOverrideGenreInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && overrideGenreInput.trim()) {
+                            e.preventDefault();
+                            const val = overrideGenreInput.trim();
+                            const current = selectedOverrideItem.customGenres || [];
+                            if (!current.includes(val)) {
+                              setSelectedOverrideItem({ ...selectedOverrideItem, customGenres: [...current, val] });
+                            }
+                            setOverrideGenreInput("");
+                          }
+                        }}
+                        placeholder="Type a genre and press Enter (e.g. Action, Sci-Fi, Shounen)..."
+                        className="flex-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!overrideGenreInput.trim()) return;
+                          const val = overrideGenreInput.trim();
+                          const current = selectedOverrideItem.customGenres || [];
+                          if (!current.includes(val)) {
+                            setSelectedOverrideItem({ ...selectedOverrideItem, customGenres: [...current, val] });
+                          }
+                          setOverrideGenreInput("");
+                        }}
+                        className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Poster & Backdrop URLs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
+                        <span>Custom Poster Image URL</span>
+                        {selectedOverrideItem.customPoster && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOverrideItem({ ...selectedOverrideItem, customPoster: "" })}
+                            className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={selectedOverrideItem.customPoster}
+                        onChange={(e) => setSelectedOverrideItem({ ...selectedOverrideItem, customPoster: e.target.value })}
+                        placeholder="https://..."
+                        className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
+                        <span>Custom Backdrop Image URL</span>
+                        {selectedOverrideItem.customBackdrop && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOverrideItem({ ...selectedOverrideItem, customBackdrop: "" })}
+                            className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={selectedOverrideItem.customBackdrop}
+                        onChange={(e) => setSelectedOverrideItem({ ...selectedOverrideItem, customBackdrop: e.target.value })}
+                        placeholder="https://..."
+                        className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Release Date & Notes */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
+                        <span>Custom Release Date</span>
+                        {selectedOverrideItem.customReleaseDate && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOverrideItem({ ...selectedOverrideItem, customReleaseDate: "" })}
+                            className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={selectedOverrideItem.customReleaseDate}
+                        onChange={(e) => setSelectedOverrideItem({ ...selectedOverrideItem, customReleaseDate: e.target.value })}
+                        placeholder="YYYY-MM-DD (e.g. 2026-11-15)"
+                        className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-zinc-400 uppercase">Internal Admin Notes</label>
+                      <input
+                        type="text"
+                        value={selectedOverrideItem.notes || ""}
+                        onChange={(e) => setSelectedOverrideItem({ ...selectedOverrideItem, notes: e.target.value })}
+                        placeholder="e.g. Waiting for season 2 bluray release..."
+                        className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sticky Modal Footer */}
+              <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm(`Reset all overrides for "${selectedOverrideItem.customTitle || selectedOverrideItem.mediaId}"?`)) return;
+                    const res = await fetch("/api/admin/entry-overrides", {
+                      method: "DELETE",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: selectedOverrideItem.id }),
+                    });
+                    if (res.ok) {
+                      loadOverrides();
+                      setOverrideModalOpen(false);
+                      showToast("success", "Override reset to default.");
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Reset All Overrides
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOverrideModalOpen(false)}
+                    className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={overrideSaving}
+                    onClick={async () => {
+                      setOverrideSaving(true);
+                      try {
+                        const res = await fetch("/api/admin/entry-overrides", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(selectedOverrideItem),
+                        });
+                        if (res.ok) {
+                          setOverrideModalOpen(false);
+                          loadOverrides();
+                          showToast("success", "Entry override saved successfully!");
+                        } else {
+                          const errData = await res.json().catch(() => ({}));
+                          showToast("error", errData.error || "Failed to save override");
+                        }
+                      } catch {
+                        showToast("error", "Error saving override");
+                      } finally {
+                        setOverrideSaving(false);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow cursor-pointer active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {overrideSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>Save Override</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // TAB 7: THEME STUDIO & SITE CUSTOMIZATION
@@ -2744,6 +3698,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 { id: "spotlight", label: "Spotlight Hero", icon: Star },
                 { id: "users", label: "User Accounts", icon: Users },
                 { id: "franchises", label: "Franchises", icon: Layers },
+                { id: "overrides", label: "Entry Overrides", icon: Sliders, badge: overridesList.length > 0 ? String(overridesList.length) : null },
                 { id: "appearance", label: "Theme Studio", icon: Palette },
                 { id: "reports", label: "Issue Reports", icon: Bug, badge: reportsList.length > 0 ? String(reportsList.length) : null },
                 { id: "streaming", label: "Sources", icon: Server },
@@ -2785,6 +3740,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               {activeTab === "spotlight" && renderSpotlightTab()}
               {activeTab === "users" && renderUsersTab()}
               {activeTab === "franchises" && renderFranchisesTab()}
+              {activeTab === "overrides" && renderOverridesTab()}
               {activeTab === "appearance" && renderAppearanceTab()}
               {activeTab === "reports" && renderReportsTab()}
               {activeTab === "streaming" && renderStreamingTab()}

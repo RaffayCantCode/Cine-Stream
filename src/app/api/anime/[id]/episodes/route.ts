@@ -880,9 +880,10 @@ export async function GET(
       // ABSOLUTE FINAL HARD CEILING: Apply knownEpisodeCount cap one last time
       // regardless of any code path taken above. This is the last line of defense
       // against edge-cache stale data or any path that bypassed the cap logic.
-      const finalKnownCount = season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
-      const isMovieOrSpecialFinal = ["Movie", "OVA", "Special"].some(t => (season?.seasonLabel || "").startsWith(t)) || meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE";
-      const finalCap = finalKnownCount && finalKnownCount > 0 ? finalKnownCount : (isMovieOrSpecialFinal ? 1 : null);
+      const isMovieFormatFinal = (season?.seasonLabel || "").startsWith("Movie") || meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE";
+      const isMovieOrSpecialFinal = ["Movie", "OVA", "Special"].some(t => (season?.seasonLabel || "").startsWith(t)) || isMovieFormatFinal;
+      const finalKnownCount = isMovieFormatFinal ? 1 : (season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null);
+      const finalCap = isMovieFormatFinal ? 1 : (finalKnownCount && finalKnownCount > 0 ? finalKnownCount : (isMovieOrSpecialFinal ? 1 : null));
       if (finalCap && finalCap > 0) {
         seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalCap);
       }

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { fetchAnimeApi } from "@/lib/anime-fetch";
+import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";
 
 const animeNoStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
@@ -16,24 +17,43 @@ export async function GET(
   const { id } = await params;
 
   try {
+    const override = await getMediaOverride("anime", id);
     const data = await fetchAnimeApi(`/series/${id}`, true);
 
     if (!data || !data.success || !data.data) {
+      if (override) {
+        const synthetic = applyMediaOverride(null, override);
+        return Response.json({
+          success: true,
+          data: {
+            anime: {
+              ...synthetic,
+              episodes: [],
+              totalEpisodes: 0,
+              seasons: [],
+            },
+          },
+        }, { headers: animeNoStoreHeaders });
+      }
+
       return Response.json(
         { error: "Anime not found", success: false },
         { status: 404, headers: animeNoStoreHeaders }
       );
     }
 
-    const episodes = data.data.episodes || [];
-    const totalEps = data.data.totalEpisodes || episodes.length || 0;
-    const seasons = data.data.seasons || [];
+    const rawAnime = data.data;
+    const finalAnime = applyMediaOverride(rawAnime, override) || rawAnime;
+
+    const episodes = (finalAnime.isUpcoming || finalAnime.isUnavailable) ? [] : (finalAnime.episodes || []);
+    const totalEps = (finalAnime.isUpcoming || finalAnime.isUnavailable) ? 0 : (finalAnime.totalEpisodes || episodes.length || 0);
+    const seasons = finalAnime.seasons || [];
 
     return Response.json({
       success: true,
       data: {
         anime: {
-          ...data.data,
+          ...finalAnime,
           episodes,
           totalEpisodes: totalEps,
           seasons,
@@ -42,6 +62,22 @@ export async function GET(
     }, { headers: animeNoStoreHeaders });
   } catch (error) {
     console.error("[Anime Details Error]:", error);
+    const fallbackOverride = await getMediaOverride("anime", id).catch(() => null);
+    if (fallbackOverride) {
+      const synthetic = applyMediaOverride(null, fallbackOverride);
+      return Response.json({
+        success: true,
+        data: {
+          anime: {
+            ...synthetic,
+            episodes: [],
+            totalEpisodes: 0,
+            seasons: [],
+          },
+        },
+      }, { headers: animeNoStoreHeaders });
+    }
+
     return Response.json(
       { error: "Failed to fetch anime details", success: false },
       { status: 500, headers: animeNoStoreHeaders }

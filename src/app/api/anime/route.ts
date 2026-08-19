@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
-import { searchAnime, getPopularAnime, getTrendingAnime, getAiringAnime } from "@/lib/anime-fetch";
+import { searchAnime, getPopularAnime, getTrendingAnime, getAiringAnime, getUpcomingAnime } from "@/lib/anime-fetch";
 import { cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(request: NextRequest) {
@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
       items = await getAiringAnime(page, genre);
     } else if (category === "trending") {
       items = await getTrendingAnime(page, genre);
+    } else if (category === "upcoming") {
+      items = await getUpcomingAnime(page, genre);
     } else {
       items = await getPopularAnime(page, genre);
     }

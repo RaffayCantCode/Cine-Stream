@@ -2,7 +2,7 @@ export const runtime = 'edge';
 import { Metadata } from "next";
 import { cache } from "react";
 import AnimeClient from "./AnimeClient";
-import { cleanAnimeDescription } from "@/lib/anime-fetch";
+import { cleanAnimeDescription, getAnimeDetailsViaKitsu } from "@/lib/anime-fetch";
 
 // Shared AniList query — fetches enough fields for BOTH <head> metadata AND
 // the first-paint of AnimeClient. The result is produced once server-side and
@@ -34,12 +34,12 @@ interface InitialAnimeData {
   status: string | null;
   genres: string[];
   totalEpisodes: number;
-  seasons: [];
+  seasons: any[];
   season: string | null;
   seasonYear: number | null;
   format: string | null;
   openedSeasonId: string;
-  tmdbId: null;
+  tmdbId: any;
   duration: number | null;
   trailerId: string | null;
   bannerImage: string | null;
@@ -78,7 +78,29 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
   }
 
   const numId = parseInt(targetId, 10);
-  if (isNaN(numId)) {
+  if (isNaN(numId) && !id.startsWith("kitsu-")) {
+    try {
+      const kitsuDetails = await getAnimeDetailsViaKitsu(id, 100, true);
+      if (kitsuDetails && kitsuDetails.anime) {
+        const title = kitsuDetails.anime.name || "Anime";
+        const poster = kitsuDetails.anime.poster || "";
+        const desc = kitsuDetails.anime.description || "";
+        return {
+          meta: {
+            title: `${title} - CineStream`,
+            description: desc,
+            openGraph: { title: `${title} - CineStream`, description: desc, images: poster ? [poster] : [] },
+          },
+          initialData: {
+            ...kitsuDetails.anime,
+            totalEpisodes: kitsuDetails.totalEpisodes || 12,
+            seasons: kitsuDetails.seasons as any,
+            openedSeasonId: kitsuDetails.openedSeasonId || kitsuDetails.anime.id,
+            tmdbId: kitsuDetails.tmdbId as any,
+          } as InitialAnimeData,
+        };
+      }
+    } catch {}
     return { meta: { title: "Anime - CineStream" }, initialData: null };
   }
 
@@ -139,7 +161,30 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       } catch {}
     }
 
-    if (!anime) throw new Error("No media found");
+    if (!anime) {
+      // Fallback 3: Kitsu + AniZip details fallback (when AniList is down)
+      const kitsuDetails = await getAnimeDetailsViaKitsu(id, 100, true);
+      if (kitsuDetails && kitsuDetails.anime) {
+        const title = kitsuDetails.anime.name || "Anime";
+        const poster = kitsuDetails.anime.poster || "";
+        const desc = kitsuDetails.anime.description || "";
+        return {
+          meta: {
+            title: `${title} - CineStream`,
+            description: desc,
+            openGraph: { title: `${title} - CineStream`, description: desc, images: poster ? [poster] : [] },
+          },
+          initialData: {
+            ...kitsuDetails.anime,
+            totalEpisodes: kitsuDetails.totalEpisodes || 12,
+            seasons: kitsuDetails.seasons as any,
+            openedSeasonId: kitsuDetails.openedSeasonId || kitsuDetails.anime.id,
+            tmdbId: kitsuDetails.tmdbId as any,
+          } as InitialAnimeData,
+        };
+      }
+      throw new Error("No media found");
+    }
 
     // Strip HTML from description
     let desc = cleanAnimeDescription(anime.description);
@@ -157,6 +202,10 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       },
     };
 
+    const isMovie = anime.format === "MOVIE" || anime.type === "MOVIE";
+    const nextEp = anime.nextAiringEpisode?.episode;
+    const totalEps = isMovie ? 1 : (anime.episodes || (nextEp ? nextEp - 1 : 1500));
+
     const initialData: any = {
       id: String(anime.id),
       idMal: anime.idMal ? String(anime.idMal) : null,
@@ -168,12 +217,12 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
       rating: anime.averageScore ? String((anime.averageScore / 10).toFixed(1)) : null,
       status: anime.status || null,
       genres: anime.genres || [],
-      totalEpisodes: anime.episodes || 12,
+      totalEpisodes: totalEps,
       seasons: [{
         id: String(anime.id),
         name: title,
-        seasonLabel: "Season 1",
-        totalEpisodes: anime.episodes || 12,
+        seasonLabel: isMovie ? "Movie 1" : "Season 1",
+        totalEpisodes: totalEps,
         isCurrent: true,
         idMal: anime.idMal ? Number(anime.idMal) : null,
         seasonYear: anime.seasonYear || null,
@@ -191,6 +240,28 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
 
     return { meta, initialData };
   } catch {
+    try {
+      const kitsuDetails = await getAnimeDetailsViaKitsu(id, 100, true);
+      if (kitsuDetails && kitsuDetails.anime) {
+        const title = kitsuDetails.anime.name || "Anime";
+        const poster = kitsuDetails.anime.poster || "";
+        const desc = kitsuDetails.anime.description || "";
+        return {
+          meta: {
+            title: `${title} - CineStream`,
+            description: desc,
+            openGraph: { title: `${title} - CineStream`, description: desc, images: poster ? [poster] : [] },
+          },
+          initialData: {
+            ...kitsuDetails.anime,
+            totalEpisodes: kitsuDetails.totalEpisodes || 12,
+            seasons: kitsuDetails.seasons as any,
+            openedSeasonId: kitsuDetails.openedSeasonId || kitsuDetails.anime.id,
+            tmdbId: kitsuDetails.tmdbId as any,
+          } as InitialAnimeData,
+        };
+      }
+    } catch {}
     return { meta: { title: "Anime - CineStream" }, initialData: null };
   }
 });

@@ -21,29 +21,30 @@ export async function GET(
   try {
     const { id } = await params;
 
-    let franchise = FRANCHISES.find(f => f.id === id);
+    // First check DB for custom franchise or preset override
+    let dbCol: any = null;
+    try {
+      const db = getDb();
+      dbCol = await db.query.customFranchises.findFirst({
+        where: eq(customFranchises.id, id),
+      });
+    } catch {}
 
-    // If not found in static, check DB custom franchises
-    if (!franchise) {
-      try {
-        const db = getDb();
-        const dbCol = await db.query.customFranchises.findFirst({
-          where: eq(customFranchises.id, id),
-        });
-        if (dbCol) {
-          return NextResponse.json({
-            id: dbCol.id,
-            name: dbCol.name,
-            overview: dbCol.overview || "",
-            poster_path: dbCol.posterPath,
-            backdrop_path: dbCol.backdropPath,
-            parts: Array.isArray(dbCol.parts) ? dbCol.parts : [],
-          }, { headers: noStoreHeaders });
-        }
-      } catch {}
+    const staticFranchise = FRANCHISES.find(f => f.id === id);
 
+    if (!staticFranchise && !dbCol) {
       return NextResponse.json({ error: "Franchise not found" }, { status: 404, headers: noStoreHeaders });
     }
+
+    const franchise = {
+      id: dbCol?.id || staticFranchise?.id || id,
+      name: dbCol?.name || staticFranchise?.name || id,
+      overview: dbCol?.overview ?? (staticFranchise?.overview || ""),
+      poster_path: dbCol?.posterPath ?? (staticFranchise?.poster_path || null),
+      backdrop_path: dbCol?.backdropPath ?? (staticFranchise?.backdrop_path || null),
+      items: (Array.isArray(dbCol?.parts) && dbCol.parts.length > 0) ? dbCol.parts : (staticFranchise?.items || []),
+      groups: staticFranchise?.groups,
+    };
 
     type FranchiseRouteItem = {
       id: number;

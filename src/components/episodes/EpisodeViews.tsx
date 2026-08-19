@@ -497,3 +497,104 @@ export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
   );
 }
 
+// ── Episode Pagination Component (for clean 50-episode page navigation) ────
+export interface EpisodePaginationProps {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage?: number;
+  onPageChange: (page: number) => void;
+  className?: string;
+}
+
+export function EpisodePagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  itemsPerPage = 50,
+  onPageChange,
+  className,
+}: EpisodePaginationProps) {
+  if (totalPages <= 1) return null;
+
+  const startItem = (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  const getPageNumbers = (): (number | "...")[] => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages: (number | "...")[] = [];
+    pages.push(1);
+    if (currentPage > 3) {
+      pages.push("...");
+    }
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    if (currentPage < totalPages - 2) {
+      pages.push("...");
+    }
+    pages.push(totalPages);
+    return pages;
+  };
+
+  const pageNumbers = getPageNumbers();
+
+  return (
+    <div className={cn("flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 pb-2 border-t border-white/[0.06] mt-6", className)}>
+      <div className="text-xs text-white/50 font-medium">
+        Showing episodes <span className="text-white font-bold">{startItem}–{endItem}</span> of <span className="text-white font-bold">{totalItems.toLocaleString()}</span>
+      </div>
+
+      <div className="flex items-center gap-1.5 flex-wrap justify-center">
+        <button
+          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+          disabled={currentPage <= 1}
+          className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs font-bold text-white/70 hover:text-white hover:bg-white/[0.08] disabled:opacity-30 disabled:pointer-events-none transition-all select-none"
+        >
+          ← Prev
+        </button>
+
+        {pageNumbers.map((p, idx) => {
+          if (p === "...") {
+            return (
+              <span key={`ellipsis-${idx}`} className="px-2 py-1 text-xs font-bold text-white/30 select-none">
+                ...
+              </span>
+            );
+          }
+          const isCurrent = p === currentPage;
+          const rangeStart = (p - 1) * itemsPerPage + 1;
+          const rangeEnd = Math.min(p * itemsPerPage, totalItems);
+          return (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              title={`Episodes ${rangeStart}–${rangeEnd}`}
+              className={cn(
+                "min-w-[36px] h-[36px] px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center select-none",
+                isCurrent
+                  ? "bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/25 ring-1 ring-white/20 scale-105"
+                  : "bg-white/[0.04] border border-white/[0.08] text-white/70 hover:text-white hover:bg-white/[0.08]"
+              )}
+            >
+              {p}
+            </button>
+          );
+        })}
+
+        <button
+          onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+          disabled={currentPage >= totalPages}
+          className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs font-bold text-white/70 hover:text-white hover:bg-white/[0.08] disabled:opacity-30 disabled:pointer-events-none transition-all select-none"
+        >
+          Next →
+        </button>
+      </div>
+    </div>
+  );
+}
+

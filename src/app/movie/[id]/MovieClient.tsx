@@ -158,22 +158,20 @@ export default function MovieClient() {
     );
   }
 
-  if (!movie) {
+  if (!movie || (movie as any).isHidden) {
     return (
       <div className="min-h-screen bg-background text-foreground pb-24">
         <Sidebar />
         <main className="md:pl-56 lg:pl-64">
-          <div className="pt-0 px-6 md:px-12 max-w-screen-2xl mx-auto">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-white/80">
-              <div className="text-lg font-bold text-white mb-1">Couldn&apos;t load this movie</div>
-              {error ? (
-                <div className="text-sm text-white/50 break-words">{error}</div>
-              ) : (
-                <div className="text-sm text-white/50">Not found.</div>
-              )}
-              <div className="mt-5">
-                <Link href="/" className="text-sm font-semibold text-primary hover:underline">
-                  Go back home
+          <div className="pt-24 px-6 md:px-12 max-w-screen-2xl mx-auto">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-white/80 max-w-lg mx-auto text-center space-y-3">
+              <div className="text-xl font-bold text-white">Title Unavailable</div>
+              <p className="text-sm text-zinc-400">
+                This title is currently not available to view. Please check back later or browse other titles.
+              </p>
+              <div className="pt-2">
+                <Link href="/" className="inline-flex px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow">
+                  Browse Catalog
                 </Link>
               </div>
             </div>
@@ -277,13 +275,25 @@ export default function MovieClient() {
             </p>
 
             <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full pt-1">
-              <button
-                onClick={handleWatch}
-                className="group flex items-center gap-2 bg-[#E11D48] hover:bg-[#F43F5E] text-white font-extrabold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 border border-rose-400/20 cursor-pointer"
-              >
-                <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 group-hover:scale-110 transition-transform text-white" />
-                Watch Now
-              </button>
+              {(movie as any).isUpcoming || (movie as any).status === "upcoming" ? (
+                <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs sm:text-sm font-semibold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                  <span>This entry is upcoming. Please check back later.</span>
+                </div>
+              ) : (movie as any).isUnavailable || (movie as any).status === "unavailable" ? (
+                <div className="flex items-center gap-2.5 px-4 py-3 bg-zinc-800/80 border border-zinc-700/60 rounded-xl text-zinc-300 text-xs sm:text-sm font-semibold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 shrink-0" />
+                  <span>This title is currently unavailable on this site. Please check back later.</span>
+                </div>
+              ) : (
+                <button
+                  onClick={handleWatch}
+                  className="group flex items-center gap-2 bg-[#E11D48] hover:bg-[#F43F5E] text-white font-extrabold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 border border-rose-400/20 cursor-pointer"
+                >
+                  <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 group-hover:scale-110 transition-transform text-white" />
+                  Watch Now
+                </button>
+              )}
 
               <WatchlistButton
                 mediaId={movie.id}

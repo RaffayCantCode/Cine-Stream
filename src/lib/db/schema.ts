@@ -240,6 +240,32 @@ export const issueReports = pgTable("issue_reports", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Admin Entry Overrides (Upcoming, Unavailable, Hidden, Custom Metadata)
+export const mediaOverrides = pgTable(
+  "media_overrides",
+  {
+    id: varchar("id", { length: 128 }).primaryKey(), // e.g. "movie-1858", "tv-1399", "anime-16498", "kitsu-7442"
+    mediaType: varchar("media_type", { length: 32 }).notNull(), // "movie" | "tv" | "anime"
+    mediaId: varchar("media_id", { length: 64 }).notNull(), // "1858", "1399", etc.
+    status: varchar("status", { length: 32 }).default("default").notNull(), // "default" | "upcoming" | "unavailable" | "hidden"
+    isHidden: boolean("is_hidden").default(false).notNull(),
+    isUpcoming: boolean("is_upcoming").default(false).notNull(),
+    isUnavailable: boolean("is_unavailable").default(false).notNull(),
+    customTitle: varchar("custom_title", { length: 500 }),
+    customDescription: text("custom_description"),
+    customGenres: jsonb("custom_genres").$type<string[]>().default([]),
+    customReleaseDate: varchar("custom_release_date", { length: 64 }),
+    customPoster: varchar("custom_poster", { length: 1000 }),
+    customBackdrop: varchar("custom_backdrop", { length: 1000 }),
+    customTags: jsonb("custom_tags").$type<string[]>().default([]),
+    notes: text("notes"),
+    updatedBy: varchar("updated_by", { length: 255 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [unique("uq_media_overrides_type_id").on(t.mediaType, t.mediaId)]
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type WatchHistoryItem = typeof watchHistory.$inferSelect;
@@ -262,5 +288,7 @@ export type IssueReport = typeof issueReports.$inferSelect;
 export type InsertIssueReport = typeof issueReports.$inferInsert;
 export type StreamingSourceConfig = typeof streamingSourceConfig.$inferSelect;
 export type InsertStreamingSourceConfig = typeof streamingSourceConfig.$inferInsert;
+export type MediaOverride = typeof mediaOverrides.$inferSelect;
+export type InsertMediaOverride = typeof mediaOverrides.$inferInsert;
 
 

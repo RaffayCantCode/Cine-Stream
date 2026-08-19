@@ -1,7 +1,7 @@
 // CineStream Service Worker
 // Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
 // CACHE_VERSION is updated to bust previous worker cache.
-const CACHE_VERSION = 'v23-anime-thumbnails-fix';
+const CACHE_VERSION = 'v24-anime-pagination-recs-fix';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
