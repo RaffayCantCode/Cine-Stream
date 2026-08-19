@@ -105,6 +105,35 @@ export function transformKitsu(kitsuItem: any, categoriesMap?: Map<string, strin
   };
 }
 
+export async function enrichKitsuWithAniListIds(items: any[], categoriesMap?: Map<string, string>): Promise<AnimeItem[]> {
+  if (!items || items.length === 0) return [];
+  
+  const baseItems = items.map((item: any) => transformKitsu(item, categoriesMap));
+
+  await Promise.all(baseItems.map(async (anime) => {
+    try {
+      const cleanKId = anime.id.replace(/^kitsu-/, "");
+      const azRes = await fetch(`https://api.ani.zip/mappings?kitsu_id=${cleanKId}`, {
+        signal: AbortSignal.timeout(2000),
+        headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+        next: { revalidate: 86400 } as any,
+      });
+      if (azRes.ok) {
+        const az = await azRes.json();
+        if (az?.mappings?.anilist_id) {
+          anime.id = String(az.mappings.anilist_id);
+          if (az.mappings.mal_id) anime.idMal = String(az.mappings.mal_id);
+        } else if (az?.mappings?.mal_id) {
+          anime.idMal = String(az.mappings.mal_id);
+          anime.id = `mal-${az.mappings.mal_id}`;
+        }
+      }
+    } catch {}
+  }));
+
+  return baseItems;
+}
+
 export async function searchViaKitsu(q: string, page = 1, genre?: string): Promise<AnimeItem[]> {
   const cleanQ = q.trim();
   if (!cleanQ) return [];
@@ -124,7 +153,7 @@ export async function searchViaKitsu(q: string, page = 1, genre?: string): Promi
       }
     }
 
-    return res.data.map((item: any) => transformKitsu(item, categoriesMap));
+    return await enrichKitsuWithAniListIds(res.data, categoriesMap);
   } catch {
     return [];
   }
@@ -147,7 +176,7 @@ export async function getPopularAnimeViaKitsu(page = 1, genre?: string): Promise
       }
     }
 
-    return res.data.map((item: any) => transformKitsu(item, categoriesMap));
+    return await enrichKitsuWithAniListIds(res.data, categoriesMap);
   } catch {
     return [];
   }
@@ -176,7 +205,7 @@ export async function getTrendingAnimeViaKitsu(page = 1, genre?: string): Promis
       }
     }
 
-    return res.data.map((item: any) => transformKitsu(item, categoriesMap));
+    return await enrichKitsuWithAniListIds(res.data, categoriesMap);
   } catch {
     return [];
   }
@@ -199,7 +228,7 @@ export async function getAiringAnimeViaKitsu(page = 1, genre?: string): Promise<
       }
     }
 
-    return res.data.map((item: any) => transformKitsu(item, categoriesMap));
+    return await enrichKitsuWithAniListIds(res.data, categoriesMap);
   } catch {
     return [];
   }
@@ -222,7 +251,7 @@ export async function getUpcomingAnimeViaKitsu(page = 1, genre?: string): Promis
       }
     }
 
-    return res.data.map((item: any) => transformKitsu(item, categoriesMap));
+    return await enrichKitsuWithAniListIds(res.data, categoriesMap);
   } catch {
     return [];
   }
@@ -783,16 +812,15 @@ export async function fetchKitsuClientAnime(
       }
     }
 
+    const transformed = await enrichKitsuWithAniListIds(data.data, categoriesMap);
     const seen = new Set<string>();
-    const items = data.data
-      .map((item: any) => transformKitsu(item, categoriesMap))
-      .filter((item: AnimeItem) => {
-        if (!item || !item.id || seen.has(item.id)) return false;
-        seen.add(item.id);
-        const s = (item as any).status;
-        if (s === "CANCELLED" || s === "Cancelled") return false;
-        return true;
-      });
+    const items = transformed.filter((item: AnimeItem) => {
+      if (!item || !item.id || seen.has(item.id)) return false;
+      seen.add(item.id);
+      const s = (item as any).status;
+      if (s === "CANCELLED" || s === "Cancelled") return false;
+      return true;
+    });
 
     return { items, hasMore: items.length > 0 };
   } catch (e) {

@@ -1,6 +1,7 @@
 export const runtime = 'edge';
 import { Metadata } from "next";
 import { cache } from "react";
+import { redirect } from "next/navigation";
 import AnimeClient from "./AnimeClient";
 import { cleanAnimeDescription, getAnimeDetailsViaKitsu } from "@/lib/anime-fetch";
 
@@ -280,6 +281,33 @@ export default async function AnimePage(
   props: { params: Promise<{ id: string }> }
 ) {
   const { id } = await props.params;
+
+  if (id && id.startsWith("kitsu-")) {
+    try {
+      const cleanKId = id.replace("kitsu-", "");
+      const azRes = await fetch(`https://api.ani.zip/mappings?kitsu_id=${cleanKId}`, {
+        signal: AbortSignal.timeout(3000),
+      }).then(r => r.json()).catch(() => null);
+      if (azRes?.mappings?.anilist_id) {
+        redirect(`/anime/${azRes.mappings.anilist_id}`);
+      }
+    } catch (e: any) {
+      if (e?.digest?.startsWith("NEXT_REDIRECT")) throw e;
+    }
+  } else if (id && id.startsWith("mal-")) {
+    try {
+      const cleanMId = id.replace("mal-", "");
+      const azRes = await fetch(`https://api.ani.zip/mappings?mal_id=${cleanMId}`, {
+        signal: AbortSignal.timeout(3000),
+      }).then(r => r.json()).catch(() => null);
+      if (azRes?.mappings?.anilist_id) {
+        redirect(`/anime/${azRes.mappings.anilist_id}`);
+      }
+    } catch (e: any) {
+      if (e?.digest?.startsWith("NEXT_REDIRECT")) throw e;
+    }
+  }
+
   const { initialData } = await fetchInitialAnimeData(id);
   return <AnimeClient initialData={initialData} />;
 }

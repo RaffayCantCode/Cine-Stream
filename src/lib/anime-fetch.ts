@@ -5,6 +5,7 @@
 import { isAdultContent } from "./content-filter";
 import { tmdbFetch, searchTmdbShow, fetchTmdbEpisodeData, getCleanBaseTitle } from "./tmdb";
 import { getCuratedAnimeFranchiseNodes } from "./franchises";
+import { recordPrimarySuccess, recordPrimaryFailure, shouldAttemptPrimary, isPrimaryAvailable } from "./anime-health";
 
 export interface AnimeItem {
   id: string;
@@ -147,14 +148,16 @@ export const DEFAULT_FETCH_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x6
 async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "CineStream/1.0" },
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
       signal: AbortSignal.timeout(8000),
       next: { revalidate: 3600 } as any,
     });
     if (!res.ok) return null;
     const text = await res.text();
     try {
-      return JSON.parse(text) as T;
+      const parsed = JSON.parse(text) as T;
+      if (parsed) recordPrimarySuccess();
+      return parsed;
     } catch {
       return null;
     }
@@ -182,12 +185,12 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
         if (attempt < retries) {
           const retryAfter = res.headers.get("retry-after");
           const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * (attempt + 1);
-          if (delay <= 2000) {
+          if (delay <= 2500) {
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
         }
-        console.warn(`[AniList Rate Limit 429]: Returning null to trigger fallback for query`);
+        console.warn(`[AniList Rate Limit 429]: Attempt ${attempt + 1} rate limited`);
         return null;
       }
       
@@ -195,7 +198,11 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
         return null;
       }
 
-      return await res.json();
+      const json = await res.json();
+      if (json?.data) {
+        recordPrimarySuccess();
+      }
+      return json;
     } catch (e) {
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
@@ -446,7 +453,10 @@ export async function searchAnime(q: string, page = 1, genre?: string): Promise<
     } catch {}
   }
 
-  // Fallback 3: Kitsu search (when both AniList and Jikan are down)
+  // Both primary sources failed for this query
+  recordPrimaryFailure();
+
+  // Emergency Fallback: Kitsu search (when both AniList and Jikan are down)
   try {
     const kResults = await searchViaKitsu(cleanQ, page, genre);
     if (kResults && kResults.length > 0) {
@@ -479,7 +489,10 @@ export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeIt
     console.warn("Jikan popular failed, falling back to Kitsu:", e);
   }
 
-  // Fallback 3: Kitsu popular (when both AniList and Jikan are down)
+  // Both primary sources failed
+  recordPrimaryFailure();
+
+  // Emergency Fallback: Kitsu popular (when both AniList and Jikan are down)
   try {
     const kitsuItems = await getPopularAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {
@@ -512,7 +525,10 @@ export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeI
     console.warn("Jikan trending failed, falling back to Kitsu:", e);
   }
 
-  // Fallback 3: Kitsu trending (when both AniList and Jikan are down)
+  // Both primary sources failed
+  recordPrimaryFailure();
+
+  // Emergency Fallback: Kitsu trending (when both AniList and Jikan are down)
   try {
     const kitsuItems = await getTrendingAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {
@@ -546,7 +562,10 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
     console.warn("Jikan airing failed, falling back to Kitsu:", e);
   }
 
-  // Fallback 3: Kitsu airing (when both AniList and Jikan are down)
+  // Both primary sources failed
+  recordPrimaryFailure();
+
+  // Emergency Fallback: Kitsu airing (when both AniList and Jikan are down)
   try {
     const kitsuItems = await getAiringAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {
@@ -588,7 +607,10 @@ export async function getUpcomingAnime(page = 1, genre?: string): Promise<AnimeI
     console.warn("Jikan upcoming failed, falling back to Kitsu:", e);
   }
 
-  // Fallback 3: Kitsu upcoming (when both AniList and Jikan are down)
+  // Both primary sources failed
+  recordPrimaryFailure();
+
+  // Emergency Fallback: Kitsu upcoming (when both AniList and Jikan are down)
   try {
     const kitsuItems = await getUpcomingAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {

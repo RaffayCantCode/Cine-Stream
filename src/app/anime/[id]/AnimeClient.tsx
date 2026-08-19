@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v35-kitsu-trending-episodes-fix-v2";
+const ANIME_API_VERSION = "v36-kitsu-anilist-id-mapping-v1";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
