@@ -1814,7 +1814,16 @@ export async function fetchEpisodesFromAniZip(
   seasonCap: number
 ): Promise<EpisodeDetail[] | null> {
   try {
-    const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
+    const cleanId = String(anilistId || "").trim();
+    const queryParam = cleanId.startsWith("kitsu-")
+      ? `kitsu_id=${cleanId.replace("kitsu-", "")}`
+      : cleanId.startsWith("mal-")
+        ? `mal_id=${cleanId.replace("mal-", "")}`
+        : isNaN(Number(cleanId))
+          ? `kitsu_id=${cleanId}`
+          : `anilist_id=${cleanId}`;
+
+    const res = await fetch(`https://api.ani.zip/mappings?${queryParam}`, {
       signal: AbortSignal.timeout(8000),
       headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
       next: { revalidate: 86400 } as any,
@@ -1874,7 +1883,16 @@ export async function resolveTmdbMappingFromAniZip(
   anilistId: string
 ): Promise<{ tmdbId: number; tmdbSeason: number; episodeOffset: number } | null> {
   try {
-    const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
+    const cleanId = String(anilistId || "").trim();
+    const queryParam = cleanId.startsWith("kitsu-")
+      ? `kitsu_id=${cleanId.replace("kitsu-", "")}`
+      : cleanId.startsWith("mal-")
+        ? `mal_id=${cleanId.replace("mal-", "")}`
+        : isNaN(Number(cleanId))
+          ? `kitsu_id=${cleanId}`
+          : `anilist_id=${cleanId}`;
+
+    const res = await fetch(`https://api.ani.zip/mappings?${queryParam}`, {
       signal: AbortSignal.timeout(8000),
       headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
       next: { revalidate: 86400 } as any,

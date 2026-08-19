@@ -155,14 +155,17 @@ export async function getPopularAnimeViaKitsu(page = 1, genre?: string): Promise
 
 export async function getTrendingAnimeViaKitsu(page = 1, genre?: string): Promise<AnimeItem[]> {
   try {
-    const offset = Math.max((page - 1) * 20, 0);
-    let url = `${KITSU_BASE}/anime?filter[status]=current&sort=-userCount&page[limit]=20&page[offset]=${offset}&include=categories`;
-    if (genre) {
-      url += `&filter[categories]=${encodeURIComponent(normalizeKitsuGenre(genre))}`;
+    let url = `${KITSU_BASE}/trending/anime?limit=20`;
+    if (genre || page > 1) {
+      const offset = Math.max((page - 1) * 20, 0);
+      url = `${KITSU_BASE}/anime?sort=-userCount&page[limit]=20&page[offset]=${offset}&include=categories`;
+      if (genre) {
+        url += `&filter[categories]=${encodeURIComponent(normalizeKitsuGenre(genre))}`;
+      }
     }
     let res = await kitsuFetchJson<any>(url);
     if (!res || !Array.isArray(res.data) || res.data.length === 0) {
-      res = await kitsuFetchJson<any>(`${KITSU_BASE}/trending/anime?limit=20`);
+      res = await kitsuFetchJson<any>(`${KITSU_BASE}/anime?sort=-userCount&page[limit]=20&include=categories`);
     }
     if (!res || !Array.isArray(res.data) || res.data.length === 0) return [];
 
@@ -226,49 +229,69 @@ export async function getUpcomingAnimeViaKitsu(page = 1, genre?: string): Promis
 }
 
 export async function fetchEpisodesFromKitsu(
-  animeName: string,
+  animeNameOrId: string,
   seasonCap: number
 ): Promise<EpisodeDetail[] | null> {
   try {
-    const searchRes = await fetch(
-      `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(animeName)}&page[limit]=1`,
-      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } as any }
-    );
-    if (!searchRes.ok) return null;
-    const searchJson = await searchRes.json();
-    const anime = searchJson.data?.[0];
-    if (!anime) return null;
+    let kitsuId: string | null = null;
+    const cleanInput = String(animeNameOrId || "").trim();
 
-    const kitsuId = anime.id;
-    const limitParam = Math.min(Math.max(seasonCap || 20, 1), 20);
-    const epRes = await fetch(
-      `https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=${limitParam}`,
-      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } as any }
-    );
-    if (!epRes.ok) return null;
-    const epJson = await epRes.json();
-    const epsData = epJson.data || [];
+    if (cleanInput.startsWith("kitsu-")) {
+      kitsuId = cleanInput.replace("kitsu-", "");
+    } else if (!isNaN(Number(cleanInput))) {
+      kitsuId = cleanInput;
+    } else {
+      const searchRes = await fetch(
+        `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(cleanInput)}&page[limit]=1`,
+        { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } as any }
+      );
+      if (searchRes.ok) {
+        const searchJson = await searchRes.json();
+        kitsuId = searchJson.data?.[0]?.id || null;
+      }
+    }
+
+    if (!kitsuId) return null;
 
     const eps: EpisodeDetail[] = [];
-    const effectiveCap = seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500;
-    for (const ep of epsData) {
-      const epNum = ep.attributes?.number;
-      if (!epNum || epNum > effectiveCap) continue;
+    const maxFetch = Math.min(seasonCap && seasonCap > 0 ? seasonCap : 50, 100);
+    const pageSize = 20;
+    let offset = 0;
 
-      const title = ep.attributes?.canonicalTitle || ep.attributes?.title || `Episode ${epNum}`;
-      const description = ep.attributes?.synopsis || null;
-      const thumbnail = ep.attributes?.thumbnail?.original || null;
+    while (eps.length < maxFetch && offset < maxFetch) {
+      const epRes = await fetch(
+        `https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=${Math.min(pageSize, maxFetch - eps.length)}&page[offset]=${offset}`,
+        { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } as any }
+      );
+      if (!epRes.ok) break;
+      const epJson = await epRes.json();
+      const epsData = epJson.data || [];
+      if (epsData.length === 0) break;
 
-      eps.push({
-        episodeId: `kitsu-${kitsuId}-${epNum}`,
-        episodeNum: epNum,
-        title,
-        description,
-        thumbnail,
-        releasedDate: ep.attributes?.airdate || null,
-        isFiller: false,
-        isRecap: false,
-      });
+      for (const ep of epsData) {
+        const epNum = ep.attributes?.number || ep.attributes?.relativeNumber;
+        if (!epNum) continue;
+
+        const title = ep.attributes?.canonicalTitle || ep.attributes?.titles?.en_us || ep.attributes?.titles?.en_jp || ep.attributes?.title || `Episode ${epNum}`;
+        const description = cleanAnimeDescription(ep.attributes?.synopsis || ep.attributes?.description);
+        const thumbObj = ep.attributes?.thumbnail;
+        const thumbnail = thumbObj?.original || thumbObj?.large || thumbObj?.medium || thumbObj?.small || null;
+
+        eps.push({
+          episodeId: `kitsu-${kitsuId}-${epNum}`,
+          episodeNum: epNum,
+          title,
+          description,
+          thumbnail,
+          releasedDate: ep.attributes?.airdate || null,
+          isFiller: false,
+          isRecap: false,
+          runtime: ep.attributes?.length || null,
+        });
+      }
+
+      offset += pageSize;
+      if (epsData.length < pageSize) break;
     }
 
     return eps.sort((a, b) => a.episodeNum - b.episodeNum);
@@ -564,11 +587,24 @@ export async function getAnimeDetailsViaKitsu(
     }
   }
 
+  let knownAniZipTotal: number | null = null;
+  if (aniZipMapping?.episodes) {
+    const keys = Object.keys(aniZipMapping.episodes).map(Number).filter(n => !isNaN(n));
+    if (keys.length > 0) knownAniZipTotal = Math.max(...keys);
+  }
+
   // Find active season
   const activeSeason = seasonsList.find(s => s.isCurrent) || seasonsList[0];
   const isMovieFormat = subtype === "MOVIE" || activeSeason?.seasonLabel?.startsWith("Movie");
   const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => activeSeason?.seasonLabel?.startsWith(t)) || isMovieFormat;
-  const totalEps = isMovieFormat ? 1 : (isSpecialFormat ? Math.max(activeSeason?.totalEpisodes || 1, 1) : Math.max(activeSeason?.totalEpisodes || attr.episodeCount || 12, 1));
+  const rawTotal = (activeSeason?.totalEpisodes && activeSeason.totalEpisodes > 0)
+    ? activeSeason.totalEpisodes
+    : (knownAniZipTotal || attr.episodeCount || (status === "RELEASING" ? 1500 : 12));
+  const totalEps = isMovieFormat ? 1 : (isSpecialFormat ? Math.max(rawTotal, 1) : Math.max(rawTotal, 1));
+
+  if (activeSeason && (!activeSeason.totalEpisodes || activeSeason.totalEpisodes <= 0)) {
+    activeSeason.totalEpisodes = totalEps;
+  }
 
   // Step 6: Generate or fetch episodes
   const episodes: EpisodeDetail[] = [];
@@ -716,9 +752,13 @@ export async function fetchKitsuClientAnime(
         url += `&filter[categories]=${encodeURIComponent(normalizeKitsuGenre(genre))}`;
       }
     } else if (category === "trending") {
-      url = `${KITSU_BASE}/anime?filter[status]=current&sort=-userCount&page[limit]=20&page[offset]=${offset}&include=categories`;
-      if (genre) {
-        url += `&filter[categories]=${encodeURIComponent(normalizeKitsuGenre(genre))}`;
+      if (genre || page > 1) {
+        url = `${KITSU_BASE}/anime?sort=-userCount&page[limit]=20&page[offset]=${offset}&include=categories`;
+        if (genre) {
+          url += `&filter[categories]=${encodeURIComponent(normalizeKitsuGenre(genre))}`;
+        }
+      } else {
+        url = `${KITSU_BASE}/trending/anime?limit=20`;
       }
     } else if (category === "upcoming") {
       url = `${KITSU_BASE}/anime?filter[status]=upcoming&sort=-userCount&page[limit]=20&page[offset]=${offset}&include=categories`;

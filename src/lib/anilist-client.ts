@@ -151,7 +151,40 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     } catch {}
   }
 
-  // 3) Server API proxy fetch first (runs reliably on Cloudflare server Edge)
+  // 3) Direct browser query first (AniList client-side from user's residential IP)
+  if (typeof window !== "undefined") {
+    try {
+      let items: AnimeItem[] = [];
+      if (category === "search" || q) {
+        const data = await clientAnilistQuery(SEARCH_QUERY, { page, q, genre: genre || null });
+        items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+      } else if (category === "airing") {
+        const { season, year } = getCurrentSeason();
+        const data = await clientAnilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
+        items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+      } else if (category === "trending") {
+        const data = await clientAnilistQuery(TRENDING_QUERY, { page, genre: genre || null });
+        items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+      } else {
+        const data = await clientAnilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
+        items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+      }
+      
+      items = filterUnreleased(deduplicateAnime(items));
+      if (items.length > 0) {
+        const result = { items, hasMore: items.length > 0 };
+        clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+        try {
+          sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+        } catch {}
+        return result;
+      }
+    } catch (e) {
+      console.warn("Direct browser AniList query failed, trying server proxy:", e);
+    }
+  }
+
+  // 4) Server API proxy fetch (when SSR or direct AniList failed)
   try {
     const serverUrl = `/api/anime?category=${encodeURIComponent(category)}&page=${page}&genre=${encodeURIComponent(genre)}&q=${encodeURIComponent(q)}`;
     const serverRes = await fetch(serverUrl, { signal: AbortSignal.timeout(6000) });
@@ -168,40 +201,9 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
         return result;
       }
     }
-  } catch { /* ignore server proxy error and try direct client query */ }
+  } catch { /* ignore server proxy error and try Jikan */ }
 
-  // 4) Direct browser query fallback (AniList / Jikan)
-  try {
-    let items: AnimeItem[] = [];
-    if (category === "search" || q) {
-      const data = await clientAnilistQuery(SEARCH_QUERY, { page, q, genre: genre || null });
-      items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
-    } else if (category === "airing") {
-      const { season, year } = getCurrentSeason();
-      const data = await clientAnilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
-      items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
-    } else if (category === "trending") {
-      const data = await clientAnilistQuery(TRENDING_QUERY, { page, genre: genre || null });
-      items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
-    } else {
-      const data = await clientAnilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
-      items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
-    }
-    
-    items = filterUnreleased(deduplicateAnime(items));
-    const result = { items, hasMore: items.length > 0 };
-
-    if (items.length > 0) {
-      clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
-      if (typeof window !== "undefined") {
-        try {
-          sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
-        } catch {}
-      }
-    }
-    return result;
-  } catch (e) {
-    console.warn("AniList direct fetch failed, falling back to Jikan:", e);
+  // 5) Direct browser fallback (Jikan)
     try {
       let url = `${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`;
       if (category === "search" || q) {
@@ -229,7 +231,7 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
       console.warn("Jikan direct fetch failed, falling back to Kitsu:", jikanErr);
     }
 
-    // 5) Direct browser Kitsu query fallback (when both AniList and Jikan are down)
+    // 6) Direct browser Kitsu query fallback (when both AniList and Jikan are down)
     const kitsuResult = await fetchKitsuClientAnime(category, page, genre, q);
     if (kitsuResult.items.length > 0) {
       clientAnimeCache.set(cacheKey, { data: kitsuResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
@@ -241,5 +243,4 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     }
     return kitsuResult;
   }
-}
 

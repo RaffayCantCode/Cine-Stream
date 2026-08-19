@@ -442,25 +442,31 @@ export async function GET(
         }
 
         // Look for the season in the meta — prefer direct season meta first
-        season = meta.seasons?.find((s: any) => s.id === seasonId);
+        season = meta.seasons?.find((s: any) => String(s.id) === String(seasonId));
         
         // If still not found and we have a direct season meta, use its first season
         if (!season && directSeasonMeta) {
-          const directSeason = directSeasonMeta.seasons?.find((s: any) => s.id === seasonId)
+          const directSeason = directSeasonMeta.seasons?.find((s: any) => String(s.id) === String(seasonId))
             || directSeasonMeta.seasons?.[0];
           if (directSeason) season = directSeason;
         }
+
+        // Fuzzy match if seasonId has a prefix like kitsu- or mal-
+        if (!season && meta.seasons && meta.seasons.length > 0) {
+          const cleanTarget = String(seasonId).replace(/^(kitsu-|mal-|tmdb-)/, "");
+          season = meta.seasons.find((s: any) => String(s.id).replace(/^(kitsu-|mal-|tmdb-)/, "") === cleanTarget)
+            || meta.seasons.find((s: any) => s.isCurrent)
+            || meta.seasons[0];
+        }
         
         console.log(`[Episodes API] Season lookup: found=${!!season}, seasons:`, meta.seasons?.map((s: any) => ({ id: s.id, label: s.seasonLabel, tmdbSeason: s.tmdbSeasonNumber, offset: s.episodeOffset })));
-
-
 
         if (!season) {
           console.warn(`[Episodes API] Season ${seasonId} not found in any meta result`);
           return Response.json({ success: true, data: { episodes: [], totalEpisodes: 0 } }, { headers: animeCacheHeaders });
         }
 
-        const idx = meta.seasons.findIndex((s: any) => s.id === seasonId);
+        const idx = meta.seasons.findIndex((s: any) => String(s.id) === String(season.id));
         seasonNumFromList = idx >= 0 ? idx + 1 : 1;
       }
 

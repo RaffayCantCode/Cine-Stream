@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v34-anime-pagination-recs-onepiece-v1";
+const ANIME_API_VERSION = "v35-kitsu-trending-episodes-fix-v2";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -299,7 +299,12 @@ async function fetchEpisodesClientSide(
 ): Promise<Episode[]> {
   try {
     // 1. Try AniZip directly from browser
-    const aniZipRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${seasonId}`, {
+    const azQuery = String(seasonId).startsWith("kitsu-")
+      ? `kitsu_id=${String(seasonId).replace("kitsu-", "")}`
+      : String(seasonId).startsWith("mal-")
+        ? `mal_id=${String(seasonId).replace("mal-", "")}`
+        : `anilist_id=${seasonId}`;
+    const aniZipRes = await fetch(`https://api.ani.zip/mappings?${azQuery}`, {
       signal: AbortSignal.timeout(4000)
     }).catch(() => null);
 

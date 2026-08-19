@@ -78,9 +78,9 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
   }
 
   const numId = parseInt(targetId, 10);
-  if (isNaN(numId) && !id.startsWith("kitsu-")) {
+  if (isNaN(numId) || targetId.startsWith("kitsu-")) {
     try {
-      const kitsuDetails = await getAnimeDetailsViaKitsu(id, 100, true);
+      const kitsuDetails = await getAnimeDetailsViaKitsu(targetId, 100, true);
       if (kitsuDetails && kitsuDetails.anime) {
         const title = kitsuDetails.anime.name || "Anime";
         const poster = kitsuDetails.anime.poster || "";
@@ -93,9 +93,10 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
           },
           initialData: {
             ...kitsuDetails.anime,
+            id: targetId,
             totalEpisodes: kitsuDetails.totalEpisodes || 12,
             seasons: kitsuDetails.seasons as any,
-            openedSeasonId: kitsuDetails.openedSeasonId || kitsuDetails.anime.id,
+            openedSeasonId: kitsuDetails.openedSeasonId || targetId,
             tmdbId: kitsuDetails.tmdbId as any,
           } as InitialAnimeData,
         };
@@ -163,7 +164,7 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
 
     if (!anime) {
       // Fallback 3: Kitsu + AniZip details fallback (when AniList is down)
-      const kitsuDetails = await getAnimeDetailsViaKitsu(id, 100, true);
+      const kitsuDetails = await getAnimeDetailsViaKitsu(targetId, 100, true);
       if (kitsuDetails && kitsuDetails.anime) {
         const title = kitsuDetails.anime.name || "Anime";
         const poster = kitsuDetails.anime.poster || "";
@@ -176,9 +177,10 @@ const fetchInitialAnimeData = cache(async function fetchInitialAnimeData(id: str
           },
           initialData: {
             ...kitsuDetails.anime,
+            id: targetId,
             totalEpisodes: kitsuDetails.totalEpisodes || 12,
             seasons: kitsuDetails.seasons as any,
-            openedSeasonId: kitsuDetails.openedSeasonId || kitsuDetails.anime.id,
+            openedSeasonId: kitsuDetails.openedSeasonId || targetId,
             tmdbId: kitsuDetails.tmdbId as any,
           } as InitialAnimeData,
         };
