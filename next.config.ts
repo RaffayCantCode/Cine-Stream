@@ -59,7 +59,16 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "artworks.thetvdb.com",
-      }
+      },
+      // Kitsu CDN (used when AniList/Jikan are down and Kitsu is the fallback)
+      {
+        protocol: "https",
+        hostname: "media.kitsu.app",
+      },
+      {
+        protocol: "https",
+        hostname: "*.kitsu.app",
+      },
     ],
   },
   // Vercel specific optimizations

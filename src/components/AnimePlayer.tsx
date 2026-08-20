@@ -58,26 +58,44 @@ function buildProviderUrl(
   startProgress?: number,
   isMovie?: boolean
 ): string {
-  const clean = (id: string | null | undefined) => id?.replace(/\D/g, "") || null;
-  const curAni = clean(animeId);
-  const curMal = clean(malId);
-  const mainAni = clean(rootAnimeId) || curAni;
+  // Strip all non-digits — but ONLY for IDs that are guaranteed AniList/MAL numerics.
+  // Kitsu IDs like "kitsu-7442" contain digits, but those digits are Kitsu's internal
+  // ID, NOT an AniList or MAL ID. Sending "7442" to vidnest would give the wrong show.
+  const cleanNumeric = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    // Reject kitsu- prefixed IDs — their numeric part is useless for AniList/MAL providers
+    if (id.startsWith("kitsu-")) return null;
+    const digits = id.replace(/\D/g, "");
+    return digits || null;
+  };
+
+  const curAni = cleanNumeric(animeId);
+  const curMal = cleanNumeric(malId);
+  const mainAni = cleanNumeric(rootAnimeId) || curAni;
   const isSequel = Boolean(curAni && mainAni && curAni !== mainAni);
   // TMDB-based embeds use the show-wide absolute episode number
   // (episodeOffset + episode), while anime-based embeds (vidnest/animepahe)
   // use each season's OWN relative episode numbering (always 1-based).
   const absEp = (episodeOffset || 0) + episode;
   const aniId = curAni || mainAni;
-  const malClean = clean(rootMalId) || curMal;
+  const malClean = cleanNumeric(rootMalId) || curMal;
   const hasOwnMal = Boolean(curMal && curMal !== malClean);
   const malId_ = hasOwnMal ? (isSequel ? curMal : malClean) : (curMal || malClean);
+  // primaryId: AniList ID preferred, then MAL ID, then empty (triggers TMDB fallback)
   const primaryId = aniId || malId_ || "";
 
   switch (provider) {
     case "vidnest":
-      return `https://vidnest.fun/anime/${primaryId}/${episode}/sub`;
+      // vidnest needs a valid AniList or MAL ID — if we have neither, use MAL as last resort
+      // If we only have a kitsu ID (no digits available from cleanNumeric), return empty
+      // so the player shows an error rather than a broken embed.
+      return primaryId
+        ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub`
+        : "";
     case "animepahe":
-      return `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`;
+      return primaryId
+        ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`
+        : "";
     case "vidlink": {
       const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
       if (tmdbId) {
@@ -85,7 +103,11 @@ function buildProviderUrl(
           ? `https://vidlink.pro/movie/${tmdbId}?primaryColor=4b5694&autoplay=true${timeParam}`
           : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
       }
-      return `https://vidlink.pro/anime/${malId_ || aniId || ""}/${episode}/sub?primaryColor=4b5694&autoplay=true${timeParam}`;
+      // No TMDB — use MAL or AniList ID for anime embed
+      const animeEmbedId = malId_ || aniId || "";
+      return animeEmbedId
+        ? `https://vidlink.pro/anime/${animeEmbedId}/${episode}/sub?primaryColor=4b5694&autoplay=true${timeParam}`
+        : "";
     }
     case "123embed":
       if (tmdbId) {
@@ -93,14 +115,14 @@ function buildProviderUrl(
           ? `https://play2.123embed.net/movie/${tmdbId}`
           : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
       }
-      return `https://vidnest.fun/anime/${primaryId}/${episode}/sub`;
+      return primaryId ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub` : "";
     case "autoembed":
       if (tmdbId) {
         return isMovie
           ? `https://player.autoembed.co/embed/movie/${tmdbId}`
           : `https://player.autoembed.co/embed/tv/${tmdbId}/${tmdbSeason || 1}-${absEp}`;
       }
-      return `https://vidnest.fun/anime/${primaryId}/${episode}/sub`;
+      return primaryId ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub` : "";
     default:
       return "";
   }
@@ -312,7 +334,7 @@ export function AnimePlayer({
     setHasError(false);
     setCurrentUrl(url);
     setIframeReady(false);
-  }, [sourceIndex, resolvedUrls, retryCount, currentSource.provider, animeId, malId, rootAnimeId, rootMalId, episode, episodeOffset, tmdbId, tmdbSeason, isMovie]);
+  }, [sourceIndex, resolvedUrls, retryCount, currentSource.provider, animeId, malId, rootAnimeId, rootMalId, episode, episodeOffset, tmdbId, tmdbSeason, isMovie, providers]);
 
   // Scroll player into view on episode change
   useEffect(() => {

@@ -38,9 +38,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (items.length === 0) {
+      // Don't cache empty results — they are transient failures that should
+      // be retried promptly so Kitsu never gets served as a permanent answer.
       return Response.json({
-        success: true,
-        data: { items },
+        success: false,
+        data: { items: [] },
       }, { 
         headers: {
           "Cache-Control": "no-store, max-age=0",
@@ -62,3 +64,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

@@ -76,7 +76,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   // whole anime slide (onError -> imgFailed -> black). AnimeCard already uses a
   // plain <img> for the same reason — here we emit the src directly instead.
   const eventuallyOptimizable = (url?: string | null) =>
-    !!url && !/(anilist\.co|myanimelist\.net)/i.test(url);
+    !!url && !/(anilist\.co|myanimelist\.net|kitsu\.app|media\.kitsu\.io|media\.kitsu\.app)/i.test(url);
 
   const backdropPath = usePoster ? item.poster_path : item.backdrop_path;
   const backdropUrl = resolveImageUrl(backdropPath);

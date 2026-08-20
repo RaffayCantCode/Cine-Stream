@@ -113,8 +113,9 @@ export async function enrichKitsuWithAniListIds(items: any[], categoriesMap?: Ma
   await Promise.all(baseItems.map(async (anime) => {
     try {
       const cleanKId = anime.id.replace(/^kitsu-/, "");
+      // Use 4s timeout — 2s was too short on Cloudflare edge cold starts
       const azRes = await fetch(`https://api.ani.zip/mappings?kitsu_id=${cleanKId}`, {
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(4000),
         headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
         next: { revalidate: 86400 } as any,
       });
@@ -123,10 +124,34 @@ export async function enrichKitsuWithAniListIds(items: any[], categoriesMap?: Ma
         if (az?.mappings?.anilist_id) {
           anime.id = String(az.mappings.anilist_id);
           if (az.mappings.mal_id) anime.idMal = String(az.mappings.mal_id);
+          return; // Fully resolved — done
         } else if (az?.mappings?.mal_id) {
           anime.idMal = String(az.mappings.mal_id);
           anime.id = `mal-${az.mappings.mal_id}`;
+          return; // Got MAL at least
         }
+      }
+
+      // AniZip didn't have this Kitsu ID — try Kitsu's own mappings API to get MAL ID
+      // This is a second-chance lookup so the item at least gets a MAL ID for streaming
+      if (anime.id.startsWith("kitsu-")) {
+        try {
+          const kMapRes = await fetch(
+            `https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[item.id]=${cleanKId}&include=item`,
+            {
+              signal: AbortSignal.timeout(3000),
+              headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT, "Accept": "application/vnd.api+json" },
+            }
+          );
+          if (kMapRes.ok) {
+            const kMapData = await kMapRes.json();
+            const malId = kMapData?.data?.[0]?.attributes?.externalId;
+            if (malId) {
+              anime.idMal = String(malId);
+              anime.id = `mal-${malId}`;
+            }
+          }
+        } catch { /* keep kitsu- id if fallback also fails */ }
       }
     } catch {}
   }));

@@ -145,7 +145,38 @@ export const DEFAULT_FETCH_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x6
 // Safe Jikan GET that tolerates non-JSON bodies (e.g. Cloudflare "error code:
 // 504" text pages). Throwing on `res.json()` here previously 500'd the whole
 // /api/anime route on edge cold starts.
-async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
+interface ServerCacheEntry<T> {
+  data: T;
+  expires: number;
+}
+const serverAnilistCache = new Map<string, ServerCacheEntry<any>>();
+const SERVER_CACHE_MAX = 500;
+
+function getCachedAnilist<T>(key: string): T | null {
+  const entry = serverAnilistCache.get(key);
+  if (entry && entry.expires > Date.now()) {
+    return entry.data as T;
+  }
+  if (entry) serverAnilistCache.delete(key);
+  return null;
+}
+
+function setCachedAnilist<T>(key: string, data: T, ttlSeconds = 3600): void {
+  if (serverAnilistCache.size >= SERVER_CACHE_MAX) {
+    const firstKey = serverAnilistCache.keys().next().value;
+    if (firstKey) serverAnilistCache.delete(firstKey);
+  }
+  serverAnilistCache.set(key, { data, expires: Date.now() + ttlSeconds * 1000 });
+}
+
+export async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
+  const cacheKey = `jk_${url}`;
+  const cached = getCachedAnilist<T>(cacheKey);
+  if (cached) {
+    recordPrimarySuccess();
+    return cached;
+  }
+
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
@@ -156,7 +187,10 @@ async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
     const text = await res.text();
     try {
       const parsed = JSON.parse(text) as T;
-      if (parsed) recordPrimarySuccess();
+      if (parsed) {
+        recordPrimarySuccess();
+        setCachedAnilist(cacheKey, parsed, 3600);
+      }
       return parsed;
     } catch {
       return null;
@@ -167,6 +201,13 @@ async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
 }
 
 async function anilistQuery(query: string, variables: Record<string, any>, retries = 2, revalidate = 3600): Promise<any> {
+  const cacheKey = `al_${query.length}_${JSON.stringify(variables)}`;
+  const cached = getCachedAnilist<any>(cacheKey);
+  if (cached) {
+    recordPrimarySuccess();
+    return cached;
+  }
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(ANILIST_API, {
@@ -201,6 +242,7 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
       const json = await res.json();
       if (json?.data) {
         recordPrimarySuccess();
+        setCachedAnilist(cacheKey, json, revalidate);
       }
       return json;
     } catch (e) {

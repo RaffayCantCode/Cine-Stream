@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v36-kitsu-anilist-id-mapping-v1";
+const ANIME_API_VERSION = "v38-kitsu-streaming-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -1732,8 +1732,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const streamingAnimeId = useMemo(() => {
     const sId = selectedEp?.seasonId || currentSeasonId;
     if (sId && sId.startsWith("tmdb-")) return anime?.id || sId;
+    // If the seasonId is still a kitsu- ID but anime.id is a proper numeric AniList ID,
+    // use anime.id — the Kitsu detail page resolves to AniList via AniZip mappings.
+    if (sId && sId.startsWith("kitsu-")) {
+      const animeId = anime?.id;
+      if (animeId && /^\d+$/.test(animeId)) return animeId;
+      // If anime.id is also kitsu-, at least use the mal- form if we have idMal
+      if (anime?.idMal) return `mal-${anime.idMal}`;
+    }
     return sId || "";
-  }, [selectedEp?.seasonId, currentSeasonId, anime?.id]);
+  }, [selectedEp?.seasonId, currentSeasonId, anime?.id, anime?.idMal]);
 
   const streamingMalId = useMemo(() => {
     if (selectedEp?.seasonMalId != null) return String(selectedEp.seasonMalId);
@@ -2088,7 +2096,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                         malId={streamingMalId}
                         animeTitle={selectedEp.seasonName || anime.name}
                         episode={selectedEp.episodeNum}
-                        rootAnimeId={rootSeason?.id || anime?.id}
+                        rootAnimeId={(() => {
+                          // Never pass kitsu- IDs to AnimePlayer — they get mangled by clean()
+                          const rId = rootSeason?.id || anime?.id;
+                          if (!rId || rId.startsWith("kitsu-")) {
+                            // Use the resolved numeric AniList id if available
+                            if (anime?.id && /^\d+$/.test(anime.id)) return anime.id;
+                            if (anime?.idMal) return `mal-${anime.idMal}`;
+                            return anime?.id || rId || "";
+                          }
+                          return rId;
+                        })()}
                         rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
                         episodeOffset={currentEpisodeOffset}
                         tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}

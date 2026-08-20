@@ -532,10 +532,12 @@ export default function Home() {
           genres: { genres: Genre[] };
         }>("/api/tmdb/home?v=3", { cacheTtlMs: 3600000 }).catch(() => null);
 
-        // Fetch both trending and all-time popular anime to populate a rich hero pool
+        // Fetch both trending and all-time popular anime
+        const trendingAnimePromise = fetchClientAnime("trending", 1).catch(() => ({ items: [] }));
+        const popularAnimePromise = fetchClientAnime("popular", 1).catch(() => ({ items: [] }));
         const animePromise = Promise.all([
-          fetchClientAnime("trending", 1).catch(() => ({ items: [] })),
-          fetchClientAnime("popular", 1).catch(() => ({ items: [] })),
+          trendingAnimePromise,
+          popularAnimePromise,
         ]).then(([trendingRes, popularRes]) => {
           const combined = [...(trendingRes.items || []), ...(popularRes.items || [])];
           const uniqueMap = new Map<string, AnimeItem>();
@@ -544,14 +546,14 @@ export default function Home() {
               uniqueMap.set(item.id, item);
             }
           });
-          return { items: Array.from(uniqueMap.values()), hasMore: true };
-        }).catch(() => ({ items: [] }));
+          return { items: Array.from(uniqueMap.values()), trending: trendingRes.items || [], hasMore: true };
+        }).catch(() => ({ items: [], trending: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
         // Wait for fast hero payload and anime payload concurrently
         const [heroData, initialAnimeRes] = await Promise.all([
           heroDataPromise,
-          animePromise.catch(() => ({ items: [] }))
+          animePromise.catch(() => ({ items: [], trending: [] }))
         ]);
         if (cancelled) return;
 
@@ -686,9 +688,11 @@ export default function Home() {
             episodes: { sub: null, dub: null },
           }));
 
-          const finalAnimeList = (animeResponse?.items && animeResponse.items.length > 0)
-            ? animeResponse.items.slice(0, 10)
-            : initialAnimeItems;
+          const finalAnimeList = ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
+            ? (animeResponse as any).trending.slice(0, 10)
+            : (animeResponse?.items && animeResponse.items.length > 0)
+              ? animeResponse.items.slice(0, 10)
+              : initialAnimeItems;
 
           const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
             ? collectionsData.collections

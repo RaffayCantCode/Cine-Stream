@@ -115,35 +115,70 @@ function getCurrentSeason() {
   };
 }
 
-async function clientAnilistQuery(query: string, variables: Record<string, any>): Promise<any> {
-  const res = await fetch(ANILIST_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) throw new Error(`AniList returned ${res.status}`);
-  return res.json();
+async function clientAnilistQuery(query: string, variables: Record<string, any>, retries = 2): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(ANILIST_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ query, variables }),
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) return await res.json();
+      if (res.status === 429 && attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+    } catch (e) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+    }
+  }
+  throw new Error("Client AniList query failed");
 }
 
 const clientAnimeCache = new Map<string, { data: { items: AnimeItem[]; hasMore: boolean }; expires: number }>();
 const CLIENT_ANIME_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CLIENT_CACHE_VERSION = "v27-nodejs-runtime";
+
+// Returns true if ALL items in the list are from the primary sources (AniList/Jikan),
+// not Kitsu. Kitsu items have IDs like "kitsu-12345" or very long slug-style IDs.
+function isCacheFromPrimarySources(items: AnimeItem[]): boolean {
+  if (!items || items.length === 0) return false;
+  // Accept items as "primary" if ALL of them have:
+  //   - a pure numeric AniList ID  (e.g. "21")
+  //   - a mal-prefixed ID          (e.g. "mal-21" — Jikan items or Kitsu items enriched via MAL)
+  // Reject if ANY item still has an un-enriched "kitsu-" ID, which means
+  // AniList/Jikan both failed and we only got raw Kitsu data.
+  return items.every(item => {
+    const id = String(item.id || "");
+    return !id.startsWith("kitsu-"); // numeric OR mal- both count as primary/enriched
+  });
+}
 
 export async function fetchClientAnime(category: string, page = 1, genre = "", q = ""): Promise<{ items: AnimeItem[], hasMore: boolean }> {
   const cacheKey = `anime_${category}_${page}_${genre}_${q}`;
+  const versionedKey = `sv_client_${CLIENT_CACHE_VERSION}_${cacheKey}`;
 
-  // 1) In-memory cache check (only if items exist!)
+  // 1) In-memory cache check (only if items exist from primary sources!)
   const cachedMemory = clientAnimeCache.get(cacheKey);
-  if (cachedMemory && cachedMemory.expires > Date.now() && cachedMemory.data.items?.length > 0) {
+  if (cachedMemory && cachedMemory.expires > Date.now() && cachedMemory.data.items?.length > 0 && isCacheFromPrimarySources(cachedMemory.data.items)) {
     return cachedMemory.data;
   }
 
-  // 2) sessionStorage check (only if items exist!)
+  // 2) sessionStorage check (only if items exist from primary sources!)
   if (typeof window !== "undefined") {
     try {
-      const stored = sessionStorage.getItem(`sv_client_${cacheKey}`);
+      // Clear any old-format (non-versioned) cached entries to purge stale Kitsu data
+      const oldKey = `sv_client_${cacheKey}`;
+      if (sessionStorage.getItem(oldKey)) sessionStorage.removeItem(oldKey);
+
+      const stored = sessionStorage.getItem(versionedKey);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed && parsed.expires > Date.now() && parsed.data?.items?.length > 0) {
+        if (parsed && parsed.expires > Date.now() && parsed.data?.items?.length > 0 && isCacheFromPrimarySources(parsed.data.items)) {
           clientAnimeCache.set(cacheKey, parsed);
           return parsed.data;
         }
@@ -175,7 +210,7 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
         const result = { items, hasMore: items.length > 0 };
         clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
         try {
-          sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+          sessionStorage.setItem(versionedKey, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
         } catch {}
         return result;
       }
@@ -190,12 +225,12 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
     const serverRes = await fetch(serverUrl, { signal: AbortSignal.timeout(6000) });
     if (serverRes.ok) {
       const serverData = await serverRes.json();
-      if (serverData.success && Array.isArray(serverData.data?.items) && serverData.data.items.length > 0) {
+      if (serverData.success && Array.isArray(serverData.data?.items) && serverData.data.items.length > 0 && isCacheFromPrimarySources(serverData.data.items)) {
         const result = { items: serverData.data.items, hasMore: serverData.data.items.length > 0 };
         clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
         if (typeof window !== "undefined") {
           try {
-            sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+            sessionStorage.setItem(versionedKey, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
           } catch {}
         }
         return result;
@@ -222,7 +257,7 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
         clientAnimeCache.set(cacheKey, { data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
         if (typeof window !== "undefined") {
           try {
-            sessionStorage.setItem(`sv_client_${cacheKey}`, JSON.stringify({ data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+            sessionStorage.setItem(versionedKey, JSON.stringify({ data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
           } catch {}
         }
         return fallbackResult;
