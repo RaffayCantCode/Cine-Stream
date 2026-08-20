@@ -131,61 +131,59 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           </div>
         )}
 
-        {/* Persistent Title & Gradient for Anime (matching Anime section) */}
+        {/* Persistent bottom dark gradient for anime */}
         {isAnime && (
-          <div className="absolute bottom-0 inset-x-0 z-10 p-3 pointer-events-none bg-gradient-to-t from-black/95 via-black/50 to-transparent">
-            <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
-              {title}
-            </h3>
+          <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/95 via-black/50 to-transparent pointer-events-none z-10" />
+        )}
+
+        {/* Hover overlay gradient for movie/tv and hover enhancement for anime */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 z-10 pointer-events-none" />
+
+        {/* Center Play Button on hover */}
+        {!isPerson && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 opacity-0 group-hover:opacity-100 transition-all duration-300">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/65 border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 transition-colors" />
+            </div>
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent opacity-40 group-hover:opacity-0 transition-opacity duration-300" />
-
-        <div className="absolute inset-0 flex flex-col justify-between p-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
-          {!isPerson && item.vote_average && item.vote_count && item.vote_count > 20 ? (
-            <div className="flex justify-end">
-              <div className="flex items-center gap-1 bg-black/75 text-amber-400 text-xs font-bold px-2 py-1 rounded-lg border border-white/15 shadow-md">
-                <Star className="w-3 h-3 fill-current" />
-                {item.vote_average.toFixed(1)}
-              </div>
-            </div>
-          ) : (
-            <div />
-          )}
-
-          {!isPerson && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-12 h-12 rounded-full bg-black/65 border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
-                <Play className="w-5 h-5 fill-current ml-0.5 transition-colors" />
-              </div>
-            </div>
-          )}
-
-          <div className="relative z-10 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-            <h3 className="text-white font-extrabold text-[13px] leading-snug mb-1.5 line-clamp-2 drop-shadow-md tracking-tight">
-              {title}
-            </h3>
-            <div className="flex items-center gap-2">
-              {year && !isPerson && (
-                <span className="text-white/90 text-xs font-semibold bg-white/20 px-2 py-0.5 rounded border border-white/10">
-                  {year}
-                </span>
-              )}
-              <span className="text-white/60 text-xs font-medium uppercase tracking-wider">
-                {isPerson ? "Person" : isAnime ? "Anime" : isMovie ? "Movie" : "TV"}
-              </span>
-            </div>
-          </div>
-        </div>
-
+        {/* Top Right Rating Badge */}
         {!isPerson && item.vote_average ? (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 text-amber-400 text-xs font-bold px-2 py-0.5 rounded-md border border-white/10 shadow-sm group-hover:opacity-0 transition-opacity duration-300">
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-0.5 bg-black/70 text-amber-400 text-xs font-bold px-2 py-0.5 rounded-md border border-white/10 shadow-sm pointer-events-none">
             <Star className="w-2.5 h-2.5 fill-current" />
             {item.vote_average.toFixed(1)}
           </div>
         ) : null}
+
+        {/* Bottom Title & Details Container */}
+        <div className="absolute bottom-0 inset-x-0 z-30 p-3 pointer-events-none flex flex-col justify-end">
+          <div className={`transition-all duration-300 ${
+            isAnime
+              ? "transform group-hover:-translate-y-5"
+              : "opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0"
+          }`}>
+            <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
+              {title}
+            </h3>
+          </div>
+
+          {/* Details (Year & Type badge) */}
+          <div className={`flex items-center gap-2 transition-all duration-300 opacity-0 group-hover:opacity-100 ${
+            isAnime
+              ? "absolute bottom-3 left-3 transform translate-y-2 group-hover:translate-y-0"
+              : "mt-1.5 transform translate-y-2 group-hover:translate-y-0"
+          }`}>
+            {year && !isPerson && (
+              <span className="text-white/90 text-[10px] sm:text-xs font-semibold bg-white/20 px-2 py-0.5 rounded border border-white/10 shadow-sm">
+                {year}
+              </span>
+            )}
+            <span className="text-white/70 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
+              {isPerson ? "Person" : isAnime ? "Anime" : isMovie ? "Movie" : "TV"}
+            </span>
+          </div>
+        </div>
 
         </div>
       </Link>

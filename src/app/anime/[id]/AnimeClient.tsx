@@ -327,7 +327,7 @@ async function fetchEpisodesClientSide(
       }
 
       if (azData?.episodes) {
-        const isSingleCap = totalEpisodes === 1;
+        const isSingleCap = totalEpisodes === 1 || seasonName.toLowerCase().includes("movie");
         for (const k of Object.keys(azData.episodes)) {
           const num = parseInt(k, 10);
           if (isNaN(num)) continue;
@@ -336,7 +336,9 @@ async function fetchEpisodesClientSide(
           aniZipEps.push({
             episodeId: `${seasonId}-${num}`,
             episodeNum: num,
-            title: ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${num}`,
+            title: (isSingleCap && (ep.title?.en || "").toLowerCase().includes("part"))
+              ? (seasonName || "Complete Movie")
+              : (ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${num}`),
             description: ep.overview || ep.summary || null,
             thumbnail: ep.image || null,
             releasedDate: ep.airDate || ep.airdate || null,
@@ -344,27 +346,36 @@ async function fetchEpisodesClientSide(
             seasonId: String(seasonId),
             seasonNum: 1,
           });
+          if (isSingleCap) break;
         }
       }
     }
 
-    // 2. If TMDB mapping is known, fetch rich metadata via TMDB proxy route
+    const isMovie = totalEpisodes === 1 || seasonName.toLowerCase().includes("movie") || seasonId.startsWith("kitsu-") && totalEpisodes === 1;
+
+    // For movies, if AniZip returned the complete movie or a single cut, return it directly
+    if (isMovie && aniZipEps.length > 0) {
+      const first = aniZipEps[0];
+      return [{
+        ...first,
+        episodeNum: 1,
+        title: seasonName || "Complete Movie",
+      }];
+    }
+
+    // 2. If TMDB mapping is known, fetch rich metadata via TMDB proxy route (TV series ONLY)
     let activeTmdbId = mappedTmdbId;
     let activeTmdbSeason = mappedTmdbSeason;
     let tmdbFromSearch = false;
 
-    // The season's own episode count is authoritative for THIS season. TMDB
-    // sometimes merges multiple anime seasons into one TMDB season (e.g. My
-    // Dress-Up Darling S1+S2 = TMDB S1 with 24 eps), so a TMDB season's length
-    // must NEVER be trusted as this season's count. Prefer the AniList count,
-    // then AniZip's own per-season episode count.
+    // The season's own episode count is authoritative for THIS season.
     const azMaxNum = aniZipEps.length > 0 ? Math.max(...aniZipEps.map(e => e.episodeNum)) : 0;
     const seasonOwnCount = (totalEpisodes && totalEpisodes > 0 && totalEpisodes < 1499)
       ? totalEpisodes
       : azMaxNum;
 
-    // Fallback: If TMDB ID is missing, search TMDB for the anime title directly from browser!
-    if (!activeTmdbId && seasonName) {
+    // Fallback: If TMDB ID is missing, search TMDB for the anime title directly from browser (TV series only)
+    if (!activeTmdbId && seasonName && !isMovie) {
       try {
         const cleanName = seasonName.replace(/\b(season|part|2nd|3rd|4th|5th|final)\b.*$/i, "").trim() || seasonName;
         const searchRes = await fetch(`/api/tmdb/search?query=${encodeURIComponent(cleanName)}&type=tv`, {
@@ -382,7 +393,7 @@ async function fetchEpisodesClientSide(
       } catch { /* ignore */ }
     }
 
-    if (activeTmdbId && activeTmdbSeason != null) {
+    if (activeTmdbId && activeTmdbSeason != null && !isMovie) {
       try {
         const tmdbRes = await fetch(`/api/tmdb/tv/${activeTmdbId}/season/${activeTmdbSeason}`, {
           signal: AbortSignal.timeout(4000)
@@ -391,10 +402,6 @@ async function fetchEpisodesClientSide(
           const tmdbData = await tmdbRes.json();
           const epsList = tmdbData?.episodes || [];
           if (epsList.length > 0) {
-            // A title-searched TMDB season can be the merged S1 of a multi-season
-            // show (e.g. My Dress-Up Darling S1+S2 both matching TMDB S1). Only
-            // trust it as an episode SOURCE when we have some per-season count to
-            // bound it; otherwise it would show another season's episodes here.
             const canTrustTmdbSource = !(tmdbFromSearch && azMaxNum === 0 && seasonOwnCount === 0);
             if (canTrustTmdbSource) {
               const result: Episode[] = [];
@@ -429,7 +436,8 @@ async function fetchEpisodesClientSide(
 
     // 3. If AniZip returned episodes, return them
     if (aniZipEps.length > 0) {
-      return aniZipEps.sort((a, b) => a.episodeNum - b.episodeNum);
+      const sorted = aniZipEps.sort((a, b) => a.episodeNum - b.episodeNum);
+      return isMovie ? [sorted[0]] : sorted;
     }
 
     // 4. Try Kitsu directly from browser
@@ -439,7 +447,7 @@ async function fetchEpisodesClientSide(
         const kJson = await kSearch.json();
         const kId = kJson.data?.[0]?.id;
         if (kId) {
-          const kitsuLimit = Math.max(seasonOwnCount || 50, 1);
+          const kitsuLimit = isMovie ? 1 : Math.max(seasonOwnCount || 50, 1);
           const kEpsRes = await fetch(`https://kitsu.io/api/edge/anime/${kId}/episodes?page[limit]=${kitsuLimit}`, { signal: AbortSignal.timeout(4000) });
           if (kEpsRes.ok) {
             const kEpsJson = await kEpsRes.json();
@@ -452,7 +460,7 @@ async function fetchEpisodesClientSide(
               kEps.push({
                 episodeId: `kitsu-${kId}-${num}`,
                 episodeNum: num,
-                title: ep.attributes?.canonicalTitle || ep.attributes?.title || `Episode ${num}`,
+                title: isMovie ? (seasonName || "Complete Movie") : (ep.attributes?.canonicalTitle || ep.attributes?.title || `Episode ${num}`),
                 description: ep.attributes?.synopsis || null,
                 thumbnail: ep.attributes?.thumbnail?.original || null,
                 releasedDate: ep.attributes?.airdate || null,
@@ -460,8 +468,9 @@ async function fetchEpisodesClientSide(
                 seasonId,
                 seasonNum: 1,
               });
+              if (isMovie) break;
             }
-            if (kEps.length > 0) return kEps.sort((a, b) => a.episodeNum - b.episodeNum);
+            if (kEps.length > 0) return isMovie ? [kEps[0]] : kEps.sort((a, b) => a.episodeNum - b.episodeNum);
           }
         }
       }
@@ -723,6 +732,7 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
             .filter((inc: any) => inc.type === "categories" && inc.attributes?.title)
             .map((inc: any) => inc.attributes.title);
 
+          const isMovie = subtype === "MOVIE";
           const kAnime: AnimeDetail = {
             id: idStr,
             idMal: null,
@@ -735,12 +745,12 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
             score: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
             status: attr.status === "current" ? "RELEASING" : (attr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
             genres: categories,
-            totalEpisodes: attr.episodeCount || 12,
+            totalEpisodes: isMovie ? 1 : (attr.episodeCount || 12),
             seasons: [{
               id: idStr,
               name: attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Anime",
-              seasonLabel: subtype === "MOVIE" ? "Movie 1" : "Season 1",
-              totalEpisodes: attr.episodeCount || 12,
+              seasonLabel: isMovie ? "Movie 1" : "Season 1",
+              totalEpisodes: isMovie ? 1 : (attr.episodeCount || 12),
               isCurrent: true,
               idMal: null,
               seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
@@ -800,6 +810,7 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
               const jData = await jRes.json();
               const a = jData.data;
               if (a) {
+                const isMovie = (a.type || "").toUpperCase() === "MOVIE";
                 const jAnime: AnimeDetail = {
                   id: String(parsedId),
                   idMal: String(a.mal_id),
@@ -812,12 +823,12 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
                   score: a.score ? String(a.score) : null,
                   status: a.status || null,
                   genres: (a.genres || []).map((g: any) => g.name),
-                  totalEpisodes: a.episodes || 12,
+                  totalEpisodes: isMovie ? 1 : (a.episodes || 12),
                   seasons: [{
                     id: String(parsedId),
                     name: a.title_english || a.title || "Unknown",
-                    seasonLabel: "Season 1",
-                    totalEpisodes: a.episodes || 12,
+                    seasonLabel: isMovie ? "Movie 1" : "Season 1",
+                    totalEpisodes: isMovie ? 1 : (a.episodes || 12),
                     isCurrent: true,
                     idMal: a.mal_id,
                     seasonYear: a.year || null,
@@ -844,6 +855,7 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
               if (kItem?.attributes) {
                 const attr = kItem.attributes;
                 const subtype = (attr.subtype || "TV").toUpperCase();
+                const isMovie = subtype === "MOVIE";
                 const kAnime: AnimeDetail = {
                   id: String(parsedId),
                   idMal: isMal ? String(parsedId) : null,
@@ -856,12 +868,12 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
                   score: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
                   status: attr.status === "current" ? "RELEASING" : (attr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
                   genres: [],
-                  totalEpisodes: attr.episodeCount || 12,
+                  totalEpisodes: isMovie ? 1 : (attr.episodeCount || 12),
                   seasons: [{
                     id: String(parsedId),
                     name: attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Unknown",
-                    seasonLabel: "Season 1",
-                    totalEpisodes: attr.episodeCount || 12,
+                    seasonLabel: isMovie ? "Movie 1" : "Season 1",
+                    totalEpisodes: isMovie ? 1 : (attr.episodeCount || 12),
                     isCurrent: true,
                     idMal: isMal ? parsedId : null,
                     seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
@@ -1288,28 +1300,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     loadSeasonEpisodes(targetSeasonId, false);
 
     // Fire fast client-side Watch Order graph fetch immediately on mount
-    fetchFranchiseClientSide(Number(id))
-      .then((clientNodes) => {
-        if (clientNodes && clientNodes.length > 0) {
-          setFranchiseNodes((prev) => (clientNodes.length >= prev.length ? clientNodes : prev));
-          const mappedSeasons = mapNodesToSeasons(clientNodes, Number(id));
-          setAnime((prev) => {
-            if (!prev) return prev;
-            const currentSeasons = prev.seasons || [];
-            return {
-              ...prev,
-              seasons: mappedSeasons.length >= currentSeasons.length ? mappedSeasons : currentSeasons,
-            };
-          });
-        }
-      })
-      .catch(() => {});
+    const numId = parseInt(String(id).replace(/\D/g, ""), 10);
+    if (!isNaN(numId) && numId > 0) {
+      fetchFranchiseClientSide(numId)
+        .then((clientNodes) => {
+          if (clientNodes && clientNodes.length > 0) {
+            setFranchiseNodes((prev) => (clientNodes.length >= prev.length ? clientNodes : prev));
+            const mappedSeasons = mapNodesToSeasons(clientNodes, numId);
+            setAnime((prev) => {
+              if (!prev) return prev;
+              const currentSeasons = prev.seasons || [];
+              return {
+                ...prev,
+                seasons: mappedSeasons.length >= currentSeasons.length ? mappedSeasons : currentSeasons,
+              };
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, [id, loadSeasonEpisodes]);
 
   // ── 2) Background Server Meta & TMDB Mapping Enrichment ─────────────────
   useEffect(() => {
     if (!id) return;
-    if (metaLoadedIdRef.current === id && anime && anime.id === id) return;
+    if (metaLoadedIdRef.current === id) return;
 
     metaLoadedIdRef.current = id;
     let cancelled = false;
@@ -1450,7 +1465,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
     loadMeta();
     return () => { cancelled = true; };
-  }, [id, loadSeasonEpisodes, authStatus, initialData, anime]);
+  }, [id, loadSeasonEpisodes, authStatus, initialData]);
 
   // ── Fetch You May Like recommendations (client-side AniList + server route fallback) ────────────
   useEffect(() => {
@@ -2125,7 +2140,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             <span>This entry is upcoming. Please check back later.</span>
                           </div>
                           <WatchlistButton
-                            mediaId={Number(anime.id)}
+                            mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0}
                             mediaType="anime"
                             title={anime.name}
                             posterPath={anime.poster || null}
@@ -2139,7 +2154,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             <span>This title is currently unavailable on this site. Please check back later.</span>
                           </div>
                           <WatchlistButton
-                            mediaId={Number(anime.id)}
+                            mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0}
                             mediaType="anime"
                             title={anime.name}
                             posterPath={anime.poster || null}
@@ -2163,7 +2178,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           </button>
 
                           <WatchlistButton
-                            mediaId={Number(anime.id)}
+                            mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0}
                             mediaType="anime"
                             title={anime.name}
                             posterPath={anime.poster || null}
@@ -2194,6 +2209,59 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               <Link href="/anime" className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
                 <ArrowLeft className="w-4 h-4" /> Back to Anime
               </Link>
+
+              {/* Title & Metadata row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl sm:text-2xl font-black text-white">{anime.name}</h2>
+                    {isMovieFormat && (
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Movie
+                      </span>
+                    )}
+                  </div>
+                  {anime.jname && anime.jname !== anime.name && (
+                    <p className="text-xs text-white/40 mt-0.5">{anime.jname}</p>
+                  )}
+                  <div className="flex items-center gap-3 mt-2 text-xs text-white/60">
+                    <span>{anime.format || anime.type || "Anime"}</span>
+                    {anime.duration && <span>• {anime.duration} min</span>}
+                    {anime.seasonYear && <span>• {anime.seasonYear}</span>}
+                    {anime.rating && (
+                      <span className="flex items-center gap-1 text-amber-400 font-bold">
+                        <Star className="w-3 h-3 fill-current" /> {anime.rating}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Season & Episode Count Badges */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">
+                        {isMovieFormat ? 1 : (currentSeasonEps.length || anime.totalEpisodes || 1)}
+                      </span>
+                      <span className="text-xs text-white/50">
+                        {isMovieFormat ? (currentSeasonEps.length > 1 ? "Parts" : "Movie") : (currentSeasonEps.length === 1 ? "Episode" : "Episodes")}
+                      </span>
+                    </div>
+                    <div className="w-px h-5 bg-white/10 hidden sm:block" />
+                    {(() => {
+                      const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
+                      const statusLabel = formatted.style === "airing" ? "Ongoing" : formatted.style === "upcoming" ? "Upcoming" : "Completed";
+                      const dotColor = formatted.style === "airing" ? "bg-emerald-400" : formatted.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${dotColor} ${formatted.style === "airing" ? "animate-pulse" : ""}`} />
+                          <span className="text-sm font-bold text-white">{statusLabel}</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
 
               <div className="flex flex-col gap-6">
                 {episodeNotice && (
@@ -2323,46 +2391,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     </aside>
                   </div>
                 )}
-
-                {/* ── Season Info Bar (Episodes · Status) ── */}
-                <div className="w-full">
-                  <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-lg font-black text-white">
-                        {isMovieFormat ? (currentSeasonEps.length || 1) : (currentSeason?.totalEpisodes || currentSeasonEps.length || 1)}
-                      </span>
-                      <span className="text-sm font-semibold text-white/50">
-                        {isMovieFormat ? (currentSeasonEps.length > 1 ? "Parts" : "Movie") : (currentSeasonEps.length === 1 ? "Episode" : "Episodes")}
-                      </span>
-                    </div>
-                    <div className="w-px h-5 bg-white/10 hidden sm:block" />
-                    {(() => {
-                      const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
-                      const statusLabel = formatted.style === "airing" ? "Ongoing" : formatted.style === "upcoming" ? "Upcoming" : "Completed";
-                      const dotColor = formatted.style === "airing" ? "bg-emerald-400" : formatted.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
-                      return (
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${dotColor} ${formatted.style === "airing" ? "animate-pulse" : ""}`} />
-                          <span className="text-sm font-bold text-white">{statusLabel}</span>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
               </div>
 
               {/* ── Episodes Section ── */}
               <section id="anime-episodes-section" className="mt-10 space-y-4">
                 {/* ── Watch Order Section (franchise order reference) ── */}
                 {(() => {
-                  const curatedNodes = getCuratedAnimeFranchiseNodes(Number(id), anime?.name);
+                  const numFranchiseId = parseInt(String(id).replace(/\D/g, ""), 10) || 0;
+                  const curatedNodes = getCuratedAnimeFranchiseNodes(numFranchiseId, anime?.name);
                   const nodesToUse: FranchiseNode[] = (franchiseNodes && franchiseNodes.length > 1)
                     ? franchiseNodes
                     : (curatedNodes && curatedNodes.length > 1)
                       ? (curatedNodes as FranchiseNode[])
                       : (anime?.seasons && anime.seasons.length > 1)
                         ? anime.seasons.map(s => ({
-                            id: Number(s.id) || Number(id),
+                            id: parseInt(String(s.id).replace(/\D/g, ""), 10) || numFranchiseId,
                             idMal: s.idMal || null,
                             title: s.name,
                             episodes: s.totalEpisodes,

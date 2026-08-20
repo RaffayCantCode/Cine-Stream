@@ -308,8 +308,9 @@ export async function fetchEpisodesFromKitsu(
     if (!kitsuId) return null;
 
     const eps: EpisodeDetail[] = [];
-    const maxFetch = Math.min(seasonCap && seasonCap > 0 ? seasonCap : 50, 100);
-    const pageSize = 20;
+    const isSingleEpCap = seasonCap === 1;
+    const maxFetch = isSingleEpCap ? 1 : Math.min(seasonCap && seasonCap > 0 ? seasonCap : 50, 100);
+    const pageSize = isSingleEpCap ? 1 : 20;
     let offset = 0;
 
     while (eps.length < maxFetch && offset < maxFetch) {
@@ -325,6 +326,7 @@ export async function fetchEpisodesFromKitsu(
       for (const ep of epsData) {
         const epNum = ep.attributes?.number || ep.attributes?.relativeNumber;
         if (!epNum) continue;
+        if (isSingleEpCap && epNum > 1) continue;
 
         const title = ep.attributes?.canonicalTitle || ep.attributes?.titles?.en_us || ep.attributes?.titles?.en_jp || ep.attributes?.title || `Episode ${epNum}`;
         const description = cleanAnimeDescription(ep.attributes?.synopsis || ep.attributes?.description);
@@ -342,10 +344,12 @@ export async function fetchEpisodesFromKitsu(
           isRecap: false,
           runtime: ep.attributes?.length || null,
         });
+
+        if (isSingleEpCap) break;
       }
 
       offset += pageSize;
-      if (epsData.length < pageSize) break;
+      if (epsData.length < pageSize || isSingleEpCap) break;
     }
 
     return eps.sort((a, b) => a.episodeNum - b.episodeNum);
@@ -536,7 +540,8 @@ export async function getAnimeDetailsViaKitsu(
   };
 
   // Step 5: Derive TMDB show ID & season mapping
-  if (!tmdbId) {
+  const isMovieFormat = subtype === "MOVIE";
+  if (!tmdbId && !isMovieFormat) {
     try {
       tmdbId = await searchTmdbShow(animeItem.name, animeItem.seasonYear || undefined);
       if (!tmdbId && animeItem.jname) {
@@ -547,7 +552,7 @@ export async function getAnimeDetailsViaKitsu(
 
   let tmdbSeasonNumber: number | null = null;
   let episodeOffset = 0;
-  if (tmdbId) {
+  if (tmdbId && !isMovieFormat) {
     const azEp1 = aniZipMapping?.episodes?.["1"];
     if (azEp1 && azEp1.seasonNumber !== undefined && azEp1.episodeNumber !== undefined) {
       tmdbSeasonNumber = azEp1.seasonNumber;
@@ -574,7 +579,7 @@ export async function getAnimeDetailsViaKitsu(
         id: anilistId ? parseInt(anilistId, 10) : parseInt(kitsuId, 10),
         idMal: malId ? parseInt(malId, 10) : null,
         title: animeItem.name,
-        episodes: attr.episodeCount || null,
+        episodes: isMovieFormat ? 1 : (attr.episodeCount || null),
         season,
         seasonYear,
         status,
@@ -605,7 +610,7 @@ export async function getAnimeDetailsViaKitsu(
         id: parseInt(rel.id, 10),
         idMal: null,
         title: rAttr.titles?.en || rAttr.canonicalTitle || rAttr.titles?.en_jp || "Related",
-        episodes: rAttr.episodeCount || null,
+        episodes: rSubtype === "MOVIE" ? 1 : (rAttr.episodeCount || null),
         season: rSeason,
         seasonYear: rYear,
         status: rAttr.status === "current" ? "RELEASING" : (rAttr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
@@ -631,9 +636,9 @@ export async function getAnimeDetailsViaKitsu(
         idMal: malId ? parseInt(malId, 10) : null,
         seasonYear,
         status,
-        tmdbId,
-        tmdbSeasonNumber,
-        episodeOffset,
+        tmdbId: isMovie ? null : tmdbId,
+        tmdbSeasonNumber: isMovie ? null : tmdbSeasonNumber,
+        episodeOffset: isMovie ? 0 : episodeOffset,
         coverImage: poster || null,
         bannerImage: bannerImage || null,
       };
@@ -649,14 +654,14 @@ export async function getAnimeDetailsViaKitsu(
 
   // Find active season
   const activeSeason = seasonsList.find(s => s.isCurrent) || seasonsList[0];
-  const isMovieFormat = subtype === "MOVIE" || activeSeason?.seasonLabel?.startsWith("Movie");
-  const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => activeSeason?.seasonLabel?.startsWith(t)) || isMovieFormat;
+  const isMovieActive = subtype === "MOVIE" || activeSeason?.seasonLabel?.startsWith("Movie");
+  const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => activeSeason?.seasonLabel?.startsWith(t)) || isMovieActive;
   const rawTotal = (activeSeason?.totalEpisodes && activeSeason.totalEpisodes > 0)
     ? activeSeason.totalEpisodes
     : (knownAniZipTotal || attr.episodeCount || (status === "RELEASING" ? 1500 : 12));
-  const totalEps = isMovieFormat ? 1 : (isSpecialFormat ? Math.max(rawTotal, 1) : Math.max(rawTotal, 1));
+  const totalEps = isMovieActive ? 1 : (isSpecialFormat ? Math.max(rawTotal, 1) : Math.max(rawTotal, 1));
 
-  if (activeSeason && (!activeSeason.totalEpisodes || activeSeason.totalEpisodes <= 0)) {
+  if (activeSeason) {
     activeSeason.totalEpisodes = totalEps;
   }
 
@@ -664,13 +669,13 @@ export async function getAnimeDetailsViaKitsu(
   const episodes: EpisodeDetail[] = [];
 
   if (skipEpisodes) {
-    for (let i = 1; i <= Math.min(totalEps, epLimit); i++) {
+    for (let i = 1; i <= (isMovieActive ? 1 : Math.min(totalEps, epLimit)); i++) {
       episodes.push({
         episodeId: `${effectiveId}-${i}`,
         episodeNum: i,
-        title: isSpecialFormat && i === 1 ? animeItem.name : `Episode ${i}`,
-        description: null,
-        thumbnail: null,
+        title: (isMovieActive || isSpecialFormat) && i === 1 ? animeItem.name : `Episode ${i}`,
+        description: isMovieActive ? animeItem.description || null : null,
+        thumbnail: isMovieActive ? animeItem.poster || null : null,
         malUrl: null,
         releasedDate: null,
         isFiller: false,
@@ -682,14 +687,14 @@ export async function getAnimeDetailsViaKitsu(
       });
     }
   } else if (isUnreleased) {
-    const targetCount = isSpecialFormat ? 1 : Math.min(totalEps, epLimit);
+    const targetCount = isMovieActive ? 1 : (isSpecialFormat ? 1 : Math.min(totalEps, epLimit));
     for (let i = 1; i <= targetCount; i++) {
       episodes.push({
         episodeId: `${effectiveId}-${i}`,
         episodeNum: i,
-        title: isSpecialFormat && i === 1 ? animeItem.name : `Episode ${i}`,
-        description: null,
-        thumbnail: null,
+        title: (isMovieActive || isSpecialFormat) && i === 1 ? animeItem.name : `Episode ${i}`,
+        description: isMovieActive ? animeItem.description || null : null,
+        thumbnail: isMovieActive ? animeItem.poster || null : null,
         malUrl: null,
         releasedDate: null,
         isFiller: false,
@@ -719,7 +724,7 @@ export async function getAnimeDetailsViaKitsu(
         if (kEpsRes?.data && Array.isArray(kEpsRes.data) && kEpsRes.data.length > 0) {
           resolvedEps = kEpsRes.data.map((ep: any) => {
             const epNum = ep.attributes?.number || ep.attributes?.relativeNumber || 1;
-            const epTitle = ep.attributes?.canonicalTitle || ep.attributes?.titles?.en_us || ep.attributes?.titles?.en_jp || `Episode ${epNum}`;
+            const epTitle = isMovieActive ? animeItem.name : (ep.attributes?.canonicalTitle || ep.attributes?.titles?.en_us || ep.attributes?.titles?.en_jp || `Episode ${epNum}`);
             const epThumb = ep.attributes?.thumbnail?.original || null;
             return {
               episodeId: `${effectiveId}-${epNum}`,
@@ -739,26 +744,36 @@ export async function getAnimeDetailsViaKitsu(
     }
 
     if (resolvedEps && resolvedEps.length > 0) {
-      episodes.push(...resolvedEps);
+      if (isMovieActive) {
+        const firstEp = resolvedEps[0];
+        firstEp.title = animeItem.name || "Complete Movie";
+        episodes.push(firstEp);
+      } else {
+        episodes.push(...resolvedEps);
+      }
     }
 
     // Fill missing numbers
     const existingNums = new Set(episodes.map(e => e.episodeNum));
-    const maxCount = Math.min(totalEps, epLimit);
+    const maxCount = isMovieActive ? 1 : Math.min(totalEps, epLimit);
     for (let i = 1; i <= maxCount; i++) {
       if (!existingNums.has(i)) {
         episodes.push({
           episodeId: `${effectiveId}-${i}`,
           episodeNum: i,
-          title: isSpecialFormat && i === 1 ? animeItem.name : `Episode ${i}`,
-          description: null,
-          thumbnail: null,
+          title: (isMovieActive || isSpecialFormat) && i === 1 ? animeItem.name : `Episode ${i}`,
+          description: isMovieActive ? animeItem.description || null : null,
+          thumbnail: isMovieActive ? animeItem.poster || null : null,
           malUrl: malId ? `https://myanimelist.net/anime/${malId}/episode/${i}` : null,
           releasedDate: null,
           isFiller: false,
           isRecap: false,
         });
       }
+    }
+
+    if (isMovieActive && episodes.length > 1) {
+      episodes.splice(1);
     }
 
     episodes.sort((a, b) => a.episodeNum - b.episodeNum);
@@ -770,16 +785,16 @@ export async function getAnimeDetailsViaKitsu(
     });
   }
 
-  const tmdbSeasonMap = tmdbId && tmdbSeasonNumber != null ? { [effectiveId]: tmdbSeasonNumber } : undefined;
+  const tmdbSeasonMap = tmdbId && tmdbSeasonNumber != null && !isMovieFormat ? { [effectiveId]: tmdbSeasonNumber } : undefined;
 
   return {
     anime: animeItem,
     episodes,
-    totalEpisodes: episodes.length > 0 ? episodes.length : totalEps,
+    totalEpisodes: isMovieFormat ? 1 : (episodes.length > 0 ? episodes.length : totalEps),
     seasons: seasonsList,
     openedSeasonId: effectiveId,
     franchiseNodes,
-    tmdbId,
+    tmdbId: isMovieFormat ? null : tmdbId,
     tmdbSeasonMap,
   };
 }

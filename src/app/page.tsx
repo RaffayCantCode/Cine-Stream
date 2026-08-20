@@ -71,7 +71,28 @@ let globalHomeCache: {
   animeList: AnimeItem[];
   collections: any[];
   spotlightBanner?: any | null;
+  customSections?: any[];
 } | null = null;
+
+let globalCustomSectionsCache: any[] | null = null;
+const SESSION_CUSTOM_SECTIONS_KEY = "sv_custom_sections_v2";
+
+function saveCustomSectionsToSession(sections: any[]): void {
+  if (typeof window === "undefined") return;
+  try { sessionStorage.setItem(SESSION_CUSTOM_SECTIONS_KEY, JSON.stringify(sections)); } catch {}
+}
+
+function loadCustomSectionsFromSession(): any[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(SESSION_CUSTOM_SECTIONS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
 
 let globalSpotlightCache: { fetched: boolean; spotlight: any | null } | null = null;
 const SESSION_SPOTLIGHT_KEY = "sv_spotlight_banner_v2";
@@ -373,7 +394,15 @@ export default function Home() {
   const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
   const [revealedSections] = useState(8);
   const [moodSeed, setMoodSeed] = useState("");
-  const [customSections, setCustomSections] = useState<any[]>([]);
+  const [customSections, setCustomSections] = useState<any[]>(() => {
+    if (globalCustomSectionsCache !== null) {
+      return globalCustomSectionsCache;
+    }
+    if (globalHomeCache?.customSections && globalHomeCache.customSections.length > 0) {
+      return globalHomeCache.customSections;
+    }
+    return loadCustomSectionsFromSession();
+  });
   const [spotlightBanner, setSpotlightBanner] = useState<any | null>(() => {
     if (globalSpotlightCache !== null) {
       return globalSpotlightCache.spotlight;
@@ -455,6 +484,39 @@ export default function Home() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
+    // Fetch dynamic admin-curated custom homepage sections unconditionally on mount
+    fetch("/api/home-sections", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.sections && Array.isArray(data.sections) && !cancelled) {
+          globalCustomSectionsCache = data.sections;
+          if (globalHomeCache) globalHomeCache.customSections = data.sections;
+          saveCustomSectionsToSession(data.sections);
+          setCustomSections(data.sections);
+        }
+      })
+      .catch(() => {});
+
+    // Fetch spotlight banner unconditionally on mount
+    fetch("/api/spotlight")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.enabled && data.spotlight && !cancelled) {
+          globalSpotlightCache = { fetched: true, spotlight: data.spotlight };
+          if (globalHomeCache) globalHomeCache.spotlightBanner = data.spotlight;
+          saveSpotlightToSession(data.spotlight);
+          setSpotlightBanner(data.spotlight);
+        } else if (!cancelled) {
+          globalSpotlightCache = { fetched: true, spotlight: null };
+          if (globalHomeCache) globalHomeCache.spotlightBanner = null;
+          saveSpotlightToSession(null);
+          setSpotlightBanner(null);
+        }
+      })
+      .catch(() => {});
+
     if (globalHomeCache && globalHomeCache.heroPool && globalHomeCache.heroPool.length > 0) {
       // Hydrate states from cache on back-navigation, even if React state
       // was not properly initialized (e.g. router cache preserved component)
@@ -462,6 +524,9 @@ export default function Home() {
       if (animeLoading) setAnimeLoading(false);
       if (heroPool.length === 0) {
         setHeroPool(globalHomeCache.heroPool);
+      }
+      if (globalHomeCache.customSections && globalHomeCache.customSections.length > 0) {
+        setCustomSections(globalHomeCache.customSections);
       }
       if (loadError) setLoadError(null);
       return;
@@ -477,8 +542,6 @@ export default function Home() {
         setAnimeLoading(false);
       }
     }
-
-    let cancelled = false;
 
     // Safety timeout: never let the loading skeleton show indefinitely
     const loadingTimeout = setTimeout(() => {
@@ -763,6 +826,7 @@ export default function Home() {
             animeList: finalAnimeList,
             collections: validCollections,
             spotlightBanner: globalSpotlightCache?.spotlight ?? spotlightBanner ?? null,
+            customSections: globalCustomSectionsCache ?? (customSections.length > 0 ? customSections : undefined),
           };
         }
         setAnimeLoading(false);
@@ -780,34 +844,6 @@ export default function Home() {
     };
 
     load();
-
-    // Fetch dynamic admin-curated custom homepage sections
-    fetch("/api/home-sections", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.sections && Array.isArray(data.sections) && !cancelled) {
-          setCustomSections(data.sections);
-        }
-      })
-      .catch(() => {});
-
-    // Fetch spotlight banner if active
-    fetch("/api/spotlight")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.enabled && data.spotlight && !cancelled) {
-          globalSpotlightCache = { fetched: true, spotlight: data.spotlight };
-          if (globalHomeCache) globalHomeCache.spotlightBanner = data.spotlight;
-          saveSpotlightToSession(data.spotlight);
-          setSpotlightBanner(data.spotlight);
-        } else if (!cancelled) {
-          globalSpotlightCache = { fetched: true, spotlight: null };
-          if (globalHomeCache) globalHomeCache.spotlightBanner = null;
-          saveSpotlightToSession(null);
-          setSpotlightBanner(null);
-        }
-      })
-      .catch(() => {});
 
     return () => {
       cancelled = true;

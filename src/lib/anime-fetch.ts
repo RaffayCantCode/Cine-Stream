@@ -180,7 +180,7 @@ export async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(4000),
       next: { revalidate: 3600 } as any,
     });
     if (!res.ok) return null;
@@ -200,7 +200,7 @@ export async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
   }
 }
 
-async function anilistQuery(query: string, variables: Record<string, any>, retries = 2, revalidate = 3600): Promise<any> {
+async function anilistQuery(query: string, variables: Record<string, any>, retries = 1, revalidate = 3600): Promise<any> {
   const cacheKey = `al_${query.length}_${JSON.stringify(variables)}`;
   const cached = getCachedAnilist<any>(cacheKey);
   if (cached) {
@@ -218,15 +218,15 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
           "User-Agent": "CineStream/1.0 (https://github.com/RaffayCantCode/Cine-Stream)"
         },
         body: JSON.stringify({ query, variables }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(4500),
         next: { revalidate } as any,
       });
 
       if (res.status === 429) {
         if (attempt < retries) {
           const retryAfter = res.headers.get("retry-after");
-          const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * (attempt + 1);
-          if (delay <= 2500) {
+          const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 800 * (attempt + 1);
+          if (delay <= 1500) {
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
@@ -247,7 +247,7 @@ async function anilistQuery(query: string, variables: Record<string, any>, retri
       return json;
     } catch (e) {
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
         continue;
       }
       return null;
@@ -1490,6 +1490,8 @@ export async function getAnimeDetails(
   if (!anime) return null;
 
   // Step 2 & 2.5: Build franchise graph and resolve TMDB ID in parallel
+  const isTargetMovie = anime.format === "MOVIE" || anime.type === "MOVIE" || media.format === "MOVIE";
+
   let [rawFranchiseNodes, searchedTmdbId] = await Promise.all([
     buildFranchiseGraph(numId).catch(() => []),
     (async () => {
@@ -1498,7 +1500,8 @@ export async function getAnimeDetails(
         tId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
         if (isNaN(tId)) tId = null;
       }
-      if (!tId) {
+      // Never search TMDB TV catalog for Movie formats to avoid false TV series cross-mapping
+      if (!tId && !isTargetMovie) {
         try {
           tId = await searchTmdbShow(anime.name, anime.seasonYear || undefined);
           if (!tId && anime.jname) {
@@ -1544,12 +1547,16 @@ export async function getAnimeDetails(
 
     const targetNode = franchiseNodes.find(n => String(n.id) === String(numId));
     if (targetNode) {
-      let realCount = media.episodes || null;
-      if (aniZipMapping?.episodes) {
-        const keys = Object.keys(aniZipMapping.episodes).map(Number).filter(k => !isNaN(k));
-        if (keys.length > 0) realCount = Math.max(...keys, realCount || 0);
+      if (isTargetMovie || targetNode.format === "MOVIE") {
+        targetNode.episodes = 1;
+      } else {
+        let realCount = media.episodes || null;
+        if (aniZipMapping?.episodes) {
+          const keys = Object.keys(aniZipMapping.episodes).map(Number).filter(k => !isNaN(k));
+          if (keys.length > 0) realCount = Math.max(...keys, realCount || 0);
+        }
+        if (realCount) targetNode.episodes = Math.max(targetNode.episodes || 0, realCount);
       }
-      if (realCount) targetNode.episodes = Math.max(targetNode.episodes || 0, realCount);
     }
   }
 
@@ -1563,7 +1570,7 @@ export async function getAnimeDetails(
       id: numId,
       idMal: media.idMal || null,
       title: anime.name,
-      episodes: media.episodes || aniZipCount || null,
+      episodes: isTargetMovie ? 1 : (media.episodes || aniZipCount || null),
       season: media.season || null,
       seasonYear: media.seasonYear || null,
       format: media.format || null,
@@ -1575,6 +1582,7 @@ export async function getAnimeDetails(
   const baseSeasons = buildSeasonList(franchiseNodes, numId);
   const mappedSeasons: SeasonInfo[] = [];
   const uniqueTmdbIds = new Set<number>();
+  const movieTmdbIds = new Set<number>();
 
   // Resolve TMDB show IDs for each AniList season in parallel
   const tmdbIds: Record<string, number | null> = {};
@@ -1584,6 +1592,7 @@ export async function getAnimeDetails(
   await Promise.all(
     baseSeasons.map(async (s) => {
       try {
+        const isSeasonMovie = s.seasonLabel.startsWith("Movie") || isTargetMovie;
         let tid: number | null = null;
         if (String(s.id) === id) {
           tid = tmdbId;
@@ -1601,20 +1610,26 @@ export async function getAnimeDetails(
               allAniZipMappings[s.id] = azData;
               if (azData.mappings?.themoviedb_id) {
                 tid = parseInt(azData.mappings.themoviedb_id, 10);
-                if (isNaN(tid)) tid = tmdbId;
+                if (isNaN(tid)) tid = isSeasonMovie ? null : tmdbId;
               } else {
-                tid = tmdbId;
+                tid = isSeasonMovie ? null : tmdbId;
               }
             } else {
-              tid = tmdbId;
+              tid = isSeasonMovie ? null : tmdbId;
             }
           } catch {
-            tid = tmdbId;
+            tid = isSeasonMovie ? null : tmdbId;
             hasFailedAniZip = true;
           }
         }
         tmdbIds[s.id] = tid;
-        if (tid) uniqueTmdbIds.add(tid);
+        if (tid) {
+          if (isSeasonMovie) {
+            movieTmdbIds.add(tid);
+          } else {
+            uniqueTmdbIds.add(tid);
+          }
+        }
       } catch {
         tmdbIds[s.id] = null;
         hasFailedAniZip = true;
@@ -1622,11 +1637,12 @@ export async function getAnimeDetails(
     })
   );
 
-  // Fetch TMDB seasons for each unique TMDB ID in parallel
+  // Fetch TMDB seasons for each unique TMDB TV ID in parallel, and TMDB movie details for movie IDs
   const showSeasonsMap: Record<number, { season_number: number; episode_count: number }[]> = {};
   const showBackdropsMap: Record<number, string | null> = {};
-  await Promise.all(
-    Array.from(uniqueTmdbIds).map(async (tid) => {
+
+  await Promise.all([
+    ...Array.from(uniqueTmdbIds).map(async (tid) => {
       try {
         const showData = await tmdbFetch(`/tv/${tid}`) as {
           seasons?: { season_number: number; episode_count: number }[];
@@ -1638,8 +1654,18 @@ export async function getAnimeDetails(
         showSeasonsMap[tid] = [];
         showBackdropsMap[tid] = null;
       }
+    }),
+    ...Array.from(movieTmdbIds).map(async (mid) => {
+      try {
+        const movieData = await tmdbFetch(`/movie/${mid}`) as {
+          backdrop_path?: string | null;
+        };
+        showBackdropsMap[mid] = movieData?.backdrop_path || null;
+      } catch {
+        showBackdropsMap[mid] = null;
+      }
     })
-  );
+  ]);
 
   if (tmdbId && showBackdropsMap[tmdbId]) {
     anime.backdrop = showBackdropsMap[tmdbId];
@@ -1649,11 +1675,14 @@ export async function getAnimeDetails(
   const mappedEpisodesCount: Record<string, number> = {}; // key: "tmdbId-seasonNum" -> total mapped episodes count
 
   for (const s of baseSeasons) {
+    const isSeasonMovie = s.seasonLabel.startsWith("Movie") || isTargetMovie;
     const tid = (s as any).tmdbId || tmdbIds[s.id];
-    let tmdbSeasonNum: number | null = (s as any).tmdbSeasonNumber ?? null;
-    let episodeOffset = (s as any).episodeOffset ?? 0;
+    let tmdbSeasonNum: number | null = isSeasonMovie ? null : ((s as any).tmdbSeasonNumber ?? null);
+    let episodeOffset = isSeasonMovie ? 0 : ((s as any).episodeOffset ?? 0);
 
-    if (tid && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
+    if (isSeasonMovie) {
+      s.totalEpisodes = 1;
+    } else if (tid && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
       const tmdbSeasons = showSeasonsMap[tid] || [];
       const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
       const parsedSeasonNum = labelNumMatch
@@ -1679,6 +1708,7 @@ export async function getAnimeDetails(
 
     mappedSeasons.push({
       ...s,
+      totalEpisodes: isSeasonMovie ? 1 : s.totalEpisodes,
       tmdbId: tid,
       tmdbSeasonNumber: tmdbSeasonNum,
       episodeOffset: episodeOffset,

@@ -159,10 +159,24 @@ function isAnimeSeasonFinished(season: any, meta?: any): boolean {
 function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): any[] {
   if (!episodes || episodes.length === 0) return [];
 
+  const isMovie = (season?.seasonLabel || "").startsWith("Movie") ||
+    meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE" || meta?.anime?.subtype === "MOVIE";
+
+  if (isMovie) {
+    const firstEp = episodes[0];
+    return [{
+      ...firstEp,
+      episodeNum: 1,
+      title: (firstEp.title && firstEp.title !== "Episode 1") ? firstEp.title : (season?.name || meta?.anime?.name || "Complete Movie"),
+      description: firstEp.description || meta?.anime?.description || null,
+      thumbnail: firstEp.thumbnail || meta?.anime?.poster || null,
+    }];
+  }
+
   // knownEpisodeCount: the DEFINITIVE episode count for this specific season from AniList.
   // This is the single source of truth — if it's set, NOTHING else overrides it.
   const knownEpisodeCount = season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
-  const isSpecial = ["Movie", "OVA", "Special"].some(t =>
+  const isSpecial = ["OVA", "Special"].some(t =>
     (season?.seasonLabel || "").startsWith(t) || (season?.name || "").includes(t)
   );
   const isFinished = isAnimeSeasonFinished(season, meta);
@@ -174,7 +188,7 @@ function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): an
   if (knownEpisodeCount && knownEpisodeCount > 0) {
     result = result.filter((ep: any) => ep.episodeNum <= knownEpisodeCount);
   } else if (isSpecial) {
-    // Specials/Movies: default to 1 unless an explicit count was specified
+    // Specials: default to 1 unless an explicit count was specified
     result = result.filter((ep: any) => ep.episodeNum <= 1);
   }
 
@@ -509,14 +523,15 @@ export async function GET(
 
       const isTMDBReady = tmdbId != null && !isNaN(tmdbId) && tmdbSeasonNum != null && !isNaN(tmdbSeasonNum);
 
-
       let seasonEps: any[] = [];
       let seasonOverview: string | null = null;
 
-      const isMovieOrSpecial = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) || meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE";
+      const isMovieOrSpecial = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) ||
+        meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE" ||
+        meta?.anime?.subtype === "MOVIE" || (season?.totalEpisodes === 1 && season.seasonLabel?.toLowerCase().includes("movie"));
       const safeTotalEpisodes = isMovieOrSpecial ? 1 : Math.max(season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : 0, 1);
 
-      console.log(`[Episodes API] TMDB ready: ${isTMDBReady}, tmdbId: ${tmdbId}, tmdbSeasonNum: ${tmdbSeasonNum}, totalEpisodes: ${safeTotalEpisodes}`);
+      console.log(`[Episodes API] TMDB ready: ${isTMDBReady}, tmdbId: ${tmdbId}, tmdbSeasonNum: ${tmdbSeasonNum}, totalEpisodes: ${safeTotalEpisodes}, isMovieOrSpecial: ${isMovieOrSpecial}`);
 
       if (isTMDBReady && !isMovieOrSpecial) {
         // ── TMDB is the source of truth for episodes ─────────────────────
@@ -557,13 +572,10 @@ export async function GET(
           );
 
           // CRITICAL FIX: Only count episodes in the CURRENT TMDB season, minus our offset.
-          // Previously this summed ALL seasons >= current which caused bleeding between split-cours.
-          // e.g. AoT S3 (tmdbSeason=3, offset=0) was counting S3 (22) + S4 (16+12+13) = 63, not 22.
           const currentTmdbSeasonEpCount = currentTmdbSeason ? Math.max((currentTmdbSeason.episode_count || 0) - episodeOffset, 0) : 0;
 
           if (knownEpisodeCount) {
             // AniList has a definitive count — this is always the ceiling, PERIOD.
-            // No other calculation can override this.
             dynamicTotalEpisodes = knownEpisodeCount;
           } else if (nextSeasonInTMDB) {
             // The next AniList season also maps to the same TMDB season — clamp to that boundary

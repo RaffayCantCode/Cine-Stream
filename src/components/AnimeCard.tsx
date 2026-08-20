@@ -127,15 +127,25 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
             <p className="text-[10px] font-bold text-emerald-400 line-clamp-1 drop-shadow-md mb-0.5">
               ✨ {item.reason}
             </p>
-          ) : item.genres && item.genres.length > 0 ? (
-            <p className="text-[10px] sm:text-[11px] font-black text-fuchsia-300 line-clamp-1 uppercase tracking-widest leading-none drop-shadow-md mb-1 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
-              {item.genres.slice(0, 2).join(" · ")}
-            </p>
           ) : null}
 
-          <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
-            {item.name}
-          </h3>
+          <div className="transform transition-transform duration-300 group-hover:-translate-y-4">
+            <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
+              {item.name}
+            </h3>
+          </div>
+
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+            {item.genres && item.genres.length > 0 ? (
+              <span className="text-[10px] sm:text-[11px] font-black text-fuchsia-300 line-clamp-1 uppercase tracking-widest leading-none drop-shadow-md">
+                {item.genres.slice(0, 2).join(" · ")}
+              </span>
+            ) : item.seasonYear ? (
+              <span className="text-white/90 text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded border border-white/10 shadow-sm">
+                {item.seasonYear}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="absolute inset-0 rounded-2xl ring-1 ring-white/0 group-hover:ring-[#7288AE]/40 transition-all duration-500 pointer-events-none" />
