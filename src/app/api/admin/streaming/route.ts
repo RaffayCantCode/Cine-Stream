@@ -2,7 +2,7 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql, and, eq, notInArray } from "drizzle-orm";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { streamingSourceConfig } from "@/lib/db/schema";
 import {
@@ -76,6 +76,15 @@ export async function POST(request: NextRequest) {
       });
 
       if (entries.length === 0) continue;
+
+      try {
+        await auth.db.delete(streamingSourceConfig).where(
+          and(
+            eq(streamingSourceConfig.category, category),
+            notInArray(streamingSourceConfig.sourceKey, baseKeys)
+          )
+        );
+      } catch {}
 
       await auth.db
         .insert(streamingSourceConfig)

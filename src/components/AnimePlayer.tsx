@@ -7,7 +7,7 @@ import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from
 
 interface ProviderSource {
   name: string;
-  provider: "vidnest" | "animepahe" | "123embed" | "vidlink" | "autoembed";
+  provider: "animepahe" | "vidnest" | "123embed" | "vidlink" | "autoembed";
   color: string;
   quality: "best" | "good" | "backup";
   tag?: SourceTag;
@@ -34,8 +34,8 @@ interface AnimePlayerProps {
 const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "animepahe", color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
   { name: "Source 2", provider: "vidnest",   color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
-  { name: "Source 3", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20", quality: "good" },
-  { name: "Source 4", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20", quality: "good" },
+  { name: "Source 3", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20", quality: "best" },
+  { name: "Source 4", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20", quality: "good" },
   { name: "Source 5", provider: "autoembed", color: "from-[#f43f5e]/30 to-[#fb7185]/20", quality: "backup" },
 ];
 
@@ -58,13 +58,9 @@ function buildProviderUrl(
   startProgress?: number,
   isMovie?: boolean
 ): string {
-  // Strip all non-digits — but ONLY for IDs that are guaranteed AniList/MAL numerics.
-  // Kitsu IDs like "kitsu-7442" contain digits, but those digits are Kitsu's internal
-  // ID, NOT an AniList or MAL ID. Sending "7442" to vidnest would give the wrong show.
+  // Extract numeric digits from IDs
   const cleanNumeric = (id: string | null | undefined): string | null => {
     if (!id) return null;
-    // Reject kitsu- prefixed IDs — their numeric part is useless for AniList/MAL providers
-    if (id.startsWith("kitsu-")) return null;
     const digits = id.replace(/\D/g, "");
     return digits || null;
   };
@@ -73,42 +69,28 @@ function buildProviderUrl(
   const curMal = cleanNumeric(malId);
   const mainAni = cleanNumeric(rootAnimeId) || curAni;
   const isSequel = Boolean(curAni && mainAni && curAni !== mainAni);
-  // TMDB-based embeds use the show-wide absolute episode number
-  // (episodeOffset + episode), while anime-based embeds (vidnest/animepahe)
-  // use each season's OWN relative episode numbering (always 1-based).
   const absEp = (episodeOffset || 0) + episode;
   const aniId = curAni || mainAni;
   const malClean = cleanNumeric(rootMalId) || curMal;
   const hasOwnMal = Boolean(curMal && curMal !== malClean);
   const malId_ = hasOwnMal ? (isSequel ? curMal : malClean) : (curMal || malClean);
-  // primaryId: AniList ID preferred, then MAL ID, then empty (triggers TMDB fallback)
-  const primaryId = aniId || malId_ || "";
+  
+  // Safe primaryId: prioritize numeric AniList ID, then MAL ID, then raw digits
+  let primaryId = aniId || malId_ || "";
+  if (!primaryId && typeof window !== "undefined") {
+    const match = window.location.pathname.match(/\/anime\/(\d+)/);
+    if (match?.[1]) primaryId = match[1];
+  }
 
   switch (provider) {
-    case "vidnest":
-      // vidnest needs a valid AniList or MAL ID — if we have neither, use MAL as last resort
-      // If we only have a kitsu ID (no digits available from cleanNumeric), return empty
-      // so the player shows an error rather than a broken embed.
-      return primaryId
-        ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub`
-        : "";
     case "animepahe":
       return primaryId
         ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`
         : "";
-    case "vidlink": {
-      const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
-      if (tmdbId) {
-        return isMovie
-          ? `https://vidlink.pro/movie/${tmdbId}?primaryColor=4b5694&autoplay=true${timeParam}`
-          : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
-      }
-      // No TMDB — use MAL or AniList ID for anime embed
-      const animeEmbedId = malId_ || aniId || "";
-      return animeEmbedId
-        ? `https://vidlink.pro/anime/${animeEmbedId}/${episode}/sub?primaryColor=4b5694&autoplay=true${timeParam}`
+    case "vidnest":
+      return primaryId
+        ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub`
         : "";
-    }
     case "123embed":
       if (tmdbId) {
         return isMovie
@@ -116,6 +98,18 @@ function buildProviderUrl(
           : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
       }
       return primaryId ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub` : "";
+    case "vidlink": {
+      const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
+      if (tmdbId) {
+        return isMovie
+          ? `https://vidlink.pro/movie/${tmdbId}?primaryColor=4b5694&autoplay=true${timeParam}`
+          : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
+      }
+      if (primaryId) {
+        return `https://vidlink.pro/anime/${primaryId}/${episode}/sub?primaryColor=4b5694&autoplay=true${timeParam}`;
+      }
+      return "";
+    }
     case "autoembed":
       if (tmdbId) {
         return isMovie
@@ -163,17 +157,20 @@ export function AnimePlayer({
 
   // Effective provider list: admin order/tags when configured, else defaults.
   const providers = useMemo<ProviderSource[]>(() => {
-    if (!providerConfig) return PROVIDERS;
+    if (!providerConfig) return PROVIDERS.map((p, i) => ({ ...p, name: `Source ${i + 1}` }));
     const byKey = new Map<string, ProviderSource>(PROVIDERS.map((p) => [p.provider, p]));
     const ordered: ProviderSource[] = [];
-    providerConfig.forEach((entry, index) => {
+    providerConfig.forEach((entry) => {
       const base = byKey.get(entry.key);
-      if (base) ordered.push({ ...base, name: `Source ${index + 1}`, tag: entry.tag });
+      if (base) ordered.push({ ...base, tag: entry.tag });
     });
     PROVIDERS.forEach((p) => {
       if (!ordered.find((o) => o.provider === p.provider)) ordered.push(p);
     });
-    return ordered;
+    return ordered.map((p, index) => ({
+      ...p,
+      name: `Source ${index + 1}`,
+    }));
   }, [providerConfig]);
 
   const [sourceIndex, setSourceIndex] = useState(() => {

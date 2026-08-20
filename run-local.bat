@@ -1,15 +1,17 @@
 @echo off
-title CineStream Local Tester
+setlocal EnableDelayedExpansion
+title CineStream Local Production Tester
 color 0B
 cls
+
+:menu
+cls
 echo ===================================================
-echo               CINESTREAM LOCAL TESTER              
+echo        CINESTREAM PRODUCTION & LOCAL TESTER         
 echo ===================================================
 echo.
-echo This script will build and run CineStream locally.
-echo.
-echo [1] Build and Run Production Server (Recommended)
-echo [2] Run Development Server (Fast reload)
+echo [1] Production Build and Server (Matches Deployed Site 1:1)
+echo [2] Development Server (Fast Hot-Reload)
 echo [3] Exit
 echo.
 set /p opt="Select an option (1-3): "
@@ -17,36 +19,57 @@ set /p opt="Select an option (1-3): "
 if "%opt%"=="1" goto prod
 if "%opt%"=="2" goto dev
 if "%opt%"=="3" goto end
-echo Invalid option, exiting.
-goto end
+echo Invalid option, please choose 1, 2, or 3.
+timeout /t 2 >nul
+goto menu
 
 :prod
+cls
+color 0E
+echo ===================================================
+echo [1/2] Building Next.js Production Bundle...
+echo ===================================================
+call npx.cmd next build
+if errorlevel 1 goto build_err
+
+cls
+color 0A
+echo ===================================================
+echo [2/2] Starting Next.js Production Server...
+echo ===================================================
+echo Server is running at http://localhost:3000
+echo (This is the exact production bundle as deployed)
 echo.
-echo [1/2] Building production bundle...
-call npm run build
-if %errorlevel% neq 0 (
-    color 0C
-    echo.
-    echo ERROR: Build failed. Please check the logs above.
-    pause
-    exit /b %errorlevel%
-)
+echo Press Ctrl+C in this window to stop the server.
+echo ===================================================
 echo.
-echo [2/2] Starting local production server...
-echo Server will be available at http://localhost:3000
-echo Press Ctrl+C to stop the server.
-echo.
-call npm run start
+call npx.cmd next start -p 3000
 goto end
 
 :dev
-echo.
-echo Starting local development server...
-echo Server will be available at http://localhost:3000 (or http://localhost:3001)
+cls
+color 0B
+echo ===================================================
+echo Starting Local Development Server...
+echo ===================================================
+echo Server will be available at http://localhost:3000
 echo Press Ctrl+C to stop the server.
 echo.
-call npm run dev
+call npx.cmd next dev -p 3000
 goto end
 
+:build_err
+color 0C
+echo.
+echo ===================================================
+echo ERROR: Production build failed!
+echo Check the error messages above for details.
+echo ===================================================
+echo.
+pause
+goto menu
+
 :end
+echo.
+echo Closing tester.
 pause

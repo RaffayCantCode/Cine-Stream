@@ -49,58 +49,30 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
         let totalPages = 1;
 
         if (isAppend) {
-          const pages = [page, page + 1, page + 2];
-          const allResults = await Promise.all(
-            pages.map((p) =>
-              fetchJson<{ results: any[]; page?: number; total_pages?: number; availableTypes?: string[] }>(
-                `${fullEndpoint}${sep}page=${p}`,
-                { cacheTtlMs: 120000 }
-              )
-            )
+          const data = await fetchJson<{ results: any[]; page?: number; total_pages?: number; availableTypes?: string[] }>(
+            `${fullEndpoint}${sep}page=${page}`,
+            { cacheTtlMs: 300000 }
           );
-          merged = allResults.flatMap((data) => data.results || []);
-          const last = allResults[allResults.length - 1];
-          totalPages = last?.total_pages ?? 1;
+          merged = data?.results || [];
+          totalPages = data?.total_pages ?? 1;
         } else {
-          // Initial load
+          // Initial load: 1 fast call
           const data = await fetchJson<{ results: any[]; page?: number; total_pages?: number; availableTypes?: string[] }>(
             `${fullEndpoint}${sep}page=1`,
-            { cacheTtlMs: 120000 }
+            { cacheTtlMs: 300000 }
           );
-          if (data.availableTypes) {
+          if (data?.availableTypes) {
             setAvailableTypes(data.availableTypes);
           }
-          let results = data.results || [];
-          totalPages = data.total_pages ?? 1;
-
-          if (totalPages > 1) {
-            const maxPage = Math.min(totalPages, 20);
-            let seedPage = 1;
-            try {
-              let s = sessionStorage.getItem(`sv_browse_page_${title}_${typeFilter}`);
-              if (!s) {
-                s = String(Math.floor(Math.random() * maxPage) + 1);
-                sessionStorage.setItem(`sv_browse_page_${title}_${typeFilter}`, s);
-              }
-              seedPage = parseInt(s, 10) || 1;
-            } catch { seedPage = 1; }
-
-            if (seedPage !== 1 && seedPage <= maxPage) {
-              try {
-                const randData = await fetchJson<{ results: any[] }>(
-                  `${fullEndpoint}${sep}page=${seedPage}`,
-                  { cacheTtlMs: 120000 }
-                );
-                results = [...results, ...randData.results];
-              } catch (e) {
-                console.error("Failed to fetch random page in BrowseGridPage", e);
-              }
-            }
-          }
-          merged = results;
+          merged = data?.results || [];
+          totalPages = data?.total_pages ?? 1;
         }
 
-        const filtered = filterReleasedSafeContent(merged);
+        const filtered = merged.filter((item) => {
+          if (item.media_type === "anime") return true;
+          return filterReleasedSafeContent([item]).length > 0;
+        });
+
         const withoutAnime = (mediaType === "movie" || mediaType === "tv" || typeFilter === "movie" || typeFilter === "tv")
           ? filterExcludeAnime(filtered)
           : filtered.filter((item) => item.media_type === "anime" || !isTmdbAnime(item));
@@ -122,7 +94,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           });
         });
 
-        setHasMore(isAppend ? (page + 2) < totalPages : 1 < totalPages);
+        setHasMore(page < totalPages);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load content");
         setHasMore(false);

@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v39-refresh-fix";
+const ANIME_API_VERSION = "v40-sources-update";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -1850,17 +1850,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   const streamingAnimeId = useMemo(() => {
     const sId = selectedEp?.seasonId || currentSeasonId;
-    if (sId && sId.startsWith("tmdb-")) return anime?.id || sId;
-    // If the seasonId is still a kitsu- ID but anime.id is a proper numeric AniList ID,
-    // use anime.id — the Kitsu detail page resolves to AniList via AniZip mappings.
-    if (sId && sId.startsWith("kitsu-")) {
-      const animeId = anime?.id;
-      if (animeId && /^\d+$/.test(animeId)) return animeId;
-      // If anime.id is also kitsu-, at least use the mal- form if we have idMal
-      if (anime?.idMal) return `mal-${anime.idMal}`;
-    }
-    return sId || "";
-  }, [selectedEp?.seasonId, currentSeasonId, anime?.id, anime?.idMal]);
+    if (sId && /^\d+$/.test(sId)) return sId;
+    if (anime?.id && /^\d+$/.test(anime.id)) return anime.id;
+    if (id && /^\d+$/.test(id)) return id;
+    if (anime?.idMal) return String(anime.idMal);
+    if (sId && sId.startsWith("tmdb-")) return anime?.id || id || sId;
+    return sId || anime?.id || id || "";
+  }, [selectedEp?.seasonId, currentSeasonId, anime?.id, anime?.idMal, id]);
 
   const streamingMalId = useMemo(() => {
     if (selectedEp?.seasonMalId != null) return String(selectedEp.seasonMalId);

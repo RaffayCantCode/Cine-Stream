@@ -1,8 +1,9 @@
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 import { filterExcludeAnime } from "@/lib/utils";
+import { getPopularAnime } from "@/lib/anime-fetch";
 
 const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
@@ -87,7 +88,6 @@ const themeConfigs: Record<string, ThemeConfig> = {
   },
 };
 
-import { getPopularAnime } from "@/lib/anime-fetch";
 
 const themeAnimeGenres: Record<string, string> = {
   'rom-com': 'Romance',
@@ -162,8 +162,13 @@ export async function GET(request: NextRequest, props: { params: Promise<{ slug:
     const fetchAnime = async () => {
       if (!animeGenre) return { results: [], total_pages: 1 };
       try {
-        const animeItems = await getPopularAnime(requestedPage, animeGenre);
-        const results = animeItems.map((a) => ({
+        const timeoutPromise = new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500));
+        const animePromise = (async () => {
+          const items = await getPopularAnime(requestedPage, animeGenre);
+          return items || [];
+        })();
+        const animeItems = await Promise.race([animePromise, timeoutPromise]);
+        const results = (animeItems || []).map((a) => ({
           id: a.id,
           anilistId: a.id,
           title: a.name,
@@ -231,7 +236,10 @@ export async function GET(request: NextRequest, props: { params: Promise<{ slug:
       finalResults = seededShuffle(finalResults, `${params.slug}-${seed}-${page}`);
     }
 
-    return Response.json({ results: finalResults, total_pages: totalPages, page: requestedPage, availableTypes }, { headers: shuffle ? noStoreHeaders : undefined });
+    return Response.json(
+      { results: finalResults, total_pages: totalPages, page: requestedPage, availableTypes },
+      { headers: shuffle ? noStoreHeaders : cacheHeaders(3600) }
+    );
   } catch (error) {
     return Response.json({ error: "Failed to fetch theme" }, { status: 500, headers: noStoreHeaders });
   }

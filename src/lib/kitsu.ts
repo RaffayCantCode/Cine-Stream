@@ -380,21 +380,21 @@ export async function getAnimeDetailsViaKitsu(
   let anilistId: string | null = (!isKitsuInput && !isMalInput && !isNaN(numId)) ? String(numId) : null;
   let tmdbId: number | null = null;
 
-  // Step 1: Query AniZip mappings to resolve cross-platform IDs
-  if (!kitsuId && !isNaN(numId)) {
-    const aniZipQueryParam = isMalInput ? `mal_id=${numId}` : `anilist_id=${numId}`;
+  // Step 1: Query AniZip mappings to resolve cross-platform IDs (AniList, MAL, TMDB)
+  const queryParam = kitsuId ? `kitsu_id=${kitsuId}` : (isMalInput ? `mal_id=${numId}` : (!isNaN(numId) ? `anilist_id=${numId}` : null));
+  if (queryParam) {
     try {
-      const azRes = await fetch(`https://api.ani.zip/mappings?${aniZipQueryParam}`, {
-        signal: AbortSignal.timeout(8000),
+      const azRes = await fetch(`https://api.ani.zip/mappings?${queryParam}`, {
+        signal: AbortSignal.timeout(6000),
         headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
         next: { revalidate: 86400 } as any,
       });
       if (azRes.ok) {
         aniZipMapping = await azRes.json();
-        if (aniZipMapping?.mappings?.kitsu_id) kitsuId = String(aniZipMapping.mappings.kitsu_id);
-        if (aniZipMapping?.mappings?.mal_id) malId = String(aniZipMapping.mappings.mal_id);
-        if (aniZipMapping?.mappings?.anilist_id) anilistId = String(aniZipMapping.mappings.anilist_id);
-        if (aniZipMapping?.mappings?.themoviedb_id) {
+        if (aniZipMapping?.mappings?.kitsu_id && !kitsuId) kitsuId = String(aniZipMapping.mappings.kitsu_id);
+        if (aniZipMapping?.mappings?.mal_id && !malId) malId = String(aniZipMapping.mappings.mal_id);
+        if (aniZipMapping?.mappings?.anilist_id && !anilistId) anilistId = String(aniZipMapping.mappings.anilist_id);
+        if (aniZipMapping?.mappings?.themoviedb_id && !tmdbId) {
           const t = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
           if (!isNaN(t)) tmdbId = t;
         }
