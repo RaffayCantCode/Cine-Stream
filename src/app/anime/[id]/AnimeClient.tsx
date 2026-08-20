@@ -479,6 +479,17 @@ async function fetchFranchiseClientSide(startId: number) {
     return curated as FranchiseNode[];
   }
 
+  // Fast session storage cache check
+  if (typeof window !== "undefined") {
+    try {
+      const cached = sessionStorage.getItem(`sv_franchise_${startId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed as FranchiseNode[];
+      }
+    } catch {}
+  }
+
   // Query fetches the node's OWN metadata AND its relation edges
   const RELATIONS_QUERY = `query ($id: Int) {
     Media(id: $id, type: ANIME) {
@@ -491,7 +502,7 @@ async function fetchFranchiseClientSide(startId: number) {
   const queue = [startId];
   let hops = 0;
   
-  while (queue.length > 0 && visited.size < 150 && hops < 15) {
+  while (queue.length > 0 && visited.size < 40 && hops < 3) {
     const batch = queue.splice(0, queue.length);
     hops++;
     
@@ -552,7 +563,7 @@ async function fetchFranchiseClientSide(startId: number) {
   const filteredNodes = nodes.filter(n => !EXCLUDED_IDS.has(Number(n.id)));
 
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-  return filteredNodes.sort((a, b) => {
+  const sortedNodes = filteredNodes.sort((a, b) => {
     // Custom chronological order for the Fate series
     const FATE_ORDER = [10087, 11741, 356, 19603, 20792, 20791, 21718, 21719];
     const idxA = FATE_ORDER.indexOf(Number(a.id));
@@ -571,6 +582,14 @@ async function fetchFranchiseClientSide(startId: number) {
     if (fA !== fB) return fA - fB;
     return seasonOrder.indexOf(a.season || "FALL") - seasonOrder.indexOf(b.season || "FALL");
   });
+
+  if (typeof window !== "undefined" && sortedNodes.length > 0) {
+    try {
+      sessionStorage.setItem(`sv_franchise_${startId}`, JSON.stringify(sortedNodes));
+    } catch {}
+  }
+
+  return sortedNodes;
 }
 
 function formatAnimeStatus(statusRaw?: string | null, eps?: Episode[]): { label: string; style: "finished" | "airing" | "upcoming" } {
@@ -1135,6 +1154,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         setSeasonOverview(epData.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
         setEpisodesLoading(false);
+
+        // Preload first 4 episode thumbnails for instant visual appearance (matching TV shows)
+        if (typeof document !== "undefined" && sorted.length > 0) {
+          sorted.slice(0, 4).forEach((ep) => {
+            if (ep.thumbnail && ep.thumbnail.startsWith("http")) {
+              const link = document.createElement("link");
+              link.rel = "preload";
+              link.as = "image";
+              link.href = ep.thumbnail;
+              document.head.appendChild(link);
+            }
+          });
+        }
         return;
       }
     } catch (err) {
@@ -1309,6 +1341,20 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         if (data && data.success && data.data?.anime) {
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
+
+          // Preload hero banner and poster image immediately
+          if (typeof document !== "undefined") {
+            const heroImg = a.bannerImage || a.poster;
+            if (heroImg && heroImg.startsWith("http")) {
+              const link = document.createElement("link");
+              link.rel = "preload";
+              link.as = "image";
+              link.href = heroImg;
+              link.fetchPriority = "high";
+              document.head.appendChild(link);
+            }
+          }
+
           setIsLoading(false);
           setAnime(prev => {
             if (!prev) return a;

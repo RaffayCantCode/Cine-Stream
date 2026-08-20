@@ -390,7 +390,7 @@ export default function Home() {
   });
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
-  usePageContentReady(!isLoading && !animeLoading);
+  usePageContentReady(!isLoading);
 
   const heroPoolLengthRef = useRef(0);
 
@@ -550,11 +550,8 @@ export default function Home() {
         }).catch(() => ({ items: [], trending: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        // Wait for fast hero payload and anime payload concurrently
-        const [heroData, initialAnimeRes] = await Promise.all([
-          heroDataPromise,
-          animePromise.catch(() => ({ items: [], trending: [] }))
-        ]);
+        // Priority 1: Await fast TMDB hero payload IMMEDIATELY (resolves in ~100-200ms)
+        const heroData = await heroDataPromise;
         if (cancelled) return;
 
         if (heroData) {
@@ -623,18 +620,26 @@ export default function Home() {
 
           setHeroFeed(initialHeroFeed);
 
-          const animeListSource = (initialAnimeRes?.items && initialAnimeRes.items.length > 0)
-            ? initialAnimeRes.items
-            : globalHomeCache?.animeList;
-
+          const animeListSource = globalHomeCache?.animeList;
           const initialPool = buildHeroPool(initialHeroFeed, animeListSource);
           if (initialPool.length > 0) {
             activeHeroPool = initialPool;
             setHeroPool((currentPool) => (currentPool.length > 0 ? currentPool : initialPool));
             saveHeroPoolToSession(initialPool);
+
+            // Preload hero slide 1 backdrop image immediately
+            if (typeof document !== "undefined" && initialPool[0]?.backdrop_path) {
+              const bg = initialPool[0].backdrop_path;
+              const link = document.createElement("link");
+              link.rel = "preload";
+              link.as = "image";
+              link.href = bg.startsWith("http") ? bg : `https://image.tmdb.org/t/p/w1280${bg}`;
+              link.fetchPriority = "high";
+              document.head.appendChild(link);
+            }
           }
 
-          // Reveal Hero Banner and Continue Watching immediately
+          // Reveal Hero Banner and Continue Watching instantly
           setIsLoading(false);
         }
 
