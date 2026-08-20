@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v38-kitsu-streaming-fix";
+const ANIME_API_VERSION = "v39-refresh-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -666,8 +666,81 @@ function mapNodesToSeasons(clientNodes: FranchiseNode[], currentId: number): Sea
   });
 }
 
-async function fetchAnimeMetaClientSide(idStr: string) {
+async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes: FranchiseNode[] } } | null> {
   if (!idStr) return null;
+
+  if (idStr.startsWith("kitsu-")) {
+    const cleanKId = idStr.replace("kitsu-", "");
+    // 1. Try AniZip mapping to get AniList ID or MAL ID
+    try {
+      const azRes = await fetch(`https://api.ani.zip/mappings?kitsu_id=${cleanKId}`, { signal: AbortSignal.timeout(4000) });
+      if (azRes.ok) {
+        const azData = await azRes.json();
+        const alId = azData.mappings?.anilist_id;
+        if (alId) {
+          const alResult = await fetchAnimeMetaClientSide(String(alId));
+          if (alResult) return alResult;
+        }
+        const malId = azData.mappings?.mal_id;
+        if (malId) {
+          const malResult = await fetchAnimeMetaClientSide(`mal-${malId}`);
+          if (malResult) return malResult;
+        }
+      }
+    } catch {}
+
+    // 2. Fetch Kitsu directly
+    try {
+      const kRes = await fetch(`https://kitsu.io/api/edge/anime/${cleanKId}?include=categories`, {
+        headers: { "Accept": "application/vnd.api+json" },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (kRes.ok) {
+        const kJson = await kRes.json();
+        const attr = kJson.data?.attributes;
+        if (attr) {
+          const subtype = (attr.subtype || "TV").toUpperCase();
+          const categories = (kJson.included || [])
+            .filter((inc: any) => inc.type === "categories" && inc.attributes?.title)
+            .map((inc: any) => inc.attributes.title);
+
+          const kAnime: AnimeDetail = {
+            id: idStr,
+            idMal: null,
+            name: attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Anime",
+            jname: attr.titles?.ja_jp || null,
+            poster: attr.posterImage?.large || attr.posterImage?.original || "",
+            description: cleanAnimeDescription(attr.synopsis || attr.description),
+            type: subtype,
+            rating: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
+            score: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
+            status: attr.status === "current" ? "RELEASING" : (attr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
+            genres: categories,
+            totalEpisodes: attr.episodeCount || 12,
+            seasons: [{
+              id: idStr,
+              name: attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Anime",
+              seasonLabel: subtype === "MOVIE" ? "Movie 1" : "Season 1",
+              totalEpisodes: attr.episodeCount || 12,
+              isCurrent: true,
+              idMal: null,
+              seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
+            }],
+            season: null,
+            seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
+            format: subtype,
+            openedSeasonId: idStr,
+            tmdbId: null,
+            duration: attr.episodeLength || null,
+            trailerId: attr.youtubeVideoId || null,
+          };
+          return { success: true, data: { anime: kAnime, franchiseNodes: [] } };
+        }
+      }
+    } catch {}
+    return null;
+  }
+
   const isMal = idStr.startsWith("mal-");
   const parsedId = parseInt(idStr.replace("mal-", ""), 10);
   if (isNaN(parsedId)) return null;
