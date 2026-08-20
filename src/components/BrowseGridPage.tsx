@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Film, Tv, Layers } from "lucide-react";
+import { Film, Tv, Layers, Flame } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
-import { fetchJson, filterReleasedSafeContent, filterExcludeAnime, cn } from "@/lib/utils";
+import { fetchJson, filterReleasedSafeContent, filterExcludeAnime, isTmdbAnime, cn } from "@/lib/utils";
 
 interface BrowseGridPageProps {
   title: string;
@@ -15,7 +15,7 @@ interface BrowseGridPageProps {
 }
 
 export function BrowseGridPage({ title, description, endpoint, mediaType }: BrowseGridPageProps) {
-  const [typeFilter, setTypeFilter] = useState<"all" | "movie" | "tv">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "movie" | "tv" | "anime">("all");
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [page, setPage] = useState(1);
@@ -101,9 +101,9 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
         }
 
         const filtered = filterReleasedSafeContent(merged);
-        // Strip anime from dedicated movie/tv feeds. Mixed "all" feeds (e.g. trending)
-        // are intentionally left untouched since they don't feed Movies or TV pages.
-        const withoutAnime = mediaType ? filterExcludeAnime(filtered) : filtered;
+        const withoutAnime = (mediaType === "movie" || mediaType === "tv" || typeFilter === "movie" || typeFilter === "tv")
+          ? filterExcludeAnime(filtered)
+          : filtered.filter((item) => item.media_type === "anime" || !isTmdbAnime(item));
         const mapped = withoutAnime.map((item) =>
           activeType ? { ...item, media_type: item.media_type || activeType } : item
         );
@@ -141,12 +141,12 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const [entry] = entries;
+        const entry = entries[0];
         if (entry.isIntersecting && !isLoadingRef.current && hasMoreRef.current) {
           setPage((p) => p + 3);
         }
       },
-      { rootMargin: "300px" }
+      { rootMargin: "400px" }
     );
 
     observer.observe(sentinel);
@@ -185,30 +185,48 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
                   <Layers className="w-3.5 h-3.5" />
                   <span>All Media</span>
                 </button>
-                <button
-                  onClick={() => setTypeFilter("movie")}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
-                    typeFilter === "movie"
-                      ? "bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-500/25"
-                      : "text-white/60 hover:text-white hover:bg-white/[0.06]"
-                  )}
-                >
-                  <Film className="w-3.5 h-3.5" />
-                  <span>Movies</span>
-                </button>
-                <button
-                  onClick={() => setTypeFilter("tv")}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
-                    typeFilter === "tv"
-                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/25"
-                      : "text-white/60 hover:text-white hover:bg-white/[0.06]"
-                  )}
-                >
-                  <Tv className="w-3.5 h-3.5" />
-                  <span>TV Shows</span>
-                </button>
+                {(availableTypes.length === 0 || availableTypes.includes("movie")) && (
+                  <button
+                    onClick={() => setTypeFilter("movie")}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                      typeFilter === "movie"
+                        ? "bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-500/25"
+                        : "text-white/60 hover:text-white hover:bg-white/[0.06]"
+                    )}
+                  >
+                    <Film className="w-3.5 h-3.5" />
+                    <span>Movies</span>
+                  </button>
+                )}
+                {(availableTypes.length === 0 || availableTypes.includes("tv")) && (
+                  <button
+                    onClick={() => setTypeFilter("tv")}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                      typeFilter === "tv"
+                        ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/25"
+                        : "text-white/60 hover:text-white hover:bg-white/[0.06]"
+                    )}
+                  >
+                    <Tv className="w-3.5 h-3.5" />
+                    <span>TV Shows</span>
+                  </button>
+                )}
+                {availableTypes.includes("anime") && (
+                  <button
+                    onClick={() => setTypeFilter("anime")}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                      typeFilter === "anime"
+                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25"
+                        : "text-white/60 hover:text-white hover:bg-white/[0.06]"
+                    )}
+                  >
+                    <Flame className="w-3.5 h-3.5" />
+                    <span>Anime</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

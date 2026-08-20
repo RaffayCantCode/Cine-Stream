@@ -211,10 +211,10 @@ const ADULT_KEYWORDS = [
   "18禁",
 ];
 
-export function isTmdbAnime(item: { original_language?: string; genre_ids?: number[] }): boolean {
-  return item.original_language === "ja" &&
-    Array.isArray(item.genre_ids) &&
-    item.genre_ids.includes(16);
+export function isTmdbAnime(item: { original_language?: string; genre_ids?: number[]; origin_country?: string[] }): boolean {
+  if (!item) return false;
+  const isJapanese = item.original_language === "ja" || (Array.isArray(item.origin_country) && item.origin_country.includes("JP"));
+  return Boolean(isJapanese);
 }
 
 /**

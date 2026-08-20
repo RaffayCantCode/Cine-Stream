@@ -153,21 +153,31 @@ export async function GET(request: NextRequest) {
     // Filter hidden items and apply overrides
     let processedResults: any[] = [];
     try {
-      const { getAllMediaOverrides, applyMediaOverride } = await import("@/lib/media-overrides");
-      const overrides = await getAllMediaOverrides();
+      const { getAllMediaOverrides, applyMediaOverride, getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
+      const [overrides, hiddenSet] = await Promise.all([
+        getAllMediaOverrides(),
+        getHiddenMediaSet(),
+      ]);
+
       const overrideMap = new Map<string, any>();
       for (const o of overrides) {
-        overrideMap.set(o.id, o);
-        overrideMap.set(`${o.mediaType}-${o.mediaId}`, o);
+        overrideMap.set(o.id.toLowerCase(), o);
+        overrideMap.set(`${o.mediaType.toLowerCase()}-${o.mediaId.toLowerCase()}`, o);
+        overrideMap.set(o.mediaId.toLowerCase(), o);
       }
 
       for (const item of uniqueMap.values()) {
-        const key1 = `${item.media_type}-${item.id}`;
-        const key2 = `${item.media_type}-${String(item.id).replace(/^kitsu-/, "")}`;
-        const ov = overrideMap.get(key1) || overrideMap.get(key2);
+        if (isMediaItemHidden(item, hiddenSet)) {
+          continue; // Strictly exclude hidden media
+        }
+
+        const key1 = `${item.media_type}-${item.id}`.toLowerCase();
+        const key2 = `${item.media_type}-${String(item.id).replace(/^kitsu-/, "")}`.toLowerCase();
+        const key3 = String(item.id).toLowerCase();
+        const ov = overrideMap.get(key1) || overrideMap.get(key2) || overrideMap.get(key3);
 
         if (ov?.isHidden || ov?.status === "hidden") {
-          continue; // Skip hidden media
+          continue;
         }
 
         const enriched = ov ? (applyMediaOverride(item, ov) || item) : item;

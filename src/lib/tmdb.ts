@@ -108,7 +108,20 @@ export async function tmdbFetch(
     }
 
     const data = await res.json();
-    return filterTmdbResponse(data, isSearch);
+    const filtered: any = filterTmdbResponse(data, isSearch);
+
+    // Filter out any Movie or TV show marked as "hidden" in admin overrides
+    if (filtered && typeof filtered === "object" && "results" in filtered && Array.isArray(filtered.results)) {
+      try {
+        const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
+        const hiddenSet = await getHiddenMediaSet();
+        if (hiddenSet.size > 0) {
+          filtered.results = filtered.results.filter((item: any) => !isMediaItemHidden(item, hiddenSet));
+        }
+      } catch {}
+    }
+
+    return filtered;
   } catch (err) {
     console.warn(`[TMDB] tmdbFetch failed for path ${path}:`, err);
     return null;

@@ -4,8 +4,76 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { mediaOverrides, type MediaOverride } from "@/lib/db/schema";
-import { normalizeOverrideId } from "@/lib/media-overrides";
+import { normalizeOverrideId, invalidateMediaOverridesCache } from "@/lib/media-overrides";
 import { desc, eq, and, or, ilike } from "drizzle-orm";
+import { tmdbFetch } from "@/lib/tmdb";
+
+async function resolveMediaTitleAndPoster(mediaType: string, mediaId: string): Promise<{ title?: string; poster?: string }> {
+  try {
+    const cleanType = mediaType.toLowerCase().trim();
+    const cleanId = String(mediaId).trim();
+
+    if (cleanType === "anime") {
+      if (cleanId.startsWith("kitsu-")) {
+        const kitsuId = cleanId.replace("kitsu-", "");
+        const res = await fetch(`https://kitsu.app/api/edge/anime/${kitsuId}`, {
+          headers: { Accept: "application/vnd.api+json", "Content-Type": "application/vnd.api+json" },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const attr = json?.data?.attributes;
+          const title = attr?.canonicalTitle || attr?.titles?.en || attr?.titles?.en_jp || attr?.titles?.ja_jp;
+          const poster = attr?.posterImage?.large || attr?.posterImage?.original || attr?.posterImage?.medium;
+          if (title) return { title, poster };
+        }
+      } else {
+        const anilistId = cleanId.startsWith("mal-") ? null : Number(cleanId);
+        const malId = cleanId.startsWith("mal-") ? Number(cleanId.replace("mal-", "")) : null;
+        const query = `query ($id: Int, $idMal: Int) {
+          Media(id: $id, idMal: $idMal, type: ANIME) {
+            title { english romaji native }
+            coverImage { large extraLarge }
+          }
+        }`;
+        const res = await fetch("https://graphql.anilist.co", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ query, variables: { id: anilistId, idMal: malId } }),
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const media = json?.data?.Media;
+          if (media) {
+            const title = media.title?.english || media.title?.romaji || media.title?.native;
+            const poster = media.coverImage?.extraLarge || media.coverImage?.large;
+            if (title) return { title, poster };
+          }
+        }
+      }
+    } else if (cleanType === "movie") {
+      const res: any = await tmdbFetch(`/movie/${cleanId}`, {}, { noCache: false });
+      if (res && res.title) {
+        return {
+          title: res.title,
+          poster: res.poster_path ? `https://image.tmdb.org/t/p/w500${res.poster_path}` : undefined,
+        };
+      }
+    } else if (cleanType === "tv") {
+      const res: any = await tmdbFetch(`/tv/${cleanId}`, {}, { noCache: false });
+      if (res && res.name) {
+        return {
+          title: res.name,
+          poster: res.poster_path ? `https://image.tmdb.org/t/p/w500${res.poster_path}` : undefined,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn(`[resolveMediaTitleAndPoster] Failed for ${mediaType} ${mediaId}:`, e);
+  }
+  return {};
+}
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminSession();
@@ -45,9 +113,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Auto-resolve missing titles/posters in parallel for all returned rows
+    const enriched = await Promise.all(
+      filtered.map(async (r) => {
+        if (!r.customTitle || !r.customPoster) {
+          const resolved = await resolveMediaTitleAndPoster(r.mediaType, r.mediaId);
+          return {
+            ...r,
+            customTitle: r.customTitle || resolved.title || null,
+            customPoster: r.customPoster || resolved.poster || null,
+          };
+        }
+        return r;
+      })
+    );
+
+    let finalResults = enriched;
+
     if (q) {
       const qLower = q.toLowerCase();
-      filtered = filtered.filter(
+      finalResults = enriched.filter(
         (r) =>
           r.mediaId.toLowerCase().includes(qLower) ||
           r.id.toLowerCase().includes(qLower) ||
@@ -58,8 +143,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      overrides: filtered,
-      total: filtered.length,
+      overrides: finalResults,
+      total: finalResults.length,
     });
   } catch (error) {
     console.error("[Admin Entry Overrides API] GET Error:", error);
@@ -101,6 +186,16 @@ export async function POST(request: NextRequest) {
     const cleanId = String(mediaId).trim();
     const id = normalizeOverrideId(cleanType, cleanId);
 
+    // Auto-resolve missing title or poster so database always stores the real title
+    let resolvedTitle = customTitle && typeof customTitle === "string" && customTitle.trim() ? customTitle.trim() : null;
+    let resolvedPoster = customPoster && typeof customPoster === "string" && customPoster.trim() ? customPoster.trim() : null;
+
+    if (!resolvedTitle || !resolvedPoster) {
+      const resolved = await resolveMediaTitleAndPoster(cleanType, cleanId);
+      if (!resolvedTitle && resolved.title) resolvedTitle = resolved.title;
+      if (!resolvedPoster && resolved.poster) resolvedPoster = resolved.poster;
+    }
+
     // Determine clean status string
     let effectiveStatus = String(status || "default").toLowerCase();
     if (isHidden) effectiveStatus = "hidden";
@@ -115,11 +210,11 @@ export async function POST(request: NextRequest) {
       isHidden: Boolean(isHidden || effectiveStatus === "hidden"),
       isUpcoming: Boolean(isUpcoming || effectiveStatus === "upcoming"),
       isUnavailable: Boolean(isUnavailable || effectiveStatus === "unavailable"),
-      customTitle: customTitle && typeof customTitle === "string" && customTitle.trim() ? customTitle.trim() : null,
+      customTitle: resolvedTitle,
       customDescription: customDescription && typeof customDescription === "string" && customDescription.trim() ? customDescription.trim() : null,
       customGenres: Array.isArray(customGenres) ? customGenres.filter(Boolean) : [],
       customReleaseDate: customReleaseDate && typeof customReleaseDate === "string" && customReleaseDate.trim() ? customReleaseDate.trim() : null,
-      customPoster: customPoster && typeof customPoster === "string" && customPoster.trim() ? customPoster.trim() : null,
+      customPoster: resolvedPoster,
       customBackdrop: customBackdrop && typeof customBackdrop === "string" && customBackdrop.trim() ? customBackdrop.trim() : null,
       customTags: Array.isArray(customTags) ? customTags.filter(Boolean) : [],
       notes: notes && typeof notes === "string" && notes.trim() ? notes.trim() : null,
@@ -149,6 +244,8 @@ export async function POST(request: NextRequest) {
         .returning();
       savedOverride = inserted;
     }
+
+    invalidateMediaOverridesCache();
 
     return NextResponse.json({
       success: true,
@@ -185,6 +282,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await db.delete(mediaOverrides).where(eq(mediaOverrides.id, targetId.trim()));
+    invalidateMediaOverridesCache();
 
     return NextResponse.json({
       success: true,

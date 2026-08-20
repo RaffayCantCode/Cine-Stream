@@ -11,6 +11,9 @@ export async function GET(
 
   try {
     const override = await getMediaOverride("movie", id);
+    if (override?.isHidden || override?.status === "hidden") {
+      return Response.json({ error: "Movie is unavailable" }, { status: 404, headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
 
     let data: any = null;
     let extraRecs: any = null;
@@ -68,7 +71,7 @@ export async function GET(
     }
 
     const finalResult = applyMediaOverride(result, override);
-    return Response.json(finalResult);
+    return Response.json(finalResult, { headers: override ? { "Cache-Control": "no-store, no-cache, max-age=0" } : undefined });
   } catch (error) {
     const fallbackOverride = await getMediaOverride("movie", id).catch(() => null);
     if (fallbackOverride) {

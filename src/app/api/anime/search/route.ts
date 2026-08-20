@@ -27,9 +27,15 @@ export async function GET(request: NextRequest) {
 
     const rawAnimes = data?.data;
     const animes = Array.isArray(rawAnimes) ? rawAnimes : (rawAnimes?.animes || []);
+
+    // Filter hidden items
+    const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
+    const hiddenSet = await getHiddenMediaSet();
+    const visibleAnimes = animes.filter((a: any) => !isMediaItemHidden({ id: a.id || a.animeId, mediaType: "anime" }, hiddenSet));
+
     return Response.json({
       success: true,
-      data: { animes },
+      data: { animes: visibleAnimes },
     }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("[Anime Search Error]:", error);

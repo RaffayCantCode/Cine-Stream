@@ -114,13 +114,29 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           </div>
         )}
 
-        {showMediaBadge && !isPerson && (
+        {/* Badges: Always visible for Anime (JP SUB), and visible for Movie/TV when showMediaBadge is active */}
+        {!isPerson && (isAnime || showMediaBadge) && (
           <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
-            <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg border ${
-              isMovie ? "bg-rose-600/85 border-rose-500/30" : "bg-emerald-600/85 border-emerald-500/30"
-            }`}>
-              {isMovie ? "MOVIE" : "TV SHOW"}
-            </span>
+            {isAnime ? (
+              <span className="bg-purple-950/85 border border-purple-500/40 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+                JP SUB
+              </span>
+            ) : (
+              <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg border ${
+                isMovie ? "bg-rose-600/85 border-rose-500/30" : "bg-emerald-600/85 border-emerald-500/30"
+              }`}>
+                {isMovie ? "MOVIE" : "TV SHOW"}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Persistent Title & Gradient for Anime (matching Anime section) */}
+        {isAnime && (
+          <div className="absolute bottom-0 inset-x-0 z-10 p-3 pointer-events-none bg-gradient-to-t from-black/95 via-black/50 to-transparent">
+            <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
+              {title}
+            </h3>
           </div>
         )}
 
@@ -158,7 +174,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
                 </span>
               )}
               <span className="text-white/60 text-xs font-medium uppercase tracking-wider">
-                {isPerson ? "Person" : isMovie ? "Movie" : "TV"}
+                {isPerson ? "Person" : isAnime ? "Anime" : isMovie ? "Movie" : "TV"}
               </span>
             </div>
           </div>

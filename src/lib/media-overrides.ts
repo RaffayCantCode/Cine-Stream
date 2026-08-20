@@ -48,6 +48,76 @@ export async function getAllMediaOverrides(): Promise<MediaOverride[]> {
   }
 }
 
+let cachedHiddenSet: { set: Set<string>; expiresAt: number } | null = null;
+
+export function invalidateMediaOverridesCache(): void {
+  cachedHiddenSet = null;
+}
+
+export async function getHiddenMediaSet(): Promise<Set<string>> {
+  const now = Date.now();
+  if (cachedHiddenSet && cachedHiddenSet.expiresAt > now) {
+    return cachedHiddenSet.set;
+  }
+
+  try {
+    const db = getDb();
+    const rows = await db.query.mediaOverrides.findMany({
+      where: or(
+        eq(mediaOverrides.isHidden, true),
+        eq(mediaOverrides.status, "hidden")
+      ),
+      columns: {
+        id: true,
+        mediaType: true,
+        mediaId: true,
+      },
+    });
+
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (r.id) set.add(r.id.toLowerCase().trim());
+      if (r.mediaType && r.mediaId) {
+        const cleanType = r.mediaType.toLowerCase().trim();
+        const cleanId = String(r.mediaId).toLowerCase().trim();
+        set.add(`${cleanType}-${cleanId}`);
+        set.add(cleanId);
+        if (cleanId.startsWith("kitsu-")) {
+          set.add(cleanId.replace("kitsu-", ""));
+        }
+      }
+    }
+
+    cachedHiddenSet = { set, expiresAt: now + 30000 }; // 30s TTL cache
+    return set;
+  } catch (error) {
+    console.error("[Media Overrides] getHiddenMediaSet Error:", error);
+    return new Set<string>();
+  }
+}
+
+export function isMediaItemHidden(
+  item: { id?: string | number; media_type?: string; mediaType?: string; type?: string } | null | undefined,
+  hiddenSet: Set<string>
+): boolean {
+  if (!item || !item.id || hiddenSet.size === 0) return false;
+  const idStr = String(item.id).toLowerCase().trim();
+  const mType = (item.media_type || item.mediaType || item.type || "movie").toLowerCase().trim();
+  const compoundId = `${mType}-${idStr}`;
+
+  if (hiddenSet.has(compoundId) || hiddenSet.has(idStr)) return true;
+  if (idStr.startsWith("kitsu-") && hiddenSet.has(idStr.replace("kitsu-", ""))) return true;
+  return false;
+}
+
+export function filterHiddenItems<T extends { id?: string | number; media_type?: string; mediaType?: string; type?: string }>(
+  items: T[],
+  hiddenSet: Set<string>
+): T[] {
+  if (!Array.isArray(items) || hiddenSet.size === 0) return items;
+  return items.filter((item) => !isMediaItemHidden(item, hiddenSet));
+}
+
 /**
  * Non-destructively overlays admin overrides on top of raw/default media data.
  */

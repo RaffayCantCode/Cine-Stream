@@ -2154,11 +2154,11 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
         isHidden: existing?.isHidden ?? false,
         isUpcoming: existing?.isUpcoming ?? false,
         isUnavailable: existing?.isUnavailable ?? false,
-        customTitle: existing?.customTitle || "",
+        customTitle: existing?.customTitle || item.title || item.name || "",
         customDescription: existing?.customDescription || "",
         customGenres: Array.isArray(existing?.customGenres) ? existing.customGenres : [],
         customReleaseDate: existing?.customReleaseDate || "",
-        customPoster: existing?.customPoster || "",
+        customPoster: existing?.customPoster || item.poster_path || item.poster || "",
         customBackdrop: existing?.customBackdrop || "",
         notes: existing?.notes || "",
       });
@@ -2362,17 +2362,21 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      {item.customPoster ? (
-                        <img src={item.customPoster} alt="" className="w-10 h-14 object-cover rounded-lg shrink-0" />
+                      {item.customPoster || item.defaultPoster || item.poster || item.poster_path ? (
+                        <img
+                          src={item.customPoster || item.defaultPoster || item.poster || item.poster_path}
+                          alt=""
+                          className="w-10 h-14 object-cover rounded-lg shrink-0"
+                        />
                       ) : (
-                        <div className="w-10 h-14 bg-zinc-800 rounded-lg flex items-center justify-center text-[10px] text-zinc-500">
+                        <div className="w-10 h-14 bg-zinc-800 rounded-lg flex items-center justify-center text-[10px] text-zinc-500 font-bold uppercase">
                           {item.mediaType}
                         </div>
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-sm font-bold text-white truncate">
-                            {item.customTitle || `Title (${item.mediaType} ${item.mediaId})`}
+                            {item.customTitle || item.defaultTitle || item.title || item.name || `Title (${item.mediaType} ${item.mediaId})`}
                           </h4>
                           <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
                             {item.mediaType} • ID {item.mediaId}

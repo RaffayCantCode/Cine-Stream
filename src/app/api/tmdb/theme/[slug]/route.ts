@@ -2,6 +2,7 @@ export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
+import { filterExcludeAnime } from "@/lib/utils";
 
 const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
@@ -86,6 +87,18 @@ const themeConfigs: Record<string, ThemeConfig> = {
   },
 };
 
+import { getPopularAnime } from "@/lib/anime-fetch";
+
+const themeAnimeGenres: Record<string, string> = {
+  'rom-com': 'Romance',
+  'fantasy-magic': 'Fantasy',
+  'action-packed': 'Action',
+  'feel-good-comedy': 'Comedy',
+  'sci-fi-fantasy': 'Sci-Fi',
+  'horror-thriller': 'Horror',
+  'superhero': 'Action',
+};
+
 export async function GET(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
   const page = request.nextUrl.searchParams.get("page") || "1";
@@ -94,11 +107,13 @@ export async function GET(request: NextRequest, props: { params: Promise<{ slug:
   const seed = request.nextUrl.searchParams.get("seed") || `${Date.now()}`;
 
   const config = themeConfigs[params.slug];
-  if (!config) return Response.json({ results: [], availableTypes: [] }, { headers: noStoreHeaders });
+  const animeGenre = themeAnimeGenres[params.slug];
+  if (!config && !animeGenre) return Response.json({ results: [], availableTypes: [] }, { headers: noStoreHeaders });
 
   const availableTypes: string[] = [];
-  if (config.movieQuery) availableTypes.push("movie");
-  if (config.tvQuery) availableTypes.push("tv");
+  if (config?.movieQuery) availableTypes.push("movie");
+  if (config?.tvQuery) availableTypes.push("tv");
+  if (animeGenre) availableTypes.push("anime");
 
   try {
     const requestedPage = Number(page) || 1;
@@ -111,48 +126,106 @@ export async function GET(request: NextRequest, props: { params: Promise<{ slug:
     let totalPages = 1;
 
     const fetchMovie = async () => {
-      if (!config.movieQuery) return { results: [], total_pages: 1 };
-      const res: any = await tmdbFetch("/discover/movie", { ...config.movieQuery, page: randomFirstPage, sort_by: "popularity.desc" }, { noCache: shuffle });
+      if (!config?.movieQuery) return { results: [], total_pages: 1 };
+      const res: any = await tmdbFetch("/discover/movie", {
+        ...config.movieQuery,
+        without_keywords: "210024",
+        without_original_language: "ja",
+        without_genres: "16",
+        page: randomFirstPage,
+        sort_by: "popularity.desc"
+      }, { noCache: shuffle });
+      const raw = (res?.results || []).map((r: any) => ({ ...r, media_type: "movie" }));
       return {
-        results: (res?.results || []).map((r: any) => ({ ...r, media_type: "movie" })),
+        results: filterExcludeAnime(raw),
         total_pages: res?.total_pages || 1
       };
     };
 
     const fetchTv = async () => {
-      if (!config.tvQuery) return { results: [], total_pages: 1 };
-      const res: any = await tmdbFetch("/discover/tv", { ...config.tvQuery, page: randomFirstPage, sort_by: "popularity.desc" }, { noCache: shuffle });
+      if (!config?.tvQuery) return { results: [], total_pages: 1 };
+      const res: any = await tmdbFetch("/discover/tv", {
+        ...config.tvQuery,
+        without_keywords: "210024",
+        without_original_language: "ja",
+        without_genres: "16",
+        page: randomFirstPage,
+        sort_by: "popularity.desc"
+      }, { noCache: shuffle });
+      const raw = (res?.results || []).map((r: any) => ({ ...r, media_type: "tv" }));
       return {
-        results: (res?.results || []).map((r: any) => ({ ...r, media_type: "tv" })),
+        results: filterExcludeAnime(raw),
         total_pages: res?.total_pages || 1
       };
     };
 
-    if (typeFilter === "movie" && config.movieQuery) {
+    const fetchAnime = async () => {
+      if (!animeGenre) return { results: [], total_pages: 1 };
+      try {
+        const animeItems = await getPopularAnime(requestedPage, animeGenre);
+        const results = animeItems.map((a) => ({
+          id: a.id,
+          anilistId: a.id,
+          title: a.name,
+          name: a.name,
+          poster_path: a.poster,
+          backdrop_path: a.bannerImage || a.poster,
+          media_type: "anime" as const,
+          vote_average: a.rating ? parseFloat(a.rating) : 8.5,
+          vote_count: 500,
+          overview: a.description || "",
+          release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
+          original_language: "ja",
+          genre_ids: [16],
+          isTmdbAnime: false,
+        }));
+        return {
+          results,
+          total_pages: 5,
+        };
+      } catch {
+        return { results: [], total_pages: 1 };
+      }
+    };
+
+    if (typeFilter === "movie" && config?.movieQuery) {
       const movieRes = await fetchMovie();
       finalResults = movieRes.results;
       totalPages = movieRes.total_pages;
-    } else if (typeFilter === "tv" && config.tvQuery) {
+    } else if (typeFilter === "tv" && config?.tvQuery) {
       const tvRes = await fetchTv();
       finalResults = tvRes.results;
       totalPages = tvRes.total_pages;
+    } else if (typeFilter === "anime" && animeGenre) {
+      const animeRes = await fetchAnime();
+      finalResults = animeRes.results;
+      totalPages = animeRes.total_pages;
     } else {
-      // All media types: fetch both movies and TV in parallel
-      const [mRes, tRes] = await Promise.all([fetchMovie(), fetchTv()]);
+      // All media types: fetch movies, TV, and anime in parallel
+      const [mRes, tRes, aRes] = await Promise.all([fetchMovie(), fetchTv(), fetchAnime()]);
       const mList = mRes.results;
       const tList = tRes.results;
+      // In All Media view, include a curated subset (max 4 per page) so anime doesn't overwhelm the page
+      const aList = aRes.results.slice(0, 4);
       totalPages = Math.max(mRes.total_pages, tRes.total_pages);
 
-      // Strict 1:1 equal balance interleaving
-      const count = Math.min(mList.length, tList.length);
-      for (let i = 0; i < count; i++) {
-        finalResults.push(mList[i]);
-        finalResults.push(tList[i]);
+      // Balanced 4:1 ratio (2 movies, 2 TV shows, 1 anime)
+      let mIdx = 0, tIdx = 0, aIdx = 0;
+      while (mIdx < mList.length || tIdx < tList.length || aIdx < aList.length) {
+        if (mIdx < mList.length) finalResults.push(mList[mIdx++]);
+        if (mIdx < mList.length) finalResults.push(mList[mIdx++]);
+        if (tIdx < tList.length) finalResults.push(tList[tIdx++]);
+        if (tIdx < tList.length) finalResults.push(tList[tIdx++]);
+        if (aIdx < aList.length) finalResults.push(aList[aIdx++]);
       }
-      // Append remainder if one list is longer
-      if (mList.length > count) finalResults.push(...mList.slice(count));
-      else if (tList.length > count) finalResults.push(...tList.slice(count));
     }
+
+    // Filter out hidden items
+    try {
+      const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
+      const hiddenSet = await getHiddenMediaSet();
+      finalResults = finalResults.filter((item: any) => !isMediaItemHidden(item, hiddenSet));
+    } catch {}
 
     if (shuffle) {
       finalResults = seededShuffle(finalResults, `${params.slug}-${seed}-${page}`);

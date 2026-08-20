@@ -37,6 +37,13 @@ export async function GET(request: NextRequest) {
       items = await getPopularAnime(page, genre);
     }
 
+    // Filter out hidden items
+    try {
+      const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
+      const hiddenSet = await getHiddenMediaSet();
+      items = items.filter((item: any) => !isMediaItemHidden({ id: item.id || item.animeId, mediaType: "anime" }, hiddenSet));
+    } catch {}
+
     if (items.length === 0) {
       // Don't cache empty results — they are transient failures that should
       // be retried promptly so Kitsu never gets served as a permanent answer.
