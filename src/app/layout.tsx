@@ -94,7 +94,7 @@ export default function RootLayout({
             } catch(e) {}
           })();
           (function() {
-            var BUILD_VER = 'v22-logo-icon-cache-reset';
+            var BUILD_VER = 'v30-sw-nav-fix';
             try {
               if (typeof sessionStorage !== 'undefined') {
                 var ver = sessionStorage.getItem('sv_build_ver');

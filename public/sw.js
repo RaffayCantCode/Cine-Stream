@@ -1,12 +1,12 @@
 // CineStream Service Worker
 // Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
 // CACHE_VERSION is updated to bust previous worker cache.
-const CACHE_VERSION = 'v29-refresh-fix';
+const CACHE_VERSION = 'v30-no-home-fallback-fix';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
 
-const STATIC_ASSETS = ['/', '/manifest.json', '/favicon.svg?v=23', '/logo-icon.svg?v=23'];
+const STATIC_ASSETS = ['/manifest.json', '/favicon.svg?v=23', '/logo-icon.svg?v=23'];
 
 // Install — pre-cache static shell
 self.addEventListener('install', (event) => {
@@ -46,42 +46,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // FAST NETWORK-FIRST WITH 2.5S TIMEOUT & AUTOMATIC HTML CACHING FOR NAVIGATIONS
-  // Prevents mobile tabs from hanging when reopening on sleeping/reconnecting mobile networks
+  // Network-first for HTML page navigations — NEVER fallback to '/' home page on sub-routes!
   if (request.mode === 'navigate') {
     event.respondWith(
-      (async () => {
-        const cache = await caches.open(STATIC_CACHE);
-        const cachedResponse = (await cache.match(request)) || (await cache.match('/'));
-
-        // 2.5s timeout for slow/reconnecting mobile networks
-        const timeoutPromise = new Promise((resolve) => {
-          setTimeout(() => resolve(null), 2500);
-        });
-
-        const fetchPromise = fetch(request)
-          .then((response) => {
-            if (response && response.status === 200 && response.type === 'basic') {
-              cache.put(request, response.clone());
-            }
-            return response;
-          })
-          .catch(() => null);
-
-        const response = await Promise.race([fetchPromise, timeoutPromise]);
-
-        if (response && response.ok) {
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+          }
           return response;
-        }
-
-        // Return cached page or cached root shell instantly if network is slow/offline
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        const fallback = await fetchPromise;
-        return fallback || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
-      })()
+        })
+        .catch(async () => {
+          const cache = await caches.open(STATIC_CACHE);
+          const matched = await cache.match(request);
+          if (matched) return matched;
+          return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        })
     );
     return;
   }
