@@ -62,14 +62,33 @@ export async function GET(
         overrideMap.set(cleanId, o);
         if (cleanId.startsWith("kitsu-")) overrideMap.set(cleanId.replace("kitsu-", ""), o);
         if (cleanId.startsWith("mal-")) overrideMap.set(cleanId.replace("mal-", ""), o);
+        if (/^\d+$/.test(cleanId)) {
+          overrideMap.set(`kitsu-${cleanId}`, o);
+          overrideMap.set(`mal-${cleanId}`, o);
+          overrideMap.set(`anime-kitsu-${cleanId}`, o);
+          overrideMap.set(`anime-mal-${cleanId}`, o);
+        }
       }
     }
 
-    // If main override wasn't found by route ID, check anime.id or openedSeasonId
+    // If main override wasn't found by route ID, check id candidates, anime.id or openedSeasonId
     let effectiveOverride = override;
+    if (!effectiveOverride) {
+      const idLower = id.toLowerCase();
+      const idNum = idLower.replace(/^(kitsu-|mal-|anime-|tv-)/, "");
+      effectiveOverride = overrideMap.get(`anime-${idLower}`) || 
+                          overrideMap.get(idLower) || 
+                          overrideMap.get(`anime-${idNum}`) || 
+                          overrideMap.get(idNum);
+    }
     if (!effectiveOverride && anime) {
       const aId = String(anime.id || "").toLowerCase();
-      effectiveOverride = overrideMap.get(`anime-${aId}`) || overrideMap.get(aId) || (openedSeasonId ? (overrideMap.get(`anime-${String(openedSeasonId).toLowerCase()}`) || overrideMap.get(String(openedSeasonId).toLowerCase())) : null);
+      const aIdNum = aId.replace(/^(kitsu-|mal-|anime-|tv-)/, "");
+      effectiveOverride = overrideMap.get(`anime-${aId}`) || 
+                          overrideMap.get(aId) || 
+                          overrideMap.get(`anime-${aIdNum}`) || 
+                          overrideMap.get(aIdNum) || 
+                          (openedSeasonId ? (overrideMap.get(`anime-${String(openedSeasonId).toLowerCase()}`) || overrideMap.get(String(openedSeasonId).toLowerCase())) : null);
     }
 
     const isParentUpcoming = Boolean(effectiveOverride?.isUpcoming || effectiveOverride?.status === "upcoming");
@@ -77,7 +96,11 @@ export async function GET(
 
     const enrichedSeasons = seasons.map((s) => {
       const sId = String(s.id).toLowerCase();
-      const sOv = overrideMap.get(`anime-${sId}`) || overrideMap.get(sId);
+      const sIdNum = sId.replace(/^(kitsu-|mal-|anime-|tv-)/, "");
+      const sOv = overrideMap.get(`anime-${sId}`) || 
+                  overrideMap.get(sId) || 
+                  overrideMap.get(`anime-${sIdNum}`) || 
+                  overrideMap.get(sIdNum);
       if (sOv) {
         return {
           ...s,

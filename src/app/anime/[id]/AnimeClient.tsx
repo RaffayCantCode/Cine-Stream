@@ -1111,18 +1111,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const episodeOffsetQuery = clientEpisodeOffset != null ? `&episodeOffset=${clientEpisodeOffset}` : "";
 
     try {
-      const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null } }>(
+      const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean; isHidden?: boolean } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
       );
-      const matchingSeason = anime?.seasons?.find(s => s.id === seasonId);
+      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId));
       const activeSeasonStatus = matchingSeason?.status || anime?.status || "";
       const statusNorm = activeSeasonStatus.toLowerCase().replace(/_/g, " ").trim();
+      const isParentUpcoming = Boolean((anime as any)?.isUpcoming || (anime as any)?.status === "upcoming");
+      const isSeasonUpcoming = Boolean((matchingSeason as any)?.isUpcoming || (matchingSeason as any)?.status === "upcoming" || epData.data?.isUpcoming);
+      const isParentUnavailable = Boolean((anime as any)?.isUnavailable || (anime as any)?.status === "unavailable");
+      const isSeasonUnavailable = Boolean((matchingSeason as any)?.isUnavailable || (matchingSeason as any)?.status === "unavailable" || epData.data?.isUnavailable);
       const isUnreleasedAnime = 
         statusNorm.includes("not yet") || 
         statusNorm.includes("upcoming") || 
         statusNorm.includes("to be aired") ||
-        statusNorm.includes("unreleased");
-      const isFinishedSeason = statusNorm.includes("finished") || statusNorm.includes("completed");
+        statusNorm.includes("unreleased") ||
+        isParentUpcoming ||
+        isSeasonUpcoming;
+
+      if (isParentUpcoming || isSeasonUpcoming || isParentUnavailable || isSeasonUnavailable) {
+        setEpisodes(prev => prev.filter(e => String(e.seasonId) !== String(seasonId)));
+        setSeasonOverview(epData.data?.seasonOverview || null);
+        loadedSeasonIds.current.add(seasonId);
+        setEpisodesLoading(false);
+        return;
+      }
 
       const hasEpisodes = epData.success && epData.data?.episodes && epData.data.episodes.length > 0;
       if (hasEpisodes) {
@@ -1191,6 +1204,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
     } catch (err) {
       console.warn(`[AnimeClient] Server episode API failed for seasonId=${seasonId}, attempting client-side fallback...`, err);
+    }
+
+    // If parent anime or season is marked as upcoming or unavailable, do NOT run client fallback
+    const parentIsUpcoming = Boolean((anime as any)?.isUpcoming || (anime as any)?.status === "upcoming");
+    const parentIsUnavailable = Boolean((anime as any)?.isUnavailable || (anime as any)?.status === "unavailable");
+    if (parentIsUpcoming || parentIsUnavailable) {
+      setEpisodes(prev => prev.filter(e => String(e.seasonId) !== String(seasonId)));
+      setEpisodesLoading(false);
+      loadedSeasonIds.current.add(seasonId);
+      return;
     }
 
     // Client-side fallback: fetch directly from browser APIs (AniZip, TMDB proxy, Kitsu)
@@ -1382,11 +1405,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             const serverSeasons = a.seasons || [];
             const currentSeasons = prev.seasons || [];
             const mergedSeasons = currentSeasons.map(ps => {
-              const serverMatch = serverSeasons.find((ss: any) => ss.id === ps.id);
+              const serverMatch = serverSeasons.find((ss: any) => String(ss.id) === String(ps.id));
               if (serverMatch) {
                 return {
                   ...ps,
+                  ...serverMatch,
+                  name: serverMatch.name || ps.name,
                   status: serverMatch.status || ps.status,
+                  isUpcoming: Boolean(serverMatch.isUpcoming || serverMatch.status === "upcoming" || a.isUpcoming || a.status === "upcoming"),
+                  isUnavailable: Boolean(serverMatch.isUnavailable || serverMatch.status === "unavailable" || a.isUnavailable || a.status === "unavailable"),
+                  customTags: (serverMatch as any).customTags || (ps as any).customTags || [],
                   totalEpisodes: Math.max(serverMatch.totalEpisodes || 0, ps.totalEpisodes || 0),
                   seasonYear: serverMatch.seasonYear || ps.seasonYear,
                   tmdbId: serverMatch.tmdbId != null ? serverMatch.tmdbId : ps.tmdbId,
@@ -1397,20 +1425,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               return ps;
             });
             for (const ss of serverSeasons) {
-              if (!mergedSeasons.find((ms: any) => ms.id === ss.id)) {
+              if (!mergedSeasons.find((ms: any) => String(ms.id) === String(ss.id))) {
                 mergedSeasons.push(ss);
               }
             }
             return {
               ...prev,
               ...a,
-              // Preserve previously-loaded good values if the server returned blanks
-              // (happens when the curated fallback fires during an AniList outage)
               description: a.description || prev.description || "",
               genres: (a.genres && a.genres.length > 0) ? a.genres : (prev.genres && prev.genres.length > 0 ? prev.genres : []),
               rating: a.rating || prev.rating || "",
               totalEpisodes: Math.max(a.totalEpisodes || 0, prev.totalEpisodes || 0),
               seasons: mergedSeasons,
+              isUpcoming: Boolean(a.isUpcoming || a.status === "upcoming"),
+              isUnavailable: Boolean(a.isUnavailable || a.status === "unavailable"),
+              isHidden: Boolean(a.isHidden || a.status === "hidden"),
             };
           });
           setFranchiseNodes(prev => {

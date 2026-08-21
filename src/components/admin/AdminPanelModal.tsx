@@ -56,6 +56,7 @@ import { useAnnouncement } from "@/hooks/useAnnouncement";
 import { useTheme } from "@/context/ThemeContext";
 import { harmonizeAccentToCineStreamTheme, ArchetypeStyle } from "@/lib/themes";
 import { SOURCE_TAGS, SOURCE_TAG_LABELS } from "@/lib/streaming-config";
+import { clearAllClientCaches } from "@/lib/utils";
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -2496,6 +2497,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                             body: JSON.stringify({ id: item.id, mediaType: item.mediaType, mediaId: item.mediaId }),
                           });
                           if (res.ok) {
+                            clearAllClientCaches();
                             loadOverrides();
                             showToast("success", "Override reset to default.");
                           }
@@ -2970,6 +2972,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                       body: JSON.stringify({ id: selectedOverrideItem.id, mediaType: selectedOverrideItem.mediaType, mediaId: selectedOverrideItem.mediaId }),
                     });
                     if (res.ok) {
+                      clearAllClientCaches();
                       loadOverrides();
                       setOverrideModalOpen(false);
                       showToast("success", "Override reset to default.");
@@ -3000,6 +3003,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                           body: JSON.stringify(selectedOverrideItem),
                         });
                         if (res.ok) {
+                          clearAllClientCaches();
                           setOverrideModalOpen(false);
                           loadOverrides();
                           showToast("success", "Entry override saved successfully!");

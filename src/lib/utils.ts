@@ -45,6 +45,17 @@ function getCacheKey(input: RequestInfo | URL, init?: RequestInit) {
 
 function getSmartTtlMs(urlStr: string): number {
   const lower = urlStr.toLowerCase();
+  // Dynamic media details and admin endpoints must never be cached in persistent storage
+  if (
+    lower.includes("/api/admin/") ||
+    lower.includes("/api/tmdb/movie/") ||
+    lower.includes("/api/tmdb/tv/") ||
+    lower.includes("/api/anime/") ||
+    lower.includes("/meta") ||
+    lower.includes("/episodes")
+  ) {
+    return 0; // Fresh real-time data
+  }
   if (lower.includes("/genre") || lower.includes("/providers") || lower.includes("/configuration")) {
     return 86_400_000; // 24 hours
   }
@@ -70,7 +81,7 @@ export async function fetchJson<T = unknown>(
   const urlStr = String(input);
   const { cacheTtlMs = getSmartTtlMs(urlStr), skipCache = false, ...requestInit } = init || {};
   const method = requestInit.method ?? "GET";
-  const shouldUseCache = !skipCache && method.toUpperCase() === "GET";
+  const shouldUseCache = !skipCache && method.toUpperCase() === "GET" && cacheTtlMs > 0;
   const cacheKey = getCacheKey(input, requestInit);
 
   if (shouldUseCache) {
@@ -80,7 +91,7 @@ export async function fetchJson<T = unknown>(
     }
 
     // Try sessionStorage cache for fast cross-page hydration
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && cacheTtlMs >= 60_000) {
       try {
         const storedStr = sessionStorage.getItem(`cs_v16_cache_${cacheKey}`);
         if (storedStr) {
@@ -118,12 +129,12 @@ export async function fetchJson<T = unknown>(
       throw new Error(message);
     }
 
-    if (shouldUseCache) {
+    if (shouldUseCache && cacheTtlMs > 0) {
       const expires = Date.now() + cacheTtlMs;
       requestCache.set(cacheKey, { data, expires });
       pruneCache();
 
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && cacheTtlMs >= 60_000) {
         try {
           sessionStorage.setItem(`cs_v16_cache_${cacheKey}`, JSON.stringify({ data, expires }));
         } catch {}
@@ -145,6 +156,20 @@ export function clearFetchJsonCache(match?: string) {
   if (!match) {
     requestCache.clear();
     pendingRequests.clear();
+    if (typeof window !== "undefined") {
+      try {
+        const toRemove: string[] = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const k = sessionStorage.key(i);
+          if (k && (k.startsWith("cs_v") || k.includes("cache"))) {
+            toRemove.push(k);
+          }
+        }
+        for (const k of toRemove) {
+          sessionStorage.removeItem(k);
+        }
+      } catch {}
+    }
     return;
   }
 
@@ -158,6 +183,24 @@ export function clearFetchJsonCache(match?: string) {
       pendingRequests.delete(key);
     }
   }
+  if (typeof window !== "undefined") {
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.includes(match)) {
+          toRemove.push(k);
+        }
+      }
+      for (const k of toRemove) {
+        sessionStorage.removeItem(k);
+      }
+    } catch {}
+  }
+}
+
+export function clearAllClientCaches(): void {
+  clearFetchJsonCache();
 }
 
 export function shuffleArray<T>(items: T[] | null | undefined): T[] {
