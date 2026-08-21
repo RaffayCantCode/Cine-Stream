@@ -4,9 +4,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { mediaOverrides, type MediaOverride } from "@/lib/db/schema";
-import { normalizeOverrideId, invalidateMediaOverridesCache } from "@/lib/media-overrides";
+import { normalizeOverrideId, extractCandidateMediaIds, invalidateMediaOverridesCache } from "@/lib/media-overrides";
 import { invalidateAnimeDetailsCache } from "@/lib/anime-fetch";
-import { desc, eq, and, or, ilike } from "drizzle-orm";
+import { desc, eq, and, or, ilike, inArray } from "drizzle-orm";
 import { tmdbFetch } from "@/lib/tmdb";
 
 async function resolveMediaTitleAndPoster(mediaType: string, mediaId: string): Promise<{ title?: string; poster?: string }> {
@@ -114,18 +114,36 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Auto-resolve missing titles/posters in parallel for all returned rows
+    // Auto-resolve missing or corrupted placeholder titles/posters in parallel for all returned rows
     const enriched = await Promise.all(
       filtered.map(async (r) => {
-        if (!r.customTitle || !r.customPoster) {
-          const resolved = await resolveMediaTitleAndPoster(r.mediaType, r.mediaId);
-          return {
-            ...r,
-            customTitle: r.customTitle || resolved.title || null,
-            customPoster: r.customPoster || resolved.poster || null,
-          };
+        let title = r.customTitle;
+        let poster = r.customPoster;
+
+        // Clean display mediaId if it has redundant type prefix
+        const cleanType = r.mediaType.toLowerCase().trim();
+        let displayMediaId = String(r.mediaId || "").trim();
+        const prefix = `${cleanType}-`;
+        while (displayMediaId.toLowerCase().startsWith(prefix)) {
+          displayMediaId = displayMediaId.slice(prefix.length);
         }
-        return r;
+
+        // If title is missing or corrupted placeholder like "Title (anime anime-kitsu-50629)"
+        if (!title || title.startsWith("Title (") || !poster) {
+          const resolved = await resolveMediaTitleAndPoster(cleanType, displayMediaId);
+          if ((!title || title.startsWith("Title (")) && resolved.title) title = resolved.title;
+          if (!poster && resolved.poster) poster = resolved.poster;
+        }
+
+        return {
+          ...r,
+          id: normalizeOverrideId(cleanType, displayMediaId),
+          mediaId: displayMediaId,
+          customTitle: title || r.customTitle,
+          customPoster: poster || r.customPoster,
+          defaultTitle: title,
+          defaultPoster: poster,
+        };
       })
     );
 
@@ -188,17 +206,25 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanType = String(mediaType).trim().toLowerCase();
-    const cleanId = String(mediaId).trim();
+    let cleanId = String(mediaId).trim();
+    const typePrefix = `${cleanType}-`;
+    while (cleanId.toLowerCase().startsWith(typePrefix)) {
+      cleanId = cleanId.slice(typePrefix.length);
+    }
     const id = normalizeOverrideId(cleanType, cleanId);
 
     // Auto-resolve missing title or poster so database always stores the real title
-    let resolvedTitle = customTitle && typeof customTitle === "string" && customTitle.trim() ? customTitle.trim() : null;
+    let resolvedTitle = customTitle && typeof customTitle === "string" && customTitle.trim() && !customTitle.startsWith("Title (") ? customTitle.trim() : null;
     let resolvedPoster = customPoster && typeof customPoster === "string" && customPoster.trim() ? customPoster.trim() : null;
 
     if (!resolvedTitle || !resolvedPoster) {
       const resolved = await resolveMediaTitleAndPoster(cleanType, cleanId);
       if (!resolvedTitle && resolved.title) resolvedTitle = resolved.title;
       if (!resolvedPoster && resolved.poster) resolvedPoster = resolved.poster;
+    }
+
+    if (!resolvedTitle) {
+      resolvedTitle = customTitle || `Title (${cleanType} ${cleanId})`;
     }
 
     // Determine clean status string
@@ -227,10 +253,13 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date(),
     };
 
+    // Find and clean up any existing duplicate/legacy rows
+    const { candidateIds, candidateMediaIds } = extractCandidateMediaIds(cleanType, cleanId);
     const existing = await db.query.mediaOverrides.findFirst({
       where: or(
         eq(mediaOverrides.id, id),
-        and(eq(mediaOverrides.mediaType, cleanType), eq(mediaOverrides.mediaId, cleanId))
+        inArray(mediaOverrides.id, candidateIds),
+        inArray(mediaOverrides.mediaId, candidateMediaIds)
       ),
     });
 
@@ -255,6 +284,7 @@ export async function POST(request: NextRequest) {
 
     invalidateMediaOverridesCache();
     invalidateAnimeDetailsCache(cleanId);
+    invalidateAnimeDetailsCache(id);
 
     return NextResponse.json({
       success: true,
@@ -285,33 +315,31 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const { id, mediaType, mediaId } = body;
 
-    let targetId = id;
-    if (!targetId && mediaType && mediaId) {
-      targetId = normalizeOverrideId(mediaType, mediaId);
+    const cleanType = String(mediaType || "movie").toLowerCase().trim();
+    let cleanId = String(mediaId || id || "").trim();
+    const typePrefix = `${cleanType}-`;
+    while (cleanId.toLowerCase().startsWith(typePrefix)) {
+      cleanId = cleanId.slice(typePrefix.length);
     }
 
-    if (!targetId && !mediaId) {
-      return NextResponse.json({ error: "Override ID or mediaType & mediaId required" }, { status: 400 });
-    }
+    const { candidateIds, candidateMediaIds } = extractCandidateMediaIds(cleanType, cleanId);
+    const allIds = Array.from(new Set([id, normalizeOverrideId(cleanType, cleanId), ...candidateIds])).filter(Boolean) as string[];
+    const allMediaIds = Array.from(new Set([cleanId, ...candidateMediaIds])).filter(Boolean) as string[];
 
-    const conditions = [];
-    if (targetId) conditions.push(eq(mediaOverrides.id, String(targetId).trim()));
-    if (mediaType && mediaId) {
-      conditions.push(
-        and(
-          eq(mediaOverrides.mediaType, String(mediaType).toLowerCase().trim()),
-          eq(mediaOverrides.mediaId, String(mediaId).trim())
-        )
-      );
-    }
+    await db.delete(mediaOverrides).where(
+      or(
+        inArray(mediaOverrides.id, allIds),
+        inArray(mediaOverrides.mediaId, allMediaIds)
+      )
+    );
 
-    await db.delete(mediaOverrides).where(or(...conditions));
     invalidateMediaOverridesCache();
-    invalidateAnimeDetailsCache(targetId || mediaId);
+    invalidateAnimeDetailsCache(cleanId);
+    if (id) invalidateAnimeDetailsCache(id);
 
     return NextResponse.json({
       success: true,
-      deletedId: targetId || mediaId,
+      deletedId: id || cleanId,
     }, {
       headers: {
         "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",

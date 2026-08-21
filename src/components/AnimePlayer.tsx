@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2, Maximize2, Minimize2, Tv, Play } from "lucide-react";
+import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2, Maximize2, Minimize2, Tv, Play, AlertTriangle } from "lucide-react";
 import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 
 interface ProviderSource {
@@ -58,7 +58,8 @@ function buildProviderUrl(
   tmdbId: number | null | undefined,
   tmdbSeason: number | null | undefined,
   startProgress?: number,
-  isMovie?: boolean
+  isMovie?: boolean,
+  retryAttempt?: number
 ): string {
   // Extract numeric digits from IDs
   const cleanNumeric = (id: string | null | undefined): string | null => {
@@ -85,10 +86,16 @@ function buildProviderUrl(
   }
 
   switch (provider) {
-    case "animeplay":
-      return primaryId
-        ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub`
-        : "";
+    case "animeplay": {
+      if (!primaryId) return "";
+      const attempt = retryAttempt || 0;
+      const mirrors = [
+        `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub`,
+        `https://megaplay.buzz/embed/anime/${primaryId}/${episode}/sub`,
+        `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`,
+      ];
+      return mirrors[attempt % mirrors.length];
+    }
     case "vidnest":
     case "megaplay":
       return primaryId
@@ -232,9 +239,13 @@ export function AnimePlayer({
     setSourceIndex(index);
     setHasError(false);
     setIsLoading(true);
+    setBlackScreenWarning(false);
+    playbackStartedRef.current = false;
     setShowSources(false);
     setRetryCount(0);
     setIframeReady(false);
+    setNeedsClickUnlock(false);
+    setLiveIframeSrc("");
     try {
       localStorage.setItem(sourcePrefKey, provider);
       localStorage.setItem(globalPrefKey, provider);
@@ -244,6 +255,7 @@ export function AnimePlayer({
   const [currentUrl, setCurrentUrl] = useState("");
   const [liveIframeSrc, setLiveIframeSrc] = useState("");
   const [needsClickUnlock, setNeedsClickUnlock] = useState(false);
+  const [blackScreenWarning, setBlackScreenWarning] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
@@ -254,6 +266,7 @@ export function AnimePlayer({
   const playerRef = useRef<HTMLDivElement>(null);
   const playbackStartedRef = useRef(false);
   const delayTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const blackScreenTimerRef = useRef<NodeJS.Timeout | null>(null);
   const currentProviderRef = useRef<string>(PROVIDERS[0]?.provider || "animeplay");
   useEffect(() => {
     const p = providers[sourceIndex];
@@ -278,6 +291,11 @@ export function AnimePlayer({
   const markPlaybackStarted = useCallback(() => {
     playbackStartedRef.current = true;
     setIsLoading(false);
+    setBlackScreenWarning(false);
+    if (blackScreenTimerRef.current) {
+      clearTimeout(blackScreenTimerRef.current);
+      blackScreenTimerRef.current = null;
+    }
   }, []);
 
   // When user clicks the unlock overlay for Source 1, inject the src with a tiny delay
@@ -293,12 +311,36 @@ export function AnimePlayer({
     }
   }, [resolvedUrls, currentUrl]);
 
-  // Cleanup delay timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
+      if (blackScreenTimerRef.current) clearTimeout(blackScreenTimerRef.current);
     };
   }, []);
+
+  // Watchdog: detect if an active stream is stuck on a black screen or unresponsive
+  useEffect(() => {
+    setBlackScreenWarning(false);
+    if (blackScreenTimerRef.current) {
+      clearTimeout(blackScreenTimerRef.current);
+      blackScreenTimerRef.current = null;
+    }
+
+    const activeUrl = currentSource.provider === "animeplay" ? liveIframeSrc : currentUrl;
+    if (activeUrl && !playbackStartedRef.current && !needsClickUnlock) {
+      blackScreenTimerRef.current = setTimeout(() => {
+        if (!playbackStartedRef.current) {
+          console.warn("[AnimePlayer] Black screen or unresponsiveness detected, prompting reset");
+          setBlackScreenWarning(true);
+        }
+      }, 4500);
+    }
+
+    return () => {
+      if (blackScreenTimerRef.current) clearTimeout(blackScreenTimerRef.current);
+    };
+  }, [liveIframeSrc, currentUrl, currentSource.provider, retryCount, needsClickUnlock]);
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
@@ -330,21 +372,20 @@ export function AnimePlayer({
     providers.forEach(p => {
       urls[p.provider] = buildProviderUrl(
         p.provider, animeId, malId, rootAnimeId, rootMalId,
-        episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current, isMovie
+        episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current, isMovie, retryCount
       );
     });
     setResolvedUrls(urls);
-    setRetryCount(0);
     setIsLoading(true);
     setHasError(false);
     setIframeReady(false);
-  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie, providers]);
+  }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie, providers, retryCount]);
 
   // When the source index or retry count changes, load the embed.
   useEffect(() => {
     const url = resolvedUrls[currentSource.provider] || buildProviderUrl(
       currentSource.provider, animeId, malId, rootAnimeId, rootMalId,
-      episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current, isMovie
+      episode, episodeOffset || 0, tmdbId, tmdbSeason, initialProgressRef.current, isMovie, retryCount
     );
     if (!url) return;
 
@@ -527,11 +568,15 @@ export function AnimePlayer({
   const retrySource = useCallback(() => {
     setHasError(false);
     setIsLoading(true);
-    setRetryCount(prev => prev + 1);
+    setBlackScreenWarning(false);
+    playbackStartedRef.current = false;
     setIframeReady(false);
-    setNeedsClickUnlock(false);
     setLiveIframeSrc("");
-  }, []);
+    setRetryCount(prev => prev + 1);
+    if (currentSource.provider === "animeplay") {
+      setNeedsClickUnlock(true);
+    }
+  }, [currentSource.provider]);
 
   const toggleFullscreen = async () => {
     try {
@@ -618,6 +663,31 @@ export function AnimePlayer({
           </button>
         </div>
       </div>
+
+      {blackScreenWarning && !hasError && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold shadow-lg animate-fade-in">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Black screen or stream not playing?</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={retrySource}
+              className="px-3 py-1.5 bg-amber-500/25 hover:bg-amber-500/40 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Reset Source
+            </button>
+            {providers.length > 1 && (
+              <button
+                onClick={switchSource}
+                className="px-3 py-1.5 bg-[#4B5694] hover:bg-[#7288AE] text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <SkipForward className="w-3.5 h-3.5" /> Switch Source
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {showSources && (
         <div

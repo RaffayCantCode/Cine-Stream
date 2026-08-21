@@ -396,8 +396,9 @@ export async function GET(
   const batchSize = 100;
 
   try {
-    const targetOverrideId = seasonId || id;
-    const override = await getMediaOverride("anime", targetOverrideId).catch(() => null);
+    const override = (await getMediaOverride("anime", seasonId || id).catch(() => null)) ||
+      (seasonId ? await getMediaOverride("anime", id).catch(() => null) : null);
+
     if (override?.isHidden || override?.status === "hidden") {
       return Response.json({ success: true, data: { episodes: [], isHidden: true } }, { headers: { "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate" } });
     }

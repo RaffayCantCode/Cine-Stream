@@ -2136,33 +2136,49 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
     });
 
     const openEditorForMedia = (item: any) => {
-      const cleanType = (item.media_type || item.mediaType || "movie").toLowerCase();
-      const cleanId = String(item.id || item.mediaId).trim();
+      const cleanType = (item.mediaType || item.media_type || "movie").toLowerCase().trim();
+      let cleanId = String(item.mediaId || item.id || "").trim();
+      const typePrefix = `${cleanType}-`;
+      while (cleanId.toLowerCase().startsWith(typePrefix)) {
+        cleanId = cleanId.slice(typePrefix.length);
+      }
       const compoundId = `${cleanType}-${cleanId}`;
 
       // Check if existing override exists
-      const existing = overridesList.find((o) => o.id === compoundId || (o.mediaType === cleanType && o.mediaId === cleanId) || o.mediaId === cleanId);
+      const existing = overridesList.find((o) =>
+        o.id === compoundId ||
+        o.id === `${cleanType}-${cleanId}` ||
+        o.mediaId === cleanId ||
+        o.mediaId === `${cleanType}-${cleanId}` ||
+        (o.mediaType === cleanType && o.mediaId === cleanId) ||
+        (item.id && o.id === item.id)
+      ) || (item.mediaType ? item : null);
+
+      const title = existing?.customTitle || existing?.defaultTitle || item.customTitle || item.defaultTitle || item.title || item.name || "";
+      const poster = existing?.customPoster || existing?.defaultPoster || item.customPoster || item.defaultPoster || item.poster_path || item.poster || "";
+      const backdrop = existing?.customBackdrop || existing?.defaultBackdrop || item.customBackdrop || item.defaultBackdrop || item.backdrop_path || item.backdrop || "";
+      const overview = existing?.customDescription || existing?.defaultOverview || item.customDescription || item.defaultOverview || item.overview || item.description || "";
 
       setSelectedOverrideItem({
         id: compoundId,
         mediaType: cleanType,
         mediaId: cleanId,
-        defaultTitle: item.title || item.name || `Title (${cleanType} ${cleanId})`,
-        defaultPoster: item.poster_path || item.poster || "",
-        defaultBackdrop: item.backdrop_path || item.backdrop || "",
-        defaultOverview: item.overview || item.description || "",
-        status: existing?.status || "default",
-        isHidden: existing?.isHidden ?? false,
-        isUpcoming: existing?.isUpcoming ?? false,
-        isUnavailable: existing?.isUnavailable ?? false,
-        customTitle: existing?.customTitle || item.title || item.name || "",
-        customDescription: existing?.customDescription || "",
-        customGenres: Array.isArray(existing?.customGenres) ? existing.customGenres : [],
-        customTags: Array.isArray(existing?.customTags) ? existing.customTags : [],
-        customReleaseDate: existing?.customReleaseDate || "",
-        customPoster: existing?.customPoster || item.poster_path || item.poster || "",
-        customBackdrop: existing?.customBackdrop || "",
-        notes: existing?.notes || "",
+        defaultTitle: title || `Title (${cleanType} ${cleanId})`,
+        defaultPoster: poster,
+        defaultBackdrop: backdrop,
+        defaultOverview: overview,
+        status: existing?.status || item.status || "default",
+        isHidden: Boolean(existing?.isHidden ?? item.isHidden ?? false),
+        isUpcoming: Boolean(existing?.isUpcoming ?? item.isUpcoming ?? (existing?.status === "upcoming" || item.status === "upcoming")),
+        isUnavailable: Boolean(existing?.isUnavailable ?? item.isUnavailable ?? (existing?.status === "unavailable" || item.status === "unavailable")),
+        customTitle: existing?.customTitle || item.customTitle || title,
+        customDescription: existing?.customDescription || item.customDescription || overview,
+        customGenres: Array.isArray(existing?.customGenres) ? existing.customGenres : (Array.isArray(item.customGenres) ? item.customGenres : []),
+        customTags: Array.isArray(existing?.customTags) ? existing.customTags : (Array.isArray(item.customTags) ? item.customTags : []),
+        customReleaseDate: existing?.customReleaseDate || item.customReleaseDate || "",
+        customPoster: existing?.customPoster || item.customPoster || poster,
+        customBackdrop: existing?.customBackdrop || item.customBackdrop || backdrop,
+        notes: existing?.notes || item.notes || "",
       });
       setOverrideModalOpen(true);
     };
@@ -2184,9 +2200,11 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
       openEditorForMedia({
         id: cleanId,
+        mediaId: cleanId,
+        mediaType: cleanType,
         media_type: cleanType,
-        title: q,
-        name: q,
+        title: "",
+        name: "",
       });
     };
 

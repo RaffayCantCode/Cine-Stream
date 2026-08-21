@@ -6,9 +6,9 @@ export function normalizeOverrideId(mediaType: string, mediaId: string | number)
   const cleanType = (mediaType || "movie").toLowerCase().trim();
   let cleanId = String(mediaId || "").trim();
 
-  // Strip leading redundant prefix if present (e.g. "anime-12345" -> "12345")
+  // Strip all leading redundant type prefixes (e.g. "anime-anime-kitsu-123" -> "kitsu-123")
   const typePrefix = `${cleanType}-`;
-  if (cleanId.toLowerCase().startsWith(typePrefix)) {
+  while (cleanId.toLowerCase().startsWith(typePrefix)) {
     cleanId = cleanId.slice(typePrefix.length);
   }
 
@@ -33,26 +33,51 @@ export function extractCandidateMediaIds(mediaType: string, mediaId: string | nu
   // Base raw entries
   candidateIds.add(`${cleanType}-${rawIdStr}`);
   candidateIds.add(`${cleanType}-${lowerRaw}`);
+  candidateIds.add(`${cleanType}-${cleanType}-${lowerRaw}`); // legacy double prefix
   candidateIds.add(lowerRaw);
+  candidateIds.add(rawIdStr);
   candidateMediaIds.add(rawIdStr);
   candidateMediaIds.add(lowerRaw);
+
+  // Clean stripped ID
+  let strippedType = lowerRaw;
+  while (strippedType.startsWith(`${cleanType}-`)) {
+    strippedType = strippedType.slice(`${cleanType}-`.length);
+  }
+  if (strippedType) {
+    candidateIds.add(`${cleanType}-${strippedType}`);
+    candidateIds.add(`${cleanType}-${cleanType}-${strippedType}`);
+    candidateIds.add(strippedType);
+    candidateMediaIds.add(strippedType);
+    candidateMediaIds.add(`${cleanType}-${strippedType}`);
+  }
 
   // Normalized ID
   const norm = normalizeOverrideId(cleanType, rawIdStr);
   candidateIds.add(norm);
   candidateIds.add(norm.toLowerCase());
 
-  // Stripped prefixes: kitsu-123, mal-123, tmdb-123, anime-123, tv-123, movie-123
+  // Stripped provider prefixes: kitsu-123, mal-123, tmdb-123, anime-123, tv-123, movie-123
   const prefixes = ["kitsu-", "mal-", "tmdb-", "anime-", "tv-", "movie-"];
   for (const p of prefixes) {
-    if (lowerRaw.startsWith(p)) {
-      const stripped = lowerRaw.slice(p.length);
-      if (stripped) {
-        candidateMediaIds.add(stripped);
-        candidateIds.add(`${cleanType}-${stripped}`);
-        candidateIds.add(stripped);
+    if (strippedType.startsWith(p)) {
+      const pureNum = strippedType.slice(p.length);
+      if (pureNum) {
+        candidateMediaIds.add(pureNum);
+        candidateIds.add(`${cleanType}-${pureNum}`);
+        candidateIds.add(pureNum);
       }
     }
+  }
+
+  // If ID is purely numeric (e.g. 50629), also check with kitsu- / mal- / tmdb-
+  if (/^\d+$/.test(strippedType)) {
+    candidateMediaIds.add(`kitsu-${strippedType}`);
+    candidateMediaIds.add(`mal-${strippedType}`);
+    candidateMediaIds.add(`tmdb-${strippedType}`);
+    candidateIds.add(`${cleanType}-kitsu-${strippedType}`);
+    candidateIds.add(`${cleanType}-mal-${strippedType}`);
+    candidateIds.add(`${cleanType}-tmdb-${strippedType}`);
   }
 
   // Cross-mediaType fallback between anime and tv

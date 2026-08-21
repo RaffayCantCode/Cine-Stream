@@ -2177,9 +2177,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   )}
 
                     <div className="pt-1">
-                      {(anime as any)?.isUpcoming || (anime as any)?.status === "upcoming" ? (
+                      {(anime as any)?.isUpcoming || (anime as any)?.status === "upcoming" || (currentSeasonInfo as any)?.isUpcoming || (currentSeasonInfo as any)?.status === "upcoming" ? (
                         <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
-                          <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs sm:text-sm font-semibold">
+                          <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs sm:text-sm font-semibold shadow-sm">
                             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
                             <span>This entry is upcoming. Please check back later.</span>
                           </div>
@@ -2191,9 +2191,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           />
                           <AnimeHeroTrailerButton />
                         </div>
-                      ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" ? (
+                      ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" || (currentSeasonInfo as any)?.isUnavailable || (currentSeasonInfo as any)?.status === "unavailable" ? (
                         <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
-                          <div className="flex items-center gap-2.5 px-4 py-3 bg-zinc-800/80 border border-zinc-700/60 rounded-xl text-zinc-300 text-xs sm:text-sm font-semibold">
+                          <div className="flex items-center gap-2.5 px-4 py-3 bg-zinc-800/80 border border-zinc-700/60 rounded-xl text-zinc-300 text-xs sm:text-sm font-semibold shadow-sm">
                             <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 shrink-0" />
                             <span>This title is currently unavailable on this site. Please check back later.</span>
                           </div>

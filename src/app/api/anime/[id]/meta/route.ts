@@ -56,10 +56,24 @@ export async function GET(
     for (const o of allOverrides) {
       if (o.id) overrideMap.set(o.id.toLowerCase().trim(), o);
       if (o.mediaType && o.mediaId) {
-        overrideMap.set(`${o.mediaType.toLowerCase()}-${String(o.mediaId).toLowerCase()}`, o);
-        overrideMap.set(String(o.mediaId).toLowerCase(), o);
+        const cleanType = o.mediaType.toLowerCase().trim();
+        const cleanId = String(o.mediaId).toLowerCase().trim();
+        overrideMap.set(`${cleanType}-${cleanId}`, o);
+        overrideMap.set(cleanId, o);
+        if (cleanId.startsWith("kitsu-")) overrideMap.set(cleanId.replace("kitsu-", ""), o);
+        if (cleanId.startsWith("mal-")) overrideMap.set(cleanId.replace("mal-", ""), o);
       }
     }
+
+    // If main override wasn't found by route ID, check anime.id or openedSeasonId
+    let effectiveOverride = override;
+    if (!effectiveOverride && anime) {
+      const aId = String(anime.id || "").toLowerCase();
+      effectiveOverride = overrideMap.get(`anime-${aId}`) || overrideMap.get(aId) || (openedSeasonId ? (overrideMap.get(`anime-${String(openedSeasonId).toLowerCase()}`) || overrideMap.get(String(openedSeasonId).toLowerCase())) : null);
+    }
+
+    const isParentUpcoming = Boolean(effectiveOverride?.isUpcoming || effectiveOverride?.status === "upcoming");
+    const isParentUnavailable = Boolean(effectiveOverride?.isUnavailable || effectiveOverride?.status === "unavailable");
 
     const enrichedSeasons = seasons.map((s) => {
       const sId = String(s.id).toLowerCase();
@@ -70,9 +84,17 @@ export async function GET(
           name: sOv.customTitle || s.name,
           seasonLabel: sOv.customTitle ? sOv.customTitle : s.seasonLabel,
           status: sOv.status || (sOv.isUpcoming ? "upcoming" : s.status),
-          isUpcoming: Boolean(sOv.isUpcoming || sOv.status === "upcoming"),
-          isUnavailable: Boolean(sOv.isUnavailable || sOv.status === "unavailable"),
+          isUpcoming: Boolean(sOv.isUpcoming || sOv.status === "upcoming" || isParentUpcoming),
+          isUnavailable: Boolean(sOv.isUnavailable || sOv.status === "unavailable" || isParentUnavailable),
           customTags: sOv.customTags || [],
+        };
+      }
+      if (isParentUpcoming || isParentUnavailable) {
+        return {
+          ...s,
+          status: isParentUpcoming ? "upcoming" : (isParentUnavailable ? "unavailable" : s.status),
+          isUpcoming: isParentUpcoming,
+          isUnavailable: isParentUnavailable,
         };
       }
       return s;
@@ -84,7 +106,7 @@ export async function GET(
       seasons: enrichedSeasons,
       openedSeasonId,
       tmdbId,
-    }, override);
+    }, effectiveOverride);
 
     return Response.json({
       success: true,
