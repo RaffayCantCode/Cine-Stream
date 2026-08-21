@@ -114,20 +114,36 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           </div>
         )}
 
-        {/* Badges: Always visible for Anime (JP SUB), and visible for Movie/TV when showMediaBadge is active */}
-        {!isPerson && (isAnime || showMediaBadge) && (
-          <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
-            {isAnime ? (
-              <span className="bg-purple-950/85 border border-purple-500/40 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
-                JP SUB
+        {/* Badges: Upcoming/Unavailable, Anime (JP SUB), Movie/TV, and Custom Tags */}
+        {!isPerson && (
+          <div className="absolute top-2 left-2 z-20 flex flex-wrap items-center gap-1.5 pointer-events-none max-w-[85%]">
+            {(item as any).isUpcoming || (item as any).status === "upcoming" ? (
+              <span className="bg-amber-500/90 border border-amber-400/50 text-white text-[9px] sm:text-[10px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+                UPCOMING
               </span>
-            ) : (
-              <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg border ${
-                isMovie ? "bg-rose-600/85 border-rose-500/30" : "bg-emerald-600/85 border-emerald-500/30"
-              }`}>
-                {isMovie ? "MOVIE" : "TV SHOW"}
+            ) : (item as any).isUnavailable || (item as any).status === "unavailable" ? (
+              <span className="bg-zinc-700/90 border border-zinc-500/50 text-zinc-200 text-[9px] sm:text-[10px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+                UNAVAILABLE
               </span>
-            )}
+            ) : (isAnime || showMediaBadge) ? (
+              isAnime ? (
+                <span className="bg-purple-950/85 border border-purple-500/40 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+                  JP SUB
+                </span>
+              ) : (
+                <span className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-lg border ${
+                  isMovie ? "bg-rose-600/85 border-rose-500/30" : "bg-emerald-600/85 border-emerald-500/30"
+                }`}>
+                  {isMovie ? "MOVIE" : "TV SHOW"}
+                </span>
+              )
+            ) : null}
+
+            {Array.isArray((item as any).customTags || (item as any).tags) && ((item as any).customTags || (item as any).tags).slice(0, 2).map((tag: string, i: number) => (
+              <span key={i} className="bg-purple-600/90 border border-purple-400/50 text-white text-[9px] sm:text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded-md uppercase leading-none shadow-lg">
+                {tag}
+              </span>
+            ))}
           </div>
         )}
 

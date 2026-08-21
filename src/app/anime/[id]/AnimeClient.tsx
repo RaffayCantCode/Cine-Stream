@@ -53,7 +53,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v40-sources-update";
+const ANIME_API_VERSION = "v41-instant-load";
 const ANILIST_API = "https://graphql.anilist.co";
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
@@ -1022,6 +1022,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
+  const [isTheaterMode, setIsTheaterMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("cinestream_anime_theater_mode") === "true";
+      } catch {}
+    }
+    return false;
+  });
   usePageContentReady(!isLoading);
 
   interface FranchiseNode {
@@ -1331,17 +1339,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     loadedSeasonIds.current.clear();
     tmdbIdRef.current = null;
 
-    if (authStatus === "loading") return;
-
     const loadMeta = async () => {
-      if (!initialData) setIsLoading(true);
+      if (!initialData && !anime) setIsLoading(true);
       setError(null);
       try {
         let data: any = null;
         try {
           data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
             `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
-            { signal: AbortSignal.timeout(15000) }
+            { signal: AbortSignal.timeout(12000) }
           );
         } catch (e) {
           console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
@@ -1460,12 +1466,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           }
           setIsLoading(false);
         }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadMeta();
     return () => { cancelled = true; };
-  }, [id, loadSeasonEpisodes, authStatus, initialData]);
+  }, [id, loadSeasonEpisodes, initialData]);
 
   // ── Fetch You May Like recommendations (client-side AniList + server route fallback) ────────────
   useEffect(() => {
@@ -1803,16 +1813,50 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }, [episodes]);
 
   const currentSeasonEps = useMemo(() => {
-    const list = episodesBySeason[String(currentSeasonId)] || [];
-    if (list.length > 0) {
-      return [...list].sort((a, b) => a.episodeNum - b.episodeNum);
+    const targetKey = String(currentSeasonId || id || "").trim().toLowerCase();
+    const cleanNum = targetKey.replace(/\D/g, "");
+
+    // 1. Direct exact key match
+    const direct = episodesBySeason[targetKey] || episodesBySeason[String(currentSeasonId)];
+    if (direct && direct.length > 0) {
+      return [...direct].sort((a, b) => a.episodeNum - b.episodeNum);
     }
-    // Resilient fallback: If episodes were loaded and there's only 1 season or all loaded episodes match
-    if (episodes.length > 0 && (!seasons || seasons.length <= 1)) {
+
+    // 2. Prefix-normalized match (e.g. mal-16498, kitsu-16498, 16498)
+    if (cleanNum) {
+      for (const [k, list] of Object.entries(episodesBySeason)) {
+        if (k.replace(/\D/g, "") === cleanNum && list.length > 0) {
+          return [...list].sort((a, b) => a.episodeNum - b.episodeNum);
+        }
+      }
+    }
+
+    // 3. Match from active season in anime.seasons
+    if (anime?.seasons && anime.seasons.length > 0) {
+      const activeSeason = anime.seasons.find(s => String(s.id).toLowerCase() === targetKey || (cleanNum && String(s.id).replace(/\D/g, "") === cleanNum)) || anime.seasons[0];
+      if (activeSeason) {
+        const sKey = String(activeSeason.id);
+        const sList = episodesBySeason[sKey] || episodesBySeason[sKey.replace(/\D/g, "")];
+        if (sList && sList.length > 0) {
+          return [...sList].sort((a, b) => a.episodeNum - b.episodeNum);
+        }
+      }
+    }
+
+    // 4. If all loaded episodes are present, return the matching ones or the full list
+    if (episodes.length > 0) {
+      const filtered = episodes.filter(e => {
+        const eKey = String(e.seasonId || "").toLowerCase();
+        return eKey === targetKey || (cleanNum && eKey.replace(/\D/g, "") === cleanNum);
+      });
+      if (filtered.length > 0) {
+        return [...filtered].sort((a, b) => a.episodeNum - b.episodeNum);
+      }
       return [...episodes].sort((a, b) => a.episodeNum - b.episodeNum);
     }
+
     return [];
-  }, [episodesBySeason, currentSeasonId, episodes, seasons]);
+  }, [episodesBySeason, currentSeasonId, id, episodes, anime?.seasons]);
 
   const upcomingAnimeThisWeek = useMemo(
     () => currentSeasonEps
@@ -2213,13 +2257,28 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               {/* Title & Metadata row */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
                 <div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-xl sm:text-2xl font-black text-white">{anime.name}</h2>
                     {isMovieFormat && (
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                         Movie
                       </span>
                     )}
+                    {((anime as any)?.isUpcoming || (anime as any)?.status === "upcoming") && (
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Upcoming
+                      </span>
+                    )}
+                    {((anime as any)?.isUnavailable || (anime as any)?.status === "unavailable") && (
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-zinc-700/40 text-zinc-300 border border-zinc-600/40">
+                        Unavailable
+                      </span>
+                    )}
+                    {Array.isArray((anime as any)?.customTags) && (anime as any).customTags.map((tag: string, i: number) => (
+                      <span key={i} className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                        🏷️ {tag}
+                      </span>
+                    ))}
                   </div>
                   {anime.jname && anime.jname !== anime.name && (
                     <p className="text-xs text-white/40 mt-0.5">{anime.jname}</p>
@@ -2271,7 +2330,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 )}
                 {/* ── Player + Queue ── */}
                 {isPlaying && selectedEp && (
-                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 select-none">
+                  <div className={`select-none ${isTheaterMode ? "space-y-6" : "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start"}`}>
                     <div ref={playerRef} className="w-full min-w-0">
                       <AnimePlayer
                         key={selectedEp.episodeId}
@@ -2297,6 +2356,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                         isMovie={anime?.format === 'MOVIE' || anime?.format === 'SPECIAL'}
                         startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
                         onAutoNext={handleAutoNext}
+                        isTheaterMode={isTheaterMode}
+                        onToggleTheater={() => {
+                          setIsTheaterMode(prev => {
+                            const next = !prev;
+                            try {
+                              localStorage.setItem("cinestream_anime_theater_mode", String(next));
+                            } catch {}
+                            return next;
+                          });
+                        }}
                       />
 
                       <div className="mt-4 flex items-center justify-between gap-4">
@@ -2317,7 +2386,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           <button
                             onClick={handlePrev}
                             disabled={currentIdx <= 0 || (currentSeasonEps[currentIdx - 1]?.isReleased === false)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-30 text-white/60 hover:text-white text-xs font-bold transition-all"
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-30 text-white/60 hover:text-white text-xs font-bold transition-all cursor-pointer"
                           >
                             <ChevronLeft className="w-4 h-4" /> Prev
                           </button>
@@ -2327,7 +2396,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           <button
                             onClick={handleNext}
                             disabled={currentIdx >= currentSeasonEps.length - 1 || (currentSeasonEps[currentIdx + 1]?.isReleased === false)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#4B5694] hover:bg-[#7288AE] disabled:opacity-30 text-white text-xs font-bold transition-all shadow-lg"
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#4B5694] hover:bg-[#7288AE] disabled:opacity-30 text-white text-xs font-bold transition-all shadow-lg cursor-pointer"
                           >
                             Next <ChevronRight className="w-4 h-4" />
                           </button>
@@ -2336,7 +2405,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       {nextEp && nextEp.isReleased !== false && (
                         <button
                           onClick={() => handleWatchEpisode(nextEp)}
-                          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
+                          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition cursor-pointer"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           Play Next: E{nextEp.episodeNum}
@@ -2344,8 +2413,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       )}
                     </div>
 
-                    {/* ── Episode Queue Sidebar ── */}
-                    <aside className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col max-h-[60vh] xl:max-h-[70vh]">
+                    {/* ── Episode Queue Sidebar / Bottom Shelf ── */}
+                    <aside className={`w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col ${
+                      isTheaterMode ? "max-h-[380px]" : "max-h-[60vh] xl:max-h-[70vh]"
+                    }`}>
                       <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
                         <div className="text-sm font-bold text-white flex items-center justify-between gap-2">
                           <span className="truncate">
@@ -2354,7 +2425,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           <span className="text-xs font-normal text-white/40 whitespace-nowrap">{currentSeasonEps.length} eps</span>
                         </div>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
+                      <div className={`flex-1 overflow-y-auto p-2 scrollbar-hide ${
+                        isTheaterMode ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2" : "space-y-1"
+                      }`}>
                         {currentSeasonEps.map((ep) => {
                           const isSelected = selectedEp?.episodeId === ep.episodeId && (isPlaying || watchStarted);
                           const displayTitle = ep.title || `Episode ${ep.episodeNum}`;
@@ -2365,7 +2438,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               onClick={() => {
                                 handleWatchEpisode(ep);
                               }}
-                              className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-3 ${
+                              className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-3 cursor-pointer ${
                                 isSelected
                                   ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
                                   : ep.isReleased === false
@@ -2631,6 +2704,34 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             <p className="text-sm text-white/40">Please wait while we fetch the latest episodes...</p>
                           </div>
                         </div>
+                      </div>
+                    );
+                  }
+
+                  if ((anime as any)?.isUpcoming || (anime as any)?.status === "upcoming" || (currentSeasonInfo as any)?.isUpcoming) {
+                    return (
+                      <div className="p-10 text-center rounded-2xl border border-amber-500/30 bg-amber-950/20 backdrop-blur-md my-4">
+                        <div className="text-4xl mb-3">⏳</div>
+                        <h3 className="text-lg font-black text-amber-300 mb-1">
+                          Upcoming Anime Release
+                        </h3>
+                        <p className="text-xs text-zinc-300/80 max-w-md mx-auto leading-relaxed">
+                          This entry is scheduled as Upcoming. Episodes and streaming will be available as soon as it premieres!
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  if ((anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" || (currentSeasonInfo as any)?.isUnavailable) {
+                    return (
+                      <div className="p-10 text-center rounded-2xl border border-zinc-700/50 bg-zinc-900/40 backdrop-blur-md my-4">
+                        <div className="text-4xl mb-3">🔒</div>
+                        <h3 className="text-lg font-black text-zinc-300 mb-1">
+                          Currently Unavailable
+                        </h3>
+                        <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">
+                          This title is currently unavailable for streaming on this site. Please check back later.
+                        </p>
                       </div>
                     );
                   }

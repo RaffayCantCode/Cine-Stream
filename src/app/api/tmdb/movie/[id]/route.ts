@@ -71,12 +71,20 @@ export async function GET(
     }
 
     const finalResult = applyMediaOverride(result, override);
-    return Response.json(finalResult, { headers: override ? { "Cache-Control": "no-store, no-cache, max-age=0" } : undefined });
+    return Response.json(finalResult, {
+      headers: {
+        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      },
+    });
   } catch (error) {
     const fallbackOverride = await getMediaOverride("movie", id).catch(() => null);
     if (fallbackOverride) {
       const synthetic = applyMediaOverride(null, fallbackOverride);
-      return Response.json(synthetic);
+      return Response.json(synthetic, {
+        headers: {
+          "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+        },
+      });
     }
     return Response.json({ error: "Failed to fetch movie details" }, { status: 500 });
   }

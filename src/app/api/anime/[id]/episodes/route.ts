@@ -239,7 +239,7 @@ async function getEnrichedEpisodesList(
   if (!idMal) {
     try {
       const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${seasonId}`, {
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(2000),
         headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
         next: { revalidate: 86400 } as any,
       });
@@ -255,8 +255,8 @@ async function getEnrichedEpisodesList(
   // 1, 2 & 3. Try AniZip, Jikan, and Tatakai in parallel.
   // Filler lookup is deliberately NOT awaited here — it scrapes a 3rd party website
   // (animefillerlist.com) which is slow and unreliable. Running it in parallel with
-  // a generous timeout ensures it never blocks episode delivery.
-  const fillerTimeout = new Promise<null>(r => setTimeout(() => r(null), 6000));
+  // a short timeout ensures it never blocks episode delivery.
+  const fillerTimeout = new Promise<null>(r => setTimeout(() => r(null), 1200));
   const fillerFetchPromise = fetchFillerLookupFromAnimeFillerList(cleanSeasonName);
 
   const [aniZipEpsRes, jikanEpsRes, tatakaiEpsRes] = await Promise.allSettled([
@@ -355,9 +355,28 @@ async function getEnrichedEpisodesList(
   return seasonEps;
 }
 
-// NOTE: No module-level episodesCache Map — it is wiped on every Cloudflare
-// Pages cold start. Cache-control headers and next: { revalidate } on upstream
-// fetch calls handle CDN-level caching instead.
+import { getMediaOverride } from "@/lib/media-overrides";
+
+interface EpisodesCacheEntry {
+  data: { episodes: any[]; totalEpisodes: number };
+  timestamp: number;
+}
+const EPISODES_CACHE = new Map<string, EpisodesCacheEntry>();
+const EPISODES_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function invalidateEpisodesCache(animeId?: string | number): void {
+  if (!animeId) {
+    EPISODES_CACHE.clear();
+  } else {
+    const idStr = String(animeId).toLowerCase();
+    for (const key of Array.from(EPISODES_CACHE.keys())) {
+      if (key.toLowerCase().includes(idStr)) {
+        EPISODES_CACHE.delete(key);
+      }
+    }
+  }
+}
+
 const animeCacheHeaders = {
   "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
   "CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
@@ -377,6 +396,24 @@ export async function GET(
   const batchSize = 100;
 
   try {
+    const targetOverrideId = seasonId || id;
+    const override = await getMediaOverride("anime", targetOverrideId).catch(() => null);
+    if (override?.isHidden || override?.status === "hidden") {
+      return Response.json({ success: true, data: { episodes: [], isHidden: true } }, { headers: { "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate" } });
+    }
+    if (override?.isUpcoming || override?.status === "upcoming") {
+      return Response.json({ success: true, data: { episodes: [], isUpcoming: true, status: "upcoming" } }, { headers: { "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate" } });
+    }
+    if (override?.isUnavailable || override?.status === "unavailable") {
+      return Response.json({ success: true, data: { episodes: [], isUnavailable: true, status: "unavailable" } }, { headers: { "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate" } });
+    }
+
+    const cacheKey = `${id}-${seasonId || "root"}-${page}-${searchParams.toString()}`;
+    const cached = EPISODES_CACHE.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < EPISODES_CACHE_TTL) {
+      return Response.json({ success: true, data: cached.data }, { headers: animeCacheHeaders });
+    }
+
     let season: any = null;
     let meta: any = null;
     let seasonNumFromList = 1;
@@ -1198,9 +1235,16 @@ export async function GET(
 
     episodes = enrichEpisodeReleaseStatus(episodes, meta);
 
+    const payloadData = { episodes, totalEpisodes: episodes.length };
+    if (EPISODES_CACHE.size > 300) {
+      const first = EPISODES_CACHE.keys().next().value;
+      if (first !== undefined) EPISODES_CACHE.delete(first);
+    }
+    EPISODES_CACHE.set(cacheKey, { data: payloadData, timestamp: Date.now() });
+
     return Response.json({
       success: true,
-      data: { episodes, totalEpisodes: episodes.length },
+      data: payloadData,
     }, { headers: animeCacheHeaders });
   } catch (error) {
     console.error("[Anime Episodes Error]:", error);

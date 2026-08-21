@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
           results.push({
             id: item.id,
-            media_type: isAnime ? "anime" : item.media_type,
+            media_type: item.media_type,
             title: item.title || item.name || "",
             name: item.name || item.title || "",
             poster_path: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : "",
@@ -150,44 +150,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter hidden items and apply overrides
-    let processedResults: any[] = [];
-    try {
-      const { getAllMediaOverrides, applyMediaOverride, getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
-      const [overrides, hiddenSet] = await Promise.all([
-        getAllMediaOverrides(),
-        getHiddenMediaSet(),
-      ]);
+    const { enrichMediaListWithOverrides } = await import("@/lib/media-overrides");
+    const processedResults = await enrichMediaListWithOverrides(Array.from(uniqueMap.values()));
 
-      const overrideMap = new Map<string, any>();
-      for (const o of overrides) {
-        overrideMap.set(o.id.toLowerCase(), o);
-        overrideMap.set(`${o.mediaType.toLowerCase()}-${o.mediaId.toLowerCase()}`, o);
-        overrideMap.set(o.mediaId.toLowerCase(), o);
-      }
-
-      for (const item of uniqueMap.values()) {
-        if (isMediaItemHidden(item, hiddenSet)) {
-          continue; // Strictly exclude hidden media
-        }
-
-        const key1 = `${item.media_type}-${item.id}`.toLowerCase();
-        const key2 = `${item.media_type}-${String(item.id).replace(/^kitsu-/, "")}`.toLowerCase();
-        const key3 = String(item.id).toLowerCase();
-        const ov = overrideMap.get(key1) || overrideMap.get(key2) || overrideMap.get(key3);
-
-        if (ov?.isHidden || ov?.status === "hidden") {
-          continue;
-        }
-
-        const enriched = ov ? (applyMediaOverride(item, ov) || item) : item;
-        processedResults.push(enriched);
-      }
-    } catch {
-      processedResults = Array.from(uniqueMap.values());
-    }
-
-    return NextResponse.json({ results: processedResults.slice(0, 24) });
+    return NextResponse.json({ results: processedResults.slice(0, 24) }, {
+      headers: {
+        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      },
+    });
   } catch (error) {
     console.error("[Media Search API] Error:", error);
     return NextResponse.json({ results: [] });

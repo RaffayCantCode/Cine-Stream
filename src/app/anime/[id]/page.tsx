@@ -20,7 +20,8 @@ export async function generateMetadata(
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({ query: q, variables: isMal ? { idMal: numId } : { id: numId } }),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(1200),
+        next: { revalidate: 86400 }
       }).then(r => r.json()).catch(() => null);
 
       const media = res?.data?.Media;

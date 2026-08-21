@@ -137,6 +137,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const [overrideFilterTab, setOverrideFilterTab] = useState<"all" | "upcoming" | "unavailable" | "hidden" | "customized">("all");
   const [overrideFilterQuery, setOverrideFilterQuery] = useState("");
   const [overrideGenreInput, setOverrideGenreInput] = useState("");
+  const [overrideTagInput, setOverrideTagInput] = useState("");
 
   // ── Custom Themes State ──
   const [adminCustomThemes, setAdminCustomThemes] = useState<any[]>([]);
@@ -2140,7 +2141,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
       const compoundId = `${cleanType}-${cleanId}`;
 
       // Check if existing override exists
-      const existing = overridesList.find((o) => o.id === compoundId || (o.mediaType === cleanType && o.mediaId === cleanId));
+      const existing = overridesList.find((o) => o.id === compoundId || (o.mediaType === cleanType && o.mediaId === cleanId) || o.mediaId === cleanId);
 
       setSelectedOverrideItem({
         id: compoundId,
@@ -2157,12 +2158,36 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
         customTitle: existing?.customTitle || item.title || item.name || "",
         customDescription: existing?.customDescription || "",
         customGenres: Array.isArray(existing?.customGenres) ? existing.customGenres : [],
+        customTags: Array.isArray(existing?.customTags) ? existing.customTags : [],
         customReleaseDate: existing?.customReleaseDate || "",
         customPoster: existing?.customPoster || item.poster_path || item.poster || "",
         customBackdrop: existing?.customBackdrop || "",
         notes: existing?.notes || "",
       });
       setOverrideModalOpen(true);
+    };
+
+    const handleCreateDirectOverride = () => {
+      if (!overrideSearchQuery.trim()) return;
+      const q = overrideSearchQuery.trim();
+      let cleanType = overrideSearchType === "all" ? "anime" : overrideSearchType;
+      let cleanId = q;
+
+      if (q.includes("-")) {
+        const parts = q.split("-");
+        const prefix = parts[0].toLowerCase();
+        if (["movie", "tv", "anime"].includes(prefix)) {
+          cleanType = prefix as any;
+          cleanId = parts.slice(1).join("-");
+        }
+      }
+
+      openEditorForMedia({
+        id: cleanId,
+        media_type: cleanType,
+        title: q,
+        name: q,
+      });
     };
 
     return (
@@ -2174,7 +2199,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
             <h3 className="text-sm font-bold text-white">Entry Management & Overrides</h3>
           </div>
           <p className="text-xs text-zinc-400">
-            Control individual Movies, TV Shows, and Anime behavior on the public site. Mark titles as <span className="text-amber-400 font-semibold">Upcoming</span> or <span className="text-zinc-300 font-semibold">Unavailable</span> to prevent broken player crashes, hide entries completely, or customize metadata non-destructively.
+            Control individual Movies, TV Shows, and Anime behavior on the public site. Mark titles as <span className="text-amber-400 font-semibold">Upcoming</span> or <span className="text-zinc-300 font-semibold">Unavailable</span> to prevent broken player crashes, hide entries completely, or customize metadata and tags non-destructively.
           </p>
 
           {/* Quick Metrics Bar */}
@@ -2231,7 +2256,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                   setOverrideSearchQuery(e.target.value);
                   searchOverrideMedia(e.target.value);
                 }}
-                placeholder="Search title by name or enter ID (e.g. movie-1858, tv-1399, anime-16498, 38356)..."
+                placeholder="Search title by name or enter ID (e.g. frieren s3, movie-1858, tv-1399, anime-16498)..."
                 className="w-full pl-3.5 pr-10 py-2 rounded-xl bg-black/60 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
               />
               {overrideSearchLoading && (
@@ -2239,6 +2264,22 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               )}
             </div>
           </div>
+
+          {/* Quick Direct Custom Override Button if query is present */}
+          {overrideSearchQuery.trim().length > 0 && (
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/20">
+              <div className="text-xs text-zinc-300 truncate">
+                Override or customize entry directly for <span className="text-primary font-bold">&quot;{overrideSearchQuery.trim()}&quot;</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateDirectOverride}
+                className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shrink-0 cursor-pointer shadow transition-all"
+              >
+                + Custom Entry Override
+              </button>
+            </div>
+          )}
 
           {/* Search Results Grid */}
           {overrideSearchResults.length > 0 && (
@@ -2249,7 +2290,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                   const cleanType = (item.media_type || overrideSearchType).toLowerCase();
                   const cleanId = String(item.id);
                   const compoundId = `${cleanType}-${cleanId}`;
-                  const existing = overridesList.find((o) => o.id === compoundId || (o.mediaType === cleanType && o.mediaId === cleanId));
+                  const existing = overridesList.find((o) => o.id === compoundId || (o.mediaType === cleanType && o.mediaId === cleanId) || o.mediaId === cleanId);
 
                   return (
                     <div
@@ -2355,6 +2396,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 const isUnavailable = Boolean(item.isUnavailable || item.status === "unavailable");
                 const isHidden = Boolean(item.isHidden || item.status === "hidden");
                 const hasCustomMeta = Boolean(item.customTitle || item.customDescription || (item.customGenres && item.customGenres.length > 0) || item.customPoster || item.customBackdrop);
+                const itemTags: string[] = Array.isArray(item.customTags) ? item.customTags : [];
 
                 return (
                   <div
@@ -2401,6 +2443,11 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                               Custom Meta
                             </span>
                           )}
+                          {itemTags.map((tag, tagIdx) => (
+                            <span key={tagIdx} className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+                              🏷️ {tag}
+                            </span>
+                          ))}
                         </div>
 
                         {item.customDescription && (
@@ -2428,7 +2475,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                           const res = await fetch("/api/admin/entry-overrides", {
                             method: "DELETE",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ id: item.id }),
+                            body: JSON.stringify({ id: item.id, mediaType: item.mediaType, mediaId: item.mediaId }),
                           });
                           if (res.ok) {
                             loadOverrides();
@@ -2642,7 +2689,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                       )}
                     </div>
 
-                    {/* Tag list */}
+                    {/* Genre Tag list */}
                     <div className="flex flex-wrap gap-1.5 mt-1.5 mb-2">
                       {selectedOverrideItem.customGenres?.map((g: string, i: number) => (
                         <span
@@ -2701,8 +2748,117 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     </div>
                   </div>
 
+                  {/* 3. Custom Tags / Badges */}
+                  <div className="pt-2 border-t border-zinc-800/80">
+                    <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
+                      <span className="flex items-center gap-1 text-purple-300 font-bold">
+                        🏷️ Custom Entry Tags & Badges
+                      </span>
+                      {selectedOverrideItem.customTags?.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOverrideItem({ ...selectedOverrideItem, customTags: [] })}
+                          className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                        >
+                          Clear all tags
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-0.5 mb-2">
+                      Tags appear as highlighted badges on media cards, browse grids, and hero banners.
+                    </p>
+
+                    {/* Active Tags list */}
+                    <div className="flex flex-wrap gap-1.5 mt-1.5 mb-2">
+                      {selectedOverrideItem.customTags?.map((tag: string, i: number) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-200 text-xs font-bold border border-purple-500/40 shadow-sm"
+                        >
+                          🏷️ {tag}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = selectedOverrideItem.customTags.filter((_: any, idx: number) => idx !== i);
+                              setSelectedOverrideItem({ ...selectedOverrideItem, customTags: next });
+                            }}
+                            className="hover:text-rose-400 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Tag input */}
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={overrideTagInput}
+                        onChange={(e) => setOverrideTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && overrideTagInput.trim()) {
+                            e.preventDefault();
+                            const val = overrideTagInput.trim();
+                            const current = selectedOverrideItem.customTags || [];
+                            if (!current.includes(val)) {
+                              setSelectedOverrideItem({ ...selectedOverrideItem, customTags: [...current, val] });
+                            }
+                            setOverrideTagInput("");
+                          }
+                        }}
+                        placeholder="Add custom tag (e.g. Trending, Staff Pick, 4K HDR, Dubbed, Exclusive)..."
+                        className="flex-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!overrideTagInput.trim()) return;
+                          const val = overrideTagInput.trim();
+                          const current = selectedOverrideItem.customTags || [];
+                          if (!current.includes(val)) {
+                            setSelectedOverrideItem({ ...selectedOverrideItem, customTags: [...current, val] });
+                          }
+                          setOverrideTagInput("");
+                        }}
+                        className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer"
+                      >
+                        Add Tag
+                      </button>
+                    </div>
+
+                    {/* Quick Preset Tag Buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-zinc-500 uppercase font-mono">Quick Presets:</span>
+                      {["Trending", "Featured", "Upcoming", "Staff Pick", "4K HDR", "Sub/Dub", "Exclusive", "Season Finale", "Classic"].map((preset) => {
+                        const isAdded = selectedOverrideItem.customTags?.includes(preset);
+                        return (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => {
+                              const current = selectedOverrideItem.customTags || [];
+                              if (isAdded) {
+                                setSelectedOverrideItem({ ...selectedOverrideItem, customTags: current.filter((t: string) => t !== preset) });
+                              } else {
+                                setSelectedOverrideItem({ ...selectedOverrideItem, customTags: [...current, preset] });
+                              }
+                            }}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer ${
+                              isAdded
+                                ? "bg-purple-500 text-white font-bold"
+                                : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 border border-zinc-700/50"
+                            }`}
+                          >
+                            {isAdded ? `✓ ${preset}` : `+ ${preset}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Poster & Backdrop URLs */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-800">
                     <div>
                       <div className="flex items-center justify-between text-xs font-semibold text-zinc-400">
                         <span>Custom Poster Image URL</span>
@@ -2776,7 +2932,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                         type="text"
                         value={selectedOverrideItem.notes || ""}
                         onChange={(e) => setSelectedOverrideItem({ ...selectedOverrideItem, notes: e.target.value })}
-                        placeholder="e.g. Waiting for season 2 bluray release..."
+                        placeholder="e.g. Upcoming season expected winter..."
                         className="w-full mt-1 px-3.5 py-2 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs focus:outline-none focus:border-primary"
                       />
                     </div>
@@ -2793,7 +2949,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     const res = await fetch("/api/admin/entry-overrides", {
                       method: "DELETE",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id: selectedOverrideItem.id }),
+                      body: JSON.stringify({ id: selectedOverrideItem.id, mediaType: selectedOverrideItem.mediaType, mediaId: selectedOverrideItem.mediaId }),
                     });
                     if (res.ok) {
                       loadOverrides();

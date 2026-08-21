@@ -1,11 +1,72 @@
 import { getDb } from "@/lib/db";
 import { mediaOverrides, type MediaOverride } from "@/lib/db/schema";
-import { eq, or, and, desc } from "drizzle-orm";
+import { eq, or, and, desc, inArray } from "drizzle-orm";
 
 export function normalizeOverrideId(mediaType: string, mediaId: string | number): string {
   const cleanType = (mediaType || "movie").toLowerCase().trim();
-  const cleanId = String(mediaId).trim();
+  let cleanId = String(mediaId || "").trim();
+
+  // Strip leading redundant prefix if present (e.g. "anime-12345" -> "12345")
+  const typePrefix = `${cleanType}-`;
+  if (cleanId.toLowerCase().startsWith(typePrefix)) {
+    cleanId = cleanId.slice(typePrefix.length);
+  }
+
   return `${cleanType}-${cleanId}`;
+}
+
+export function extractCandidateMediaIds(mediaType: string, mediaId: string | number): {
+  candidateIds: string[];
+  candidateMediaIds: string[];
+} {
+  const cleanType = (mediaType || "movie").toLowerCase().trim();
+  const rawIdStr = String(mediaId || "").trim();
+  const lowerRaw = rawIdStr.toLowerCase();
+
+  const candidateIds = new Set<string>();
+  const candidateMediaIds = new Set<string>();
+
+  if (!rawIdStr) {
+    return { candidateIds: [], candidateMediaIds: [] };
+  }
+
+  // Base raw entries
+  candidateIds.add(`${cleanType}-${rawIdStr}`);
+  candidateIds.add(`${cleanType}-${lowerRaw}`);
+  candidateIds.add(lowerRaw);
+  candidateMediaIds.add(rawIdStr);
+  candidateMediaIds.add(lowerRaw);
+
+  // Normalized ID
+  const norm = normalizeOverrideId(cleanType, rawIdStr);
+  candidateIds.add(norm);
+  candidateIds.add(norm.toLowerCase());
+
+  // Stripped prefixes: kitsu-123, mal-123, tmdb-123, anime-123, tv-123, movie-123
+  const prefixes = ["kitsu-", "mal-", "tmdb-", "anime-", "tv-", "movie-"];
+  for (const p of prefixes) {
+    if (lowerRaw.startsWith(p)) {
+      const stripped = lowerRaw.slice(p.length);
+      if (stripped) {
+        candidateMediaIds.add(stripped);
+        candidateIds.add(`${cleanType}-${stripped}`);
+        candidateIds.add(stripped);
+      }
+    }
+  }
+
+  // Cross-mediaType fallback between anime and tv
+  if (cleanType === "anime" || cleanType === "tv") {
+    const otherType = cleanType === "anime" ? "tv" : "anime";
+    for (const mId of Array.from(candidateMediaIds)) {
+      candidateIds.add(`${otherType}-${mId}`);
+    }
+  }
+
+  return {
+    candidateIds: Array.from(candidateIds),
+    candidateMediaIds: Array.from(candidateMediaIds),
+  };
 }
 
 export async function getMediaOverride(
@@ -15,17 +76,14 @@ export async function getMediaOverride(
   if (!mediaType || !mediaId) return null;
   try {
     const db = getDb();
-    const id = normalizeOverrideId(mediaType, mediaId);
-    const cleanId = String(mediaId).trim();
-    const cleanType = mediaType.toLowerCase().trim();
+    const { candidateIds, candidateMediaIds } = extractCandidateMediaIds(mediaType, mediaId);
+
+    if (candidateIds.length === 0) return null;
 
     const override = await db.query.mediaOverrides.findFirst({
       where: or(
-        eq(mediaOverrides.id, id),
-        and(
-          eq(mediaOverrides.mediaType, cleanType),
-          eq(mediaOverrides.mediaId, cleanId)
-        )
+        inArray(mediaOverrides.id, candidateIds),
+        inArray(mediaOverrides.mediaId, candidateMediaIds)
       ),
     });
 
@@ -36,22 +94,31 @@ export async function getMediaOverride(
   }
 }
 
+let cachedOverridesList: { list: MediaOverride[]; expiresAt: number } | null = null;
+let cachedHiddenSet: { set: Set<string>; expiresAt: number } | null = null;
+
+export function invalidateMediaOverridesCache(): void {
+  cachedOverridesList = null;
+  cachedHiddenSet = null;
+}
+
 export async function getAllMediaOverrides(): Promise<MediaOverride[]> {
+  const now = Date.now();
+  if (cachedOverridesList && cachedOverridesList.expiresAt > now) {
+    return cachedOverridesList.list;
+  }
+
   try {
     const db = getDb();
-    return await db.query.mediaOverrides.findMany({
+    const list = await db.query.mediaOverrides.findMany({
       orderBy: [desc(mediaOverrides.updatedAt)],
     });
+    cachedOverridesList = { list, expiresAt: now + 5000 }; // 5s TTL memory cache
+    return list;
   } catch (error) {
     console.error("[Media Overrides] getAllMediaOverrides Error:", error);
     return [];
   }
-}
-
-let cachedHiddenSet: { set: Set<string>; expiresAt: number } | null = null;
-
-export function invalidateMediaOverridesCache(): void {
-  cachedHiddenSet = null;
 }
 
 export async function getHiddenMediaSet(): Promise<Set<string>> {
@@ -85,10 +152,13 @@ export async function getHiddenMediaSet(): Promise<Set<string>> {
         if (cleanId.startsWith("kitsu-")) {
           set.add(cleanId.replace("kitsu-", ""));
         }
+        if (cleanId.startsWith("mal-")) {
+          set.add(cleanId.replace("mal-", ""));
+        }
       }
     }
 
-    cachedHiddenSet = { set, expiresAt: now + 30000 }; // 30s TTL cache
+    cachedHiddenSet = { set, expiresAt: now + 5000 }; // 5s TTL cache
     return set;
   } catch (error) {
     console.error("[Media Overrides] getHiddenMediaSet Error:", error);
@@ -107,6 +177,7 @@ export function isMediaItemHidden(
 
   if (hiddenSet.has(compoundId) || hiddenSet.has(idStr)) return true;
   if (idStr.startsWith("kitsu-") && hiddenSet.has(idStr.replace("kitsu-", ""))) return true;
+  if (idStr.startsWith("mal-") && hiddenSet.has(idStr.replace("mal-", ""))) return true;
   return false;
 }
 
@@ -127,28 +198,45 @@ export function applyMediaOverride<T extends Record<string, any>>(
 ): T | null {
   if (!item && !override) return null;
 
-  // If item is null/failed from API, but an override exists (e.g. Upcoming/Unavailable entry that 404s on TMDB)
+  // If item is null/failed from API, but an override exists (e.g. Upcoming/Unavailable synthetic entry)
   if (!item && override) {
     const syntheticTitle = override.customTitle || `Title (${override.mediaType} ${override.mediaId})`;
+    const customTags = Array.isArray(override.customTags) ? override.customTags : [];
+    const isUpcoming = Boolean(override.isUpcoming || override.status === "upcoming");
+    const isUnavailable = Boolean(override.isUnavailable || override.status === "unavailable");
+    const isHidden = Boolean(override.isHidden || override.status === "hidden");
+
     const syntheticItem = {
       id: isNaN(Number(override.mediaId)) ? override.mediaId : Number(override.mediaId),
       media_type: override.mediaType,
+      mediaType: override.mediaType,
       type: override.mediaType,
       title: syntheticTitle,
       name: syntheticTitle,
+      canonicalTitle: syntheticTitle,
       overview: override.customDescription || "",
       description: override.customDescription || "",
+      synopsis: override.customDescription || "",
       poster_path: override.customPoster || null,
       poster: override.customPoster || null,
       backdrop_path: override.customBackdrop || null,
+      backdrop: override.customBackdrop || null,
       bannerImage: override.customBackdrop || null,
       release_date: override.customReleaseDate || null,
       first_air_date: override.customReleaseDate || null,
+      startDate: override.customReleaseDate || null,
+      seasonYear: override.customReleaseDate ? parseInt(override.customReleaseDate.slice(0, 4), 10) || null : null,
       genres: (override.customGenres || []).map((g, i) => ({ id: i + 1, name: g })),
-      status: override.status,
-      isUpcoming: override.isUpcoming || override.status === "upcoming",
-      isUnavailable: override.isUnavailable || override.status === "unavailable",
-      isHidden: override.isHidden || override.status === "hidden",
+      customTags,
+      tags: customTags,
+      status: override.status || (isUpcoming ? "upcoming" : "default"),
+      isUpcoming,
+      isUnavailable,
+      isHidden,
+      notes: override.notes || null,
+      totalEpisodes: 0,
+      seasons: [],
+      episodes: [],
       _override: override,
     } as unknown as T;
     return syntheticItem;
@@ -163,7 +251,7 @@ export function applyMediaOverride<T extends Record<string, any>>(
     const t = override.customTitle.trim();
     res.title = t;
     res.name = t;
-    if ("canonicalTitle" in res) res.canonicalTitle = t;
+    res.canonicalTitle = t;
   }
 
   // Override Description
@@ -171,7 +259,7 @@ export function applyMediaOverride<T extends Record<string, any>>(
     const d = override.customDescription.trim();
     res.overview = d;
     res.description = d;
-    if ("synopsis" in res) res.synopsis = d;
+    res.synopsis = d;
   }
 
   // Override Genres
@@ -211,7 +299,16 @@ export function applyMediaOverride<T extends Record<string, any>>(
     res.release_date = rd;
     res.first_air_date = rd;
     res.startDate = rd;
+    const yearParsed = parseInt(rd.slice(0, 4), 10);
+    if (!isNaN(yearParsed)) {
+      res.seasonYear = yearParsed;
+    }
   }
+
+  // Custom Tags / Badges
+  const customTags = Array.isArray(override.customTags) ? override.customTags.filter(Boolean) : [];
+  res.customTags = customTags;
+  res.tags = customTags;
 
   // Status flags
   const isUpcoming = Boolean(override.isUpcoming || override.status === "upcoming");
@@ -223,7 +320,67 @@ export function applyMediaOverride<T extends Record<string, any>>(
   res.isHidden = isHidden;
   res.status = override.status || res.status;
   res.overrideStatus = override.status;
+  res.notes = override.notes || res.notes || null;
   res._override = override;
 
   return res as T;
 }
+
+/**
+ * Batch-enriches a list of media items with overrides and removes hidden items.
+ */
+export async function enrichMediaListWithOverrides<T extends { id?: string | number; media_type?: string; mediaType?: string; type?: string }>(
+  items: T[]
+): Promise<T[]> {
+  if (!Array.isArray(items) || items.length === 0) return items;
+
+  try {
+    const [overrides, hiddenSet] = await Promise.all([
+      getAllMediaOverrides(),
+      getHiddenMediaSet(),
+    ]);
+
+    if (overrides.length === 0 && hiddenSet.size === 0) {
+      return items;
+    }
+
+    const overrideMap = new Map<string, MediaOverride>();
+    for (const o of overrides) {
+      if (o.id) overrideMap.set(o.id.toLowerCase().trim(), o);
+      if (o.mediaType && o.mediaId) {
+        const cleanType = o.mediaType.toLowerCase().trim();
+        const cleanId = String(o.mediaId).toLowerCase().trim();
+        overrideMap.set(`${cleanType}-${cleanId}`, o);
+        overrideMap.set(cleanId, o);
+        if (cleanId.startsWith("kitsu-")) overrideMap.set(cleanId.replace("kitsu-", ""), o);
+        if (cleanId.startsWith("mal-")) overrideMap.set(cleanId.replace("mal-", ""), o);
+      }
+    }
+
+    const results: T[] = [];
+    for (const item of items) {
+      if (isMediaItemHidden(item, hiddenSet)) continue;
+
+      const mType = (item.media_type || item.mediaType || item.type || "movie").toLowerCase().trim();
+      const idStr = String(item.id || "").toLowerCase().trim();
+      const compoundKey = `${mType}-${idStr}`;
+      const rawStripped = idStr.replace(/^(kitsu-|mal-|tmdb-|anime-|tv-|movie-)/, "");
+
+      const ov =
+        overrideMap.get(compoundKey) ||
+        overrideMap.get(idStr) ||
+        (rawStripped ? overrideMap.get(`${mType}-${rawStripped}`) || overrideMap.get(rawStripped) : null);
+
+      if (ov?.isHidden || ov?.status === "hidden") continue;
+
+      const enriched = ov ? (applyMediaOverride(item as any, ov) as T) : item;
+      results.push(enriched);
+    }
+
+    return results;
+  } catch (err) {
+    console.error("[Media Overrides] enrichMediaListWithOverrides Error:", err);
+    return items;
+  }
+}
+

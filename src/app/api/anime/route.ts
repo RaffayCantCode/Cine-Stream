@@ -37,11 +37,16 @@ export async function GET(request: NextRequest) {
       items = await getPopularAnime(page, genre);
     }
 
-    // Filter out hidden items
+    // Enrich with media overrides and filter out hidden items
     try {
-      const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
-      const hiddenSet = await getHiddenMediaSet();
-      items = items.filter((item: any) => !isMediaItemHidden({ id: item.id || item.animeId, mediaType: "anime" }, hiddenSet));
+      const { enrichMediaListWithOverrides } = await import("@/lib/media-overrides");
+      const mapped = items.map((i: any) => ({
+        ...i,
+        id: i.id || i.animeId,
+        media_type: "anime",
+        mediaType: "anime",
+      }));
+      items = await enrichMediaListWithOverrides(mapped);
     } catch {}
 
     if (items.length === 0) {
@@ -61,7 +66,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: { items },
       hasMore: items.length > 0,
-    }, { headers: cacheHeaders(3600) });
+    }, { headers: { "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate" } });
   } catch (error) {
     console.error("[Anime API Route Error]:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);

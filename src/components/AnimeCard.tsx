@@ -22,6 +22,11 @@ export interface AnimeItem {
   seasonYear?: number | null;
   format?: string | null;
   reason?: string;
+  isUpcoming?: boolean;
+  isUnavailable?: boolean;
+  isHidden?: boolean;
+  customTags?: string[];
+  tags?: string[];
 }
 
 interface AnimeCardProps {
@@ -91,15 +96,32 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           </div>
         )}
 
-        <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
-          <span className="bg-purple-950/80 border border-purple-500/30 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
-            JP SUB
-          </span>
-          {dubCount !== null && dubCount > 0 && (
-            <span className="bg-amber-500/90 border border-amber-400/40 text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
-              DUB
+        <div className="absolute top-2 left-2 z-20 flex flex-wrap items-center gap-1.5 pointer-events-none max-w-[85%]">
+          {item.isUpcoming || item.status === "upcoming" ? (
+            <span className="bg-amber-500/90 border border-amber-400/50 text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+              UPCOMING
             </span>
+          ) : item.isUnavailable || item.status === "unavailable" ? (
+            <span className="bg-zinc-700/90 border border-zinc-500/50 text-zinc-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+              UNAVAILABLE
+            </span>
+          ) : (
+            <>
+              <span className="bg-purple-950/80 border border-purple-500/30 text-purple-200 text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+                JP SUB
+              </span>
+              {dubCount !== null && dubCount > 0 && (
+                <span className="bg-amber-500/90 border border-amber-400/40 text-white text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded-md uppercase leading-none shadow-lg">
+                  DUB
+                </span>
+              )}
+            </>
           )}
+          {Array.isArray((item as any).customTags || (item as any).tags) && ((item as any).customTags || (item as any).tags).slice(0, 2).map((tag: string, i: number) => (
+            <span key={i} className="bg-purple-600/90 border border-purple-400/50 text-white text-[9px] sm:text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded-md uppercase leading-none shadow-lg">
+              {tag}
+            </span>
+          ))}
         </div>
 
         <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/95 via-black/50 to-transparent pointer-events-none z-10" />

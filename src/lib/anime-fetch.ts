@@ -696,10 +696,18 @@ const BATCH_RELATIONS_QUERY = `query ($ids: [Int]) {
   }
 }`;
 
+const FRANCHISE_GRAPH_CACHE = new Map<number, { nodes: FranchiseNode[]; timestamp: number }>();
+const FRANCHISE_GRAPH_TTL = 60 * 60 * 1000; // 1 hour in-memory cache
+
 async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
   const curated = getCuratedAnimeFranchiseNodes(startId);
   if (curated && curated.length > 1) {
     return curated as FranchiseNode[];
+  }
+
+  const cachedGraph = FRANCHISE_GRAPH_CACHE.get(startId);
+  if (cachedGraph && Date.now() - cachedGraph.timestamp < FRANCHISE_GRAPH_TTL) {
+    return cachedGraph.nodes;
   }
 
   const visited = new Map<number, FranchiseNode>();
@@ -783,7 +791,15 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
     console.warn("[Franchise] Level 1 fetch failed for", startId, e);
   }
 
-  return [...visited.values()].filter(n => n.title);
+  const finalNodes = [...visited.values()].filter(n => n.title);
+  if (finalNodes.length > 0) {
+    if (FRANCHISE_GRAPH_CACHE.size > 200) {
+      const first = FRANCHISE_GRAPH_CACHE.keys().next().value;
+      if (first !== undefined) FRANCHISE_GRAPH_CACHE.delete(first);
+    }
+    FRANCHISE_GRAPH_CACHE.set(startId, { nodes: finalNodes, timestamp: Date.now() });
+  }
+  return finalNodes;
 }
 
 /**
@@ -1046,6 +1062,36 @@ function validateEpisode(
 // MAIN DETAIL FUNCTION
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface AnimeDetailsCacheEntry {
+  data: {
+    anime: AnimeItem;
+    episodes: EpisodeDetail[];
+    totalEpisodes: number;
+    seasons: SeasonInfo[];
+    openedSeasonId: string;
+    franchiseNodes: FranchiseNode[];
+    tmdbId?: number | null;
+    tmdbSeasonMap?: Record<string, number>;
+  };
+  timestamp: number;
+}
+const ANIME_DETAILS_CACHE = new Map<string, AnimeDetailsCacheEntry>();
+const ANIME_DETAILS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes in-memory cache
+
+export function invalidateAnimeDetailsCache(animeId?: string | number): void {
+  if (!animeId) {
+    ANIME_DETAILS_CACHE.clear();
+    FRANCHISE_GRAPH_CACHE.clear();
+  } else {
+    const idStr = String(animeId).toLowerCase();
+    for (const key of Array.from(ANIME_DETAILS_CACHE.keys())) {
+      if (key.toLowerCase().includes(idStr)) {
+        ANIME_DETAILS_CACHE.delete(key);
+      }
+    }
+  }
+}
+
 /**
  * Fetch full anime franchise details for any season ID.
  * - Builds the complete franchise graph via BFS
@@ -1066,8 +1112,26 @@ export async function getAnimeDetails(
   tmdbId?: number | null;
   tmdbSeasonMap?: Record<string, number>;
 } | null> {
+  const cacheKey = `${id}-${epLimit}-${skipEpisodes}`;
+  const cached = ANIME_DETAILS_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < ANIME_DETAILS_CACHE_TTL) {
+    return JSON.parse(JSON.stringify(cached.data));
+  }
+
+  function cacheAndReturn(res: any) {
+    if (res && res.anime) {
+      if (ANIME_DETAILS_CACHE.size > 300) {
+        const firstKey = ANIME_DETAILS_CACHE.keys().next().value;
+        if (firstKey !== undefined) ANIME_DETAILS_CACHE.delete(firstKey);
+      }
+      ANIME_DETAILS_CACHE.set(cacheKey, { data: res, timestamp: Date.now() });
+    }
+    return res;
+  }
+
   if (id.startsWith("kitsu-")) {
-    return getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
+    const kitsuRes = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
+    return cacheAndReturn(kitsuRes);
   }
 
   const isMalInput = id.startsWith("mal-");
@@ -1102,7 +1166,7 @@ export async function getAnimeDetails(
       if (!isNaN(tmdbIdNum)) {
         try {
           const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${tmdbIdNum}`, {
-            signal: AbortSignal.timeout(8000),
+            signal: AbortSignal.timeout(2500),
             headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
             next: { revalidate: 86400 },
           });
@@ -1137,18 +1201,16 @@ export async function getAnimeDetails(
 
   if (isNaN(numId)) {
     const kitsuRes = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
-    if (kitsuRes) return kitsuRes;
+    if (kitsuRes) return cacheAndReturn(kitsuRes);
     return null;
   }
-
-  // No local cache — rely on Cloudflare CDN via next: { revalidate } on fetch calls.
 
   // Step 0 & Step 1: Fetch AniZip mappings and main media metadata in parallel
   let aniZipMapping: any = null;
   let media: any = null;
 
   const aniZipPromise = fetch(`https://api.ani.zip/mappings?anilist_id=${id}`, {
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(2500),
     headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
     next: { revalidate: 86400 } // Cache mappings for 24h
   }).then(async res => res.ok ? res.json() : null).catch(() => null);
@@ -1229,7 +1291,7 @@ export async function getAnimeDetails(
   if (!media && !isNaN(numId)) {
     try {
       const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(2500),
         headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
         next: { revalidate: 86400 }
       });
@@ -1252,7 +1314,7 @@ export async function getAnimeDetails(
       if (!resolvedMalId && !isNaN(numId)) {
         try {
           const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${numId}`, {
-            signal: AbortSignal.timeout(8000),
+            signal: AbortSignal.timeout(2500),
             headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
             next: { revalidate: 86400 }
           });
@@ -1269,7 +1331,7 @@ export async function getAnimeDetails(
       if (targetMalId) {
         const jikanRes = await fetch(
           `${JIKAN_BASE}/anime/${targetMalId}`,
-          { signal: AbortSignal.timeout(8000) }
+          { signal: AbortSignal.timeout(3000) }
         );
         if (jikanRes.ok) {
           const jData = await jikanRes.json();
@@ -1381,13 +1443,13 @@ export async function getAnimeDetails(
               seasonsList = buildSeasonList(jikanCuratedNodes, numId);
             }
 
-            return {
+            return cacheAndReturn({
               anime: animeItem, episodes, totalEpisodes: totalEps,
               seasons: seasonsList, openedSeasonId: id,
               franchiseNodes: jikanCuratedNodes && jikanCuratedNodes.length > 1 ? jikanCuratedNodes : ([] as FranchiseNode[]),
               tmdbId,
               tmdbSeasonMap,
-            };
+            });
           }
         }
       }
@@ -1455,7 +1517,7 @@ export async function getAnimeDetails(
         });
       }
 
-      return {
+      return cacheAndReturn({
         anime: animeItem,
         episodes,
         totalEpisodes: epCount,
@@ -1464,7 +1526,7 @@ export async function getAnimeDetails(
         franchiseNodes: curatedNodes || [],
         tmdbId: curatedItem.tmdbId || 1429,
         tmdbSeasonMap: { [String(numId)]: curatedItem.tmdbSeasonNumber || 4 },
-      };
+      });
     }
 
     try {
@@ -1478,7 +1540,7 @@ export async function getAnimeDetails(
     // Fallback 3: Kitsu + AniZip + TMDB (when both AniList and Jikan are down)
     try {
       const kitsuFallback = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
-      if (kitsuFallback) return kitsuFallback;
+      if (kitsuFallback) return cacheAndReturn(kitsuFallback);
     } catch (e) {
       console.warn("Kitsu details fallback failed:", e);
     }
@@ -1601,7 +1663,7 @@ export async function getAnimeDetails(
         } else {
           try {
             const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
-              signal: AbortSignal.timeout(8000),
+              signal: AbortSignal.timeout(2500),
               headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
               next: { revalidate: 86400 }
             });
@@ -1672,38 +1734,44 @@ export async function getAnimeDetails(
   }
 
   // Group and map each AniList season to its TMDB season number and episodeOffset
-  const mappedEpisodesCount: Record<string, number> = {}; // key: "tmdbId-seasonNum" -> total mapped episodes count
-
   for (const s of baseSeasons) {
     const isSeasonMovie = s.seasonLabel.startsWith("Movie") || isTargetMovie;
     const tid = (s as any).tmdbId || tmdbIds[s.id];
     let tmdbSeasonNum: number | null = isSeasonMovie ? null : ((s as any).tmdbSeasonNumber ?? null);
     let episodeOffset = isSeasonMovie ? 0 : ((s as any).episodeOffset ?? 0);
 
-    if (isSeasonMovie) {
-      s.totalEpisodes = 1;
-    } else if (tid && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
+    if (tid && !isSeasonMovie && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
       const tmdbSeasons = showSeasonsMap[tid] || [];
       const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
       const parsedSeasonNum = labelNumMatch
         ? parseInt(labelNumMatch[1], 10)
         : parseSeasonNumberFromTitle(s.name);
 
-      const sAniZip = allAniZipMappings[s.id];
-      const azEp1 = sAniZip?.episodes?.["1"];
-      
-      const isMovieOrSpecial = s.seasonLabel.startsWith("Movie") || s.seasonLabel.startsWith("OVA") || s.seasonLabel.startsWith("Special");
-      if (!isMovieOrSpecial && azEp1?.seasonNumber !== undefined && azEp1?.episodeNumber !== undefined) {
-        tmdbSeasonNum = azEp1.seasonNumber;
-        episodeOffset = azEp1.episodeNumber - 1;
-        const key = `${tid}-${tmdbSeasonNum}`;
-        mappedEpisodesCount[key] = Math.max(mappedEpisodesCount[key] || 0, episodeOffset + s.totalEpisodes);
-        tmdbSeasonMap[s.id] = tmdbSeasonNum as number;
-      } else if (!isMovieOrSpecial) {
-        const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
-        tmdbSeasonNum = labelNumMatch ? parseInt(labelNumMatch[1], 10) : parseSeasonNumberFromTitle(s.name);
-        episodeOffset = 0;
+      const exactMatch = tmdbSeasons.find(ts => ts.season_number === parsedSeasonNum);
+      if (exactMatch) {
+        tmdbSeasonNum = parsedSeasonNum;
+      } else {
+        const matchByTitle = tmdbSeasons.find(ts => ts.season_number > 0);
+        if (matchByTitle) {
+          tmdbSeasonNum = matchByTitle.season_number;
+        }
       }
+    }
+
+    // Derive TMDB mapping from AniZip ep-1 data
+    const az = allAniZipMappings[s.id];
+    if (az && az.episodes && az.episodes["1"]) {
+      const ep1 = az.episodes["1"];
+      if (ep1.seasonNumber !== undefined) {
+        tmdbSeasonNum = ep1.seasonNumber;
+      }
+      if (ep1.episodeNumber !== undefined) {
+        episodeOffset = Math.max(ep1.episodeNumber - 1, 0);
+      }
+    }
+
+    if (tid && tmdbSeasonNum !== null) {
+      tmdbSeasonMap[s.id] = tmdbSeasonNum;
     }
 
     mappedSeasons.push({
@@ -1712,26 +1780,14 @@ export async function getAnimeDetails(
       tmdbId: tid,
       tmdbSeasonNumber: tmdbSeasonNum,
       episodeOffset: episodeOffset,
-      coverImage: s.coverImage,
-      bannerImage: s.bannerImage,
     });
   }
 
-  // Step 4: Find the opened season (the one matching the requested ID)
-  let openedSeasonIndex = mappedSeasons.findIndex(s => String(s.id) === id);
-  if (openedSeasonIndex === -1) openedSeasonIndex = 0;
-  const openedSeason = mappedSeasons[openedSeasonIndex];
-  const activeSeasonId = openedSeason?.id || id;
+  // Find the requested season
+  const openedSeasonIndex = mappedSeasons.findIndex(s => String(s.id) === id);
+  const openedSeason = openedSeasonIndex >= 0 ? mappedSeasons[openedSeasonIndex] : mappedSeasons[0];
+  const activeSeasonId = openedSeason ? String(openedSeason.id) : id;
 
-  // Validate all seasons
-  for (const s of mappedSeasons) {
-    const val = validateSeason(s, anime.name, franchiseNodes);
-    if (val.warnings.length > 0) {
-      console.warn(`[Validation] Season warnings for "${s.name}":`, val.warnings);
-    }
-  }
-
-  // Step 5: If skipEpisodes, generate placeholder episodes for the active season only
   if (skipEpisodes) {
     const basicEpisodes: EpisodeDetail[] = [];
     const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel.startsWith(t));
@@ -1749,7 +1805,7 @@ export async function getAnimeDetails(
         seasonMalId: openedSeason.idMal || null,
       });
     }
-    return {
+    return cacheAndReturn({
       anime,
       episodes: basicEpisodes,
       totalEpisodes: openedSeason.totalEpisodes,
@@ -1758,7 +1814,7 @@ export async function getAnimeDetails(
       franchiseNodes,
       tmdbId,
       tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
-    };
+    });
   }
 
   // Step 6: Check if anime season is unreleased
@@ -1786,7 +1842,7 @@ export async function getAnimeDetails(
         seasonMalId: openedSeason.idMal || null,
       });
     }
-    return {
+    return cacheAndReturn({
       anime,
       episodes: unreleasedEps,
       totalEpisodes: targetCount,
@@ -1795,7 +1851,7 @@ export async function getAnimeDetails(
       franchiseNodes,
       tmdbId,
       tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
-    };
+    });
   }
 
   // Fetch real episodes for the active season
@@ -1859,7 +1915,7 @@ export async function getAnimeDetails(
 
   allCombinedEpisodes.push(...seasonEps);
 
-  return {
+  return cacheAndReturn({
     anime,
     episodes: allCombinedEpisodes,
     totalEpisodes: allCombinedEpisodes.length,
@@ -1868,7 +1924,7 @@ export async function getAnimeDetails(
     franchiseNodes,
     tmdbId,
     tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
-  };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

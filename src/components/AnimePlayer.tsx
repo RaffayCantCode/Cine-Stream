@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2 } from "lucide-react";
+import { Server, RotateCcw, SkipForward, ChevronRight, Check, Loader2, Maximize2, Minimize2, Tv, Play } from "lucide-react";
 import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 
 interface ProviderSource {
   name: string;
-  provider: "animepahe" | "vidnest" | "123embed" | "vidlink" | "autoembed";
+  provider: "animeplay" | "vidnest" | "vidlink" | "123embed" | "autoembed" | "megaplay" | "animepahe";
   color: string;
   quality: "best" | "good" | "backup";
   tag?: SourceTag;
@@ -29,13 +29,15 @@ interface AnimePlayerProps {
   onProgress?: (time: number) => void;
   forcedSource?: string;
   forceReloadCount?: number;
+  isTheaterMode?: boolean;
+  onToggleTheater?: () => void;
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Source 1", provider: "animepahe", color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
+  { name: "Source 1", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
   { name: "Source 2", provider: "vidnest",   color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
-  { name: "Source 3", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20", quality: "best" },
-  { name: "Source 4", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20", quality: "good" },
+  { name: "Source 3", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20", quality: "best" },
+  { name: "Source 4", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20", quality: "good" },
   { name: "Source 5", provider: "autoembed", color: "from-[#f43f5e]/30 to-[#fb7185]/20", quality: "backup" },
 ];
 
@@ -83,13 +85,18 @@ function buildProviderUrl(
   }
 
   switch (provider) {
+    case "animeplay":
+      return primaryId
+        ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub`
+        : "";
+    case "vidnest":
+    case "megaplay":
+      return primaryId
+        ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub`
+        : "";
     case "animepahe":
       return primaryId
         ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`
-        : "";
-    case "vidnest":
-      return primaryId
-        ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub`
         : "";
     case "123embed":
       if (tmdbId) {
@@ -137,7 +144,9 @@ export function AnimePlayer({
   onAutoNext,
   onProgress,
   forcedSource,
-  forceReloadCount
+  forceReloadCount,
+  isTheaterMode,
+  onToggleTheater
 }: AnimePlayerProps) {
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
@@ -223,7 +232,6 @@ export function AnimePlayer({
     setSourceIndex(index);
     setHasError(false);
     setIsLoading(true);
-    setShowSpinner(true);
     setShowSources(false);
     setRetryCount(0);
     setIframeReady(false);
@@ -234,9 +242,10 @@ export function AnimePlayer({
   };
 
   const [currentUrl, setCurrentUrl] = useState("");
+  const [liveIframeSrc, setLiveIframeSrc] = useState("");
+  const [needsClickUnlock, setNeedsClickUnlock] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-  const [showSpinner, setShowSpinner] = useState(true);
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
   const [retryCount, setRetryCount] = useState(0);
   const [iframeReady, setIframeReady] = useState(false);
@@ -244,7 +253,8 @@ export function AnimePlayer({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const playbackStartedRef = useRef(false);
-  const currentProviderRef = useRef<string>(PROVIDERS[0]?.provider || "animepahe");
+  const delayTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const currentProviderRef = useRef<string>(PROVIDERS[0]?.provider || "animeplay");
   useEffect(() => {
     const p = providers[sourceIndex];
     if (p) currentProviderRef.current = p.provider;
@@ -268,15 +278,27 @@ export function AnimePlayer({
   const markPlaybackStarted = useCallback(() => {
     playbackStartedRef.current = true;
     setIsLoading(false);
-    setShowSpinner(false);
   }, []);
 
-  // Auto-dismiss the loading spinner once the embed has had time to render.
+  // When user clicks the unlock overlay for Source 1, inject the src with a tiny delay
+  // so the iframe is fully mounted and the click event serves as the user gesture for autoplay
+  const handleClickUnlock = useCallback(() => {
+    setNeedsClickUnlock(false);
+    const url = resolvedUrls["animeplay"] || currentUrl;
+    if (url) {
+      if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
+      delayTimerRef.current = setTimeout(() => {
+        setLiveIframeSrc(url);
+      }, 50);
+    }
+  }, [resolvedUrls, currentUrl]);
+
+  // Cleanup delay timer on unmount
   useEffect(() => {
-    setShowSpinner(true);
-    const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
-    return () => { clearTimeout(spinnerTimer); };
-  }, [currentUrl, sourceIndex, retryCount]);
+    return () => {
+      if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
+    };
+  }, []);
 
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
@@ -284,7 +306,8 @@ export function AnimePlayer({
       "https://vidnest.fun",
       "https://vidlink.pro",
       "https://player.autoembed.co",
-      "https://play2.123embed.net"
+      "https://play2.123embed.net",
+      "https://megaplay.buzz"
     ];
     const links: HTMLLinkElement[] = [];
     domains.forEach(href => {
@@ -317,7 +340,7 @@ export function AnimePlayer({
     setIframeReady(false);
   }, [animeId, malId, episode, rootAnimeId, rootMalId, episodeOffset, tmdbId, tmdbSeason, isMovie, providers]);
 
-  // When the source index or retry count changes, load the embed immediately.
+  // When the source index or retry count changes, load the embed.
   useEffect(() => {
     const url = resolvedUrls[currentSource.provider] || buildProviderUrl(
       currentSource.provider, animeId, malId, rootAnimeId, rootMalId,
@@ -325,12 +348,24 @@ export function AnimePlayer({
     );
     if (!url) return;
 
+    if (delayTimerRef.current) {
+      clearTimeout(delayTimerRef.current);
+      delayTimerRef.current = null;
+    }
+
     playbackStartedRef.current = false;
     setIsLoading(true);
-    setShowSpinner(true);
     setHasError(false);
     setCurrentUrl(url);
     setIframeReady(false);
+
+    if (currentSource.provider === "animeplay") {
+      setNeedsClickUnlock(true);
+      setLiveIframeSrc("");
+    } else {
+      setNeedsClickUnlock(false);
+      setLiveIframeSrc(url);
+    }
   }, [sourceIndex, resolvedUrls, retryCount, currentSource.provider, animeId, malId, rootAnimeId, rootMalId, episode, episodeOffset, tmdbId, tmdbSeason, isMovie, providers]);
 
   // Scroll player into view on episode change
@@ -413,7 +448,6 @@ export function AnimePlayer({
       if (data.event === "error") {
         setHasError(true);
         setIsLoading(false);
-        setShowSpinner(false);
       }
 
       // ── VidLink events ───────────────────────────────────────────────────
@@ -484,17 +518,19 @@ export function AnimePlayer({
     });
     setHasError(false);
     setIsLoading(true);
-    setShowSpinner(true);
     setRetryCount(0);
     setIframeReady(false);
+    setNeedsClickUnlock(false);
+    setLiveIframeSrc("");
   }, [sourcePrefKey, globalPrefKey, providers]);
 
   const retrySource = useCallback(() => {
     setHasError(false);
     setIsLoading(true);
-    setShowSpinner(true);
     setRetryCount(prev => prev + 1);
     setIframeReady(false);
+    setNeedsClickUnlock(false);
+    setLiveIframeSrc("");
   }, []);
 
   const toggleFullscreen = async () => {
@@ -511,48 +547,74 @@ export function AnimePlayer({
     } catch { /* ignore */ }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable) return;
+      if (e.key === "t" || e.key === "T") {
+        onToggleTheater?.();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onToggleTheater]);
+
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-white/40 font-medium uppercase tracking-wider hidden sm:inline">Source:</span>
+        {/* Left Side: Source dropdown & Next Source */}
+        <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setShowSources(!showSources)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r ${currentSource.color} border border-[#7288AE]/30 text-white text-xs font-bold transition-all hover:opacity-90 shadow-lg`}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r ${currentSource.color} border border-white/10 text-white text-xs font-bold transition-all hover:opacity-90 shadow-md cursor-pointer shrink-0`}
           >
-            <Server className="w-4 h-4" />
-            {currentSource.name}
+            <Server className="w-3.5 h-3.5 shrink-0 text-white/90" />
+            <span className="font-bold">{currentSource.name}</span>
             {currentSource?.tag ? (
-              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${TAG_STYLES[currentSource.tag] || TAG_STYLES.good}`}>
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold leading-none ${TAG_STYLES[currentSource.tag] || TAG_STYLES.good}`}>
                 {SOURCE_TAG_LABELS[currentSource.tag] || currentSource.tag}
               </span>
             ) : currentSource?.quality ? (
-              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[currentSource.quality]}`}>
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold leading-none ${QUALITY_STYLES[currentSource.quality]}`}>
                 {currentSource.quality}
               </span>
             ) : null}
-            <ChevronRight className={`w-4 h-4 transition-transform ${showSources ? "rotate-90" : ""}`} />
+            <ChevronRight className={`w-3.5 h-3.5 text-white/70 transition-transform ${showSources ? "rotate-90" : ""}`} />
           </button>
           {providers.length > 1 && (
             <button
               onClick={switchSource}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-[#4B5694] border border-white/10 hover:border-[#7288AE]/40 text-white/80 hover:text-white text-xs font-bold transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white/75 hover:text-white text-xs font-semibold transition-all cursor-pointer shrink-0"
+              title="Switch to next streaming source"
             >
-              <SkipForward className="w-4 h-4" />
-              Next Source
+              <SkipForward className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Next Source</span>
             </button>
           )}
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-          <span className="text-[10px] text-amber-400 font-bold">Popup ads may open — close them and the video will play</span>
-        </div>
-        <div className="flex items-center gap-2">
+
+        {/* Right Side: Theater Mode & Reload */}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {onToggleTheater && (
+            <button
+              onClick={onToggleTheater}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all shadow-sm cursor-pointer ${
+                isTheaterMode
+                  ? "bg-primary text-primary-foreground border-primary/40 ring-1 ring-primary/30"
+                  : "bg-white/[0.05] hover:bg-white/[0.1] border-white/10 text-white/75 hover:text-white"
+              }`}
+              title="Toggle Theater Mode [T]"
+            >
+              {isTheaterMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <span>{isTheaterMode ? "Standard" : "Theater"}</span>
+            </button>
+          )}
           <button
             onClick={retrySource}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/20 text-white/70 hover:text-white rounded-xl text-xs font-bold transition-all shadow-lg"
-            title="Reload source"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white/75 hover:text-white rounded-xl text-xs font-semibold transition-all shadow-sm cursor-pointer"
+            title="Reload video player"
           >
-            <RotateCcw className="w-4 h-4" /> Reload
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Reload</span>
           </button>
         </div>
       </div>
@@ -624,39 +686,44 @@ export function AnimePlayer({
               </div>
             </div>
           </div>
+        ) : needsClickUnlock ? (
+          <button
+            onClick={handleClickUnlock}
+            className="w-full h-full flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-black/80 via-black/95 to-black group cursor-pointer select-none"
+            aria-label="Click to start Source 1"
+          >
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4B5694] to-[#7288AE] flex items-center justify-center shadow-2xl shadow-[#4B5694]/40 group-hover:scale-110 active:scale-95 transition-transform duration-200 ring-4 ring-[#7288AE]/30">
+              <Play className="w-9 h-9 text-white fill-white ml-1" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-white font-bold text-base tracking-wide">Click to Play</p>
+              <p className="text-white/40 text-xs">Source 1 • Tap to start playback</p>
+            </div>
+          </button>
         ) : (
-          <>
-            {showSpinner && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none">
-                <div className="w-14 h-14 border-4 border-white/10 border-t-[#4B5694] rounded-full animate-spin" />
-              </div>
-            )}
-            {currentUrl && (
-              <iframe
-                key={`${currentSource.provider}-${retryCount}`}
-                ref={iframeRef}
-                src={currentUrl}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
-                allowFullScreen={true}
-                referrerPolicy="no-referrer-when-downgrade"
-                title={`${animeTitle} - Episode ${episode}`}
-                onLoad={() => {
-                  setIsLoading(false);
-                  setHasError(false);
-                  setIframeReady(true);
-                  setShowSpinner(false);
-                  playbackStartedRef.current = true;
-                }}
-                onError={() => {
-                  console.warn(`[AnimePlayer] ${currentSource.name} failed to load`);
-                  setHasError(true);
-                  setIsLoading(false);
-                  setShowSpinner(false);
-                }}
-              />
-            )}
-          </>
+          (currentSource.provider === "animeplay" ? liveIframeSrc : currentUrl) && (
+            <iframe
+              key={`${currentSource.provider}-${retryCount}`}
+              ref={iframeRef}
+              src={currentSource.provider === "animeplay" ? liveIframeSrc : currentUrl}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
+              allowFullScreen={true}
+              referrerPolicy="no-referrer-when-downgrade"
+              title={`${animeTitle} - Episode ${episode}`}
+              onLoad={() => {
+                setIsLoading(false);
+                setHasError(false);
+                setIframeReady(true);
+                playbackStartedRef.current = true;
+              }}
+              onError={() => {
+                console.warn(`[AnimePlayer] ${currentSource.name} failed to load`);
+                setHasError(true);
+                setIsLoading(false);
+              }}
+            />
+          )
         )}
       </div>
     </div>

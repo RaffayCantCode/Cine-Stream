@@ -58,9 +58,27 @@ export default function MovieClient() {
   const [movie, setMovie] = useState<Movie | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isTheaterMode, setIsTheaterMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("cinestream_movie_theater_mode") === "true";
+      } catch {}
+    }
+    return false;
+  });
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   usePageContentReady(!isLoading);
+
+  const handleToggleTheater = () => {
+    setIsTheaterMode(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("cinestream_movie_theater_mode", String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -265,6 +283,14 @@ export default function MovieClient() {
                     {g.name}
                   </span>
                 ))}
+                {Array.isArray((movie as any).customTags) && (movie as any).customTags.map((tag: string, i: number) => (
+                  <span
+                    key={i}
+                    className="px-2 sm:px-2.5 py-0.5 bg-purple-500/20 border border-purple-500/40 rounded-full text-[11px] sm:text-xs font-bold text-purple-300"
+                  >
+                    🏷️ {tag}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -310,8 +336,15 @@ export default function MovieClient() {
         </CinematicHero>
 
       {isPlaying && (
-        <div ref={playerRef} className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 mb-4">
-          <VideoPlayer type="movie" id={id} title={movie.title} startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0} />
+        <div ref={playerRef} className={`mx-auto mt-8 mb-4 transition-all duration-300 ${isTheaterMode ? "w-full max-w-none px-2 sm:px-4 md:px-6" : "max-w-screen-2xl px-5 md:px-10"}`}>
+          <VideoPlayer
+            type="movie"
+            id={id}
+            title={movie.title}
+            startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
+            isTheaterMode={isTheaterMode}
+            onToggleTheater={handleToggleTheater}
+          />
         </div>
       )}
 

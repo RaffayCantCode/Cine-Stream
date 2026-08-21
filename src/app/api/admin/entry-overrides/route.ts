@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { mediaOverrides, type MediaOverride } from "@/lib/db/schema";
 import { normalizeOverrideId, invalidateMediaOverridesCache } from "@/lib/media-overrides";
+import { invalidateAnimeDetailsCache } from "@/lib/anime-fetch";
 import { desc, eq, and, or, ilike } from "drizzle-orm";
 import { tmdbFetch } from "@/lib/tmdb";
 
@@ -145,6 +146,10 @@ export async function GET(request: NextRequest) {
       success: true,
       overrides: finalResults,
       total: finalResults.length,
+    }, {
+      headers: {
+        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      },
     });
   } catch (error) {
     console.error("[Admin Entry Overrides API] GET Error:", error);
@@ -223,7 +228,10 @@ export async function POST(request: NextRequest) {
     };
 
     const existing = await db.query.mediaOverrides.findFirst({
-      where: eq(mediaOverrides.id, id),
+      where: or(
+        eq(mediaOverrides.id, id),
+        and(eq(mediaOverrides.mediaType, cleanType), eq(mediaOverrides.mediaId, cleanId))
+      ),
     });
 
     let savedOverride;
@@ -231,7 +239,7 @@ export async function POST(request: NextRequest) {
       const [updated] = await db
         .update(mediaOverrides)
         .set(payload)
-        .where(eq(mediaOverrides.id, id))
+        .where(eq(mediaOverrides.id, existing.id))
         .returning();
       savedOverride = updated;
     } else {
@@ -246,10 +254,15 @@ export async function POST(request: NextRequest) {
     }
 
     invalidateMediaOverridesCache();
+    invalidateAnimeDetailsCache(cleanId);
 
     return NextResponse.json({
       success: true,
       override: savedOverride,
+    }, {
+      headers: {
+        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      },
     });
   } catch (error) {
     console.error("[Admin Entry Overrides API] POST Error:", error);
@@ -277,16 +290,32 @@ export async function DELETE(request: NextRequest) {
       targetId = normalizeOverrideId(mediaType, mediaId);
     }
 
-    if (!targetId || typeof targetId !== "string") {
+    if (!targetId && !mediaId) {
       return NextResponse.json({ error: "Override ID or mediaType & mediaId required" }, { status: 400 });
     }
 
-    await db.delete(mediaOverrides).where(eq(mediaOverrides.id, targetId.trim()));
+    const conditions = [];
+    if (targetId) conditions.push(eq(mediaOverrides.id, String(targetId).trim()));
+    if (mediaType && mediaId) {
+      conditions.push(
+        and(
+          eq(mediaOverrides.mediaType, String(mediaType).toLowerCase().trim()),
+          eq(mediaOverrides.mediaId, String(mediaId).trim())
+        )
+      );
+    }
+
+    await db.delete(mediaOverrides).where(or(...conditions));
     invalidateMediaOverridesCache();
+    invalidateAnimeDetailsCache(targetId || mediaId);
 
     return NextResponse.json({
       success: true,
-      deletedId: targetId,
+      deletedId: targetId || mediaId,
+    }, {
+      headers: {
+        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      },
     });
   } catch (error) {
     console.error("[Admin Entry Overrides API] DELETE Error:", error);

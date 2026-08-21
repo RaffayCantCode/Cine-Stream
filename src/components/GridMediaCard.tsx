@@ -61,16 +61,24 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
           </div>
         )}
 
-        {/* Top left status badge */}
-        {(item as any).isUpcoming || (item as any).status === "upcoming" ? (
-          <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-amber-950 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md backdrop-blur-sm">
-            Upcoming
-          </div>
-        ) : (item as any).isUnavailable || (item as any).status === "unavailable" ? (
-          <div className="absolute top-2 left-2 flex items-center gap-1 bg-zinc-700/90 text-zinc-200 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md backdrop-blur-sm">
-            Unavailable
-          </div>
-        ) : null}
+        {/* Top left status and custom tag badges */}
+        <div className="absolute top-2 left-2 z-10 flex flex-wrap items-center gap-1 max-w-[75%]">
+          {(item as any).isUpcoming || (item as any).status === "upcoming" ? (
+            <div className="flex items-center gap-1 bg-amber-500/90 text-amber-950 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md backdrop-blur-sm">
+              Upcoming
+            </div>
+          ) : (item as any).isUnavailable || (item as any).status === "unavailable" ? (
+            <div className="flex items-center gap-1 bg-zinc-700/90 text-zinc-200 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md backdrop-blur-sm">
+              Unavailable
+            </div>
+          ) : null}
+
+          {Array.isArray((item as any).customTags || (item as any).tags) && ((item as any).customTags || (item as any).tags).slice(0, 1).map((tag: string, i: number) => (
+            <div key={i} className="flex items-center gap-1 bg-purple-600/90 text-white text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md shadow-md backdrop-blur-sm">
+              {tag}
+            </div>
+          ))}
+        </div>
 
         {/* Top right rating badge */}
         {item.vote_average ? (

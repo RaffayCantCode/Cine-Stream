@@ -91,7 +91,25 @@ export default function TvClient() {
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>("list");
+  const [isTheaterMode, setIsTheaterMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("cinestream_tv_theater_mode") === "true";
+      } catch {}
+    }
+    return false;
+  });
   usePageContentReady(!isLoading);
+
+  const handleToggleTheater = () => {
+    setIsTheaterMode(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("cinestream_tv_theater_mode", String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const handleTvViewChange = (view: EpisodeViewMode) => {
     setTvViewMode(view);
@@ -547,6 +565,14 @@ export default function TvClient() {
                     {g.name}
                   </span>
                 ))}
+                {Array.isArray((show as any).customTags) && (show as any).customTags.map((tag: string, i: number) => (
+                  <span
+                    key={i}
+                    className="px-2 sm:px-2.5 py-0.5 bg-purple-500/20 border border-purple-500/40 rounded-full text-[11px] sm:text-xs font-bold text-purple-300"
+                  >
+                    🏷️ {tag}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -617,8 +643,8 @@ export default function TvClient() {
         </div>
       )}
       {isPlaying && (
-        <div ref={playerRef} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start select-none">
-          <div>
+        <div ref={playerRef} className={`select-none ${isTheaterMode ? "space-y-6" : "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start"}`}>
+          <div className="w-full">
             <VideoPlayer
               type="tv"
               id={id}
@@ -628,35 +654,44 @@ export default function TvClient() {
               startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
               onEpisodeChange={(s, e) => handleWatchEpisode(s, e)}
               onVideoEnd={handleAutoPlayNext}
+              isTheaterMode={isTheaterMode}
+              onToggleTheater={handleToggleTheater}
             />
-            <div className="mt-3 text-sm text-white/60">
-              <span className="font-bold text-white">Now Playing: </span>
-              S{playingSeason}E{playingEpisode}
-              {currentEpisode?.name ? ` - ${currentEpisode.name}` : ""}
+            <div className="mt-3 flex items-center justify-between gap-4 flex-wrap">
+              <div className="text-sm text-white/60">
+                <span className="font-bold text-white">Now Playing: </span>
+                S{playingSeason}E{playingEpisode}
+                {currentEpisode?.name ? ` - ${currentEpisode.name}` : ""}
+              </div>
+              {nextEpisode && (
+                <button
+                  onClick={() => handleWatchEpisode(playingSeason, nextEpisode.episode_number, nextEpisode.name)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Play Next: E{nextEpisode.episode_number}
+                </button>
+              )}
             </div>
-            {nextEpisode && (
-              <button
-                onClick={() => handleWatchEpisode(playingSeason, nextEpisode.episode_number, nextEpisode.name)}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Play Next: E{nextEpisode.episode_number}
-              </button>
-            )}
           </div>
 
-          <aside className="w-full xl:w-80 shrink-0 rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col max-h-[60vh] xl:max-h-[70vh]">
-            <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
-              <div className="text-sm font-bold text-white flex items-center justify-between">
+          <aside className={`w-full shrink-0 rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col ${
+            isTheaterMode ? "max-h-[380px]" : "xl:w-80 max-h-[60vh] xl:max-h-[70vh]"
+          }`}>
+            <div className="p-4 border-b border-white/[0.06] bg-white/[0.01] flex items-center justify-between">
+              <div className="text-sm font-bold text-white flex items-center gap-2">
                 <span>Episode Queue</span>
-                <span className="text-xs font-normal text-white/40">Season {selectedSeason}</span>
+                {isTheaterMode && <span className="text-xs font-normal text-white/30">(Theater View)</span>}
               </div>
+              <span className="text-xs font-normal text-white/40">Season {selectedSeason}</span>
             </div>
-            <div ref={queueRef} className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-hide">
+            <div ref={queueRef} className={`flex-1 overflow-y-auto p-2 scrollbar-hide ${
+              isTheaterMode ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2" : "space-y-1"
+            }`}>
               {seasonLoading ? (
-                <div className="flex items-center justify-center py-8 text-white/30 text-xs">Loading episodes...</div>
+                <div className="col-span-full flex items-center justify-center py-8 text-white/30 text-xs">Loading episodes...</div>
               ) : !seasonData?.episodes?.length ? (
-                <div className="flex items-center justify-center py-8 text-white/30 text-xs">No episodes found</div>
+                <div className="col-span-full flex items-center justify-center py-8 text-white/30 text-xs">No episodes found</div>
               ) : (
                 seasonData.episodes.map((episode) => {
                   const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
@@ -666,7 +701,7 @@ export default function TvClient() {
                       key={`queue-${episode.id}`}
                       ref={isWatching ? selectedEpRef : undefined}
                       onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
-                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 ${
+                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 cursor-pointer ${
                         isWatching
                           ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
                           : isUpcoming

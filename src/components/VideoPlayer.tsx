@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { AlertCircle, Check, Server, Maximize2, ChevronRight, RotateCcw, Loader2, SkipForward, ExternalLink } from "lucide-react";
+import { AlertCircle, Check, Server, Maximize2, Minimize2, ChevronRight, RotateCcw, Loader2, SkipForward, ExternalLink } from "lucide-react";
 import { StreamingSource, getStreamingSources } from "@/lib/streaming-fetch";
 import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 
@@ -18,6 +18,8 @@ interface VideoPlayerProps {
   onVideoEnd?: () => void;
   forcedSource?: string;
   forceReloadCount?: number;
+  isTheaterMode?: boolean;
+  onToggleTheater?: () => void;
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
@@ -40,7 +42,7 @@ const DEFAULT_TIMEOUT = 12000;
 // Per-media source key: each movie/show remembers its own preferred source independently per user
 const getSourcePrefKey = (type: string, id: number, userId: string) => `sv_src_${userId}_${type}_${id}`;
 
-export function VideoPlayer({ type, id, season, episode, title, startProgress, onProgress, onEpisodeChange, onVideoEnd, forcedSource, forceReloadCount }: VideoPlayerProps) {
+export function VideoPlayer({ type, id, season, episode, title, startProgress, onProgress, onEpisodeChange, onVideoEnd, forcedSource, forceReloadCount, isTheaterMode, onToggleTheater }: VideoPlayerProps) {
   const { data: session, status } = useSession();
   const userId = session?.user?.id || "guest";
   const initialProgressRef = useRef(startProgress);
@@ -105,7 +107,6 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showSpinner, setShowSpinner] = useState(true);
   const [showSources, setShowSources] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const playerContainerRef = useRef<HTMLDivElement>(null);
@@ -135,15 +136,6 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     }
   }, [sources, currentSource, sourcePrefKey, globalPrefKey, type]);
 
-  // Auto-dismiss spinner after timeout without forced source switching
-  useEffect(() => {
-    setShowSpinner(true);
-    const spinnerTimer = setTimeout(() => setShowSpinner(false), 2500);
-
-    return () => {
-      clearTimeout(spinnerTimer);
-    };
-  }, [currentSource?.url, isLoading]);
 
   // Sources are all shown always — if an embed fails the user sees the error and can pick another
 
@@ -314,49 +306,82 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     }
   };
 
+  useEffect(() => {
+    if (!onToggleTheater) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        onToggleTheater();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onToggleTheater]);
+
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-white/40 font-medium uppercase tracking-wider hidden sm:inline">Source:</span>
+        {/* Left Side: Source dropdown & Next Source */}
+        <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setShowSources(!showSources)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl ${currentStyle.bg} text-white text-xs font-bold transition-all hover:opacity-90 shadow-lg`}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl ${currentStyle.bg} text-white text-xs font-bold transition-all hover:opacity-90 shadow-md cursor-pointer shrink-0`}
           >
-            <Server className="w-4 h-4" />
-            {currentSource?.name || "Select Source"}
+            <Server className="w-3.5 h-3.5 shrink-0 text-white/90" />
+            <span className="font-bold">{currentSource?.name || "Select Source"}</span>
             {currentSource?.tag ? (
-              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${TAG_STYLES[currentSource.tag as SourceTag] || TAG_STYLES.good}`}>
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold leading-none ${TAG_STYLES[currentSource.tag as SourceTag] || TAG_STYLES.good}`}>
                 {SOURCE_TAG_LABELS[currentSource.tag as SourceTag] || currentSource.tag}
               </span>
             ) : currentSource?.quality ? (
-              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] leading-none ${QUALITY_STYLES[currentSource.quality]}`}>
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold leading-none ${QUALITY_STYLES[currentSource.quality]}`}>
                 {currentSource.quality}
               </span>
             ) : null}
-            <ChevronRight className={`w-4 h-4 transition-transform ${showSources ? "rotate-90" : ""}`} />
+            <ChevronRight className={`w-3.5 h-3.5 text-white/70 transition-transform ${showSources ? "rotate-90" : ""}`} />
           </button>
           {sources.length > 1 && (
             <button
               onClick={switchToNext}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-[#4B5694] border border-white/10 hover:border-[#7288AE]/40 text-white/80 hover:text-white text-xs font-bold transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white/75 hover:text-white text-xs font-semibold transition-all cursor-pointer shrink-0"
+              title="Switch to next streaming source"
             >
-              <SkipForward className="w-4 h-4" />
-              Next Source
+              <SkipForward className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Next Source</span>
             </button>
           )}
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-          <span className="text-[10px] text-amber-400 font-bold">Popup ads may open — close them and the video will play</span>
-        </div>
-        <div className="flex items-center gap-2">
+
+        {/* Right Side: Theater Mode & Reload */}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {onToggleTheater && (
+            <button
+              onClick={onToggleTheater}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all shadow-sm cursor-pointer ${
+                isTheaterMode
+                  ? "bg-primary text-primary-foreground border-primary/40 ring-1 ring-primary/30"
+                  : "bg-white/[0.05] hover:bg-white/[0.1] border-white/10 text-white/75 hover:text-white"
+              }`}
+              title="Toggle Theater Mode [T]"
+            >
+              {isTheaterMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <span>{isTheaterMode ? "Standard" : "Theater"}</span>
+            </button>
+          )}
           <button
             onClick={() => { setError(null); setIsLoading(true); setRetryCount(c => c + 1); }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white text-xs font-bold transition-all"
-            title="Reload Source"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white/75 hover:text-white rounded-xl text-xs font-semibold transition-all shadow-sm cursor-pointer"
+            title="Reload Video Source"
           >
-            <RotateCcw className="w-4 h-4" />
-            <span className="hidden sm:inline">Reload Source</span>
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Reload</span>
           </button>
         </div>
       </div>
@@ -433,27 +458,18 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
             </div>
           </div>
         ) : (
-          <>
-            {showSpinner && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none">
-                <div className="text-center">
-                  <div className="w-14 h-14 border-4 border-white/10 border-t-[#4B5694] rounded-full animate-spin mx-auto" />
-                </div>
-              </div>
-            )}
-            <iframe
-              key={`${currentSource.type}-${retryCount}`}
-              ref={iframeRef}
-              src={currentSource.url}
-              className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
-              allowFullScreen={true}
-              referrerPolicy="no-referrer-when-downgrade"
-              title={title || "Watch"}
-              onLoad={() => { setIsLoading(false); setShowSpinner(false); }}
-              onError={handleIframeError}
-            />
-          </>
+          <iframe
+            key={`${currentSource.type}-${retryCount}`}
+            ref={iframeRef}
+            src={currentSource.url}
+            className="w-full h-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share; microphone"
+            allowFullScreen={true}
+            referrerPolicy="no-referrer-when-downgrade"
+            title={title || "Watch"}
+            onLoad={() => { setIsLoading(false); }}
+            onError={handleIframeError}
+          />
         )}
       </div>
     </div>
