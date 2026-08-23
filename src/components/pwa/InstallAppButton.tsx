@@ -92,22 +92,22 @@ export function InstallAppButton({ compact = false, className }: InstallAppButto
           type="button"
           onClick={handleInstallClick}
           className={cn(
-            "p-1.5 sm:p-2 text-purple-300 hover:text-purple-200 hover:bg-purple-500/10 rounded-xl transition-all touch-manipulation cursor-pointer flex items-center gap-1 text-xs font-bold",
+            "p-1.5 sm:p-2 text-primary hover:text-primary hover:bg-primary/10 rounded-xl transition-all touch-manipulation cursor-pointer flex items-center gap-1 text-xs font-bold",
             className
           )}
           title="Download App"
           aria-label="Download App"
         >
-          <Download className="w-4 h-4 text-purple-400" />
+          <Download className="w-4 h-4 text-primary" />
         </button>
       ) : (
         <div className={cn("px-3 py-1", className)}>
           <button
             type="button"
             onClick={handleInstallClick}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-purple-500/30 text-white/80 hover:text-white font-bold text-xs transition-all group cursor-pointer"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-primary/40 text-white/80 hover:text-white font-bold text-xs transition-all group cursor-pointer"
           >
-            <Download className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform shrink-0" />
+            <Download className="w-4 h-4 text-primary group-hover:scale-110 transition-transform shrink-0" />
             <span className="truncate">Download App</span>
           </button>
         </div>

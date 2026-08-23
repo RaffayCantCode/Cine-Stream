@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
-export type ContentMode = "all" | "movies" | "tv" | "anime" | "people";
+export type ContentMode = "all" | "movies" | "tv" | "anime" | "people" | "manga";
 
 interface ContentModeContextProps {
   mode: ContentMode;
@@ -28,6 +28,8 @@ export function ContentModeProvider({ children }: { children: ReactNode }) {
       setModeState("tv");
     } else if (pathname.startsWith("/anime")) {
       setModeState("anime");
+    } else if (pathname.startsWith("/manga")) {
+      setModeState("manga");
     }
   }, [pathname]);
 
@@ -38,7 +40,7 @@ export function ContentModeProvider({ children }: { children: ReactNode }) {
   // Apply theme classes to document element
   useEffect(() => {
     const html = document.documentElement;
-    html.classList.remove("mode-movies", "mode-tv", "mode-anime", "mode-all");
+    html.classList.remove("mode-movies", "mode-tv", "mode-anime", "mode-manga", "mode-all");
     html.classList.add(`mode-${mode}`);
   }, [mode]);
 

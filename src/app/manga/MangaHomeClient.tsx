@@ -352,7 +352,7 @@ export default function MangaHomeClient() {
           {/* Header Section */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#42f5dd]/10 border border-[#42f5dd]/30 text-[#42f5dd] text-xs font-black uppercase tracking-wider mb-3 shadow-[0_0_15px_rgba(66,245,221,0.15)]">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-black uppercase tracking-wider mb-3 shadow-[0_0_15px_hsl(var(--primary)/0.2)]">
                 <BookOpen className="w-3.5 h-3.5" />
                 <span>Dedicated Manga & Manhwa Reader</span>
               </div>
@@ -372,7 +372,7 @@ export default function MangaHomeClient() {
                   onClick={() => setSelectedType(t)}
                   className={`px-4 py-2 rounded-xl text-xs font-black capitalize transition-all cursor-pointer ${
                     selectedType === t
-                      ? "bg-[#42f5dd] text-black shadow-lg shadow-[#42f5dd]/30 scale-102"
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-102"
                       : "text-white/60 hover:text-white hover:bg-white/[0.06]"
                   }`}
                 >
@@ -385,12 +385,12 @@ export default function MangaHomeClient() {
           {/* Search & Genre Filter Bar */}
           <div className="space-y-4">
             <div className="relative max-w-xl">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#42f5dd]/60" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/70" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search manga, manhwa, or authors (e.g. Solo Leveling, One Piece)..."
-                className="w-full h-12 pl-11 pr-10 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] focus:bg-white/[0.06] border border-white/[0.08] focus:border-[#42f5dd]/60 text-white text-sm outline-none transition-all placeholder:text-white/35 shadow-inner"
+                className="w-full h-12 pl-11 pr-10 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] focus:bg-white/[0.06] border border-white/[0.08] focus:border-primary/60 text-white text-sm outline-none transition-all placeholder:text-white/35 shadow-inner"
               />
               {searchQuery && (
                 <button
@@ -412,7 +412,7 @@ export default function MangaHomeClient() {
                     onClick={() => setSelectedGenre(isActive ? "" : g.id)}
                     className={`shrink-0 px-4 py-2 rounded-xl text-xs transition-all cursor-pointer ${
                       isActive
-                        ? "bg-[#42f5dd] text-black border border-[#42f5dd] shadow-lg shadow-[#42f5dd]/30 font-black scale-105"
+                        ? "bg-primary text-primary-foreground border border-primary shadow-lg shadow-primary/30 font-black scale-105"
                         : "bg-white/[0.04] text-white/70 border border-white/[0.08] hover:bg-white/[0.08] hover:text-white font-bold"
                     }`}
                   >
@@ -423,17 +423,17 @@ export default function MangaHomeClient() {
             </div>
           </div>
 
-          {/* CONTINUE READING SECTION (with Next Chapter and Discard X button) */}
+          {/* CONTINUE READING SECTION (with Continue + Open Series buttons and Discard X button) */}
           {!debouncedSearch.trim() && history.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <Bookmark className="w-5 h-5 text-[#42f5dd]" />
+                  <Bookmark className="w-5 h-5 text-primary" />
                   <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
                     Continue Reading
                   </h2>
                 </div>
-                <span className="text-xs text-[#42f5dd] font-black bg-[#42f5dd]/10 px-3 py-1 rounded-full border border-[#42f5dd]/30">
+                <span className="text-xs text-primary font-black bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
                   {history.length} In Progress
                 </span>
               </div>
@@ -442,18 +442,20 @@ export default function MangaHomeClient() {
                 {history.map((item) => (
                   <div
                     key={item.mangaId}
-                    className="group relative flex flex-col justify-between p-4 rounded-3xl bg-zinc-900/80 border border-white/[0.08] hover:border-[#42f5dd]/50 hover:shadow-[0_12px_32px_rgba(66,245,221,0.15)] transition-all duration-300 overflow-hidden"
+                    className="group relative flex flex-col justify-between p-4 rounded-3xl bg-zinc-900/90 border border-white/[0.08] hover:border-primary/50 hover:shadow-[0_12px_32px_hsl(var(--primary)/0.2)] transition-all duration-300 overflow-hidden"
                   >
-                    {/* Top Discard (Cross X) Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleDiscardHistory(e, item.mangaId)}
-                      className="absolute top-3 right-3 z-30 p-1.5 rounded-full bg-black/80 hover:bg-red-500 text-white/70 hover:text-white border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-xl"
-                      title="Discard from Continue Reading"
-                      aria-label="Discard"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                    {/* Top Discard (Cross X) Button — Only shows after page has mounted & loaded */}
+                    {!isTrendingNowLoading && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDiscardHistory(e, item.mangaId)}
+                        className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-black/80 hover:bg-rose-600 text-white/60 hover:text-white border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-lg opacity-80 hover:opacity-100 hover:scale-105 active:scale-95"
+                        title="Remove from Continue Reading"
+                        aria-label="Remove"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
 
                     {/* Content Details */}
                     <div className="flex gap-3.5 items-start">
@@ -470,46 +472,51 @@ export default function MangaHomeClient() {
 
                       <div className="flex-1 flex flex-col justify-between min-w-0 pr-6">
                         <div>
-                          <span className="text-[10px] font-black text-[#42f5dd] uppercase tracking-wider">
+                          <span className="text-[10px] font-black text-primary uppercase tracking-wider">
                             {item.mangaType}
                           </span>
                           <Link
                             href={`/manga/${item.mangaId}`}
-                            className="text-sm sm:text-base font-black text-white truncate block hover:text-[#42f5dd] transition-colors"
+                            className="text-sm sm:text-base font-black text-white truncate block hover:text-primary transition-colors mt-0.5"
                             title={item.mangaTitle}
                           >
                             {item.mangaTitle}
                           </Link>
-                          <p className="text-xs text-white/70 font-semibold mt-1">
-                            Last read: <strong className="text-white">Ch. {item.chapterNumber}</strong>
-                            {item.totalPages > 1 && ` (p. ${item.pageNumber}/${item.totalPages})`}
-                          </p>
+                          <div className="flex flex-col gap-0.5 mt-1.5">
+                            <span className="text-xs text-white/80 font-bold">
+                              Last read: <strong className="text-primary">Ch. {item.chapterNumber}</strong>
+                            </span>
+                            {item.totalPages > 1 && (
+                              <span className="text-[11px] text-white/50 font-medium">
+                                Page {item.pageNumber} of {item.totalPages}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Action Buttons Row (Resume & Next Chapter) */}
+                    {/* Action Buttons Row: [Continue / Resume] + [Open Series] */}
                     <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/[0.06]">
-                      {/* Resume Last Read Chapter */}
+                      {/* Button 1: Continue Reading (Direct to Chapter) */}
                       <Link
                         href={`/manga/${item.mangaId}/read/${item.chapterId}`}
-                        className="flex-1 py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-black transition-all shadow-md shadow-primary/25 flex items-center justify-center gap-1.5 active:scale-95 touch-manipulation cursor-pointer hover:opacity-90"
+                        title={`Resume Reading Chapter ${item.chapterNumber}`}
                       >
-                        <Play className="w-3 h-3 text-[#42f5dd] fill-current" />
+                        <Play className="w-3.5 h-3.5 fill-current" />
                         <span>Resume Ch. {item.chapterNumber}</span>
                       </Link>
 
-                      {/* Next Chapter Button (If available) */}
-                      {item.nextChapterId && (
-                        <Link
-                          href={`/manga/${item.mangaId}/read/${item.nextChapterId}`}
-                          className="py-2 px-3.5 rounded-xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black text-xs font-black transition-all shadow-md shadow-[#42f5dd]/30 flex items-center gap-1 shrink-0"
-                          title={`Read Next Chapter ${item.nextChapterNumber || ""}`}
-                        >
-                          <span>Next Ch. {item.nextChapterNumber || ""}</span>
-                          <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
-                        </Link>
-                      )}
+                      {/* Button 2: Open Series (Opens Details Page) */}
+                      <Link
+                        href={`/manga/${item.mangaId}`}
+                        className="py-2.5 px-3.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white hover:text-primary text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 touch-manipulation cursor-pointer shrink-0"
+                        title="Open Manga Details Page"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-primary" />
+                        <span>Open</span>
+                      </Link>
                     </div>
                   </div>
                 ))}
@@ -524,7 +531,7 @@ export default function MangaHomeClient() {
                 <h2 className="text-2xl font-black text-white tracking-tight">
                   Search Results for &quot;{debouncedSearch}&quot;
                 </h2>
-                <span className="text-xs text-[#42f5dd] font-bold">
+                <span className="text-xs text-primary font-bold">
                   {isSearching ? "Searching..." : `${searchResults.length} titles`}
                 </span>
               </div>
@@ -546,7 +553,7 @@ export default function MangaHomeClient() {
                   {/* Infinite Scroll Sentinel */}
                   <div ref={sentinelRef} className="py-8 flex items-center justify-center">
                     {isLoadingMore && (
-                      <div className="flex items-center gap-2 text-xs font-bold text-[#42f5dd]">
+                      <div className="flex items-center gap-2 text-xs font-bold text-primary">
                         <Loader2 className="w-5 h-5 animate-spin" />
                         <span>Loading more results...</span>
                       </div>
@@ -583,7 +590,7 @@ export default function MangaHomeClient() {
                       : `Equal 50/50 mix of trending Manga & Manhwa ${activeGenreObj?.label ? `in ${activeGenreObj.label}` : ""}`}
                   </p>
                 </div>
-                <span className="text-xs text-[#42f5dd] font-bold bg-[#42f5dd]/10 px-3 py-1 rounded-full border border-[#42f5dd]/30">
+                <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
                   {isGenreLoading ? "Loading..." : `${genreResults.length} loaded`}
                 </span>
               </div>
@@ -605,7 +612,7 @@ export default function MangaHomeClient() {
                   {/* Infinite Scroll Sentinel */}
                   <div ref={sentinelRef} className="py-8 flex items-center justify-center">
                     {isLoadingMore && (
-                      <div className="flex items-center gap-2 text-xs font-black text-[#42f5dd]">
+                      <div className="flex items-center gap-2 text-xs font-black text-primary">
                         <Loader2 className="w-5 h-5 animate-spin" />
                         <span>Loading more {activeGenreObj?.label || "series"}...</span>
                       </div>
@@ -621,12 +628,12 @@ export default function MangaHomeClient() {
               <section className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <TrendingUp className="w-5 h-5 text-[#42f5dd]" />
+                    <TrendingUp className="w-5 h-5 text-primary" />
                     <h2 className="text-2xl font-black text-white tracking-tight">
                       Trending Now
                     </h2>
                   </div>
-                  <span className="text-xs font-bold text-[#42f5dd]/80">Real-Time Picks</span>
+                  <span className="text-xs font-bold text-primary/80">Real-Time Picks</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
@@ -644,12 +651,12 @@ export default function MangaHomeClient() {
               <section className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <Flame className="w-5 h-5 text-[#42f5dd]" />
+                    <Flame className="w-5 h-5 text-primary" />
                     <h2 className="text-2xl font-black text-white tracking-tight">
                       Trending Manhwas
                     </h2>
                   </div>
-                  <span className="text-xs font-black text-[#42f5dd] bg-[#42f5dd]/10 px-3 py-1 rounded-full border border-[#42f5dd]/30">
+                  <span className="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
                     Korean Manhwa
                   </span>
                 </div>
@@ -669,12 +676,12 @@ export default function MangaHomeClient() {
               <section className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <Sparkles className="w-5 h-5 text-[#42f5dd]" />
+                    <Sparkles className="w-5 h-5 text-primary" />
                     <h2 className="text-2xl font-black text-white tracking-tight">
                       Trending Mangas
                     </h2>
                   </div>
-                  <span className="text-xs font-black text-[#42f5dd] bg-[#42f5dd]/10 px-3 py-1 rounded-full border border-[#42f5dd]/30">
+                  <span className="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
                     Japanese Manga
                   </span>
                 </div>

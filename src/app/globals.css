@@ -73,6 +73,15 @@
     --primary: 278 85% 56%;
     --ring: 278 85% 56%;
   }
+
+  /* Manga Mode: Midnight slate with vibrant electric Mint/Teal accents (#0be3bb) */
+  .mode-manga.dark {
+    --background: 210 30% 5.5%;
+    --card: 210 17% 17%;
+    --primary: 169 91% 47%;
+    --primary-foreground: 210 30% 6%;
+    --ring: 169 91% 47%;
+  }
 }
 
 /* ============================================================
@@ -279,6 +288,12 @@
     --primary: 270 95% 70%;
     --ring: 270 95% 70%;
   }
+  html.theme-glass.mode-manga.dark {
+    --background: 240 16% 8%;
+    --primary: 169 91% 47%;
+    --primary-foreground: 210 30% 6%;
+    --ring: 169 91% 47%;
+  }
 }
 
 /* Light refracting slowly through liquid glass surfaces */
@@ -324,6 +339,11 @@
   html.theme-oled.mode-anime.dark {
     --primary: 266 70% 60%;
     --ring: 266 70% 60%;
+  }
+  html.theme-oled.mode-manga.dark {
+    --primary: 169 91% 47%;
+    --primary-foreground: 0 0% 0%;
+    --ring: 169 91% 47%;
   }
 }
 
@@ -392,6 +412,13 @@
     --card: 348 30% 18%;
     --primary: 42 92% 64%;
     --ring: 42 92% 64%;
+  }
+  html.theme-cinema.mode-manga.dark {
+    --background: 348 34% 12%;
+    --card: 348 30% 18%;
+    --primary: 169 91% 47%;
+    --primary-foreground: 210 30% 6%;
+    --ring: 169 91% 47%;
   }
 }
 
@@ -489,6 +516,13 @@
     --primary: 302 82% 74%;
     --ring: 302 82% 74%;
   }
+  html.theme-wisteria.mode-manga.dark {
+    --background: 265 40% 10%;
+    --card: 268 35% 15%;
+    --primary: 169 91% 47%;
+    --primary-foreground: 210 30% 6%;
+    --ring: 169 91% 47%;
+  }
 }
 
 /* ============ 5. ZESTY (Lemon Solaris Palette) ============ */
@@ -584,6 +618,13 @@
     --card: 55 22% 13%;
     --primary: 50 100% 70%;
     --ring: 50 100% 70%;
+  }
+  html.theme-solaris.mode-manga.dark {
+    --background: 55 25% 7%;
+    --card: 55 22% 13%;
+    --primary: 169 91% 47%;
+    --primary-foreground: 210 30% 6%;
+    --ring: 169 91% 47%;
   }
 }
 

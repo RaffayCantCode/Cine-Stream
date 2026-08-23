@@ -168,7 +168,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
             <p className="text-sm text-zinc-400 mb-6">{error}</p>
             <Link
               href="/manga"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#42f5dd] text-black font-black text-sm"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-black text-sm"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Manga Hub</span>
@@ -206,7 +206,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                     alt={manga.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-black/80 backdrop-blur-md text-[#42f5dd] border border-[#42f5dd]/30 shadow-lg">
+                  <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-black/80 backdrop-blur-md text-primary border border-primary/30 shadow-lg">
                     {manga.type}
                   </div>
                 </div>
@@ -215,7 +215,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                 <div className="flex-1 space-y-5 text-left w-full">
                   <Link
                     href="/manga"
-                    className="inline-flex items-center gap-2 text-xs font-bold text-zinc-400 hover:text-[#42f5dd] transition-colors mb-2"
+                    className="inline-flex items-center gap-2 text-xs font-bold text-zinc-400 hover:text-primary transition-colors mb-2"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     <span>All Manga</span>
@@ -227,7 +227,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
 
                   {/* Status & Metadata Badges */}
                   <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold">
-                    <span className="px-3.5 py-1 rounded-full bg-[#42f5dd]/15 text-[#42f5dd] border border-[#42f5dd]/30 capitalize font-black">
+                    <span className="px-3.5 py-1 rounded-full bg-primary/15 text-primary border border-primary/30 capitalize font-black">
                       {manga.status}
                     </span>
                     {manga.releaseYear && (
@@ -240,14 +240,14 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                         {chapters.length} Chapters
                       </span>
                     ) : isChaptersLoading ? (
-                      <span className="px-3 py-1 rounded-full bg-white/[0.06] text-[#42f5dd]/80 border border-white/[0.08] flex items-center gap-1.5">
-                        <Loader2 className="w-3 h-3 animate-spin text-[#42f5dd]" />
+                      <span className="px-3 py-1 rounded-full bg-white/[0.06] text-primary/80 border border-white/[0.08] flex items-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin text-primary" />
                         <span>Loading Chapters...</span>
                       </span>
                     ) : null}
                     {manga.authors && manga.authors.length > 0 && (
                       <span className="text-white/60 flex items-center gap-1.5 ml-2 font-semibold">
-                        <Users className="w-3.5 h-3.5 text-[#42f5dd]" />
+                        <Users className="w-3.5 h-3.5 text-primary" />
                         <span>{manga.authors.join(", ")}</span>
                       </span>
                     )}
@@ -255,13 +255,18 @@ export default function MangaDetailsClient({ id }: { id: string }) {
 
                   {/* Synopsis */}
                   <div className="max-w-3xl text-sm leading-relaxed text-zinc-300 font-medium">
-                    <p className={!isDescExpanded ? "line-clamp-3" : ""}>
+                    <div
+                      className={`whitespace-pre-line text-zinc-300 ${
+                        !isDescExpanded ? "line-clamp-3" : "line-clamp-none"
+                      }`}
+                    >
                       {manga.description}
-                    </p>
-                    {manga.description.length > 200 && (
+                    </div>
+                    {manga.description && (manga.description.length > 160 || manga.description.includes("\n")) && (
                       <button
-                        onClick={() => setIsDescExpanded(!isDescExpanded)}
-                        className="text-xs font-black text-[#42f5dd] hover:text-white mt-2 flex items-center gap-1 cursor-pointer focus:outline-none"
+                        type="button"
+                        onClick={() => setIsDescExpanded((prev) => !prev)}
+                        className="inline-flex items-center gap-1.5 text-xs font-black text-primary hover:opacity-80 mt-2.5 py-1 px-2.5 -ml-2.5 rounded-lg hover:bg-primary/10 transition-colors cursor-pointer touch-manipulation focus:outline-none select-none"
                       >
                         <span>{isDescExpanded ? "Show Less" : "Read More"}</span>
                         {isDescExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -286,7 +291,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                     {resumeChapter ? (
                       <Link
                         href={`/manga/${manga.id}/read/${resumeChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(progress?.chapterNumber || "")}`}
-                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black font-black text-sm transition-all shadow-xl shadow-[#42f5dd]/30 active:scale-95 cursor-pointer touch-manipulation"
+                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-primary hover:opacity-90 text-primary-foreground font-black text-sm transition-all shadow-xl shadow-primary/30 active:scale-95 cursor-pointer touch-manipulation"
                       >
                         <Play className="w-4 h-4 fill-current" />
                         <span>Continue Chapter {progress?.chapterNumber}</span>
@@ -294,14 +299,14 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                     ) : firstChapter ? (
                       <Link
                         href={`/manga/${manga.id}/read/${firstChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(firstChapter.chapterNumber)}`}
-                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black font-black text-sm transition-all shadow-xl shadow-[#42f5dd]/30 active:scale-95 cursor-pointer touch-manipulation"
+                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-primary hover:opacity-90 text-primary-foreground font-black text-sm transition-all shadow-xl shadow-primary/30 active:scale-95 cursor-pointer touch-manipulation"
                       >
                         <BookOpen className="w-4 h-4" />
                         <span>Start Reading (Ch. {firstChapter.chapterNumber})</span>
                       </Link>
                     ) : isChaptersLoading ? (
                       <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.06] border border-white/10 text-white/70 text-xs font-bold">
-                        <Loader2 className="w-4 h-4 animate-spin text-[#42f5dd]" />
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
                         <span>Loading Chapters...</span>
                       </div>
                     ) : null}
@@ -338,7 +343,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
         <div className="max-w-screen-2xl mx-auto px-5 sm:px-8 md:px-12 pt-10 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/10">
             <div className="flex items-center gap-3">
-              <div className="w-1.5 h-6 bg-[#42f5dd] rounded-full shadow-[0_0_10px_#42f5dd]" />
+              <div className="w-1.5 h-6 bg-primary rounded-full shadow-[0_0_10px_hsl(var(--primary))]" />
               <h2 className="text-2xl font-black text-white tracking-tight">
                 Chapters {chapters.length > 0 && `(${chapters.length})`}
               </h2>
@@ -354,16 +359,16 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                     value={chapterSearch}
                     onChange={(e) => setChapterSearch(e.target.value)}
                     placeholder="Search chapter number..."
-                    className="w-full h-10 pl-10 pr-4 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#42f5dd]/60 transition-colors"
+                    className="w-full h-10 pl-10 pr-4 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-primary/60 transition-colors"
                   />
                 </div>
 
                 <button
                   onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
-                  className="flex items-center gap-2 h-10 px-4 rounded-xl bg-[#42f5dd]/15 hover:bg-[#42f5dd]/25 border border-[#42f5dd]/40 text-xs font-black text-[#42f5dd] hover:text-white transition-all cursor-pointer shadow-sm touch-manipulation"
+                  className="flex items-center gap-2 h-10 px-4 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-xs font-black text-primary hover:text-white transition-all cursor-pointer shadow-sm touch-manipulation"
                   title="Toggle chapter order"
                 >
-                  <ArrowUpDown className="w-3.5 h-3.5 text-[#42f5dd]" />
+                  <ArrowUpDown className="w-3.5 h-3.5 text-primary" />
                   <span>{sortOrder === "desc" ? "Latest First" : "Oldest First"}</span>
                 </button>
               </div>
@@ -389,33 +394,33 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                     href={`/manga/${manga?.id || id}/read/${ch.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(ch.chapterNumber)}`}
                     className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-200 cursor-pointer touch-manipulation active:scale-[0.99] ${
                       isCurrentRead
-                        ? "bg-[#42f5dd]/15 border-[#42f5dd]/50 text-[#42f5dd] shadow-md shadow-[#42f5dd]/10"
+                        ? "bg-primary/15 border-primary/50 text-primary shadow-md shadow-primary/10"
                         : isRead
-                        ? "bg-card/30 border-white/[0.04] text-white/70 hover:border-[#42f5dd]/30 hover:text-white"
-                        : "bg-card/50 border-white/[0.06] hover:bg-white/[0.06] hover:border-[#42f5dd]/40 text-white"
+                        ? "bg-card/30 border-white/[0.04] text-white/70 hover:border-primary/30 hover:text-white"
+                        : "bg-card/50 border-white/[0.06] hover:bg-white/[0.06] hover:border-primary/40 text-white"
                     }`}
                   >
                     {/* Left: Chapter Number & Title */}
                     <div className="flex items-center gap-4 min-w-0 pr-4">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
                         isCurrentRead
-                          ? "bg-[#42f5dd] text-black"
+                          ? "bg-primary text-primary-foreground"
                           : isRead
                           ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                          : "bg-white/[0.06] text-white/70 group-hover:bg-[#42f5dd]/20 group-hover:text-[#42f5dd] transition-colors"
+                          : "bg-white/[0.06] text-white/70 group-hover:bg-primary/20 group-hover:text-primary transition-colors"
                       }`}>
                         {ch.chapterNumber}
                       </div>
 
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`font-extrabold text-sm sm:text-base tracking-tight truncate group-hover:text-[#42f5dd] transition-colors ${
+                          <span className={`font-extrabold text-sm sm:text-base tracking-tight truncate group-hover:text-primary transition-colors ${
                             isRead && !isCurrentRead ? "text-white/80" : ""
                           }`}>
                             {ch.title || `Chapter ${ch.chapterNumber}`}
                           </span>
                           {isCurrentRead ? (
-                            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-[#42f5dd]/25 text-[#42f5dd] border border-[#42f5dd]/40">
+                            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-primary/25 text-primary border border-primary/40">
                               Current Read
                             </span>
                           ) : isRead ? (
@@ -460,7 +465,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                         <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                       </button>
 
-                      <div className="w-8 h-8 rounded-full bg-white/[0.04] group-hover:bg-[#42f5dd] group-hover:text-black flex items-center justify-center text-white/40 transition-all">
+                      <div className="w-8 h-8 rounded-full bg-white/[0.04] group-hover:bg-primary group-hover:text-primary-foreground flex items-center justify-center text-white/40 transition-all">
                         <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                       </div>
                     </div>
