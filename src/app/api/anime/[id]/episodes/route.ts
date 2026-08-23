@@ -3,6 +3,7 @@ export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { fetchEpisodesFromJikan, fetchEpisodesFromJikanPage, getAnimeDetails, fetchEpisodesFromAniZip, fetchEpisodesFromTatakai, fetchEpisodesFromKitsu, fetchFillerLookupFromAnimeFillerList, resolveTmdbMappingFromAniZip, DEFAULT_FETCH_USER_AGENT } from "@/lib/anime-fetch";
 import { tmdbFetch, fetchTmdbEpisodeData, searchTmdbShow } from "@/lib/tmdb";
+import { isEpisodeAvailable } from "@/lib/episode-availability";
 
 // An episode only counts as "real" if it carries actual metadata — a specific
 // title (not the generic "Episode N"), thumbnail, description, or MAL url.
@@ -105,6 +106,7 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): a
 
   const isSeasonFinished = season?.status === "FINISHED" || season?.status === "FINISHED_AIRING" || meta?.anime?.status === "FINISHED";
   const nextAiringEpNum = !isSeasonFinished ? (meta?.anime?.nextAiringEpisode?.episode || null) : null;
+  const nextAiringAt = !isSeasonFinished ? (meta?.anime?.nextAiringEpisode?.airingAt || null) : null;
   const isNotYetReleased = !isSeasonFinished && (meta?.anime?.status === "NOT_YET_RELEASED" || season?.status === "NOT_YET_RELEASED");
 
   let seasonIsUpcoming = isNotYetReleased || Boolean(!isSeasonFinished && season?.seasonYear && season.seasonYear > currentYear);
@@ -117,11 +119,18 @@ function enrichEpisodeReleaseStatus(episodes: any[], meta: any, season?: any): a
       isReleased = true;
     } else if (seasonIsUpcoming) {
       isReleased = false;
-    } else if (nextAiringEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextAiringEpNum) {
+    } else if (nextAiringEpNum && typeof ep.episodeNum === "number" && ep.episodeNum > nextAiringEpNum) {
       isReleased = false;
+    } else if (nextAiringEpNum && typeof ep.episodeNum === "number" && ep.episodeNum === nextAiringEpNum) {
+      if (nextAiringAt) {
+        if (!isEpisodeAvailable(nextAiringAt, nowMs)) {
+          isReleased = false;
+        }
+      } else {
+        isReleased = false;
+      }
     } else if (ep.releasedDate) {
-      const epDateMs = new Date(ep.releasedDate).getTime();
-      if (!isNaN(epDateMs) && epDateMs > nowMs) {
+      if (!isEpisodeAvailable(ep.releasedDate, nowMs)) {
         isReleased = false;
       }
     }
@@ -871,7 +880,7 @@ export async function GET(
           const knownCount = season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null;
           const nextAiringEp = meta?.anime?.nextAiringEpisode?.episode || null;
           const maxReleased = seasonEps.reduce((max: number, e: any) => {
-            const isRel = e.releasedDate ? new Date(e.releasedDate).getTime() <= Date.now() + 86400000 : (e.title && e.title !== `Episode ${e.episodeNum}`);
+            const isRel = e.releasedDate ? isEpisodeAvailable(e.releasedDate) : (e.title && e.title !== `Episode ${e.episodeNum}`);
             return isRel ? Math.max(max, e.episodeNum) : max;
           }, 0);
 

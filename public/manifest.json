@@ -54,6 +54,12 @@
       "short_name": "Anime",
       "url": "/anime",
       "description": "Browse anime"
+    },
+    {
+      "name": "Manga & Manhwa",
+      "short_name": "Manga",
+      "url": "/manga",
+      "description": "Read manga and manhwa webtoons"
     }
   ],
   "screenshots": [

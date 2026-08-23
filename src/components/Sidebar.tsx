@@ -8,6 +8,7 @@ import {
   Film, 
   Tv, 
   Sparkles, 
+  BookOpen,
   Search,
   User,
   LogIn,
@@ -26,6 +27,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { ThemeButton } from "@/components/ThemeButton";
 import { WatchlistLink } from "@/components/WatchlistLink";
 import { AdminPanelModal } from "@/components/admin/AdminPanelModal";
+import { InstallAppButton } from "@/components/pwa/InstallAppButton";
 
 const navItems: { href: string; icon: any; label: string; subtitle?: string }[] = [
   { href: "/", icon: Home, label: "Home" },
@@ -33,6 +35,7 @@ const navItems: { href: string; icon: any; label: string; subtitle?: string }[] 
   { href: "/browse/movies", icon: Film, label: "Movies" },
   { href: "/browse/tv", icon: Tv, label: "TV Shows" },
   { href: "/anime", icon: Sparkles, label: "Anime", subtitle: "JP Dub + Eng Subtitles" },
+  { href: "/manga", icon: BookOpen, label: "Manga", subtitle: "Manga & Manhwa" },
   { href: "/browse/franchises", icon: Library, label: "Franchises", subtitle: "Collections & Sagas" },
 ];
 
@@ -62,6 +65,7 @@ export const Sidebar = memo(function Sidebar() {
         <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
           <ThemeButton compact className="md:hidden" />
           <WatchlistLink compact className="md:hidden" />
+          <InstallAppButton compact className="md:hidden" />
           {isAdmin && (
             <button
               type="button"
@@ -189,9 +193,9 @@ export const Sidebar = memo(function Sidebar() {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-background/95 backdrop-blur-sm border-r border-white/[0.08] shadow-[8px_0_32px_rgba(0,0,0,0.6)]">
         {/* Logo */}
-        <div className="p-4 md:p-3 lg:p-4">
+        <div className="pt-4 pb-2 px-4">
           <Link href="/" className="flex items-center gap-3 group">
-            <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform" />
+            <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" />
             <span className="font-extrabold text-xl tracking-wider">
               <span className="text-white">CINE</span>
               <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
@@ -200,7 +204,7 @@ export const Sidebar = memo(function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-1 flex flex-col gap-0.5 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             
@@ -209,7 +213,7 @@ export const Sidebar = memo(function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "group relative flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-all duration-200 select-none",
+                  "group relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 select-none",
                   isActive 
                     ? "text-white font-extrabold" 
                     : "text-white/85 font-bold hover:text-white hover:bg-white/[0.08]"
@@ -223,14 +227,14 @@ export const Sidebar = memo(function Sidebar() {
                   />
                 )}
                 
-                <item.icon className={cn("w-5 h-5 shrink-0 transition-colors", isActive ? "text-foreground" : "text-white/80 group-hover:text-white")} />
+                <item.icon className={cn("w-4.5 h-4.5 shrink-0 transition-colors", isActive ? "text-foreground" : "text-white/80 group-hover:text-white")} />
                 
                 <div className="flex flex-col">
-                  <span className="text-sm font-bold truncate tracking-tight">
+                  <span className="text-xs lg:text-sm font-bold truncate tracking-tight">
                     {item.label}
                   </span>
                   {item.subtitle && (
-                    <span className="text-[10px] text-white/60 truncate leading-tight font-semibold">
+                    <span className="text-[9px] text-white/60 truncate leading-tight font-semibold">
                       {item.subtitle}
                     </span>
                   )}
@@ -242,11 +246,11 @@ export const Sidebar = memo(function Sidebar() {
 
         {/* Admin Panel Button (Visible only to database role === admin) */}
         {isAdmin && (
-          <div className="px-3 pb-2">
+          <div className="px-3 py-1">
             <button
               type="button"
               onClick={() => setAdminPanelOpen(true)}
-              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 hover:text-amber-200 font-extrabold text-xs transition-all shadow-sm cursor-pointer group"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 hover:text-amber-200 font-extrabold text-xs transition-all shadow-sm cursor-pointer group"
             >
               <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
               <span className="truncate">Admin Panel</span>
@@ -254,11 +258,14 @@ export const Sidebar = memo(function Sidebar() {
           </div>
         )}
 
+        {/* Install / Download App */}
+        <InstallAppButton />
+
         {/* Report Issue */}
-        <div className="px-3">
+        <div className="px-3 py-1">
           <Link
             href="/contact"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/60 hover:text-[#f59e0b] hover:bg-[#f59e0b]/[0.06] transition-all text-xs font-semibold"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-white/60 hover:text-[#f59e0b] hover:bg-[#f59e0b]/[0.06] transition-all text-xs font-semibold"
           >
             <Bug className="w-4 h-4" />
             <span>Report Issue</span>
@@ -266,20 +273,20 @@ export const Sidebar = memo(function Sidebar() {
         </div>
 
         {/* Search */}
-        <div className="px-3 py-3">
+        <div className="px-3 py-1">
           <Link
             href="/search"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/80 hover:text-white hover:bg-white/[0.06] transition-all"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-white/80 hover:text-white hover:bg-white/[0.06] transition-all"
           >
-            <Search className="w-5 h-5" />
-            <span className="text-sm font-bold">
+            <Search className="w-4 h-4" />
+            <span className="text-xs font-bold">
               Search
             </span>
           </Link>
         </div>
 
         {/* User section */}
-        <div className="relative pt-3 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
+        <div className="relative pt-2 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
           {status !== "loading" && (
             isAuthenticated && user ? (
               <>

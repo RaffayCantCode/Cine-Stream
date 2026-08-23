@@ -140,6 +140,37 @@ export const watchlists = pgTable(
   ]
 );
 
+// Manga Reading History table
+export const mangaReadingHistory = pgTable(
+  "manga_reading_history",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mangaId: varchar("manga_id", { length: 255 }).notNull(),
+    mangaTitle: varchar("manga_title", { length: 500 }).notNull(),
+    mangaCover: varchar("manga_cover", { length: 1000 }).notNull(),
+    mangaType: varchar("manga_type", { length: 32 }).notNull().default("manga"),
+    chapterId: varchar("chapter_id", { length: 255 }).notNull(),
+    chapterNumber: varchar("chapter_number", { length: 64 }).notNull(),
+    chapterTitle: varchar("chapter_title", { length: 500 }),
+    pageNumber: integer("page_number").notNull().default(1),
+    totalPages: integer("total_pages").notNull().default(1),
+    nextChapterId: varchar("next_chapter_id", { length: 255 }),
+    nextChapterNumber: varchar("next_chapter_number", { length: 64 }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("uq_manga_reading_user_manga").on(t.userId, t.mangaId),
+  ]
+);
+
+export type MangaReadingHistoryItem = typeof mangaReadingHistory.$inferSelect;
+export type NewMangaReadingHistoryItem = typeof mangaReadingHistory.$inferInsert;
+
 // Site Announcements table
 export const siteAnnouncements = pgTable("site_announcements", {
   id: varchar("id", { length: 32 }).primaryKey().default("current"),

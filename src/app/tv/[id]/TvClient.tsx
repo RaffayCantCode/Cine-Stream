@@ -28,6 +28,7 @@ function TvHeroTrailerButton() {
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
+import { isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { format } from "date-fns";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
@@ -167,28 +168,9 @@ export default function TvClient() {
     return Boolean(normalized) && !["ended", "canceled", "cancelled"].includes(normalized);
   };
 
-  const isFutureDate = (dateValue?: string | null) => {
-    if (!dateValue) return false;
-    const dateOnlyStr = dateValue.split("T")[0];
-    const episodeDate = new Date(`${dateOnlyStr}T00:00:00`);
-    if (Number.isNaN(episodeDate.getTime())) return false;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return episodeDate.getTime() > today.getTime();
-  };
-
-  const isWithinNextDays = (dateValue?: string | null, days = 7) => {
-    if (!dateValue) return false;
-    const date = new Date(`${dateValue}T12:00:00`);
-    if (Number.isNaN(date.getTime())) return false;
-    const now = Date.now();
-    return date.getTime() >= now && date.getTime() <= now + days * 24 * 60 * 60 * 1000;
-  };
-
   const isUpcomingEpisode = (episode?: Episode | null) => {
     if (!episode || !isOngoingShow(show?.status)) return false;
-    if (isFutureDate(episode.air_date)) return true;
+    if (isEpisodeUpcoming(episode.air_date)) return true;
     if (!seasonData?.episodes) return false;
 
     const eps = seasonData.episodes;
@@ -196,7 +178,7 @@ export default function TvClient() {
     if (epIdx <= 0) return false;
 
     for (let i = 0; i < epIdx; i++) {
-      if (isFutureDate(eps[i].air_date)) return true;
+      if (isEpisodeUpcoming(eps[i].air_date)) return true;
     }
     return false;
   };
@@ -447,7 +429,7 @@ export default function TvClient() {
   const currentEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode) : null;
   const nextEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode + 1) : null;
   const upcomingThisWeek = seasonData?.episodes
-    ?.filter((episode) => isUpcomingEpisode(episode) && isWithinNextDays(episode.air_date, 7))
+    ?.filter((episode) => isUpcomingEpisode(episode) && isWithinUpcomingDays(episode.air_date, 7))
     ?.sort((a, b) => new Date(a.air_date || "").getTime() - new Date(b.air_date || "").getTime())?.[0] || null;
 
   const seasonTrailerId = seasonData?.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;

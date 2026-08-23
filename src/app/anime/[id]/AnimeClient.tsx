@@ -32,6 +32,7 @@ import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { cleanAnimeDescription } from "@/lib/anime-fetch";
 import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
+import { isEpisodeAvailable, isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv } from "lucide-react";
 
 interface FranchiseNode {
@@ -1063,22 +1064,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }
 
   function isFutureDate(dateValue: string | null | undefined): boolean {
-    if (!dateValue) return false;
-    const dateOnlyStr = dateValue.split("T")[0];
-    const episodeDate = new Date(`${dateOnlyStr}T00:00:00`);
-    if (Number.isNaN(episodeDate.getTime())) return false;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return episodeDate.getTime() > today.getTime();
+    return isEpisodeUpcoming(dateValue);
   }
 
   function isWithinNextDays(dateValue: string | null | undefined, days = 7): boolean {
-    if (!dateValue) return false;
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return false;
-    const now = Date.now();
-    return date.getTime() >= now && date.getTime() <= now + days * 24 * 60 * 60 * 1000;
+    return isWithinUpcomingDays(dateValue, days);
   }
 
   function isEpisodeReleased(ep: Episode, status?: string | null): boolean {
@@ -1149,11 +1139,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
           if (isUnreleasedAnime) {
             released = false;
-          } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextEpNum) {
+          } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum > nextEpNum) {
             released = false;
+          } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum === nextEpNum) {
+            if (anime?.nextAiringEpisode?.airingAt) {
+              if (!isEpisodeAvailable(anime.nextAiringEpisode.airingAt, nowMs)) {
+                released = false;
+              }
+            } else {
+              released = false;
+            }
           } else if (ep.releasedDate) {
-            const epDateMs = new Date(ep.releasedDate).getTime();
-            if (!isNaN(epDateMs) && epDateMs > nowMs) {
+            if (!isEpisodeAvailable(ep.releasedDate, nowMs)) {
               released = false;
             }
           }
@@ -1243,11 +1240,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       if (isNotYet) {
         released = false;
-      } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum >= nextEpNum) {
+      } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum > nextEpNum) {
         released = false;
+      } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum === nextEpNum) {
+        if (anime?.nextAiringEpisode?.airingAt) {
+          if (!isEpisodeAvailable(anime.nextAiringEpisode.airingAt, nowMs)) {
+            released = false;
+          }
+        } else {
+          released = false;
+        }
       } else if (ep.releasedDate) {
-        const epDateMs = new Date(ep.releasedDate).getTime();
-        if (!isNaN(epDateMs) && epDateMs > nowMs) {
+        if (!isEpisodeAvailable(ep.releasedDate, nowMs)) {
           released = false;
         }
       }
