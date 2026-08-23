@@ -1,7 +1,7 @@
 /**
  * Manga and Manhwa Fetching Engine
- * Primary Source: WeebCentral API/Engine (https://weebcentral.com)
- * Secondary Source: MangaDex API (https://api.mangadex.org)
+ * Primary Source: WeebCentral Engine (https://weebcentral.com)
+ * Secondary Source: Asura Scans Engine (https://api.asurascans.com)
  */
 
 export interface MangaItem {
@@ -23,7 +23,7 @@ export interface MangaItem {
   totalChapters?: number | null;
   followedCount?: number;
   ratingScore?: number;
-  source?: "weebcentral" | "mangadex";
+  source?: "weebcentral" | "asura";
 }
 
 export interface MangaChapter {
@@ -36,7 +36,7 @@ export interface MangaChapter {
   publishAt: string;
   scanlationGroup?: string | null;
   externalUrl?: string | null;
-  source?: "weebcentral" | "mangadex";
+  source?: "weebcentral" | "asura";
 }
 
 export interface ChapterPagesData {
@@ -48,8 +48,7 @@ export interface ChapterPagesData {
 }
 
 const WEEBCENTRAL_BASE = "https://weebcentral.com";
-const MANGADEX_API = "https://api.mangadex.org";
-const MANGADEX_COVER_BASE = "https://uploads.mangadex.org/covers";
+const ASURA_API = "https://api.asurascans.com/api";
 
 // High-speed in-memory response cache
 const serverCache = new Map<string, { data: any; expiry: number }>();
@@ -76,6 +75,19 @@ function setInCache(key: string, data: any, ttlSeconds = 1800): void {
   serverCache.set(key, { data, expiry: Date.now() + ttlSeconds * 1000 });
 }
 
+function decodeHtmlEntities(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .trim();
+}
+
 /**
  * Parses WeebCentral search / list HTML into standardized MangaItem array.
  */
@@ -97,7 +109,8 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
     const titleMatch =
       block.match(/class="line-clamp-1 link link-hover">([^<]+)<\/a>/) ||
       block.match(/alt="([^"]+)\s+cover"/);
-    const title = titleMatch ? titleMatch[1].trim() : decodeURIComponent(slug.replace(/-/g, " "));
+    const rawTitle = titleMatch ? titleMatch[1].trim() : decodeURIComponent(slug.replace(/-/g, " "));
+    const title = decodeHtmlEntities(rawTitle);
 
     const coverMatch = block.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/);
     const coverImage = coverMatch ? coverMatch[0] : "/icon-512.png";
@@ -116,7 +129,7 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
 
     const tagsMatch = block.match(/<strong>Tag\(s\):<\/strong>([\s\S]*?)<\/div>/i);
     const tags = tagsMatch
-      ? [...tagsMatch[1].matchAll(/<span>([^<,]+),?<\/span>/g)].map((m) => m[1].trim())
+      ? [...tagsMatch[1].matchAll(/<span>([^<,]+),?<\/span>/g)].map((m) => decodeHtmlEntities(m[1]))
       : [];
 
     items.push({
@@ -139,107 +152,7 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
 }
 
 /**
- * Dynamically extracts the English title from MangaDex attributes.
- */
-function extractBestEnglishTitle(attrs: any): string {
-  const titles = attrs.title || {};
-
-  if (titles.en && typeof titles.en === "string" && titles.en.trim().length > 0) {
-    return titles.en.trim();
-  }
-  if (titles["en-us"] && typeof titles["en-us"] === "string" && titles["en-us"].trim().length > 0) {
-    return titles["en-us"].trim();
-  }
-
-  const altTitlesList = attrs.altTitles || [];
-  for (const alt of altTitlesList) {
-    if (typeof alt === "object" && alt !== null) {
-      if (alt.en && typeof alt.en === "string" && alt.en.trim().length > 0) {
-        return alt.en.trim();
-      }
-      if (alt["en-us"] && typeof alt["en-us"] === "string" && alt["en-us"].trim().length > 0) {
-        return alt["en-us"].trim();
-      }
-    }
-  }
-
-  return (
-    titles["ja-ro"] ||
-    titles["ko-ro"] ||
-    titles["zh-ro"] ||
-    Object.values(titles)[0] ||
-    "Untitled"
-  ).toString();
-}
-
-/**
- * Formats MangaDex item to MangaItem.
- */
-export function formatMangaDexItem(item: any): MangaItem {
-  const attrs = item.attributes || {};
-  const relationships = item.relationships || [];
-
-  const title = extractBestEnglishTitle(attrs);
-
-  const altTitles: string[] = (attrs.altTitles || [])
-    .flatMap((t: any) => Object.values(t))
-    .filter((t: any): t is string => typeof t === "string");
-
-  const descs = attrs.description || {};
-  const description =
-    descs.en ||
-    descs["en-us"] ||
-    Object.values(descs)[0] ||
-    `Read ${title} on CineStream.`;
-
-  const coverRel = relationships.find((r: any) => r.type === "cover_art");
-  const coverFileName = coverRel?.attributes?.fileName;
-  const coverImage = coverFileName
-    ? `${MANGADEX_COVER_BASE}/${item.id}/${coverFileName}.512.jpg`
-    : "/icon-512.png";
-
-  const authors = relationships
-    .filter((r: any) => r.type === "author")
-    .map((r: any) => r.attributes?.name)
-    .filter(Boolean);
-
-  const artists = relationships
-    .filter((r: any) => r.type === "artist")
-    .map((r: any) => r.attributes?.name)
-    .filter(Boolean);
-
-  const origLang = (attrs.originalLanguage || "ja").toLowerCase();
-  let type: "manga" | "manhwa" | "manhua" = "manga";
-  if (origLang === "ko") type = "manhwa";
-  else if (origLang === "zh" || origLang === "zh-hk") type = "manhua";
-
-  const tags = (attrs.tags || [])
-    .map((tag: any) => tag.attributes?.name?.en)
-    .filter(Boolean);
-
-  return {
-    id: item.id,
-    title,
-    altTitles,
-    description,
-    coverImage,
-    bannerImage: coverImage,
-    type,
-    status: attrs.status || "ongoing",
-    releaseYear: attrs.year || null,
-    authors: authors.length > 0 ? authors : undefined,
-    artists: artists.length > 0 ? artists : undefined,
-    tags,
-    contentRating: attrs.contentRating || "safe",
-    originalLanguage: origLang,
-    lastChapter: attrs.lastChapter || null,
-    followedCount: attrs.followedCount,
-    source: "mangadex",
-  };
-}
-
-/**
- * Fetches real-time Trending Now (combined Manga + Manhwa) from WeebCentral (with MangaDex fallback).
+ * Fetches real-time Trending Now (combined Manga + Manhwa) from WeebCentral.
  */
 export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
   const cacheKey = `manga_trending_${limit}`;
@@ -248,7 +161,7 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
 
   try {
     const res = await fetch(
-      `${WEEBCENTRAL_BASE}/search/data?sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False`,
+      `${WEEBCENTRAL_BASE}/search/data?sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
       {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -268,36 +181,14 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
       }
     }
   } catch (err) {
-    console.warn("[MangaFetch] WeebCentral getMangaTrending failed, trying MangaDex fallback:", err);
+    console.warn("[MangaFetch] WeebCentral getMangaTrending failed:", err);
   }
 
-  // MangaDex Fallback
-  try {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      "order[followedCount]": "desc",
-      "contentRating[]": "safe",
-    });
-    params.append("contentRating[]", "suggestive");
-    params.append("includes[]", "cover_art");
-    params.append("includes[]", "author");
-
-    const res = await fetch(`${MANGADEX_API}/manga?${params.toString()}`, {
-      next: { revalidate: 1800 },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const result = (data.data || []).map(formatMangaDexItem);
-    setInCache(cacheKey, result, 1800);
-    return result;
-  } catch (err) {
-    console.warn("[MangaFetch] MangaDex getMangaTrending fallback failed:", err);
-    return [];
-  }
+  return [];
 }
 
 /**
- * Fetches real-time Trending Korean Manhwas from WeebCentral (with MangaDex fallback).
+ * Fetches real-time Trending Korean Manhwas from WeebCentral.
  */
 export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
   const cacheKey = `manga_manhwa_${limit}`;
@@ -306,7 +197,7 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
 
   try {
     const res = await fetch(
-      `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False`,
+      `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
       {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -326,37 +217,14 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
       }
     }
   } catch (err) {
-    console.warn("[MangaFetch] WeebCentral getPopularManhwa failed, trying MangaDex fallback:", err);
+    console.warn("[MangaFetch] WeebCentral getPopularManhwa failed:", err);
   }
 
-  // MangaDex Fallback
-  try {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      "originalLanguage[]": "ko",
-      "order[followedCount]": "desc",
-      "contentRating[]": "safe",
-    });
-    params.append("contentRating[]", "suggestive");
-    params.append("includes[]", "cover_art");
-    params.append("includes[]", "author");
-
-    const res = await fetch(`${MANGADEX_API}/manga?${params.toString()}`, {
-      next: { revalidate: 1800 },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const result = (data.data || []).map(formatMangaDexItem);
-    setInCache(cacheKey, result, 1800);
-    return result;
-  } catch (err) {
-    console.warn("[MangaFetch] MangaDex getPopularManhwa fallback failed:", err);
-    return [];
-  }
+  return [];
 }
 
 /**
- * Fetches real-time Trending Japanese Mangas from WeebCentral (with MangaDex fallback).
+ * Fetches real-time Trending Japanese Mangas from WeebCentral.
  */
 export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
   const cacheKey = `manga_latest_${limit}`;
@@ -365,7 +233,7 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
 
   try {
     const res = await fetch(
-      `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False`,
+      `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
       {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -385,31 +253,43 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
       }
     }
   } catch (err) {
-    console.warn("[MangaFetch] WeebCentral getLatestMangaUpdates failed, trying MangaDex fallback:", err);
+    console.warn("[MangaFetch] WeebCentral getLatestMangaUpdates failed:", err);
   }
 
-  // MangaDex Fallback
-  try {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      "originalLanguage[]": "ja",
-      "order[followedCount]": "desc",
-      "contentRating[]": "safe",
-    });
-    params.append("contentRating[]", "suggestive");
-    params.append("includes[]", "cover_art");
-    params.append("includes[]", "author");
+  return [];
+}
 
-    const res = await fetch(`${MANGADEX_API}/manga?${params.toString()}`, {
+/**
+ * Searches Asura Scans as secondary fallback.
+ */
+async function searchAsura(query: string): Promise<MangaItem[]> {
+  if (!query?.trim()) return [];
+  try {
+    const res = await fetch(`${ASURA_API}/search?q=${encodeURIComponent(query.trim())}`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
       next: { revalidate: 1800 },
     });
     if (!res.ok) return [];
     const data = await res.json();
-    const result = (data.data || []).map(formatMangaDexItem);
-    setInCache(cacheKey, result, 1800);
-    return result;
+    const seriesList = data.data || [];
+
+    return seriesList.map((s: any) => ({
+      id: `asura-${s.slug}`,
+      title: decodeHtmlEntities(s.title || s.slug),
+      altTitles: s.alt_titles || [],
+      description: decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) || `Read ${s.title} on CineStream.`,
+      coverImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
+      bannerImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
+      type: "manhwa" as const,
+      status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
+      releaseYear: s.release_year || null,
+      tags: ["Action", "Manhwa", "Fantasy"],
+      contentRating: "safe" as const,
+      originalLanguage: "ko",
+      source: "asura" as const,
+    }));
   } catch (err) {
-    console.warn("[MangaFetch] MangaDex getLatestMangaUpdates fallback failed:", err);
+    console.warn("[MangaFetch] Asura search fallback failed:", err);
     return [];
   }
 }
@@ -434,79 +314,22 @@ export async function searchManga(
   const type = options?.type || "all";
   const sortBy = options?.sortBy || "followedCount";
 
-  const cacheKey = `search_${query}_${type}_${limit}_${offset}_${sortBy}_${genreName}_${options?.genreId || ""}`;
+  const cacheKey = `search_${query}_${type}_${limit}_${offset}_${sortBy}_${genreName}`;
   const cached = getFromCache<{ items: MangaItem[]; total: number }>(cacheKey);
   if (cached) return cached;
 
-  // 1. If searching via WeebCentral (keyword or genre)
-  if (query?.trim() || genreName) {
-    try {
-      const tagParam = genreName ? `&included_tag=${encodeURIComponent(genreName)}` : "";
-      const textParam = query?.trim() ? `&text=${encodeURIComponent(query.trim())}` : "";
+  try {
+    const tagParam = genreName ? `&included_tag=${encodeURIComponent(genreName)}` : "";
+    const textParam = query?.trim() ? `&text=${encodeURIComponent(query.trim())}` : "";
 
-      if (type === "all") {
-        // Equal 50/50 balanced combination of Manga and Manhwa
-        const halfLimit = Math.max(12, Math.ceil(limit / 2));
-        const halfOffset = Math.floor(offset / 2);
+    if (type === "all") {
+      // Equal 50/50 balanced combination of Manga and Manhwa
+      const halfLimit = Math.max(12, Math.ceil(limit / 2));
+      const halfOffset = Math.floor(offset / 2);
 
-        const [manhwaRes, mangaRes] = await Promise.all([
-          fetch(
-            `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa${tagParam}${textParam}&sort=Subscribers&order=Descending&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
-            {
-              headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "HX-Request": "true",
-              },
-              cache: "no-store",
-            }
-          ).catch(() => null),
-          fetch(
-            `${WEEBCENTRAL_BASE}/search/data?included_type=Manga${tagParam}${textParam}&sort=Subscribers&order=Descending&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
-            {
-              headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "HX-Request": "true",
-              },
-              cache: "no-store",
-            }
-          ).catch(() => null),
-        ]);
-
-        let manhwaItems: MangaItem[] = [];
-        let mangaItems: MangaItem[] = [];
-
-        if (manhwaRes && manhwaRes.ok) {
-          const html = await manhwaRes.text();
-          manhwaItems = parseWeebCentralHtml(html);
-        }
-        if (mangaRes && mangaRes.ok) {
-          const html = await mangaRes.text();
-          mangaItems = parseWeebCentralHtml(html);
-        }
-
-        // Interleave equally (Manhwa, Manga, Manhwa, Manga...)
-        const combined: MangaItem[] = [];
-        const maxLen = Math.max(manhwaItems.length, mangaItems.length);
-        for (let i = 0; i < maxLen; i++) {
-          if (i < manhwaItems.length) combined.push(manhwaItems[i]);
-          if (i < mangaItems.length) combined.push(mangaItems[i]);
-        }
-
-        if (combined.length > 0) {
-          const result = { items: combined.slice(0, limit), total: 500 };
-          setInCache(cacheKey, result, 1200);
-          return result;
-        }
-      } else {
-        const typeParam =
-          type === "manhwa"
-            ? "&included_type=Manhwa"
-            : type === "manga"
-            ? "&included_type=Manga"
-            : "";
-
-        const res = await fetch(
-          `${WEEBCENTRAL_BASE}/search/data?sort=Subscribers&order=Descending${typeParam}${tagParam}${textParam}&adult=False&offset=${offset}&limit=${limit}`,
+      const [manhwaRes, mangaRes] = await Promise.all([
+        fetch(
+          `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa${tagParam}${textParam}&sort=Subscribers&order=Descending&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
           {
             headers: {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -514,153 +337,199 @@ export async function searchManga(
             },
             cache: "no-store",
           }
-        );
-
-        if (res.ok) {
-          const html = await res.text();
-          const items = parseWeebCentralHtml(html);
-          if (items.length > 0) {
-            const result = { items: items.slice(0, limit), total: 500 };
-            setInCache(cacheKey, result, 1200);
-            return result;
+        ).catch(() => null),
+        fetch(
+          `${WEEBCENTRAL_BASE}/search/data?included_type=Manga${tagParam}${textParam}&sort=Subscribers&order=Descending&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
+          {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "HX-Request": "true",
+            },
+            cache: "no-store",
           }
+        ).catch(() => null),
+      ]);
+
+      let manhwaItems: MangaItem[] = [];
+      let mangaItems: MangaItem[] = [];
+
+      if (manhwaRes && manhwaRes.ok) {
+        const html = await manhwaRes.text();
+        manhwaItems = parseWeebCentralHtml(html);
+      }
+      if (mangaRes && mangaRes.ok) {
+        const html = await mangaRes.text();
+        mangaItems = parseWeebCentralHtml(html);
+      }
+
+      // Interleave equally (Manhwa, Manga, Manhwa, Manga...)
+      const combined: MangaItem[] = [];
+      const maxLen = Math.max(manhwaItems.length, mangaItems.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < manhwaItems.length) combined.push(manhwaItems[i]);
+        if (i < mangaItems.length) combined.push(mangaItems[i]);
+      }
+
+      if (combined.length > 0) {
+        const result = { items: combined.slice(0, limit), total: 500 };
+        setInCache(cacheKey, result, 1200);
+        return result;
+      }
+    } else {
+      // Specific type: Manhwa or Manga
+      const typeParam =
+        type === "manhwa"
+          ? "&included_type=Manhwa"
+          : type === "manga"
+          ? "&included_type=Manga"
+          : "";
+
+      const res = await fetch(
+        `${WEEBCENTRAL_BASE}/search/data?sort=Subscribers&order=Descending${typeParam}${tagParam}${textParam}&adult=False&offset=${offset}&limit=${limit}`,
+        {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "HX-Request": "true",
+          },
+          cache: "no-store",
+        }
+      );
+
+      if (res.ok) {
+        const html = await res.text();
+        const items = parseWeebCentralHtml(html);
+        if (items.length > 0) {
+          const result = { items: items.slice(0, limit), total: 500 };
+          setInCache(cacheKey, result, 1200);
+          return result;
         }
       }
-    } catch (err) {
-      console.warn("[MangaFetch] WeebCentral search failed, trying MangaDex fallback:", err);
     }
-  }
 
-  // MangaDex Fallback
-  try {
-    const mdSortBy = options?.sortBy || (query ? "relevance" : "followedCount");
-
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-      "contentRating[]": "safe",
-    });
-    params.append("contentRating[]", "suggestive");
-    params.append("includes[]", "cover_art");
-    params.append("includes[]", "author");
-
+    // Secondary fallback to Asura if keyword search had 0 results
     if (query?.trim()) {
-      params.append("title", query.trim());
+      const asuraResults = await searchAsura(query);
+      if (asuraResults.length > 0) {
+        const result = { items: asuraResults.slice(0, limit), total: asuraResults.length };
+        setInCache(cacheKey, result, 1200);
+        return result;
+      }
     }
-
-    if (options?.type && options.type !== "all") {
-      if (options.type === "manga") params.append("originalLanguage[]", "ja");
-      else if (options.type === "manhwa") params.append("originalLanguage[]", "ko");
-      else if (options.type === "manhua") params.append("originalLanguage[]", "zh");
-    }
-
-    if (options?.genreId) {
-      params.append("includedTags[]", options.genreId);
-    }
-
-    params.append(`order[${mdSortBy}]`, "desc");
-
-    const res = await fetch(`${MANGADEX_API}/manga?${params.toString()}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return { items: [], total: 0 };
-    const data = await res.json();
-    const result = {
-      items: (data.data || []).map(formatMangaDexItem),
-      total: data.total || 0,
-    };
-    setInCache(cacheKey, result, 1200);
-    return result;
   } catch (err) {
-    console.warn("[MangaFetch] searchManga fallback failed:", err);
-    return { items: [], total: 0 };
+    console.warn("[MangaFetch] WeebCentral search failed:", err);
   }
+
+  return { items: [], total: 0 };
 }
 
 /**
- * Fetches details for a single Manga or Manhwa.
+ * Fetches full details for a Manga/Manhwa from WeebCentral or Asura Scans.
  */
 export async function getMangaDetails(id: string): Promise<MangaItem | null> {
-  // If WeebCentral ID
-  if (id.startsWith("wc-")) {
-    const rawId = id.replace(/^wc-/, "");
+  const cacheKey = `details_${id}`;
+  const cached = getFromCache<MangaItem>(cacheKey);
+  if (cached) return cached;
+
+  // Asura Scans details
+  if (id.startsWith("asura-")) {
+    const slug = id.replace(/^asura-/, "");
     try {
-      const res = await fetch(`${WEEBCENTRAL_BASE}/series/${rawId}`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
+      const res = await fetch(`${ASURA_API}/series/${slug}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
         next: { revalidate: 1800 },
       });
       if (res.ok) {
-        const html = await res.text();
-        const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title>([^<|]+)/i);
-        const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").trim() : "Manga";
-        const descMatch =
-          html.match(/<strong>Description<\/strong>\s*<p[^>]*>([\s\S]*?)<\/p>/i) ||
-          html.match(/<p class="[^"]*whitespace-pre-wrap[^"]*">([\s\S]*?)<\/p>/i) ||
-          html.match(/<p class="[^"]*leading-relaxed[^"]*">([\s\S]*?)<\/p>/i);
-        const description = descMatch && descMatch[1]
-          ? descMatch[1].replace(/<[^>]+>/g, "").trim()
-          : `Read ${title} on CineStream.`;
-        const coverMatch = html.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/i);
-        const coverImage = coverMatch ? coverMatch[0] : "/icon-512.png";
-
-        const yearMatch = html.match(/<strong>Year:<\/strong>\s*<span>(\d+)<\/span>/i);
-        const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : null;
-
-        const statusMatch = html.match(/<strong>Status:<\/strong>\s*<span>([^<]+)<\/span>/i);
-        const status = (statusMatch ? statusMatch[1].trim().toLowerCase() : "ongoing") as any;
-
-        const typeMatch = html.match(/<strong>Type:<\/strong>\s*<span>([^<]+)<\/span>/i);
-        const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "manga";
-        let type: "manga" | "manhwa" | "manhua" = "manga";
-        if (rawType.includes("manhwa")) type = "manhwa";
-        else if (rawType.includes("manhua")) type = "manhua";
-
-        const tagsMatch = html.match(/<strong>Tag\(s\):<\/strong>([\s\S]*?)<\/div>/i);
-        const tags = tagsMatch
-          ? [...tagsMatch[1].matchAll(/<span>([^<,]+),?<\/span>/g)].map((m) => m[1].trim())
-          : ["Action", "Webtoon"];
-
-        return {
-          id,
-          title,
-          description,
-          coverImage,
-          bannerImage: coverImage,
-          type,
-          status,
-          releaseYear,
-          tags,
+        const data = await res.json();
+        const s = data.series || data.data || data;
+        const item: MangaItem = {
+          id: `asura-${slug}`,
+          title: decodeHtmlEntities(s.title || slug),
+          altTitles: s.alt_titles || [],
+          description: decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) || `Read ${s.title || slug} on CineStream.`,
+          coverImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
+          bannerImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
+          type: "manhwa",
+          status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
+          releaseYear: s.release_year || null,
+          tags: (s.genres || ["Action", "Manhwa", "Fantasy"]).map((g: any) => typeof g === "string" ? g : g.name || "Action"),
           contentRating: "safe",
-          originalLanguage: "en",
-          source: "weebcentral",
+          originalLanguage: "ko",
+          source: "asura",
         };
+        setInCache(cacheKey, item, 1800);
+        return item;
       }
     } catch (err) {
-      console.warn(`[MangaFetch] WeebCentral getMangaDetails failed for ${id}:`, err);
+      console.warn(`[MangaFetch] Asura getMangaDetails failed for ${id}:`, err);
     }
-  }
-
-  // MangaDex Details
-  try {
-    const params = new URLSearchParams({
-      "includes[]": "cover_art",
-    });
-    params.append("includes[]", "author");
-    params.append("includes[]", "artist");
-
-    const res = await fetch(`${MANGADEX_API}/manga/${id}?${params.toString()}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.data) return null;
-    return formatMangaDexItem(data.data);
-  } catch (err) {
-    console.warn(`[MangaFetch] getMangaDetails failed for ${id}:`, err);
     return null;
   }
+
+  // WeebCentral details
+  const rawId = id.replace(/^wc-/, "");
+  try {
+    const res = await fetch(`${WEEBCENTRAL_BASE}/series/${rawId}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      next: { revalidate: 1800 },
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title>([^<|]+)/i);
+      const rawTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").trim() : "Manga";
+      const title = decodeHtmlEntities(rawTitle);
+      const descMatch =
+        html.match(/<strong>Description<\/strong>\s*<p[^>]*>([\s\S]*?)<\/p>/i) ||
+        html.match(/<p class="[^"]*whitespace-pre-wrap[^"]*">([\s\S]*?)<\/p>/i) ||
+        html.match(/<p class="[^"]*leading-relaxed[^"]*">([\s\S]*?)<\/p>/i);
+      const rawDescription = descMatch && descMatch[1]
+        ? descMatch[1].replace(/<[^>]+>/g, "").trim()
+        : `Read ${title} on CineStream.`;
+      const description = decodeHtmlEntities(rawDescription);
+      const coverMatch = html.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/i);
+      const coverImage = coverMatch ? coverMatch[0] : "/icon-512.png";
+
+      const yearMatch = html.match(/<strong>Year:<\/strong>\s*<span>(\d+)<\/span>/i);
+      const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : null;
+
+      const statusMatch = html.match(/<strong>Status:<\/strong>\s*<span>([^<]+)<\/span>/i);
+      const status = (statusMatch ? statusMatch[1].trim().toLowerCase() : "ongoing") as any;
+
+      const typeMatch = html.match(/<strong>Type:<\/strong>\s*<span>([^<]+)<\/span>/i);
+      const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "manga";
+      let type: "manga" | "manhwa" | "manhua" = "manga";
+      if (rawType.includes("manhwa")) type = "manhwa";
+      else if (rawType.includes("manhua")) type = "manhua";
+
+      const tagsMatch = html.match(/<strong>Tag\(s\):<\/strong>([\s\S]*?)<\/div>/i);
+      const tags = tagsMatch
+        ? [...tagsMatch[1].matchAll(/<span>([^<,]+),?<\/span>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
+        : ["Action", "Webtoon"];
+
+      const item: MangaItem = {
+        id: `wc-${rawId}`,
+        title,
+        description,
+        coverImage,
+        bannerImage: coverImage,
+        type,
+        status,
+        releaseYear,
+        tags,
+        contentRating: "safe",
+        originalLanguage: "en",
+        source: "weebcentral",
+      };
+
+      setInCache(cacheKey, item, 1800);
+      return item;
+    }
+  } catch (err) {
+    console.warn(`[MangaFetch] WeebCentral getMangaDetails failed for ${id}:`, err);
+  }
+
+  return null;
 }
 
 /**
@@ -721,180 +590,125 @@ async function fetchWeebCentralChapters(seriesId: string): Promise<MangaChapter[
 }
 
 /**
- * Fetches chapters for Manga, with WeebCentral as primary source and MangaDex as fallback.
+ * Helper to fetch Asura Scans chapters.
+ */
+async function fetchAsuraChapters(seriesSlug: string): Promise<MangaChapter[]> {
+  const cacheKey = `chapters_asura_${seriesSlug}`;
+  const cached = getFromCache<MangaChapter[]>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch(`${ASURA_API}/series/${seriesSlug}/chapters`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      next: { revalidate: 900 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list = data.data || [];
+
+    const chapters: MangaChapter[] = list.map((c: any) => ({
+      id: `asura-${seriesSlug}---${c.slug || `chapter-${c.number}`}`,
+      chapterNumber: String(c.number || 0),
+      title: `Chapter ${c.number || 0}`,
+      language: "en",
+      pagesCount: c.page_count || 1,
+      publishAt: c.published_at || c.created_at || "",
+      scanlationGroup: "Asura Scans",
+      source: "asura" as const,
+    }));
+
+    setInCache(cacheKey, chapters, 900);
+    return chapters;
+  } catch (err) {
+    console.warn(`[MangaFetch] fetchAsuraChapters failed for ${seriesSlug}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Fetches chapters for Manga/Manhwa from WeebCentral or Asura Scans.
  */
 export async function getMangaChapters(
   id: string,
-  options?: {
+  _options?: {
     order?: "asc" | "desc";
     limit?: number;
     offset?: number;
   }
 ): Promise<{ chapters: MangaChapter[]; total: number }> {
-  // 1. If WeebCentral series ID
-  if (id.startsWith("wc-")) {
-    const chapters = await fetchWeebCentralChapters(id);
+  if (id.startsWith("asura-")) {
+    const slug = id.replace(/^asura-/, "");
+    const chapters = await fetchAsuraChapters(slug);
     return { chapters, total: chapters.length };
   }
 
-  // 2. If MangaDex ID, try WeebCentral first using title search for highest completeness
-  const details = await getMangaDetails(id);
-  if (details?.title) {
-    try {
-      const wcSearchRes = await fetch(
-        `${WEEBCENTRAL_BASE}/search/data?text=${encodeURIComponent(details.title)}&adult=False`,
-        {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "HX-Request": "true",
-          },
-          next: { revalidate: 1800 },
-        }
-      );
-      if (wcSearchRes.ok) {
-        const wcHtml = await wcSearchRes.text();
-        const wcItems = parseWeebCentralHtml(wcHtml);
-        if (wcItems.length > 0) {
-          const wcChapters = await fetchWeebCentralChapters(wcItems[0].id);
-          if (wcChapters.length > 0) {
-            return { chapters: wcChapters, total: wcChapters.length };
-          }
-        }
-      }
-    } catch (err) {
-      console.warn(`[MangaFetch] WeebCentral chapter lookup failed for ${details.title}:`, err);
-    }
-  }
-
-  // 3. MangaDex fallback
-  try {
-    const order = options?.order || "asc";
-    const limit = options?.limit || 500;
-    const offset = options?.offset || 0;
-
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-      "translatedLanguage[]": "en",
-      "order[chapter]": order,
-      "contentRating[]": "safe",
-    });
-    params.append("contentRating[]", "suggestive");
-    params.append("includes[]", "scanlation_group");
-
-    const res = await fetch(`${MANGADEX_API}/manga/${id}/feed?${params.toString()}`, {
-      next: { revalidate: 1800 },
-    });
-    if (!res.ok) return { chapters: [], total: 0 };
-    let data = await res.json();
-    let rawChapters = data.data || [];
-
-    let readableChapters = rawChapters.filter(
-      (ch: any) => !ch.attributes?.externalUrl && (ch.attributes?.pages || 0) > 0
-    );
-
-    const seenChapters = new Set<string>();
-    const chapters: MangaChapter[] = [];
-
-    for (const ch of readableChapters) {
-      const attrs = ch.attributes || {};
-      const chNum = attrs.chapter || "0";
-      const dedupeKey = `${chNum}`;
-      if (seenChapters.has(dedupeKey)) continue;
-      seenChapters.add(dedupeKey);
-
-      const groupRel = (ch.relationships || []).find((r: any) => r.type === "scanlation_group");
-      const groupName = groupRel?.attributes?.name || null;
-
-      chapters.push({
-        id: ch.id,
-        chapterNumber: chNum,
-        volumeNumber: attrs.volume || null,
-        title: attrs.title || (chNum !== "0" ? `Chapter ${chNum}` : "Oneshot"),
-        language: attrs.translatedLanguage || "en",
-        pagesCount: attrs.pages || 0,
-        publishAt: attrs.publishAt || attrs.readableAt || new Date().toISOString(),
-        scanlationGroup: groupName,
-        externalUrl: attrs.externalUrl || null,
-        source: "mangadex",
-      });
-    }
-
-    return {
-      chapters,
-      total: data.total || chapters.length,
-    };
-  } catch (err) {
-    console.warn(`[MangaFetch] getMangaChapters failed for ${id}:`, err);
-    return { chapters: [], total: 0 };
-  }
+  const chapters = await fetchWeebCentralChapters(id);
+  return { chapters, total: chapters.length };
 }
 
 /**
- * Fetches high-res page URLs for a chapter.
+ * Fetches high-res page URLs for a chapter from WeebCentral or Asura Scans.
  */
 export async function getChapterPages(chapterId: string): Promise<ChapterPagesData | null> {
-  // If WeebCentral chapter
-  if (chapterId.startsWith("wc-")) {
-    const rawId = chapterId.replace(/^wc-/, "");
+  // Asura chapter pages
+  if (chapterId.startsWith("asura-")) {
+    const parts = chapterId.replace(/^asura-/, "").split("---");
+    const seriesSlug = parts[0];
+    const chapterSlug = parts[1];
+
     try {
-      const res = await fetch(`${WEEBCENTRAL_BASE}/chapters/${rawId}/images?reading_style=long_strip`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "HX-Request": "true",
-        },
+      const res = await fetch(`${ASURA_API}/series/${seriesSlug}/chapters/${chapterSlug}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
         cache: "no-store",
       });
       if (!res.ok) return null;
-      const html = await res.text();
-
-      const imgUrls = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)]
-        .map((m) => m[1])
-        .filter((url) => url.startsWith("http") && !url.includes("broken_image") && !url.includes("badge"));
+      const data = await res.json();
+      const pages = data.data?.chapter?.pages || [];
+      const imgUrls = pages.map((p: any) => p.url).filter(Boolean);
 
       if (imgUrls.length === 0) return null;
 
       return {
         chapterId,
         chapterNumber: "",
-        mangaId: "",
+        mangaId: `asura-${seriesSlug}`,
         pageUrls: imgUrls,
         dataSaverUrls: imgUrls,
       };
     } catch (err) {
-      console.warn(`[MangaFetch] WeebCentral getChapterPages failed for ${chapterId}:`, err);
+      console.warn(`[MangaFetch] Asura getChapterPages failed for ${chapterId}:`, err);
       return null;
     }
   }
 
-  // MangaDex chapter pages
+  // WeebCentral chapter pages
+  const rawId = chapterId.replace(/^wc-/, "");
   try {
-    const res = await fetch(`${MANGADEX_API}/at-home/server/${chapterId}`, {
+    const res = await fetch(`${WEEBCENTRAL_BASE}/chapters/${rawId}/images?reading_style=long_strip`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "HX-Request": "true",
+      },
       cache: "no-store",
     });
     if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.baseUrl || !data.chapter?.hash || !data.chapter?.data) {
-      return null;
-    }
+    const html = await res.text();
 
-    const baseUrl = data.baseUrl;
-    const hash = data.chapter.hash;
-    const filenames: string[] = data.chapter.data || [];
-    const dataSaverFilenames: string[] = data.chapter.dataSaver || [];
+    const imgUrls = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)]
+      .map((m) => m[1])
+      .filter((url) => url.startsWith("http") && !url.includes("broken_image") && !url.includes("badge"));
 
-    const pageUrls = filenames.map((fn) => `${baseUrl}/data/${hash}/${fn}`);
-    const dataSaverUrls = dataSaverFilenames.map((fn) => `${baseUrl}/data-saver/${hash}/${fn}`);
+    if (imgUrls.length === 0) return null;
 
     return {
-      chapterId,
+      chapterId: `wc-${rawId}`,
       chapterNumber: "",
       mangaId: "",
-      pageUrls,
-      dataSaverUrls,
+      pageUrls: imgUrls,
+      dataSaverUrls: imgUrls,
     };
   } catch (err) {
-    console.warn(`[MangaFetch] getChapterPages failed for ${chapterId}:`, err);
+    console.warn(`[MangaFetch] WeebCentral getChapterPages failed for ${chapterId}:`, err);
     return null;
   }
 }

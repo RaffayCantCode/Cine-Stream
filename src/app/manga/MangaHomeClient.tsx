@@ -33,7 +33,7 @@ const GENRES = [
   { label: "Fantasy", id: "cdc58593-87dd-415e-bbc0-2ec27bf404cc", name: "Fantasy" },
   { label: "Isekai", id: "ace04997-f6bd-4329-856c-70ab7742f351", name: "Isekai" },
   { label: "Supernatural", id: "eabc54f9-f450-482a-b7e6-8c467a80b852", name: "Supernatural" },
-  { label: "Sci-Fi", id: "256c8bd9-4904-4503-8b03-d40d1f250238", name: "Sci-Fi" },
+  { label: "Sci-Fi", id: "256c8bd9-4904-4503-8b03-d40d1f250238", name: "Sci-fi" },
   { label: "Comedy", id: "4d32cc48-9f00-4cca-9b5a-a839f0764984", name: "Comedy" },
   { label: "Mystery", id: "ee9683c4-0415-499b-aa2f-f1804aad49ca", name: "Mystery" },
   { label: "Drama", id: "b9af3a63-f058-444f-a20d-83864c053c83", name: "Drama" },
@@ -44,8 +44,14 @@ const ITEMS_PER_PAGE = 24;
 
 export default function MangaHomeClient() {
   const [trendingNow, setTrendingNow] = useState<MangaItem[]>([]);
+  const [isTrendingNowLoading, setIsTrendingNowLoading] = useState(true);
+
   const [trendingManhwas, setTrendingManhwas] = useState<MangaItem[]>([]);
+  const [isTrendingManhwasLoading, setIsTrendingManhwasLoading] = useState(true);
+
   const [trendingMangas, setTrendingMangas] = useState<MangaItem[]>([]);
+  const [isTrendingMangasLoading, setIsTrendingMangasLoading] = useState(true);
+
   const [history, setHistory] = useState<MangaReadingProgress[]>([]);
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,7 +59,7 @@ export default function MangaHomeClient() {
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Simplified type filter: All, Manhwa, Manga (removed manhua and 'webtoons' subtitle)
+  // Simplified type filter: All, Manhwa, Manga
   const [selectedType, setSelectedType] = useState<"all" | "manhwa" | "manga">("all");
   const [selectedGenre, setSelectedGenre] = useState<string>("");
   const [genreResults, setGenreResults] = useState<MangaItem[]>([]);
@@ -62,8 +68,8 @@ export default function MangaHomeClient() {
   const [hasMore, setHasMore] = useState(true);
   const [pageOffset, setPageOffset] = useState(0);
 
-  const [isLoading, setIsLoading] = useState(true);
-  usePageContentReady(!isLoading);
+  // Page shell is immediately ready for instant navigation feel
+  usePageContentReady(true);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const clientCache = useRef<Map<string, MangaItem[]>>(new Map());
@@ -96,53 +102,67 @@ export default function MangaHomeClient() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Initial Load with real-time fetching and dynamic randomization
+  // Modular & Incremental Progressive Load for top speed
   useEffect(() => {
-    const loadHomeData = async () => {
-      setIsLoading(true);
-      try {
-        const [trendData, manhwaData, mangaData] = await Promise.all([
-          fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=32").catch(() => ({ success: false, items: [] as MangaItem[] })),
-          fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=32").catch(() => ({ success: false, items: [] as MangaItem[] })),
-          fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=32").catch(() => ({ success: false, items: [] as MangaItem[] })),
-        ]);
+    let isMounted = true;
 
-        const rawTrend: MangaItem[] = trendData.items || [];
-        const rawManhwas: MangaItem[] = manhwaData.items || [];
-        const rawMangas: MangaItem[] = mangaData.items || [];
+    // 1. Load Trending Now first (appears immediately!)
+    fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=32")
+      .then((data) => {
+        if (!isMounted) return;
+        const items = data.items || [];
+        setTrendingNow(shuffleArray<MangaItem>(items).slice(0, 15));
+      })
+      .catch((err) => console.warn("Failed to load trending now:", err))
+      .finally(() => {
+        if (isMounted) setIsTrendingNowLoading(false);
+      });
 
-        // Randomize each section on load so every visit is fresh and dynamic
-        const combined: MangaItem[] = shuffleArray<MangaItem>([...rawTrend, ...rawManhwas, ...rawMangas]);
-        const uniqueCombined = Array.from(new Map(combined.map(item => [item.id, item])).values());
+    // 2. Load Trending Manhwas as soon as ready
+    fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=32")
+      .then((data) => {
+        if (!isMounted) return;
+        const items = data.items || [];
+        setTrendingManhwas(shuffleArray<MangaItem>(items).slice(0, 15));
+      })
+      .catch((err) => console.warn("Failed to load trending manhwas:", err))
+      .finally(() => {
+        if (isMounted) setIsTrendingManhwasLoading(false);
+      });
 
-        setTrendingNow(shuffleArray<MangaItem>(uniqueCombined).slice(0, 15));
-        setTrendingManhwas(shuffleArray<MangaItem>(rawManhwas).slice(0, 15));
-        setTrendingMangas(shuffleArray<MangaItem>(rawMangas).slice(0, 15));
+    // 3. Load Trending Mangas as soon as ready
+    fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=32")
+      .then((data) => {
+        if (!isMounted) return;
+        const items = data.items || [];
+        setTrendingMangas(shuffleArray<MangaItem>(items).slice(0, 15));
+      })
+      .catch((err) => console.warn("Failed to load trending mangas:", err))
+      .finally(() => {
+        if (isMounted) setIsTrendingMangasLoading(false);
+      });
 
-        // Background pre-fetch popular genres for 0ms instant loading
-        setTimeout(() => {
-          ["Action", "Fantasy", "Romance"].forEach(async (gName) => {
-            const cacheKey = `genre_${gName}_all_0`;
-            if (!clientCache.current.has(cacheKey)) {
-              try {
-                const res = await fetch(`/api/manga/search?limit=24&offset=0&genreName=${encodeURIComponent(gName)}&sortBy=followedCount`);
-                if (res.ok) {
-                  const d = await res.json();
-                  if (d.items) clientCache.current.set(cacheKey, d.items);
-                }
-              } catch {}
+    // Background pre-fetch top genres for instant 0ms switching
+    const timer = setTimeout(() => {
+      if (!isMounted) return;
+      ["Action", "Fantasy", "Romance"].forEach(async (gName) => {
+        const cacheKey = `genre_${gName}_all_0`;
+        if (!clientCache.current.has(cacheKey)) {
+          try {
+            const res = await fetch(`/api/manga/search?limit=24&offset=0&genreName=${encodeURIComponent(gName)}&sortBy=followedCount`);
+            if (res.ok) {
+              const d = await res.json();
+              if (d.items) clientCache.current.set(cacheKey, d.items);
             }
-          });
-        }, 1000);
+          } catch {}
+        }
+      });
+    }, 800);
 
-      } catch (err) {
-        console.error("Failed to load manga hub data:", err);
-      } finally {
-        setIsLoading(false);
-      }
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
     };
-
-    loadHomeData();
   }, []);
 
   // Optimized Search Query Handler (with client cache & request aborting)
@@ -542,15 +562,25 @@ export default function MangaHomeClient() {
               )}
             </section>
           ) : selectedGenre || selectedType !== "all" ? (
-            /* FILTERED GENRE / TYPE VIEW (Equal Manga+Manhwa & Infinite Scroll) */
+            /* FILTERED GENRE / TYPE VIEW (Infinite Scroll & Accurate Titles) */
             <section className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                    {activeGenreObj?.label ? `${activeGenreObj.label} Titles` : "Filtered Series"}
+                    {activeGenreObj?.label
+                      ? `${activeGenreObj.label} ${selectedType === "manhwa" ? "Manhwa" : selectedType === "manga" ? "Manga" : "Titles"}`
+                      : selectedType === "manhwa"
+                      ? "Trending Korean Manhwas"
+                      : selectedType === "manga"
+                      ? "Trending Japanese Mangas"
+                      : "Filtered Series"}
                   </h2>
                   <p className="text-xs sm:text-sm text-zinc-400 font-semibold mt-0.5">
-                    Equal 50/50 mix of trending Manga & Manhwa
+                    {selectedType === "manhwa"
+                      ? `Real-time Korean Manhwa ${activeGenreObj?.label ? `in ${activeGenreObj.label}` : "series"}`
+                      : selectedType === "manga"
+                      ? `Real-time Japanese Manga ${activeGenreObj?.label ? `in ${activeGenreObj.label}` : "series"}`
+                      : `Equal 50/50 mix of trending Manga & Manhwa ${activeGenreObj?.label ? `in ${activeGenreObj.label}` : ""}`}
                   </p>
                 </div>
                 <span className="text-xs text-[#42f5dd] font-bold bg-[#42f5dd]/10 px-3 py-1 rounded-full border border-[#42f5dd]/30">
@@ -585,9 +615,9 @@ export default function MangaHomeClient() {
               )}
             </section>
           ) : (
-            /* DEFAULT 3 REAL-TIME SECTIONS */
+            /* DEFAULT 3 REAL-TIME MODULAR SECTIONS */
             <>
-              {/* SECTION 1: TRENDING NOW (Combined random trending manga + manhwa) */}
+              {/* SECTION 1: TRENDING NOW (Loads and appears first!) */}
               <section className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -600,7 +630,7 @@ export default function MangaHomeClient() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
-                  {isLoading
+                  {isTrendingNowLoading
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
@@ -610,7 +640,7 @@ export default function MangaHomeClient() {
                 </div>
               </section>
 
-              {/* SECTION 2: TRENDING MANHWAS (Real-time Korean Webtoons) */}
+              {/* SECTION 2: TRENDING MANHWAS (Loads and appears as soon as ready) */}
               <section className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -625,7 +655,7 @@ export default function MangaHomeClient() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
-                  {isLoading
+                  {isTrendingManhwasLoading
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
@@ -635,7 +665,7 @@ export default function MangaHomeClient() {
                 </div>
               </section>
 
-              {/* SECTION 3: TRENDING MANGAS (Real-time Japanese Mangas) */}
+              {/* SECTION 3: TRENDING MANGAS (Loads and appears as soon as ready) */}
               <section className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -650,7 +680,7 @@ export default function MangaHomeClient() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
-                  {isLoading
+                  {isTrendingMangasLoading
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
