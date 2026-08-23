@@ -17,11 +17,12 @@ import {
   watchlistKey,
   writeLocalWatchlist,
   WatchlistItem,
+  MediaType,
 } from "@/lib/watchlist";
 
 interface SaveableInput {
-  mediaId: number;
-  mediaType: WatchlistItem["mediaType"];
+  mediaId: number | string;
+  mediaType: MediaType | string;
   title: string;
   posterPath?: string | null;
   backdropPath?: string | null;
@@ -30,9 +31,9 @@ interface SaveableInput {
 interface WatchlistContextValue {
   items: WatchlistItem[];
   loading: boolean;
-  isSaved: (mediaId: number, mediaType: string) => boolean;
+  isSaved: (mediaId: number | string, mediaType: string) => boolean;
   toggle: (item: SaveableInput) => void;
-  remove: (mediaId: number, mediaType: string) => void;
+  remove: (mediaId: number | string, mediaType: string) => void;
 }
 
 const WatchlistContext = createContext<WatchlistContextValue | undefined>(undefined);
@@ -68,13 +69,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // Load when auth state resolves.
     if (status === "loading") return;
 
-    if (status === "authenticated" && session?.user?.id) {
+    if (isAuthed) {
       let cancelled = false;
-      setLoading(true);
       (async () => {
         const local = readLocalWatchlist();
         try {
-          let list: WatchlistItem[] = [];
           if (local.length > 0) {
             // Merge guest items into the user's DB watchlist (dedupes server-side).
             const res = await fetch("/api/watchlist/sync", {
@@ -82,20 +81,20 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ items: local }),
             });
-            if (!res.ok) throw new Error("Sync failed");
-            list = (await res.json()).items ?? [];
-            clearLocalWatchlist();
+            const data = await res.json();
+            if (!cancelled) {
+              applyList(data.items ?? []);
+              clearLocalWatchlist();
+            }
           } else {
-            // Try fetch with one retry on failure.
             let res = await fetch("/api/watchlist", { cache: "no-store" });
-            if (!res.ok) {
-              await new Promise((r) => setTimeout(r, 800));
+            if (res.status === 401) {
+              await new Promise((r) => setTimeout(r, 400));
               res = await fetch("/api/watchlist", { cache: "no-store" });
             }
-            if (!res.ok) throw new Error("Fetch failed");
-            list = (await res.json()).items ?? [];
+            const data = await res.json();
+            if (!cancelled) applyList(data.items ?? []);
           }
-          if (!cancelled) applyList(list);
           setLoading(false);
         } catch {
           // Offline / persistent server error — keep whatever the guest had locally.
@@ -124,7 +123,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       next = [
         {
           mediaId: input.mediaId,
-          mediaType: input.mediaType,
+          mediaType: input.mediaType as MediaType,
           title: input.title,
           posterPath: input.posterPath ?? null,
           backdropPath: input.backdropPath ?? null,
@@ -144,9 +143,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Authenticated — persist to the server. On failure, reconcile the UI from
-    // the authoritative server list instead of reverting to a stale snapshot
-    // (which oscillates/flickers when toggles are spammed).
+    // Authenticated — persist to the server.
     const url = exists
       ? `/api/watchlist/${input.mediaId}?mediaType=${input.mediaType}`
       : "/api/watchlist";
@@ -173,7 +170,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       });
   }, [isAuthed]);
 
-  const remove = useCallback((mediaId: number, mediaType: string) => {
+  const remove = useCallback((mediaId: number | string, mediaType: string) => {
     const key = watchlistKey(mediaId, mediaType);
     const next = itemsRef.current.filter((i) => watchlistKey(i.mediaId, i.mediaType) !== key);
 
@@ -199,27 +196,32 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const refreshFromServer = async () => {
     try {
       const res = await fetch("/api/watchlist", { cache: "no-store" });
-      if (!res.ok) return;
-      const list: WatchlistItem[] = (await res.json()).items ?? [];
-      rebuildKeys(list);
-      setItemsSafe(list);
+      const data = await res.json();
+      if (Array.isArray(data.items)) {
+        rebuildKeys(data.items);
+        setItemsSafe(data.items);
+      }
     } catch {
-      /* network unavailable — keep the last known optimistic state */
+      /* ignore */
     }
   };
 
-  const isSaved = (mediaId: number, mediaType: string) =>
-    keySetRef.current.has(watchlistKey(mediaId, mediaType));
+  const isSaved = useCallback((mediaId: number | string, mediaType: string) => {
+    return keySetRef.current.has(watchlistKey(mediaId, mediaType));
+  }, []);
 
   const value = useMemo(
-    () => ({ items, loading, isSaved, toggle, remove }),
-    // Reflect the live item list; isSaved reads a ref so it is always current.
-    [items, loading, toggle, remove]
+    () => ({
+      items,
+      loading,
+      isSaved,
+      toggle,
+      remove,
+    }),
+    [items, loading, isSaved, toggle, remove]
   );
 
-  return (
-    <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>
-  );
+  return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;
 }
 
 export function useWatchlist() {

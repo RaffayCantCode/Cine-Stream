@@ -649,8 +649,12 @@ export async function getMangaChapters(
 /**
  * Fetches high-res page URLs for a chapter from WeebCentral or Asura Scans.
  */
-export async function getChapterPages(chapterId: string): Promise<ChapterPagesData | null> {
-  // Asura chapter pages
+export async function getChapterPages(
+  chapterId: string,
+  mangaTitle?: string,
+  chapterNumber?: string
+): Promise<ChapterPagesData | null> {
+  // 1. Asura chapter pages
   if (chapterId.startsWith("asura-")) {
     const parts = chapterId.replace(/^asura-/, "").split("---");
     const seriesSlug = parts[0];
@@ -681,34 +685,89 @@ export async function getChapterPages(chapterId: string): Promise<ChapterPagesDa
     }
   }
 
-  // WeebCentral chapter pages
+  // 2. WeebCentral chapter pages
   const rawId = chapterId.replace(/^wc-/, "");
   try {
-    const res = await fetch(`${WEEBCENTRAL_BASE}/chapters/${rawId}/images?reading_style=long_strip`, {
+    let res = await fetch(`${WEEBCENTRAL_BASE}/chapters/${rawId}/images?reading_style=long_strip`, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "HX-Request": "true",
       },
       cache: "no-store",
     });
-    if (!res.ok) return null;
-    const html = await res.text();
 
-    const imgUrls = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)]
-      .map((m) => m[1])
-      .filter((url) => url.startsWith("http") && !url.includes("broken_image") && !url.includes("badge"));
+    if (!res.ok) {
+      res = await fetch(`${WEEBCENTRAL_BASE}/chapters/${rawId}`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        cache: "no-store",
+      });
+    }
 
-    if (imgUrls.length === 0) return null;
+    if (res.ok) {
+      const html = await res.text();
 
-    return {
-      chapterId: `wc-${rawId}`,
-      chapterNumber: "",
-      mangaId: "",
-      pageUrls: imgUrls,
-      dataSaverUrls: imgUrls,
-    };
+      const imgMatches = [
+        ...html.matchAll(/<img[^>]+(?:src|data-src)="([^"]+)"/g),
+        ...html.matchAll(/https:\/\/(?:temp\.compsci88\.com|scans-hot\.planeptune\.us|cdn\.[^"'\s]+)\/manga\/[^"'\s]+/g)
+      ];
+
+      const imgUrls: string[] = [];
+      const seen = new Set<string>();
+
+      for (const m of imgMatches) {
+        const url = typeof m === "string" ? m : m[1] || m[0];
+        if (
+          url &&
+          url.startsWith("http") &&
+          !url.includes("broken_image") &&
+          !url.includes("badge") &&
+          !url.includes("avatar") &&
+          !url.includes("icon") &&
+          !url.includes("logo") &&
+          !seen.has(url)
+        ) {
+          seen.add(url);
+          imgUrls.push(url);
+        }
+      }
+
+      if (imgUrls.length > 0) {
+        return {
+          chapterId: `wc-${rawId}`,
+          chapterNumber: "",
+          mangaId: "",
+          pageUrls: imgUrls,
+          dataSaverUrls: imgUrls,
+        };
+      }
+    }
   } catch (err) {
     console.warn(`[MangaFetch] WeebCentral getChapterPages failed for ${chapterId}:`, err);
-    return null;
   }
+
+  // 3. Fallback: Check Asura Scans if title or chapterNumber is provided
+  if (mangaTitle && chapterNumber) {
+    try {
+      const asuraResults = await searchAsura(mangaTitle);
+      if (asuraResults.length > 0) {
+        const asuraSlug = asuraResults[0].id.replace(/^asura-/, "");
+        const asuraChapters = await fetchAsuraChapters(asuraSlug);
+        const matchCh = asuraChapters.find(
+          (c) => c.chapterNumber === chapterNumber || parseFloat(c.chapterNumber) === parseFloat(chapterNumber)
+        );
+        if (matchCh) {
+          const asuraPages = await getChapterPages(matchCh.id);
+          if (asuraPages && asuraPages.pageUrls.length > 0) {
+            return asuraPages;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[MangaFetch] Asura chapter fallback failed:", e);
+    }
+  }
+
+  return null;
 }

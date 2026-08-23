@@ -71,7 +71,9 @@ export async function GET(
 
     if (action === "chapter" && route[1]) {
       const chapterId = route[1];
-      const data = await getChapterPages(chapterId);
+      const mangaTitle = searchParams.get("title") || undefined;
+      const chapterNumber = searchParams.get("ch") || undefined;
+      const data = await getChapterPages(chapterId, mangaTitle, chapterNumber);
       if (!data) {
         return NextResponse.json({ success: false, error: "Chapter pages not found" }, { status: 404 });
       }

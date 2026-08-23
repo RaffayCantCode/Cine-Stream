@@ -4,7 +4,14 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { MangaItem, MangaChapter } from "@/lib/manga-fetch";
-import { getMangaProgress, MangaReadingProgress } from "@/lib/manga-history";
+import { 
+  getMangaProgress, 
+  syncMangaHistoryFromServer, 
+  MangaReadingProgress,
+  isChapterRead,
+  toggleChapterReadStatus
+} from "@/lib/manga-history";
+import { useWatchlist } from "@/context/WatchlistContext";
 import { fetchJson } from "@/lib/utils";
 import { 
   BookOpen, 
@@ -15,7 +22,10 @@ import {
   Loader2, 
   Users, 
   ChevronDown, 
-  ChevronUp 
+  ChevronUp,
+  Bookmark,
+  CheckCircle2,
+  Check
 } from "lucide-react";
 import { format } from "date-fns";
 import { usePageContentReady } from "@/lib/pageLoad";
@@ -34,13 +44,35 @@ export default function MangaDetailsClient({ id }: { id: string }) {
   const [chapterSearch, setChapterSearch] = useState("");
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [progress, setProgress] = useState<MangaReadingProgress | null>(null);
+  const [readTick, setReadTick] = useState(0);
+
+  const { isSaved, toggle } = useWatchlist();
+  const inWatchlist = manga ? isSaved(manga.id, manga.type || "manga") : false;
 
   // Shell is immediately ready for instant page entry
   usePageContentReady(true);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
-    setProgress(getMangaProgress(id));
+    
+    // 1. Check local progress first
+    const localP = getMangaProgress(id);
+    if (localP) setProgress(localP);
+
+    // 2. Fetch and sync from user account across all devices
+    syncMangaHistoryFromServer().then((syncedList) => {
+      const serverP = syncedList.find((item) => item.mangaId === id);
+      if (serverP) setProgress(serverP);
+    });
+
+    const handleUpdate = () => {
+      const updated = getMangaProgress(id);
+      setProgress(updated);
+      setReadTick((t) => t + 1);
+    };
+
+    window.addEventListener("cinestream:manga-history-updated", handleUpdate);
+    window.addEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
 
     let isMounted = true;
     setIsDetailsLoading(true);
@@ -84,6 +116,8 @@ export default function MangaDetailsClient({ id }: { id: string }) {
 
     return () => {
       isMounted = false;
+      window.removeEventListener("cinestream:manga-history-updated", handleUpdate);
+      window.removeEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
     };
   }, [id]);
 
@@ -92,7 +126,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
     let result = [...chapters];
 
     if (chapterSearch.trim()) {
-      const q = chapterSearch.toLowerCase();
+      const q = chapterSearch.toLowerCase().trim();
       result = result.filter(
         (c) =>
           c.chapterNumber.toLowerCase().includes(q) ||
@@ -103,173 +137,198 @@ export default function MangaDetailsClient({ id }: { id: string }) {
     result.sort((a, b) => {
       const numA = parseFloat(a.chapterNumber) || 0;
       const numB = parseFloat(b.chapterNumber) || 0;
-      return sortOrder === "asc" ? numA - numB : numB - numA;
+      return sortOrder === "desc" ? numB - numA : numA - numB;
     });
 
     return result;
   }, [chapters, chapterSearch, sortOrder]);
 
-  // First chapter (Chapter 1) & resume chapter
+  // First chapter (numerical Chapter 1 or lowest chapter)
   const firstChapter = useMemo(() => {
     if (chapters.length === 0) return null;
     return [...chapters].sort((a, b) => (parseFloat(a.chapterNumber) || 0) - (parseFloat(b.chapterNumber) || 0))[0];
   }, [chapters]);
 
+  // Resume chapter based on active reading progress
   const resumeChapter = useMemo(() => {
     if (!progress || chapters.length === 0) return null;
     return chapters.find((c) => c.id === progress.chapterId) || null;
   }, [progress, chapters]);
 
-  // Error State
-  if (error && !manga && !isDetailsLoading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 text-center">
-        <Sidebar />
-        <BookOpen className="w-16 h-16 text-white/20 mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">Manga Not Found</h2>
-        <p className="text-sm text-white/50 mb-6">{error || "Could not retrieve manga data."}</p>
-        <Link
-          href="/manga"
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#42f5dd] text-black font-black text-sm shadow-lg shadow-[#42f5dd]/30"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Manga Hub</span>
-        </Link>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
+    <div className="min-h-screen bg-background text-foreground pb-24 select-none">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64">
-        
-        {/* METADATA HERO SECTION (Loads immediately) */}
-        {isDetailsLoading || !manga ? (
-          <div className="relative w-full bg-gradient-to-b from-[#42f5dd]/10 via-background/80 to-background border-b border-white/[0.06] pt-10 md:pt-14 pb-12 px-5 sm:px-8 md:px-12 animate-pulse">
-            <div className="max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-start">
-              <div className="w-48 sm:w-56 md:w-64 aspect-[2/3] rounded-3xl bg-white/[0.04]" />
-              <div className="flex-1 space-y-4 w-full">
-                <div className="h-6 w-24 rounded-full bg-white/[0.05]" />
-                <div className="h-10 w-2/3 rounded-2xl bg-white/[0.06]" />
-                <div className="h-4 w-1/3 rounded-xl bg-white/[0.04]" />
-                <div className="h-20 w-full rounded-2xl bg-white/[0.03]" />
+      <main className="md:pl-56 lg:pl-64 pt-4 md:pt-6">
+        {/* Error State */}
+        {error && !manga && (
+          <div className="max-w-4xl mx-auto px-6 py-20 text-center">
+            <BookOpen className="w-16 h-16 text-zinc-700 mx-auto mb-4" />
+            <h2 className="text-2xl font-black text-white mb-2">Failed to Load Manga</h2>
+            <p className="text-sm text-zinc-400 mb-6">{error}</p>
+            <Link
+              href="/manga"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#42f5dd] text-black font-black text-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Manga Hub</span>
+            </Link>
+          </div>
+        )}
+
+        {/* DETAILS HERO SECTION (Modular / Fast Render) */}
+        {isDetailsLoading ? (
+          <div className="max-w-screen-2xl mx-auto px-5 sm:px-8 md:px-12 py-8 animate-pulse">
+            <div className="flex flex-col md:flex-row gap-8 lg:gap-12">
+              <div className="w-48 sm:w-60 md:w-72 aspect-[2/3] rounded-3xl bg-white/[0.04]" />
+              <div className="flex-1 space-y-4 pt-4">
+                <div className="h-8 w-2/3 bg-white/[0.04] rounded-2xl" />
+                <div className="h-4 w-1/3 bg-white/[0.04] rounded-xl" />
+                <div className="h-20 w-full bg-white/[0.04] rounded-2xl" />
               </div>
             </div>
           </div>
-        ) : (
-          <div className="relative w-full bg-gradient-to-b from-[#42f5dd]/15 via-background/80 to-background border-b border-white/[0.06] pt-10 md:pt-14 pb-12 px-5 sm:px-8 md:px-12">
-            <div className="max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-8 items-start">
-              
-              {/* Poster Card */}
-              <div className="shrink-0 w-48 sm:w-56 md:w-64 aspect-[2/3] rounded-3xl overflow-hidden shadow-2xl border-2 border-[#42f5dd]/30 bg-muted/40 relative shadow-[0_0_30px_rgba(66,245,221,0.15)]">
-                <img
-                  src={manga.coverImage}
-                  alt={manga.title}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md text-[11px] font-black uppercase text-[#42f5dd] border border-[#42f5dd]/40">
-                  {manga.type}
-                </div>
-              </div>
+        ) : manga && (
+          <div className="relative overflow-hidden border-b border-white/10 pb-12 pt-4">
+            {/* Background Blur Backdrop */}
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-10 blur-3xl scale-125 pointer-events-none"
+              style={{ backgroundImage: `url(${manga.coverImage})` }}
+            />
 
-              {/* Main Info */}
-              <div className="flex-1 flex flex-col items-start gap-4">
-                <Link
-                  href="/manga"
-                  className="inline-flex items-center gap-2 text-xs font-black text-[#42f5dd] hover:text-white transition-colors bg-[#42f5dd]/10 px-4 py-1.5 rounded-full border border-[#42f5dd]/30 shadow-sm"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>All Manga</span>
-                </Link>
-
-                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
-                  {manga.title}
-                </h1>
-
-                {/* Status & Metadata Badges */}
-                <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold">
-                  <span className="px-3.5 py-1 rounded-full bg-[#42f5dd]/15 text-[#42f5dd] border border-[#42f5dd]/30 capitalize font-black">
-                    {manga.status}
-                  </span>
-                  {manga.releaseYear && (
-                    <span className="px-3 py-1 rounded-full bg-white/[0.06] text-white/80 border border-white/[0.08]">
-                      {manga.releaseYear}
-                    </span>
-                  )}
-                  {chapters.length > 0 ? (
-                    <span className="px-3 py-1 rounded-full bg-white/[0.06] text-white/80 border border-white/[0.08]">
-                      {chapters.length} Chapters
-                    </span>
-                  ) : isChaptersLoading ? (
-                    <span className="px-3 py-1 rounded-full bg-white/[0.06] text-[#42f5dd]/80 border border-white/[0.08] flex items-center gap-1.5">
-                      <Loader2 className="w-3 h-3 animate-spin text-[#42f5dd]" />
-                      <span>Loading Chapters...</span>
-                    </span>
-                  ) : null}
-                  {manga.authors && manga.authors.length > 0 && (
-                    <span className="text-white/60 flex items-center gap-1.5 ml-2 font-semibold">
-                      <Users className="w-3.5 h-3.5 text-[#42f5dd]" />
-                      <span>{manga.authors.join(", ")}</span>
-                    </span>
-                  )}
+            <div className="relative max-w-screen-2xl mx-auto px-5 sm:px-8 md:px-12">
+              <div className="flex flex-col md:flex-row gap-8 lg:gap-12 items-start">
+                
+                {/* Poster Cover */}
+                <div className="w-48 sm:w-60 md:w-72 aspect-[2/3] shrink-0 rounded-3xl overflow-hidden shadow-2xl border border-white/10 relative group mx-auto md:mx-0">
+                  <img
+                    src={manga.coverImage}
+                    alt={manga.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-black/80 backdrop-blur-md text-[#42f5dd] border border-[#42f5dd]/30 shadow-lg">
+                    {manga.type}
+                  </div>
                 </div>
 
-                {/* Synopsis */}
-                <div className="max-w-3xl text-sm leading-relaxed text-zinc-300 font-medium">
-                  <p className={!isDescExpanded ? "line-clamp-3" : ""}>
-                    {manga.description}
-                  </p>
-                  {manga.description.length > 200 && (
+                {/* Info & Metadata */}
+                <div className="flex-1 space-y-5 text-left w-full">
+                  <Link
+                    href="/manga"
+                    className="inline-flex items-center gap-2 text-xs font-bold text-zinc-400 hover:text-[#42f5dd] transition-colors mb-2"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>All Manga</span>
+                  </Link>
+
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
+                    {manga.title}
+                  </h1>
+
+                  {/* Status & Metadata Badges */}
+                  <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold">
+                    <span className="px-3.5 py-1 rounded-full bg-[#42f5dd]/15 text-[#42f5dd] border border-[#42f5dd]/30 capitalize font-black">
+                      {manga.status}
+                    </span>
+                    {manga.releaseYear && (
+                      <span className="px-3 py-1 rounded-full bg-white/[0.06] text-white/80 border border-white/[0.08]">
+                        {manga.releaseYear}
+                      </span>
+                    )}
+                    {chapters.length > 0 ? (
+                      <span className="px-3 py-1 rounded-full bg-white/[0.06] text-white/80 border border-white/[0.08]">
+                        {chapters.length} Chapters
+                      </span>
+                    ) : isChaptersLoading ? (
+                      <span className="px-3 py-1 rounded-full bg-white/[0.06] text-[#42f5dd]/80 border border-white/[0.08] flex items-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin text-[#42f5dd]" />
+                        <span>Loading Chapters...</span>
+                      </span>
+                    ) : null}
+                    {manga.authors && manga.authors.length > 0 && (
+                      <span className="text-white/60 flex items-center gap-1.5 ml-2 font-semibold">
+                        <Users className="w-3.5 h-3.5 text-[#42f5dd]" />
+                        <span>{manga.authors.join(", ")}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Synopsis */}
+                  <div className="max-w-3xl text-sm leading-relaxed text-zinc-300 font-medium">
+                    <p className={!isDescExpanded ? "line-clamp-3" : ""}>
+                      {manga.description}
+                    </p>
+                    {manga.description.length > 200 && (
+                      <button
+                        onClick={() => setIsDescExpanded(!isDescExpanded)}
+                        className="text-xs font-black text-[#42f5dd] hover:text-white mt-2 flex items-center gap-1 cursor-pointer focus:outline-none"
+                      >
+                        <span>{isDescExpanded ? "Show Less" : "Read More"}</span>
+                        {isDescExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Genre Tags */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {manga.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-3 py-1 rounded-xl text-[11px] font-bold bg-white/[0.04] text-white/70 border border-white/[0.06]"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Call to Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2">
+                    {resumeChapter ? (
+                      <Link
+                        href={`/manga/${manga.id}/read/${resumeChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(progress?.chapterNumber || "")}`}
+                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black font-black text-sm transition-all shadow-xl shadow-[#42f5dd]/30 active:scale-95 cursor-pointer touch-manipulation"
+                      >
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>Continue Chapter {progress?.chapterNumber}</span>
+                      </Link>
+                    ) : firstChapter ? (
+                      <Link
+                        href={`/manga/${manga.id}/read/${firstChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(firstChapter.chapterNumber)}`}
+                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black font-black text-sm transition-all shadow-xl shadow-[#42f5dd]/30 active:scale-95 cursor-pointer touch-manipulation"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        <span>Start Reading (Ch. {firstChapter.chapterNumber})</span>
+                      </Link>
+                    ) : isChaptersLoading ? (
+                      <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.06] border border-white/10 text-white/70 text-xs font-bold">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#42f5dd]" />
+                        <span>Loading Chapters...</span>
+                      </div>
+                    ) : null}
+
+                    {/* Bookmark / Watchlist Button */}
                     <button
-                      onClick={() => setIsDescExpanded(!isDescExpanded)}
-                      className="text-xs font-black text-[#42f5dd] hover:text-white mt-2 flex items-center gap-1 cursor-pointer focus:outline-none"
+                      onClick={() => {
+                        if (!manga) return;
+                        toggle({
+                          mediaId: manga.id,
+                          mediaType: manga.type || "manga",
+                          title: manga.title,
+                          posterPath: manga.coverImage,
+                        });
+                      }}
+                      className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm border transition-all active:scale-95 cursor-pointer touch-manipulation ${
+                        inWatchlist
+                          ? "bg-primary/20 border-primary text-primary shadow-lg shadow-primary/20"
+                          : "bg-white/[0.08] hover:bg-white/[0.14] border-white/10 text-white"
+                      }`}
                     >
-                      <span>{isDescExpanded ? "Show Less" : "Read More"}</span>
-                      {isDescExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      <Bookmark className={`w-4 h-4 ${inWatchlist ? "fill-current" : ""}`} />
+                      <span>{inWatchlist ? "In Watchlist" : "Add to Watchlist"}</span>
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                {/* Genre Tags */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {manga.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-3 py-1 rounded-xl text-[11px] font-bold bg-white/[0.04] text-white/70 border border-white/[0.06]"
-                    >
-                      {tag}
-                    </span>
-                  ))}
                 </div>
-
-                {/* Call to Action Buttons */}
-                <div className="flex flex-wrap items-center gap-4 pt-2">
-                  {resumeChapter ? (
-                    <Link
-                      href={`/manga/${manga.id}/read/${resumeChapter.id}`}
-                      className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black font-black text-sm transition-all shadow-xl shadow-[#42f5dd]/30 active:scale-95 cursor-pointer"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>Continue Chapter {progress?.chapterNumber}</span>
-                    </Link>
-                  ) : firstChapter ? (
-                    <Link
-                      href={`/manga/${manga.id}/read/${firstChapter.id}`}
-                      className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black font-black text-sm transition-all shadow-xl shadow-[#42f5dd]/30 active:scale-95 cursor-pointer"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      <span>Start Reading (Ch. {firstChapter.chapterNumber})</span>
-                    </Link>
-                  ) : isChaptersLoading ? (
-                    <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.06] border border-white/10 text-white/70 text-xs font-bold">
-                      <Loader2 className="w-4 h-4 animate-spin text-[#42f5dd]" />
-                      <span>Loading Chapters...</span>
-                    </div>
-                  ) : null}
-                </div>
-
               </div>
             </div>
           </div>
@@ -281,37 +340,27 @@ export default function MangaDetailsClient({ id }: { id: string }) {
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-[#42f5dd] rounded-full shadow-[0_0_10px_#42f5dd]" />
               <h2 className="text-2xl font-black text-white tracking-tight">
-                Chapters
+                Chapters {chapters.length > 0 && `(${chapters.length})`}
               </h2>
-              {isChaptersLoading ? (
-                <span className="text-xs text-[#42f5dd] font-bold bg-[#42f5dd]/10 px-2.5 py-0.5 rounded-full border border-[#42f5dd]/30 flex items-center gap-1.5">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Loading...</span>
-                </span>
-              ) : (
-                <span className="text-xs text-[#42f5dd] font-bold bg-[#42f5dd]/10 px-2.5 py-0.5 rounded-full border border-[#42f5dd]/30">
-                  {chapters.length} Total
-                </span>
-              )}
             </div>
 
-            {/* Search & Sort Controls */}
-            {!isChaptersLoading && chapters.length > 0 && (
+            {/* Filter Search & Order Toggle */}
+            {chapters.length > 0 && (
               <div className="flex items-center gap-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#42f5dd]/60" />
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
                   <input
+                    type="text"
                     value={chapterSearch}
                     onChange={(e) => setChapterSearch(e.target.value)}
-                    placeholder="Filter chapters..."
-                    className="h-10 pl-9 pr-3 w-40 sm:w-48 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs text-white placeholder:text-white/30 outline-none focus:border-[#42f5dd]/60"
+                    placeholder="Search chapter number..."
+                    className="w-full h-10 pl-10 pr-4 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-[#42f5dd]/60 transition-colors"
                   />
                 </div>
 
-                {/* Order Toggle Button (Latest First vs Oldest First) */}
                 <button
                   onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
-                  className="flex items-center gap-2 h-10 px-4 rounded-xl bg-[#42f5dd]/15 hover:bg-[#42f5dd]/25 border border-[#42f5dd]/40 text-xs font-black text-[#42f5dd] hover:text-white transition-all cursor-pointer shadow-sm"
+                  className="flex items-center gap-2 h-10 px-4 rounded-xl bg-[#42f5dd]/15 hover:bg-[#42f5dd]/25 border border-[#42f5dd]/40 text-xs font-black text-[#42f5dd] hover:text-white transition-all cursor-pointer shadow-sm touch-manipulation"
                   title="Toggle chapter order"
                 >
                   <ArrowUpDown className="w-3.5 h-3.5 text-[#42f5dd]" />
@@ -332,14 +381,18 @@ export default function MangaDetailsClient({ id }: { id: string }) {
             <div className="flex flex-col gap-2.5 max-w-4xl">
               {filteredChapters.map((ch) => {
                 const isCurrentRead = progress?.chapterId === ch.id;
+                const isRead = isCurrentRead || isChapterRead(manga?.id || id, ch.id, ch.chapterNumber, progress?.chapterNumber);
+
                 return (
                   <Link
                     key={ch.id}
-                    href={`/manga/${manga?.id || id}/read/${ch.id}`}
-                    className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                    href={`/manga/${manga?.id || id}/read/${ch.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(ch.chapterNumber)}`}
+                    className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-200 cursor-pointer touch-manipulation active:scale-[0.99] ${
                       isCurrentRead
                         ? "bg-[#42f5dd]/15 border-[#42f5dd]/50 text-[#42f5dd] shadow-md shadow-[#42f5dd]/10"
-                        : "bg-card/40 border-white/[0.06] hover:bg-white/[0.06] hover:border-[#42f5dd]/40 text-white"
+                        : isRead
+                        ? "bg-card/30 border-white/[0.04] text-white/70 hover:border-[#42f5dd]/30 hover:text-white"
+                        : "bg-card/50 border-white/[0.06] hover:bg-white/[0.06] hover:border-[#42f5dd]/40 text-white"
                     }`}
                   >
                     {/* Left: Chapter Number & Title */}
@@ -347,6 +400,8 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
                         isCurrentRead
                           ? "bg-[#42f5dd] text-black"
+                          : isRead
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                           : "bg-white/[0.06] text-white/70 group-hover:bg-[#42f5dd]/20 group-hover:text-[#42f5dd] transition-colors"
                       }`}>
                         {ch.chapterNumber}
@@ -354,14 +409,21 @@ export default function MangaDetailsClient({ id }: { id: string }) {
 
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-sm sm:text-base tracking-tight truncate group-hover:text-[#42f5dd] transition-colors">
+                          <span className={`font-extrabold text-sm sm:text-base tracking-tight truncate group-hover:text-[#42f5dd] transition-colors ${
+                            isRead && !isCurrentRead ? "text-white/80" : ""
+                          }`}>
                             {ch.title || `Chapter ${ch.chapterNumber}`}
                           </span>
-                          {isCurrentRead && (
+                          {isCurrentRead ? (
                             <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-[#42f5dd]/25 text-[#42f5dd] border border-[#42f5dd]/40">
                               Current Read
                             </span>
-                          )}
+                          ) : isRead ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              <span>Read</span>
+                            </span>
+                          ) : null}
                         </div>
                         {ch.title && ch.title !== `Chapter ${ch.chapterNumber}` && (
                           <span className="text-xs text-white/40 truncate font-medium">
@@ -371,13 +433,33 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                       </div>
                     </div>
 
-                    {/* Right: Date & Play Indicator */}
-                    <div className="flex items-center gap-3 shrink-0">
+                    {/* Right: Date, Read Toggle Button & Play Indicator */}
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                       {ch.publishAt && !isNaN(new Date(ch.publishAt).getTime()) && (
-                        <span className="text-xs text-zinc-400 font-semibold hidden sm:inline">
+                        <span className="text-xs text-zinc-400 font-semibold hidden sm:inline mr-1">
                           {format(new Date(ch.publishAt), "MMM d, yyyy")}
                         </span>
                       )}
+
+                      {/* Interactive 1-Click Mark as Read/Unread */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleChapterReadStatus(manga?.id || id, ch.id, ch.chapterNumber);
+                          setReadTick((t) => t + 1);
+                        }}
+                        title={isRead ? "Mark as Unread" : "Mark as Read"}
+                        className={`p-2 rounded-xl border transition-all cursor-pointer touch-manipulation active:scale-90 ${
+                          isRead
+                            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25"
+                            : "bg-white/[0.04] border-white/10 text-white/40 hover:text-white hover:bg-white/[0.08]"
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                      </button>
+
                       <div className="w-8 h-8 rounded-full bg-white/[0.04] group-hover:bg-[#42f5dd] group-hover:text-black flex items-center justify-center text-white/40 transition-all">
                         <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                       </div>

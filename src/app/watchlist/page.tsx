@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { BookMarked, X, Compass, Clapperboard, Tv, Sparkles, Layers, LogIn } from "lucide-react";
+import { BookMarked, X, Compass, Clapperboard, Tv, Sparkles, Layers, BookOpen, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { GridMediaCard } from "@/components/GridMediaCard";
@@ -17,6 +17,7 @@ const FILTERS: { id: Filter; label: string; icon: typeof Clapperboard }[] = [
   { id: "movie", label: "Movies", icon: Clapperboard },
   { id: "tv", label: "TV Shows", icon: Tv },
   { id: "anime", label: "Anime", icon: Sparkles },
+  { id: "manga", label: "Manga & Manhwa", icon: BookOpen },
 ];
 
 export default function WatchlistPage() {
@@ -28,14 +29,18 @@ export default function WatchlistPage() {
     () =>
       filter === "all"
         ? items
+        : filter === "manga"
+        ? items.filter((i) => i.mediaType === "manga" || i.mediaType === "manhwa")
         : items.filter((i) => i.mediaType === filter),
     [items, filter]
   );
 
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: items.length, movie: 0, tv: 0, anime: 0 };
+    const c: Record<Filter, number> = { all: items.length, movie: 0, tv: 0, anime: 0, manga: 0, manhwa: 0 };
     items.forEach((i) => {
-      if (i.mediaType === "movie" || i.mediaType === "tv" || i.mediaType === "anime") {
+      if (i.mediaType === "manga" || i.mediaType === "manhwa") {
+        c.manga += 1;
+      } else if (i.mediaType in c) {
         c[i.mediaType] += 1;
       }
     });

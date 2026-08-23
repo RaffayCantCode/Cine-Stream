@@ -21,7 +21,7 @@ export const MangaCard = memo(function MangaCard({ item, priority = false }: Man
   return (
     <Link
       href={`/manga/${item.id}`}
-      className="group relative flex flex-col w-full aspect-[2/3] rounded-3xl overflow-hidden bg-zinc-950 border border-white/[0.08] hover:border-[#42f5dd]/70 hover:shadow-[0_16px_40px_rgba(66,245,221,0.22)] hover:scale-[1.03] hover:-translate-y-1.5 transition-all duration-300 select-none focus:outline-none cursor-pointer"
+      className="group relative flex flex-col w-full aspect-[2/3] rounded-3xl overflow-hidden bg-zinc-950 border border-white/[0.08] hover:border-[#42f5dd]/70 hover:shadow-[0_16px_40px_rgba(66,245,221,0.22)] hover:scale-[1.03] hover:-translate-y-1.5 active:scale-[0.98] transition-all duration-300 select-none focus:outline-none cursor-pointer touch-manipulation"
     >
       {/* Full-Bleed Poster Image */}
       <img

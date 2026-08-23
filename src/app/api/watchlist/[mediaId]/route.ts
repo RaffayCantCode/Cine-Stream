@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { auth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { watchlists } from "@/lib/db/schema";
+import { watchlists, mangaBookmarks } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 
 export async function DELETE(
@@ -17,15 +17,27 @@ export async function DELETE(
     }
 
     const { mediaId: mediaIdRaw } = await params;
-    const mediaId = Number(mediaIdRaw);
-    const mediaType =
-      new URL(request.url).searchParams.get("mediaType") ?? "";
+    const mediaType = new URL(request.url).searchParams.get("mediaType") ?? "";
 
+    const db = getDb();
+
+    if (mediaType === "manga" || mediaType === "manhwa") {
+      await db
+        .delete(mangaBookmarks)
+        .where(
+          and(
+            eq(mangaBookmarks.userId, session.user.id),
+            eq(mangaBookmarks.mangaId, mediaIdRaw)
+          )
+        );
+      return Response.json({ success: true });
+    }
+
+    const mediaId = Number(mediaIdRaw);
     if (!Number.isFinite(mediaId) || !["movie", "tv", "anime"].includes(mediaType)) {
       return Response.json({ error: "Invalid params" }, { status: 400 });
     }
 
-    const db = getDb();
     await db
       .delete(watchlists)
       .where(

@@ -171,6 +171,31 @@ export const mangaReadingHistory = pgTable(
 export type MangaReadingHistoryItem = typeof mangaReadingHistory.$inferSelect;
 export type NewMangaReadingHistoryItem = typeof mangaReadingHistory.$inferInsert;
 
+// Manga Bookmarks / Watchlist table
+export const mangaBookmarks = pgTable(
+  "manga_bookmarks",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mangaId: varchar("manga_id", { length: 255 }).notNull(),
+    mediaType: varchar("media_type", { length: 32 }).notNull().default("manga"),
+    title: varchar("title", { length: 500 }).notNull(),
+    posterPath: varchar("poster_path", { length: 1000 }),
+    backdropPath: varchar("backdrop_path", { length: 1000 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("uq_manga_bookmarks_user_manga").on(t.userId, t.mangaId),
+  ]
+);
+
+export type MangaBookmarkItem = typeof mangaBookmarks.$inferSelect;
+export type NewMangaBookmarkItem = typeof mangaBookmarks.$inferInsert;
+
 // Site Announcements table
 export const siteAnnouncements = pgTable("site_announcements", {
   id: varchar("id", { length: 32 }).primaryKey().default("current"),

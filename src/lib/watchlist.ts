@@ -1,7 +1,7 @@
-export type MediaType = "movie" | "tv" | "anime";
+export type MediaType = "movie" | "tv" | "anime" | "manga" | "manhwa";
 
 export interface WatchlistItem {
-  mediaId: number;
+  mediaId: number | string;
   mediaType: MediaType;
   title: string;
   posterPath: string | null;
@@ -11,7 +11,7 @@ export interface WatchlistItem {
 
 export const WATCHLIST_STORAGE_KEY = "cinestream.watchlist";
 
-export function watchlistKey(mediaId: number, mediaType: string): string {
+export function watchlistKey(mediaId: number | string, mediaType: string): string {
   return `${mediaType}:${mediaId}`;
 }
 
@@ -25,8 +25,8 @@ export function readLocalWatchlist(): WatchlistItem[] {
     return parsed.filter(
       (i) =>
         i &&
-        typeof i.mediaId === "number" &&
-        (i.mediaType === "movie" || i.mediaType === "tv" || i.mediaType === "anime")
+        (typeof i.mediaId === "number" || typeof i.mediaId === "string") &&
+        (i.mediaType === "movie" || i.mediaType === "tv" || i.mediaType === "anime" || i.mediaType === "manga" || i.mediaType === "manhwa")
     );
   } catch {
     return [];
