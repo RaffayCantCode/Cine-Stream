@@ -13,13 +13,12 @@ import {
   Maximize,
   Minimize,
   BookOpen,
-  Layers,
-  Scroll,
+  ZoomIn,
+  ZoomOut,
   RotateCcw,
   Loader2,
   CheckCircle2,
-  List,
-  Sparkles
+  List
 } from "lucide-react";
 import { usePageContentReady } from "@/lib/pageLoad";
 
@@ -42,6 +41,7 @@ export default function MangaReaderClient({
 
   const [readingMode, setReadingMode] = useState<ReadingMode>("webtoon");
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [zoomLevel, setZoomLevel] = useState<number>(100); // 50% to 200%
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [chapterPickerOpen, setChapterPickerOpen] = useState(false);
@@ -51,14 +51,36 @@ export default function MangaReaderClient({
 
   usePageContentReady(!isLoading);
 
-  // Load Saved Preferences (Reading Mode)
+  // Load Saved Preferences (Reading Mode & Zoom Level)
   useEffect(() => {
     try {
       const savedMode = localStorage.getItem("cinestream.manga_reading_mode") as ReadingMode;
       if (savedMode === "webtoon" || savedMode === "single") {
         setReadingMode(savedMode);
       }
+      const savedZoom = localStorage.getItem("cinestream.manga_zoom_level");
+      if (savedZoom) {
+        const parsed = parseInt(savedZoom, 10);
+        if (!isNaN(parsed) && parsed >= 50 && parsed <= 200) {
+          setZoomLevel(parsed);
+        }
+      }
     } catch {}
+  }, []);
+
+  // Listen to standard fullscreen change events
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+    };
   }, []);
 
   // Fetch Manga Details, Chapter List, and Chapter Pages
@@ -137,7 +159,7 @@ export default function MangaReaderClient({
   // Total pages count
   const totalPages = pagesData?.pageUrls?.length || 0;
 
-  // Save Reading Progress (with next chapter metadata)
+  // Save Reading Progress
   const updateProgress = useCallback(
     (page: number) => {
       if (!manga || !currentChapter || totalPages <= 0) return;
@@ -198,7 +220,7 @@ export default function MangaReaderClient({
           }
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.4 }
     );
 
     pageRefs.current.forEach((el) => {
@@ -207,6 +229,31 @@ export default function MangaReaderClient({
 
     return () => observer.disconnect();
   }, [readingMode, totalPages, currentPage, updateProgress]);
+
+  // Zoom Handler Functions (+ / - / reset)
+  const handleZoomIn = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setZoomLevel((prev) => {
+      const next = Math.min(200, prev + 10);
+      try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const handleZoomOut = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setZoomLevel((prev) => {
+      const next = Math.max(50, prev - 10);
+      try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const handleZoomReset = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setZoomLevel(100);
+    try { localStorage.setItem("cinestream.manga_zoom_level", "100"); } catch {}
+  };
 
   // Switch Reading Mode
   const handleSetMode = (mode: ReadingMode) => {
@@ -239,7 +286,24 @@ export default function MangaReaderClient({
     }
   };
 
-  // Keyboard Navigation
+  // Proper Fullscreen Toggle (Starts from top without offsets)
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      if (readerContainerRef.current?.requestFullscreen) {
+        readerContainerRef.current.requestFullscreen().catch(() => {});
+      } else if ((document.documentElement as any).webkitRequestFullscreen) {
+        (document.documentElement as any).webkitRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+    }
+  };
+
+  // Keyboard Navigation & Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -253,22 +317,21 @@ export default function MangaReaderClient({
       } else if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         toggleFullscreen();
+      } else if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        handleZoomIn();
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        handleZoomOut();
+      } else if (e.key === "0") {
+        e.preventDefault();
+        handleZoomReset();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      readerContainerRef.current?.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -296,42 +359,46 @@ export default function MangaReaderClient({
     );
   }
 
+  // Calculate dynamic maxWidth based on zoom percentage
+  const dynamicWebtoonMaxWidth = Math.round(768 * (zoomLevel / 100));
+  const dynamicSingleMaxWidth = Math.round(920 * (zoomLevel / 100));
+
   return (
     <div
       ref={readerContainerRef}
-      className="min-h-screen bg-black text-white flex flex-col select-none relative overflow-x-hidden"
+      className="min-h-screen w-full bg-black text-white flex flex-col select-none relative overflow-x-hidden"
     >
       {/* TOP FLOATING NAVIGATION BAR */}
       <header
         className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
           showControls ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"
-        } bg-black/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 py-3 flex items-center justify-between shadow-2xl`}
+        } bg-black/90 backdrop-blur-xl border-b border-white/10 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between shadow-2xl`}
       >
         {/* Left: Back & Title */}
-        <div className="flex items-center gap-3 min-w-0 pr-4">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-2 sm:pr-4">
           <Link
             href={`/manga/${mangaId}`}
-            className="p-2 rounded-xl bg-white/[0.06] hover:bg-[#42f5dd]/20 hover:text-[#42f5dd] text-white/80 transition-colors"
+            className="p-2 rounded-xl bg-white/[0.06] hover:bg-[#42f5dd]/20 hover:text-[#42f5dd] text-white/80 transition-colors shrink-0"
             title="Back to Details"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
 
           <div className="flex flex-col min-w-0">
-            <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[180px] sm:max-w-xs md:max-w-md">
+            <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[130px] sm:max-w-xs md:max-w-md">
               {manga?.title || "Manga"}
             </h1>
-            <span className="text-[11px] text-[#42f5dd] font-bold truncate">
+            <span className="text-[10px] sm:text-[11px] text-[#42f5dd] font-bold truncate">
               {currentChapter ? currentChapter.title || `Chapter ${currentChapter.chapterNumber}` : `Chapter`}
             </span>
           </div>
         </div>
 
         {/* Center: Chapter Jump Picker */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setChapterPickerOpen(!chapterPickerOpen)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-xs font-bold text-white transition-all cursor-pointer"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-xs font-bold text-white transition-all cursor-pointer"
           >
             <List className="w-3.5 h-3.5 text-[#42f5dd]" />
             <span>Ch. {currentChapter?.chapterNumber || "1"}</span>
@@ -369,10 +436,42 @@ export default function MangaReaderClient({
           )}
         </div>
 
-        {/* Right: Mode Toggle & Automatic Next Chapter Button */}
-        <div className="flex items-center gap-2">
+        {/* Right: Zoom Controls, Mode Toggle, Fullscreen & Next Chapter Button */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          
+          {/* Zoom In / Out Controls */}
+          <div className="flex items-center bg-white/[0.06] border border-white/10 rounded-xl p-0.5 sm:p-1">
+            <button
+              onClick={handleZoomOut}
+              disabled={zoomLevel <= 50}
+              className="p-1 sm:p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-[#42f5dd] disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+              title="Zoom Out (-)"
+              aria-label="Zoom Out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={handleZoomReset}
+              className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-black text-[#42f5dd] hover:bg-white/10 rounded-md transition-all cursor-pointer"
+              title="Reset Zoom to 100% (0)"
+            >
+              {zoomLevel}%
+            </button>
+
+            <button
+              onClick={handleZoomIn}
+              disabled={zoomLevel >= 200}
+              className="p-1 sm:p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-[#42f5dd] disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+              title="Zoom In (+)"
+              aria-label="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Mode Switcher */}
-          <div className="hidden sm:flex items-center bg-white/[0.06] p-1 rounded-xl border border-white/10">
+          <div className="hidden md:flex items-center bg-white/[0.06] p-1 rounded-xl border border-white/10">
             <button
               onClick={() => handleSetMode("webtoon")}
               className={`px-3 py-1 rounded-lg text-xs font-black transition-all ${
@@ -400,8 +499,9 @@ export default function MangaReaderClient({
           {/* Fullscreen Button */}
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white/80 transition-colors hidden md:block"
+            className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white/80 hover:text-[#42f5dd] transition-colors cursor-pointer"
             title="Toggle Fullscreen (F)"
+            aria-label="Toggle Fullscreen"
           >
             {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
           </button>
@@ -410,12 +510,12 @@ export default function MangaReaderClient({
           {nextChapter && (
             <Link
               href={`/manga/${mangaId}/read/${nextChapter.id}`}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black text-xs font-black shadow-lg shadow-[#42f5dd]/25 transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-[#42f5dd] hover:bg-[#34dbcb] text-black text-xs font-black shadow-lg shadow-[#42f5dd]/25 transition-all cursor-pointer shrink-0"
               title={`Next Chapter (Ch. ${nextChapter.chapterNumber})`}
             >
               <span className="hidden sm:inline">Next Chapter</span>
               <span className="sm:hidden">Next</span>
-              <ChevronRight className="w-4 h-4 stroke-[3]" />
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
             </Link>
           )}
         </div>
@@ -424,11 +524,14 @@ export default function MangaReaderClient({
       {/* MAIN READING CANVAS */}
       <main
         onClick={() => setShowControls((prev) => !prev)}
-        className="flex-1 flex flex-col items-center justify-center pt-16 pb-24 min-h-screen cursor-default"
+        className="flex-1 flex flex-col items-center justify-center pt-14 sm:pt-16 pb-24 min-h-screen w-full cursor-default"
       >
         {readingMode === "webtoon" ? (
-          /* CONTINUOUS WEBTOON VERTICAL SCROLL */
-          <div className="w-full max-w-3xl flex flex-col items-center mx-auto">
+          /* CONTINUOUS WEBTOON VERTICAL SCROLL (Perfect fit & customizable zoom width) */
+          <div
+            style={{ maxWidth: `min(100vw, ${dynamicWebtoonMaxWidth}px)` }}
+            className="w-full flex flex-col items-center mx-auto transition-[max-width] duration-200"
+          >
             {pagesData.pageUrls.map((url, idx) => {
               const pageNum = idx + 1;
               return (
@@ -439,17 +542,17 @@ export default function MangaReaderClient({
                     if (el) pageRefs.current.set(pageNum, el);
                     else pageRefs.current.delete(pageNum);
                   }}
-                  className="relative w-full flex justify-center bg-black"
+                  className="relative w-full flex justify-center bg-black overflow-hidden"
                 >
                   <img
                     src={url}
                     alt={`Page ${pageNum}`}
                     loading={pageNum <= 3 ? "eager" : "lazy"}
                     decoding="async"
-                    className="w-full h-auto object-contain block select-none"
+                    className="w-full h-auto max-w-full object-contain block select-none"
                   />
                   {/* Subtle Page Watermark */}
-                  <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/60 text-[9px] text-white/50 backdrop-blur-md pointer-events-none font-bold">
+                  <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/70 text-[9px] text-white/60 backdrop-blur-md pointer-events-none font-bold">
                     {pageNum} / {totalPages}
                   </span>
                 </div>
@@ -457,7 +560,7 @@ export default function MangaReaderClient({
             })}
 
             {/* END OF CHAPTER BANNER */}
-            <div className="w-full p-8 my-8 text-center bg-zinc-950 border border-white/10 rounded-3xl space-y-4 max-w-xl mx-4">
+            <div className="w-full p-8 my-8 text-center bg-zinc-950 border border-white/10 rounded-3xl space-y-4 max-w-xl mx-4 shadow-2xl">
               <div className="w-12 h-12 rounded-full bg-[#42f5dd]/15 text-[#42f5dd] flex items-center justify-center mx-auto border border-[#42f5dd]/30">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
@@ -484,13 +587,16 @@ export default function MangaReaderClient({
             </div>
           </div>
         ) : (
-          /* SINGLE PAGE FLIP MODE */
-          <div className="w-full max-w-4xl flex-1 flex flex-col items-center justify-center relative px-4">
-            <div className="relative w-full max-w-3xl aspect-[2/3] max-h-[85vh] flex items-center justify-center bg-zinc-950 rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+          /* SINGLE PAGE FLIP MODE (Scales with zoom, never clipped) */
+          <div
+            style={{ maxWidth: `min(100vw, ${dynamicSingleMaxWidth}px)` }}
+            className="w-full flex-1 flex flex-col items-center justify-center relative px-2 sm:px-4 transition-[max-width] duration-200"
+          >
+            <div className="relative w-full aspect-[2/3] max-h-[85vh] flex items-center justify-center bg-zinc-950 rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
               <img
                 src={pagesData.pageUrls[currentPage - 1]}
                 alt={`Page ${currentPage}`}
-                className="w-full h-full object-contain"
+                className="w-full h-full max-h-full object-contain block"
               />
 
               {/* Invisible Click Zones for Left/Right Page Flip */}
@@ -501,7 +607,7 @@ export default function MangaReaderClient({
                 }}
                 className="absolute inset-y-0 left-0 w-1/2 cursor-w-resize group flex items-center justify-start pl-4"
               >
-                <div className="opacity-0 group-hover:opacity-100 p-3 rounded-full bg-black/60 text-[#42f5dd] backdrop-blur-md transition-opacity">
+                <div className="opacity-0 group-hover:opacity-100 p-3 rounded-full bg-black/70 text-[#42f5dd] backdrop-blur-md transition-opacity">
                   <ChevronLeft className="w-6 h-6" />
                 </div>
               </div>
@@ -513,7 +619,7 @@ export default function MangaReaderClient({
                 }}
                 className="absolute inset-y-0 right-0 w-1/2 cursor-e-resize group flex items-center justify-end pr-4"
               >
-                <div className="opacity-0 group-hover:opacity-100 p-3 rounded-full bg-black/60 text-[#42f5dd] backdrop-blur-md transition-opacity">
+                <div className="opacity-0 group-hover:opacity-100 p-3 rounded-full bg-black/70 text-[#42f5dd] backdrop-blur-md transition-opacity">
                   <ChevronRight className="w-6 h-6" />
                 </div>
               </div>
@@ -551,11 +657,11 @@ export default function MangaReaderClient({
         )}
       </main>
 
-      {/* BOTTOM FLOATING CONTROLS */}
+      {/* BOTTOM FLOATING CONTROLS (With page info, navigation, and zoom shortcut) */}
       <footer
-        className={`fixed bottom-4 inset-x-0 mx-auto w-fit z-50 transition-all duration-300 ${
-          showControls ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0 pointer-events-none"
-        } bg-black/90 backdrop-blur-2xl border border-[#42f5dd]/30 rounded-2xl px-5 py-2.5 flex items-center gap-4 shadow-2xl shadow-[#42f5dd]/10`}
+        className={`fixed bottom-4 inset-x-0 mx-auto w-fit max-w-[95vw] z-50 transition-all duration-300 ${
+          showControls ? "translate-y-0 opacity-100" : "translate-y-16 opacity-0 pointer-events-none"
+        } bg-black/90 backdrop-blur-2xl border border-[#42f5dd]/30 rounded-2xl px-4 sm:px-5 py-2 sm:py-2.5 flex items-center gap-3 sm:gap-4 shadow-2xl shadow-[#42f5dd]/10`}
       >
         {/* Prev Chapter */}
         {prevChapter ? (
@@ -565,18 +671,23 @@ export default function MangaReaderClient({
             title={`Prev: Ch. ${prevChapter.chapterNumber}`}
           >
             <ChevronLeft className="w-4 h-4" />
-            <span>Ch. {prevChapter.chapterNumber}</span>
+            <span className="hidden sm:inline">Ch. {prevChapter.chapterNumber}</span>
           </Link>
         ) : (
-          <span className="text-xs text-white/20 font-bold">First Chapter</span>
+          <span className="text-xs text-white/20 font-bold hidden sm:inline">Start</span>
         )}
 
         <div className="w-px h-4 bg-white/20" />
 
-        {/* Current Position */}
-        <span className="text-xs font-black text-[#42f5dd]">
-          Page {currentPage} / {totalPages}
-        </span>
+        {/* Current Position & Quick Zoom */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-[#42f5dd]">
+            p. {currentPage} / {totalPages}
+          </span>
+          <span className="text-[10px] font-bold text-white/40 hidden sm:inline">
+            ({zoomLevel}%)
+          </span>
+        </div>
 
         <div className="w-px h-4 bg-white/20" />
 
@@ -587,7 +698,7 @@ export default function MangaReaderClient({
             className="flex items-center gap-1 text-xs font-black text-[#42f5dd] hover:text-white transition-colors cursor-pointer"
             title={`Next: Ch. ${nextChapter.chapterNumber}`}
           >
-            <span>Ch. {nextChapter.chapterNumber}</span>
+            <span className="hidden sm:inline">Ch. {nextChapter.chapterNumber}</span>
             <ChevronRight className="w-4 h-4" />
           </Link>
         ) : (
