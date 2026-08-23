@@ -74,6 +74,26 @@ export default function MangaHomeClient() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const clientCache = useRef<Map<string, MangaItem[]>>(new Map());
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeSearchIdRef = useRef<number>(0);
+
+  // Instant clear handler for search input
+  const handleClearSearch = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    activeSearchIdRef.current++;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setSearchQuery("");
+    setDebouncedSearch("");
+    setSearchResults([]);
+    setIsSearching(false);
+    setPageOffset(0);
+    setHasMore(true);
+  }, []);
 
   // Sync Reading History from Local & DB
   const refreshHistory = useCallback(async () => {
@@ -111,7 +131,9 @@ export default function MangaHomeClient() {
       .then((data) => {
         if (!isMounted) return;
         const items = data.items || [];
-        setTrendingNow(shuffleArray<MangaItem>(items).slice(0, 15));
+        if (items.length > 0) {
+          setTrendingNow(shuffleArray<MangaItem>(items).slice(0, 15));
+        }
       })
       .catch((err) => console.warn("Failed to load trending now:", err))
       .finally(() => {
@@ -123,7 +145,9 @@ export default function MangaHomeClient() {
       .then((data) => {
         if (!isMounted) return;
         const items = data.items || [];
-        setTrendingManhwas(shuffleArray<MangaItem>(items).slice(0, 15));
+        if (items.length > 0) {
+          setTrendingManhwas(shuffleArray<MangaItem>(items).slice(0, 15));
+        }
       })
       .catch((err) => console.warn("Failed to load trending manhwas:", err))
       .finally(() => {
@@ -135,7 +159,9 @@ export default function MangaHomeClient() {
       .then((data) => {
         if (!isMounted) return;
         const items = data.items || [];
-        setTrendingMangas(shuffleArray<MangaItem>(items).slice(0, 15));
+        if (items.length > 0) {
+          setTrendingMangas(shuffleArray<MangaItem>(items).slice(0, 15));
+        }
       })
       .catch((err) => console.warn("Failed to load trending mangas:", err))
       .finally(() => {
@@ -169,14 +195,16 @@ export default function MangaHomeClient() {
   useEffect(() => {
     if (!debouncedSearch.trim()) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
     const trimmed = debouncedSearch.trim();
+    const searchId = ++activeSearchIdRef.current;
     const cacheKey = `search_${trimmed}_${selectedType}_0`;
 
-    // 1. Check in-memory client cache for instant 0ms response
-    if (clientCache.current.has(cacheKey)) {
+    // 1. Check in-memory client cache for instant 0ms response (only non-empty)
+    if (clientCache.current.has(cacheKey) && (clientCache.current.get(cacheKey)?.length || 0) > 0) {
       setSearchResults(clientCache.current.get(cacheKey)!);
       setIsSearching(false);
       setHasMore(true);
@@ -188,7 +216,8 @@ export default function MangaHomeClient() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    abortControllerRef.current = new AbortController();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const performSearch = async () => {
       setIsSearching(true);
@@ -198,22 +227,28 @@ export default function MangaHomeClient() {
         const typeParam = selectedType !== "all" ? `&type=${selectedType}` : "";
         const res = await fetch(
           `/api/manga/search?q=${encodeURIComponent(trimmed)}${typeParam}&limit=${ITEMS_PER_PAGE}&offset=0`,
-          { signal: abortControllerRef.current?.signal }
+          { signal: controller.signal }
         );
         if (res.ok) {
           const data = await res.json();
           const items = data.items || [];
-          setSearchResults(items);
-          clientCache.current.set(cacheKey, items);
-          if (items.length < ITEMS_PER_PAGE) setHasMore(false);
+          if (activeSearchIdRef.current === searchId) {
+            setSearchResults(items);
+            if (items.length > 0) {
+              clientCache.current.set(cacheKey, items);
+            }
+            if (items.length < ITEMS_PER_PAGE) setHasMore(false);
+          }
         }
       } catch (err: any) {
-        if (err.name !== "AbortError") {
+        if (err.name !== "AbortError" && activeSearchIdRef.current === searchId) {
           console.error("Search failed:", err);
           setSearchResults([]);
         }
       } finally {
-        setIsSearching(false);
+        if (activeSearchIdRef.current === searchId) {
+          setIsSearching(false);
+        }
       }
     };
 
@@ -385,17 +420,24 @@ export default function MangaHomeClient() {
           {/* Search & Genre Filter Bar */}
           <div className="space-y-4">
             <div className="relative max-w-xl">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/70" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/60 pointer-events-none" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    handleClearSearch();
+                  }
+                }}
                 placeholder="Search manga, manhwa, or authors (e.g. Solo Leveling, One Piece)..."
-                className="w-full h-12 pl-11 pr-10 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] focus:bg-white/[0.06] border border-white/[0.08] focus:border-primary/60 text-white text-sm outline-none transition-all placeholder:text-white/35 shadow-inner"
+                className="w-full h-12 pl-11 pr-12 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] focus:bg-white/[0.06] border border-white/[0.08] focus:border-primary/60 text-white text-sm outline-none transition-all placeholder:text-white/35 shadow-inner"
               />
               {searchQuery && (
                 <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                  type="button"
+                  onClick={handleClearSearch}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>

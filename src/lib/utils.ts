@@ -51,6 +51,8 @@ function getSmartTtlMs(urlStr: string): number {
     lower.includes("/api/tmdb/movie/") ||
     lower.includes("/api/tmdb/tv/") ||
     lower.includes("/api/anime/") ||
+    lower.includes("/api/manga/chapter") ||
+    lower.includes("/api/manga/details") ||
     lower.includes("/meta") ||
     lower.includes("/episodes")
   ) {
@@ -97,8 +99,27 @@ export async function fetchJson<T = unknown>(
         if (storedStr) {
           const parsed = JSON.parse(storedStr);
           if (parsed && parsed.expires > Date.now()) {
-            requestCache.set(cacheKey, { data: parsed.data, expires: parsed.expires });
-            return parsed.data as T;
+            const isCachedDataEmpty =
+              parsed.data === null ||
+              parsed.data === undefined ||
+              (Array.isArray(parsed.data) && parsed.data.length === 0) ||
+              (typeof parsed.data === "object" &&
+                parsed.data &&
+                "items" in (parsed.data as any) &&
+                Array.isArray((parsed.data as any).items) &&
+                (parsed.data as any).items.length === 0) ||
+              (typeof parsed.data === "object" &&
+                parsed.data &&
+                "success" in (parsed.data as any) &&
+                (parsed.data as any).success === false);
+
+            if (!isCachedDataEmpty) {
+              requestCache.set(cacheKey, { data: parsed.data, expires: parsed.expires });
+              return parsed.data as T;
+            } else {
+              // Stale empty cache detected, purge it!
+              sessionStorage.removeItem(`cs_v16_cache_${cacheKey}`);
+            }
           }
         }
       } catch {}
@@ -129,7 +150,21 @@ export async function fetchJson<T = unknown>(
       throw new Error(message);
     }
 
-    if (shouldUseCache && cacheTtlMs > 0) {
+    const isEmptyPayload =
+      data === null ||
+      data === undefined ||
+      (Array.isArray(data) && data.length === 0) ||
+      (typeof data === "object" &&
+        data &&
+        "items" in (data as any) &&
+        Array.isArray((data as any).items) &&
+        (data as any).items.length === 0) ||
+      (typeof data === "object" &&
+        data &&
+        "success" in (data as any) &&
+        (data as any).success === false);
+
+    if (shouldUseCache && cacheTtlMs > 0 && !isEmptyPayload) {
       const expires = Date.now() + cacheTtlMs;
       requestCache.set(cacheKey, { data, expires });
       pruneCache();
