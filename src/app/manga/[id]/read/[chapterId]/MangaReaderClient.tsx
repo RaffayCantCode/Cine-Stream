@@ -527,10 +527,10 @@ export default function MangaReaderClient({
         className="flex-1 flex flex-col items-center justify-center pt-14 sm:pt-16 pb-24 min-h-screen w-full cursor-default"
       >
         {readingMode === "webtoon" ? (
-          /* CONTINUOUS WEBTOON VERTICAL SCROLL (Perfect fit & customizable zoom width) */
+          /* CONTINUOUS WEBTOON VERTICAL SCROLL (Scales actual page width directly with zoom) */
           <div
-            style={{ maxWidth: `min(100vw, ${dynamicWebtoonMaxWidth}px)` }}
-            className="w-full flex flex-col items-center mx-auto transition-[max-width] duration-200"
+            style={{ width: `${Math.round(768 * (zoomLevel / 100))}px`, maxWidth: "100vw" }}
+            className="w-full flex flex-col items-center mx-auto transition-[width] duration-200"
           >
             {pagesData.pageUrls.map((url, idx) => {
               const pageNum = idx + 1;
@@ -549,7 +549,7 @@ export default function MangaReaderClient({
                     alt={`Page ${pageNum}`}
                     loading={pageNum <= 3 ? "eager" : "lazy"}
                     decoding="async"
-                    className="w-full h-auto max-w-full object-contain block select-none"
+                    className="w-full h-auto object-contain block select-none"
                   />
                   {/* Subtle Page Watermark */}
                   <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/70 text-[9px] text-white/60 backdrop-blur-md pointer-events-none font-bold">
@@ -587,16 +587,16 @@ export default function MangaReaderClient({
             </div>
           </div>
         ) : (
-          /* SINGLE PAGE FLIP MODE (Scales with zoom, never clipped) */
+          /* SINGLE PAGE FLIP MODE (Scales actual page image directly with zoom) */
           <div
-            style={{ maxWidth: `min(100vw, ${dynamicSingleMaxWidth}px)` }}
-            className="w-full flex-1 flex flex-col items-center justify-center relative px-2 sm:px-4 transition-[max-width] duration-200"
+            style={{ width: `${Math.round(800 * (zoomLevel / 100))}px`, maxWidth: "100vw" }}
+            className="w-full flex-1 flex flex-col items-center justify-center relative px-2 sm:px-4 transition-[width] duration-200"
           >
-            <div className="relative w-full aspect-[2/3] max-h-[85vh] flex items-center justify-center bg-zinc-950 rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+            <div className="relative w-full flex items-center justify-center bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
               <img
                 src={pagesData.pageUrls[currentPage - 1]}
                 alt={`Page ${currentPage}`}
-                className="w-full h-full max-h-full object-contain block"
+                className="w-full h-auto max-h-[88vh] object-contain block select-none"
               />
 
               {/* Invisible Click Zones for Left/Right Page Flip */}
