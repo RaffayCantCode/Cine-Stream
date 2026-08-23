@@ -291,22 +291,22 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                     {resumeChapter ? (
                       <Link
                         href={`/manga/${manga.id}/read/${resumeChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(progress?.chapterNumber || "")}`}
-                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-primary hover:opacity-90 text-primary-foreground font-black text-sm transition-all shadow-xl shadow-primary/30 active:scale-95 cursor-pointer touch-manipulation"
+                        className="inline-flex items-center gap-2.5 bg-[#E5E5E5] hover:bg-white text-[#090F15] font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation"
                       >
-                        <Play className="w-4 h-4 fill-current" />
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 text-[#090F15]" />
                         <span>Continue Chapter {progress?.chapterNumber}</span>
                       </Link>
                     ) : firstChapter ? (
                       <Link
                         href={`/manga/${manga.id}/read/${firstChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(firstChapter.chapterNumber)}`}
-                        className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-primary hover:opacity-90 text-primary-foreground font-black text-sm transition-all shadow-xl shadow-primary/30 active:scale-95 cursor-pointer touch-manipulation"
+                        className="inline-flex items-center gap-2.5 bg-[#E5E5E5] hover:bg-white text-[#090F15] font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation"
                       >
-                        <BookOpen className="w-4 h-4" />
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 text-[#090F15]" />
                         <span>Start Reading (Ch. {firstChapter.chapterNumber})</span>
                       </Link>
                     ) : isChaptersLoading ? (
-                      <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.06] border border-white/10 text-white/70 text-xs font-bold">
-                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      <div className="flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white/[0.06] border border-white/10 text-white/70 text-xs font-bold">
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
                         <span>Loading Chapters...</span>
                       </div>
                     ) : null}
@@ -322,7 +322,7 @@ export default function MangaDetailsClient({ id }: { id: string }) {
                           posterPath: manga.coverImage,
                         });
                       }}
-                      className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm border transition-all active:scale-95 cursor-pointer touch-manipulation ${
+                      className={`flex items-center gap-2 px-6 py-3.5 sm:py-4 rounded-2xl font-extrabold text-xs sm:text-sm border transition-all duration-300 active:scale-95 cursor-pointer touch-manipulation ${
                         inWatchlist
                           ? "bg-primary/20 border-primary text-primary shadow-lg shadow-primary/20"
                           : "bg-white/[0.08] hover:bg-white/[0.14] border-white/10 text-white"

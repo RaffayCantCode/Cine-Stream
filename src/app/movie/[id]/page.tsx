@@ -9,7 +9,7 @@ export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const params = await props.params;
-  const id = params.id;
+  const id = params?.id || "";
 
   try {
     const [rawMovie, override] = await Promise.all([
@@ -20,14 +20,14 @@ export async function generateMetadata(
     const movie = applyMediaOverride(rawMovie as any, override) as any;
 
     if (movie && !movie.isHidden) {
-      const title = movie.title || "Movie";
-      const year = movie.release_date ? movie.release_date.split("-")[0] : null;
+      const title = movie.title || movie.name || "Movie";
+      const year = movie.release_date ? String(movie.release_date).split("-")[0] : null;
 
       return constructMediaMetadata({
         title,
-        overview: movie.overview,
-        backdropPath: movie.backdrop_path,
-        posterPath: movie.poster_path,
+        overview: typeof movie.overview === "string" ? movie.overview : "",
+        backdropPath: typeof movie.backdrop_path === "string" ? movie.backdrop_path : null,
+        posterPath: typeof movie.poster_path === "string" ? movie.poster_path : null,
         releaseYear: year,
         mediaTypeLabel: "Movie",
         urlPath: `/movie/${id}`,

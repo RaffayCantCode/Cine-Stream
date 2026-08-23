@@ -9,7 +9,7 @@ export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const params = await props.params;
-  const id = params.id;
+  const id = params?.id || "";
 
   try {
     const [rawShow, override] = await Promise.all([
@@ -21,13 +21,13 @@ export async function generateMetadata(
 
     if (show && !show.isHidden) {
       const title = show.name || show.title || "TV Show";
-      const year = show.first_air_date ? show.first_air_date.split("-")[0] : null;
+      const year = show.first_air_date ? String(show.first_air_date).split("-")[0] : null;
 
       return constructMediaMetadata({
         title,
-        overview: show.overview,
-        backdropPath: show.backdrop_path,
-        posterPath: show.poster_path,
+        overview: typeof show.overview === "string" ? show.overview : "",
+        backdropPath: typeof show.backdrop_path === "string" ? show.backdrop_path : null,
+        posterPath: typeof show.poster_path === "string" ? show.poster_path : null,
         releaseYear: year,
         mediaTypeLabel: "TV Series",
         urlPath: `/tv/${id}`,

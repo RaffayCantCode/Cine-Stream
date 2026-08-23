@@ -8,20 +8,20 @@ export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const params = await props.params;
-  const id = params.id;
+  const id = params?.id || "";
 
   try {
     const manga = await getMangaDetails(id);
     if (manga) {
       const typeLabel = manga.type === "manhwa" ? "Manhwa" : manga.type === "manhua" ? "Manhua" : "Manga";
       return constructMediaMetadata({
-        title: `${manga.title} (${typeLabel})`,
-        overview: manga.description,
-        posterPath: manga.coverImage,
-        backdropPath: manga.coverImage,
+        title: `${manga.title || "Manga"} (${typeLabel})`,
+        overview: typeof manga.description === "string" ? manga.description : "",
+        posterPath: typeof manga.coverImage === "string" ? manga.coverImage : null,
+        backdropPath: typeof manga.coverImage === "string" ? manga.coverImage : null,
         type: "website",
         urlPath: `/manga/${id}`,
-        fallbackDescription: `Read ${manga.title} online in full color on CineStream with all chapters.`,
+        fallbackDescription: `Read ${manga.title || "manga"} online in full color on CineStream with all chapters.`,
       });
     }
   } catch (err) {

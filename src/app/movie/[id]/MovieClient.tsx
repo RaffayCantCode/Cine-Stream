@@ -4,13 +4,19 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
-import { Sidebar } from "@/components/Sidebar";
 import { Play, Star, Clock, Calendar, Film } from "lucide-react";
+import { format } from "date-fns";
+import { Sidebar } from "@/components/Sidebar";
+import { MediaRow } from "@/components/MediaRow";
+import { GridMediaCard } from "@/components/GridMediaCard";
+import { CastRow } from "@/components/CastRow";
+import { WatchlistButton } from "@/components/WatchlistButton";
+import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+import { usePageContentReady } from "@/lib/pageLoad";
+import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
-import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 
 function MovieHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -18,19 +24,13 @@ function MovieHeroTrailerButton() {
   return (
     <button
       onClick={playTrailer}
-      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold px-6 py-4 rounded-xl text-sm transition-all border border-white/15 backdrop-blur-md shadow-lg"
+      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold px-6 py-4 rounded-xl text-sm transition-all border border-white/15 backdrop-blur-md shadow-lg cursor-pointer"
     >
       <Film className="w-4 h-4 text-[#7288AE] shrink-0" />
       <span>Trailer</span>
     </button>
   );
 }
-import { GridMediaCard } from "@/components/GridMediaCard";
-import { format } from "date-fns";
-import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
-import { CastRow } from "@/components/CastRow";
-import { WatchlistButton } from "@/components/WatchlistButton";
-import { usePageContentReady } from "@/lib/pageLoad";
 
 interface Movie {
   id: number;

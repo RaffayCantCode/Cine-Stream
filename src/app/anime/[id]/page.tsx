@@ -9,7 +9,7 @@ export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const params = await props.params;
-  const id = params.id;
+  const id = params?.id || "";
 
   try {
     const [details, override] = await Promise.all([
@@ -27,9 +27,9 @@ export async function generateMetadata(
 
       return constructMediaMetadata({
         title,
-        overview: anime.description || anime.overview,
-        backdropPath: bannerUrl,
-        posterPath: posterUrl,
+        overview: typeof (anime.description || anime.overview) === "string" ? (anime.description || anime.overview) : "",
+        backdropPath: typeof bannerUrl === "string" ? bannerUrl : null,
+        posterPath: typeof posterUrl === "string" ? posterUrl : null,
         mediaTypeLabel: "Anime",
         urlPath: `/anime/${id}`,
         fallbackDescription: `Watch ${title} on CineStream in Full HD with Japanese audio and English subtitles.`,
