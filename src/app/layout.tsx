@@ -111,12 +111,20 @@ export default function RootLayout({
             } catch(e) {}
           })();
           if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
+            var registerSW = function() {
               navigator.serviceWorker.register('/sw.js', { scope: '/' })
                 .catch(function(err) { console.warn('SW registration failed:', err); });
-            });
+            };
+            if (document.readyState === 'complete') {
+              registerSW();
+            } else {
+              window.addEventListener('load', registerSW);
+            }
           }
         `}} />
+
+        {/* Web App Manifest for PWA & Address Bar Install Icon */}
+        <link rel="manifest" href="/manifest.json" />
 
         {/* Explicit Apple Touch Icons for iPhone Home Screen Bookmark & PWA */}
         <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=22" />
@@ -124,6 +132,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=22" />
         <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png?v=22" />
         <link rel="apple-touch-icon" href="/apple-icon.png?v=22" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="CineStream" />

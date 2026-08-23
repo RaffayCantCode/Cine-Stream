@@ -55,6 +55,7 @@ export default function MangaReaderClient({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [chapterPickerOpen, setChapterPickerOpen] = useState(false);
+  const [widePages, setWidePages] = useState<Set<number>>(new Set());
 
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -79,6 +80,19 @@ export default function MangaReaderClient({
     } catch {}
   }, []);
 
+  // Track wide/landscape images (aspect ratio > 1.15) for proper Double-Page spread handling
+  const handleImageLoad = useCallback((pageNum: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    if (img.naturalWidth > img.naturalHeight * 1.15) {
+      setWidePages((prev) => {
+        if (prev.has(pageNum)) return prev;
+        const next = new Set(prev);
+        next.add(pageNum);
+        return next;
+      });
+    }
+  }, []);
+
   // Listen to standard fullscreen change events
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -100,6 +114,7 @@ export default function MangaReaderClient({
     setIsLoading(true);
     setError(null);
     setPagesData(null);
+    setWidePages(new Set());
 
     try {
       const titleParam = queryTitle ? `?title=${encodeURIComponent(queryTitle)}&ch=${encodeURIComponent(queryCh)}` : "";
@@ -255,7 +270,7 @@ export default function MangaReaderClient({
   const handleZoomIn = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setZoomLevel((prev) => {
-      const next = Math.min(200, prev + 10);
+      const next = Math.min(200, prev + 15);
       try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
       return next;
     });
@@ -264,7 +279,7 @@ export default function MangaReaderClient({
   const handleZoomOut = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setZoomLevel((prev) => {
-      const next = Math.max(50, prev - 10);
+      const next = Math.max(50, prev - 15);
       try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
       return next;
     });
@@ -284,16 +299,33 @@ export default function MangaReaderClient({
     } catch {}
   };
 
+  // Double page spread calculations
+  const isCurrentPageWide = widePages.has(currentPage);
+  const pageLeft = currentPage;
+  const pageRight = !isCurrentPageWide && currentPage + 1 <= totalPages && !widePages.has(currentPage + 1)
+    ? currentPage + 1
+    : null;
+
   // Single & Double Page Mode Navigation
   const handleNextPage = () => {
     if (readingMode === "double") {
-      if (currentPage + 2 <= totalPages) {
+      if (isCurrentPageWide) {
+        // Wide single spread advances by 1 page
+        if (currentPage < totalPages) {
+          const next = currentPage + 1;
+          setCurrentPage(next);
+          updateProgress(next);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (nextChapter) {
+          router.push(`/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`);
+        }
+      } else if (pageRight && currentPage + 2 <= totalPages) {
+        // Standard double spread advances by 2 pages
         const next = currentPage + 2;
         setCurrentPage(next);
         updateProgress(next);
         window.scrollTo({ top: 0, behavior: "smooth" });
-      } else if (currentPage + 1 === totalPages) {
-        // Last page of odd count
+      } else if (currentPage < totalPages) {
         const next = currentPage + 1;
         setCurrentPage(next);
         updateProgress(next);
@@ -404,10 +436,6 @@ export default function MangaReaderClient({
     }
   };
 
-  // Double page spread calculation (Left to Right)
-  const pageLeft = currentPage;
-  const pageRight = currentPage + 1 <= totalPages ? currentPage + 1 : null;
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
@@ -474,7 +502,7 @@ export default function MangaReaderClient({
           </Link>
 
           <div className="flex flex-col min-w-0">
-            <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[130px] sm:max-w-xs md:max-w-md">
+            <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[120px] sm:max-w-xs md:max-w-md">
               {manga?.title || queryTitle || "Manga"}
             </h1>
             <span className="text-[10px] sm:text-[11px] text-[#42f5dd] font-bold truncate">
@@ -528,7 +556,7 @@ export default function MangaReaderClient({
         {/* Right: Zoom Controls, Mode Toggle, Fullscreen & Next Chapter Button */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           
-          {/* Zoom In / Out Controls */}
+          {/* Zoom In / Out Controls (Works dynamically on mobile & desktop) */}
           <div className="flex items-center bg-white/[0.06] border border-white/10 rounded-xl p-0.5 sm:p-1">
             <button
               onClick={handleZoomOut}
@@ -596,10 +624,10 @@ export default function MangaReaderClient({
             </button>
           </div>
 
-          {/* Fullscreen Button */}
+          {/* Fullscreen Button: HIDDEN ON MOBILE (only shown on tablet/desktop) */}
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white/80 hover:text-[#42f5dd] transition-colors cursor-pointer touch-manipulation active:scale-90"
+            className="hidden sm:flex p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white/80 hover:text-[#42f5dd] transition-colors cursor-pointer touch-manipulation active:scale-90"
             title="Toggle Fullscreen (F)"
             aria-label="Toggle Fullscreen"
           >
@@ -621,7 +649,7 @@ export default function MangaReaderClient({
         </div>
       </header>
 
-      {/* MAIN READING CANVAS (Safe-area padded for Notch & Status Bar) */}
+      {/* MAIN READING CANVAS (Safe-area padded for Notch & Status Bar, overflow-x-auto for smooth mobile zoom) */}
       <main
         style={{
           paddingTop: "max(4.5rem, calc(4.25rem + env(safe-area-inset-top, 0px)))",
@@ -630,13 +658,17 @@ export default function MangaReaderClient({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onClick={() => setShowControls((prev) => !prev)}
-        className="flex-1 flex flex-col items-center justify-center min-h-screen w-full cursor-default"
+        className="flex-1 flex flex-col items-center justify-center min-h-screen w-full cursor-default overflow-x-auto"
       >
         {readingMode === "webtoon" ? (
-          /* CONTINUOUS WEBTOON VERTICAL SCROLL */
+          /* CONTINUOUS WEBTOON VERTICAL SCROLL (Scales on both mobile and desktop) */
           <div
-            style={{ width: `${Math.round(768 * (zoomLevel / 100))}px`, maxWidth: "100vw" }}
-            className="w-full flex flex-col items-center mx-auto transition-[width] duration-200"
+            style={{
+              width: `${zoomLevel}%`,
+              minWidth: zoomLevel < 100 ? `${zoomLevel}%` : "100%",
+              maxWidth: zoomLevel <= 100 ? `${Math.round(768 * (zoomLevel / 100))}px` : `${Math.round(768 * (zoomLevel / 100))}px`,
+            }}
+            className="flex flex-col items-center mx-auto transition-[width] duration-200"
           >
             {pagesData.pageUrls.map((url, idx) => {
               const pageNum = idx + 1;
@@ -655,6 +687,7 @@ export default function MangaReaderClient({
                     alt={`Page ${pageNum}`}
                     loading={pageNum <= 3 ? "eager" : "lazy"}
                     decoding="async"
+                    onLoad={(e) => handleImageLoad(pageNum, e)}
                     className="w-full h-auto object-contain block select-none"
                   />
                   {/* Subtle Page Watermark */}
@@ -695,33 +728,51 @@ export default function MangaReaderClient({
             )}
           </div>
         ) : readingMode === "double" ? (
-          /* DOUBLE-PAGE SPREAD MODE (Desktop Side-by-Side Left to Right) */
+          /* DOUBLE-PAGE SPREAD MODE (Smart handling for landscape vs portrait pages) */
           <div
-            style={{ width: `${Math.round(1350 * (zoomLevel / 100))}px`, maxWidth: "100vw" }}
+            style={{ width: `${Math.round(1400 * (zoomLevel / 100))}px`, maxWidth: "100vw" }}
             className="w-full flex-1 flex flex-col items-center justify-center relative px-2 sm:px-6 transition-[width] duration-200"
           >
             <div className="relative w-full flex items-center justify-center bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl p-2 sm:p-4">
-              <div className="flex items-center justify-center gap-2 sm:gap-4 w-full">
-                {/* Left Page (Page N) */}
-                <div className="flex-1 flex justify-end items-center max-w-[50%]">
+              
+              {isCurrentPageWide ? (
+                /* Wide Single Spread (e.g. Cover / Landscape Spread) */
+                <div className="w-full flex items-center justify-center min-h-[50vh] max-h-[86vh]">
                   <img
-                    src={pagesData.pageUrls[pageLeft - 1]}
-                    alt={`Page ${pageLeft}`}
-                    className="w-auto h-auto max-h-[85vh] object-contain block select-none rounded-l-xl shadow-lg"
+                    src={pagesData.pageUrls[currentPage - 1]}
+                    alt={`Page ${currentPage}`}
+                    onLoad={(e) => handleImageLoad(currentPage, e)}
+                    className="w-auto h-auto max-h-[85vh] max-w-full object-contain block select-none rounded-xl shadow-2xl mx-auto"
                   />
                 </div>
-
-                {/* Right Page (Page N+1) if available */}
-                {pageRight ? (
-                  <div className="flex-1 flex justify-start items-center max-w-[50%]">
+              ) : (
+                /* Side-by-Side Balanced 50/50 Columns (Left: Page N, Right: Page N+1) */
+                <div className="flex items-center justify-center w-full h-[85vh] gap-2 sm:gap-4 p-1">
+                  {/* Left Page (Page N) */}
+                  <div className="w-1/2 h-full flex items-center justify-end">
                     <img
-                      src={pagesData.pageUrls[pageRight - 1]}
-                      alt={`Page ${pageRight}`}
-                      className="w-auto h-auto max-h-[85vh] object-contain block select-none rounded-r-xl shadow-lg"
+                      src={pagesData.pageUrls[pageLeft - 1]}
+                      alt={`Page ${pageLeft}`}
+                      onLoad={(e) => handleImageLoad(pageLeft, e)}
+                      className="max-h-full max-w-full w-auto h-auto object-contain block select-none rounded-l-xl shadow-lg"
                     />
                   </div>
-                ) : null}
-              </div>
+
+                  {/* Right Page (Page N+1) if available and not wide */}
+                  {pageRight ? (
+                    <div className="w-1/2 h-full flex items-center justify-start">
+                      <img
+                        src={pagesData.pageUrls[pageRight - 1]}
+                        alt={`Page ${pageRight}`}
+                        onLoad={(e) => handleImageLoad(pageRight, e)}
+                        className="max-h-full max-w-full w-auto h-auto object-contain block select-none rounded-r-xl shadow-lg"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-1/2 h-full" />
+                  )}
+                </div>
+              )}
 
               {/* Invisible Click Zones for Left/Right Double-Page Flip */}
               <div
@@ -763,7 +814,7 @@ export default function MangaReaderClient({
               </button>
 
               <span className="text-xs font-black text-white/90">
-                {pageRight ? `Pages ${pageLeft} - ${pageRight} of ${totalPages}` : `Page ${pageLeft} of ${totalPages}`}
+                {pageRight ? `Pages ${pageLeft} - ${pageRight} of ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
               </span>
 
               <button
@@ -771,7 +822,7 @@ export default function MangaReaderClient({
                   e.stopPropagation();
                   handleNextPage();
                 }}
-                disabled={(pageRight ? pageRight >= totalPages : pageLeft >= totalPages) && !nextChapter}
+                disabled={(pageRight ? pageRight >= totalPages : currentPage >= totalPages) && !nextChapter}
                 className="p-2.5 rounded-xl bg-[#42f5dd] text-black hover:bg-[#34dbcb] disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer font-black shadow-md shadow-[#42f5dd]/20 touch-manipulation active:scale-90"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -779,15 +830,20 @@ export default function MangaReaderClient({
             </div>
           </div>
         ) : (
-          /* SINGLE PAGE FLIP MODE */
+          /* SINGLE PAGE FLIP MODE (Scales on both mobile and desktop) */
           <div
-            style={{ width: `${Math.round(800 * (zoomLevel / 100))}px`, maxWidth: "100vw" }}
-            className="w-full flex-1 flex flex-col items-center justify-center relative px-2 sm:px-4 transition-[width] duration-200"
+            style={{
+              width: `${zoomLevel}%`,
+              minWidth: zoomLevel < 100 ? `${zoomLevel}%` : "100%",
+              maxWidth: zoomLevel <= 100 ? `${Math.round(850 * (zoomLevel / 100))}px` : `${Math.round(850 * (zoomLevel / 100))}px`,
+            }}
+            className="flex-1 flex flex-col items-center justify-center relative px-2 sm:px-4 transition-[width] duration-200 mx-auto"
           >
             <div className="relative w-full flex items-center justify-center bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
               <img
                 src={pagesData.pageUrls[currentPage - 1]}
                 alt={`Page ${currentPage}`}
+                onLoad={(e) => handleImageLoad(currentPage, e)}
                 className="w-full h-auto object-contain block select-none"
               />
 

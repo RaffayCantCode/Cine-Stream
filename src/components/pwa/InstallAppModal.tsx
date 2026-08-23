@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { 
   Download, 
   X, 
@@ -9,8 +10,8 @@ import {
   Share, 
   PlusSquare, 
   MoreVertical, 
-  CheckCircle2, 
-  Sparkles 
+  Sparkles,
+  CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -28,9 +29,10 @@ export function InstallAppModal({
   canPromptDesktop = false,
 }: InstallAppModalProps) {
   const [platform, setPlatform] = useState<"ios" | "android" | "desktop">("desktop");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    setMounted(true);
     const ua = navigator.userAgent || "";
     if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) {
       setPlatform("ios");
@@ -41,52 +43,72 @@ export function InstallAppModal({
     }
   }, []);
 
-  return (
+  // Lock scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  if (!mounted) return null;
+
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 bg-black/85 backdrop-blur-md"
           />
 
-          {/* Modal Container */}
+          {/* Modal Container — Centered across entire screen */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: 12 }}
-            className="relative w-full max-w-lg bg-[#0e122b] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/90 z-10 overflow-hidden"
+            exit={{ opacity: 0, scale: 0.92, y: 20 }}
+            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            className="relative w-full max-w-lg bg-[#0b0f24] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/90 z-10 overflow-hidden my-auto"
           >
+            {/* Ambient Background Glow */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#42f5dd]/10 rounded-full blur-3xl pointer-events-none" />
+
             {/* Header */}
-            <div className="flex items-center justify-between pb-5 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-600/30">
-                  <Download className="w-5 h-5 text-white" />
+            <div className="relative flex items-center justify-between pb-5 border-b border-white/10">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-[#42f5dd] flex items-center justify-center shadow-lg shadow-purple-600/30">
+                  <Download className="w-5 h-5 text-black stroke-[2.5]" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white">Install CineStream App</h3>
-                  <p className="text-xs text-white/50 font-medium">Enjoy full-screen, standalone streaming</p>
+                  <h3 className="text-lg font-black text-white tracking-tight">Install CineStream App</h3>
+                  <p className="text-xs text-white/60 font-medium">Fast, standalone, and full-screen experience</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer touch-manipulation active:scale-95"
+                aria-label="Close modal"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Platform Selector Tabs */}
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] my-6">
+            <div className="relative flex items-center gap-1.5 p-1 rounded-2xl bg-white/[0.05] border border-white/[0.08] my-6">
               <button
                 onClick={() => setPlatform("desktop")}
-                className={`flex-1 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer touch-manipulation ${
                   platform === "desktop"
-                    ? "bg-purple-600 text-white shadow-md"
+                    ? "bg-purple-600 text-white shadow-lg shadow-purple-600/40"
                     : "text-white/60 hover:text-white"
                 }`}
               >
@@ -95,9 +117,9 @@ export function InstallAppModal({
               </button>
               <button
                 onClick={() => setPlatform("ios")}
-                className={`flex-1 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer touch-manipulation ${
                   platform === "ios"
-                    ? "bg-purple-600 text-white shadow-md"
+                    ? "bg-purple-600 text-white shadow-lg shadow-purple-600/40"
                     : "text-white/60 hover:text-white"
                 }`}
               >
@@ -106,9 +128,9 @@ export function InstallAppModal({
               </button>
               <button
                 onClick={() => setPlatform("android")}
-                className={`flex-1 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer touch-manipulation ${
                   platform === "android"
-                    ? "bg-purple-600 text-white shadow-md"
+                    ? "bg-purple-600 text-white shadow-lg shadow-purple-600/40"
                     : "text-white/60 hover:text-white"
                 }`}
               >
@@ -118,22 +140,22 @@ export function InstallAppModal({
             </div>
 
             {/* Platform Instructions */}
-            <div className="space-y-4 text-xs font-medium text-white/80">
+            <div className="relative space-y-4 text-xs font-medium text-white/80">
               {platform === "desktop" && (
                 <div className="space-y-4">
                   {canPromptDesktop ? (
-                    <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex flex-col items-center gap-3 text-center">
+                    <div className="p-5 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex flex-col items-center gap-3 text-center">
                       <Sparkles className="w-6 h-6 text-purple-400" />
                       <div>
                         <p className="text-sm font-black text-white">Direct Installation Ready</p>
-                        <p className="text-xs text-white/60 mt-0.5">Click below to install CineStream directly onto your desktop as a standalone app.</p>
+                        <p className="text-xs text-white/70 mt-1">Click below to install CineStream directly onto your computer as a standalone desktop app.</p>
                       </div>
                       <button
                         onClick={() => {
                           onInstallDesktop?.();
                           onClose();
                         }}
-                        className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                        className="w-full py-3.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs transition-all shadow-xl shadow-purple-600/40 flex items-center justify-center gap-2 cursor-pointer touch-manipulation active:scale-95"
                       >
                         <Download className="w-4 h-4" />
                         <span>Install Desktop App Now</span>
@@ -141,18 +163,18 @@ export function InstallAppModal({
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                        <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-[11px] shrink-0">1</span>
+                      <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
+                        <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-black text-xs shrink-0">1</span>
                         <div>
-                          <p className="font-bold text-white">Using Chrome, Edge, or Brave:</p>
-                          <p className="text-white/60 mt-0.5">Click the <strong className="text-purple-300">Install icon</strong> in your browser address bar (top right).</p>
+                          <p className="font-bold text-white text-sm">Chrome, Edge, or Brave Browser:</p>
+                          <p className="text-white/60 mt-1">Click the <strong className="text-[#42f5dd]">Install App icon (⊕ or computer icon)</strong> in your browser address bar (top right corner of URL bar).</p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                        <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-[11px] shrink-0">2</span>
+                      <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
+                        <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-black text-xs shrink-0">2</span>
                         <div>
-                          <p className="font-bold text-white">Using Other Browsers:</p>
-                          <p className="text-white/60 mt-0.5">Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">Ctrl+D</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">Cmd+D</kbd> to save CineStream to your bookmarks bar.</p>
+                          <p className="font-bold text-white text-sm">Browser Menu (3 Dots):</p>
+                          <p className="text-white/60 mt-1">Click the top-right menu ⋮ &rarr; <strong>&quot;Cast, save, and share&quot;</strong> (or &quot;Apps&quot;) &rarr; <strong>&quot;Install CineStream&quot;</strong>.</p>
                         </div>
                       </div>
                     </div>
@@ -162,31 +184,31 @@ export function InstallAppModal({
 
               {platform === "ios" && (
                 <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-[11px] shrink-0">1</span>
+                  <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
+                    <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-black text-xs shrink-0">1</span>
                     <div className="flex-1">
-                      <p className="font-bold text-white flex items-center gap-1.5">
+                      <p className="font-bold text-white text-sm flex items-center gap-1.5">
                         <span>Tap the <strong>Share</strong> button</span>
-                        <Share className="w-3.5 h-3.5 text-blue-400" />
+                        <Share className="w-4 h-4 text-blue-400" />
                       </p>
-                      <p className="text-white/60 mt-0.5">Located at the bottom of Safari.</p>
+                      <p className="text-white/60 mt-1">Located at the bottom bar in Safari.</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-[11px] shrink-0">2</span>
+                  <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
+                    <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-black text-xs shrink-0">2</span>
                     <div className="flex-1">
-                      <p className="font-bold text-white flex items-center gap-1.5">
+                      <p className="font-bold text-white text-sm flex items-center gap-1.5">
                         <span>Tap <strong>&quot;Add to Home Screen&quot;</strong></span>
-                        <PlusSquare className="w-3.5 h-3.5 text-purple-400" />
+                        <PlusSquare className="w-4 h-4 text-purple-400" />
                       </p>
-                      <p className="text-white/60 mt-0.5">Scroll down the share menu list.</p>
+                      <p className="text-white/60 mt-1">Scroll down the iOS share sheet list.</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-[11px] shrink-0">3</span>
+                  <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
+                    <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-black text-xs shrink-0">3</span>
                     <div className="flex-1">
-                      <p className="font-bold text-white">Tap &quot;Add&quot; in top right</p>
-                      <p className="text-white/60 mt-0.5">CineStream will appear as a full-screen app on your iPhone home screen!</p>
+                      <p className="font-bold text-white text-sm">Tap &quot;Add&quot; in top right</p>
+                      <p className="text-white/60 mt-1">CineStream will appear as a dedicated app icon on your iPhone home screen!</p>
                     </div>
                   </div>
                 </div>
@@ -194,32 +216,48 @@ export function InstallAppModal({
 
               {platform === "android" && (
                 <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-[11px] shrink-0">1</span>
+                  <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
+                    <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-black text-xs shrink-0">1</span>
                     <div className="flex-1">
-                      <p className="font-bold text-white flex items-center gap-1.5">
+                      <p className="font-bold text-white text-sm flex items-center gap-1.5">
                         <span>Tap the <strong>Menu</strong> button (three dots)</span>
-                        <MoreVertical className="w-3.5 h-3.5 text-white/60" />
+                        <MoreVertical className="w-4 h-4 text-white/60" />
                       </p>
-                      <p className="text-white/60 mt-0.5">Located at the top right of Chrome.</p>
+                      <p className="text-white/60 mt-1">Located at the top right of Chrome.</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <span className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-[11px] shrink-0">2</span>
+                  <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]">
+                    <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-black text-xs shrink-0">2</span>
                     <div className="flex-1">
-                      <p className="font-bold text-white">Tap <strong>&quot;Install app&quot;</strong> or <strong>&quot;Add to Home screen&quot;</strong></p>
-                      <p className="text-white/60 mt-0.5">Follow the prompt to install the standalone CineStream app.</p>
+                      <p className="font-bold text-white text-sm">Tap <strong>&quot;Install app&quot;</strong> or <strong>&quot;Add to Home screen&quot;</strong></p>
+                      <p className="text-white/60 mt-1">Tap Install to add the CineStream app to your Android home screen and app drawer.</p>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
+            {/* Features preview */}
+            <div className="mt-5 p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-around text-[11px] text-white/60">
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#42f5dd]" />
+                <span>Zero browser bars</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#42f5dd]" />
+                <span>Faster loading</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#42f5dd]" />
+                <span>1-Tap Launch</span>
+              </span>
+            </div>
+
             {/* Close / Got it footer */}
-            <div className="pt-6">
+            <div className="pt-5">
               <button
                 onClick={onClose}
-                className="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white font-extrabold text-xs transition-colors"
+                className="w-full py-3.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-black text-xs transition-colors cursor-pointer touch-manipulation active:scale-98"
               >
                 Got it
               </button>
@@ -229,4 +267,6 @@ export function InstallAppModal({
       )}
     </AnimatePresence>
   );
+
+  return createPortal(modalContent, document.body);
 }

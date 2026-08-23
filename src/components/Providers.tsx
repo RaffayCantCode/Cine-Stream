@@ -1,7 +1,7 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { ContentModeProvider } from "@/context/ContentModeContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { WatchlistProvider } from "@/context/WatchlistContext";
@@ -13,6 +13,13 @@ interface ProvidersProps {
 }
 
 export function Providers({ children }: ProvidersProps) {
+  useEffect(() => {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/" })
+        .catch((err) => console.warn("[PWA] Service Worker registration failed:", err));
+    }
+  }, []);
   return (
     <SessionProvider refetchOnWindowFocus={false}>
       <ThemeProvider>
