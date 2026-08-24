@@ -27,6 +27,7 @@ export const MangaCard = memo(function MangaCard({ item, priority = false }: Man
       <img
         src={item.coverImage}
         alt={item.title}
+        referrerPolicy="no-referrer"
         loading={priority ? "eager" : "lazy"}
         className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
       />

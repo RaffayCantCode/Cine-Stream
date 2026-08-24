@@ -31,23 +31,31 @@ import {
 } from "lucide-react";
 import { usePageContentReady } from "@/lib/pageLoad";
 
+export interface MangaReaderClientProps {
+  mangaId: string;
+  chapterId: string;
+  initialManga?: MangaItem | null;
+  initialChapters?: MangaChapter[];
+  initialPages?: ChapterPagesData | null;
+}
+
 export default function MangaReaderClient({
   mangaId,
   chapterId,
-}: {
-  mangaId: string;
-  chapterId: string;
-}) {
+  initialManga = null,
+  initialChapters = [],
+  initialPages = null,
+}: MangaReaderClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const queryTitle = searchParams.get("title") || "";
   const queryCh = searchParams.get("ch") || "";
 
-  const [manga, setManga] = useState<MangaItem | null>(null);
-  const [chapters, setChapters] = useState<MangaChapter[]>([]);
-  const [pagesData, setPagesData] = useState<ChapterPagesData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [manga, setManga] = useState<MangaItem | null>(initialManga);
+  const [chapters, setChapters] = useState<MangaChapter[]>(initialChapters);
+  const [pagesData, setPagesData] = useState<ChapterPagesData | null>(initialPages);
+  const [isLoading, setIsLoading] = useState(!initialPages);
   const [error, setError] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -72,8 +80,9 @@ export default function MangaReaderClient({
       const savedZoom = localStorage.getItem("cinestream.manga_zoom_level");
       if (savedZoom) {
         const parsed = parseInt(savedZoom, 10);
-        if (!isNaN(parsed) && parsed >= 30 && parsed <= 200) {
-          setZoomLevel(parsed);
+        if (!isNaN(parsed) && parsed >= 20 && parsed <= 200) {
+          const cleanZoom = Math.round(parsed / 10) * 10;
+          setZoomLevel(cleanZoom);
         } else {
           setZoomLevel(defaultZoom);
         }
@@ -115,19 +124,32 @@ export default function MangaReaderClient({
 
   // Fetch Manga Details, Chapter List, and Chapter Pages
   const loadChapter = useCallback(async () => {
+    if (pagesData && pagesData.chapterId === chapterId && manga && chapters.length > 0) {
+      setIsLoading(false);
+      return;
+    }
+
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
     setIsLoading(true);
     setError(null);
-    setPagesData(null);
 
     try {
       const titleParam = queryTitle ? `?title=${encodeURIComponent(queryTitle)}&ch=${encodeURIComponent(queryCh)}` : "";
 
-      const [detailsData, chaptersData, pagesRes] = await Promise.all([
-        fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${mangaId}`),
-        fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${mangaId}?order=asc&limit=500`),
-        fetchJson<{ success: boolean; pageUrls: string[]; dataSaverUrls: string[] }>(`/api/manga/chapter/${chapterId}${titleParam}`),
-      ]);
+      const fetches: Promise<any>[] = [];
+      if (!manga) fetches.push(fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${mangaId}`));
+      else fetches.push(Promise.resolve({ success: true, item: manga }));
+
+      if (chapters.length === 0) fetches.push(fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${mangaId}?order=asc&limit=500`));
+      else fetches.push(Promise.resolve({ success: true, chapters }));
+
+      if (!pagesData || pagesData.chapterId !== chapterId) {
+        fetches.push(fetchJson<{ success: boolean; pageUrls: string[]; dataSaverUrls: string[] }>(`/api/manga/chapter/${chapterId}${titleParam}`));
+      } else {
+        fetches.push(Promise.resolve({ success: true, pageUrls: pagesData.pageUrls, dataSaverUrls: pagesData.dataSaverUrls }));
+      }
+
+      const [detailsData, chaptersData, pagesRes] = await Promise.all(fetches);
 
       if (detailsData.success && detailsData.item) {
         setManga(detailsData.item);
@@ -154,7 +176,7 @@ export default function MangaReaderClient({
     } finally {
       setIsLoading(false);
     }
-  }, [mangaId, chapterId, queryTitle, queryCh]);
+  }, [mangaId, chapterId, queryTitle, queryCh, manga, chapters, pagesData]);
 
   useEffect(() => {
     loadChapter();
@@ -263,11 +285,12 @@ export default function MangaReaderClient({
     return () => observer.disconnect();
   }, [totalPages, currentPage, updateProgress]);
 
-  // Zoom Handler Functions (+ / - / reset)
+  // Zoom Handler Functions (+ / - / reset in clean steps of 10)
   const handleZoomIn = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setZoomLevel((prev) => {
-      const next = Math.min(200, prev + 15);
+      const base = Math.floor(prev / 10) * 10;
+      const next = Math.min(200, base + 10);
       try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
       return next;
     });
@@ -276,7 +299,8 @@ export default function MangaReaderClient({
   const handleZoomOut = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setZoomLevel((prev) => {
-      const next = Math.max(30, prev - 10);
+      const base = Math.ceil(prev / 10) * 10;
+      const next = Math.max(20, base - 10);
       try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
       return next;
     });
@@ -614,9 +638,9 @@ export default function MangaReaderClient({
           <div className="flex items-center bg-[#141622] border-2 border-primary/40 hover:border-primary/80 rounded-2xl p-1 shadow-lg shadow-black/50 transition-all">
             <button
               onClick={handleZoomOut}
-              disabled={zoomLevel <= 30}
+              disabled={zoomLevel <= 20}
               className="p-1.5 sm:p-2 rounded-xl bg-white/[0.04] hover:bg-white/10 text-white/90 hover:text-primary disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
-              title="Zoom Out (-)"
+              title="Zoom Out (-10%)"
               aria-label="Zoom Out"
             >
               <ZoomOut className="w-4 h-4 stroke-[2.5]" />
@@ -625,7 +649,7 @@ export default function MangaReaderClient({
             <button
               onClick={handleZoomReset}
               className="px-2 sm:px-2.5 py-1 text-xs sm:text-sm font-black text-primary font-mono tracking-tight hover:bg-primary/15 rounded-lg transition-all cursor-pointer touch-manipulation"
-              title="Reset Zoom"
+              title="Reset Zoom (50% Desktop / 100% Mobile)"
             >
               {zoomLevel}%
             </button>
@@ -634,7 +658,7 @@ export default function MangaReaderClient({
               onClick={handleZoomIn}
               disabled={zoomLevel >= 200}
               className="p-1.5 sm:p-2 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/50 hover:border-primary font-black shadow-md shadow-primary/20 hover:scale-105 disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
-              title="Zoom In (+)"
+              title="Zoom In (+10%)"
               aria-label="Zoom In"
             >
               <ZoomIn className="w-4 h-4 stroke-[2.5]" />
@@ -695,17 +719,25 @@ export default function MangaReaderClient({
                   if (el) pageRefs.current.set(pageNum, el);
                   else pageRefs.current.delete(pageNum);
                 }}
-                className="relative w-full flex justify-center bg-black"
+                className="relative w-full flex justify-center bg-black min-h-[400px] sm:min-h-[600px]"
               >
                 <img
                   src={url}
                   alt={`Page ${pageNum}`}
-                  loading={pageNum <= 3 ? "eager" : "lazy"}
+                  referrerPolicy="no-referrer"
+                  loading={pageNum <= 4 ? "eager" : "lazy"}
                   decoding="async"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.dataset.retried) {
+                      target.dataset.retried = "true";
+                      target.src = `${url}${url.includes("?") ? "&" : "?"}_retry=${Date.now()}`;
+                    }
+                  }}
                   className="w-full h-auto object-contain block select-none"
                 />
                 {/* Subtle Page Watermark */}
-                <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/70 text-[9px] text-white/60 backdrop-blur-md pointer-events-none font-bold">
+                <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/70 text-[9px] text-white/60 backdrop-blur-md pointer-events-none font-bold z-10">
                   {pageNum} / {totalPages}
                 </span>
               </div>

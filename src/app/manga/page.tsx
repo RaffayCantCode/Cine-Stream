@@ -1,6 +1,9 @@
 export const runtime = 'edge';
+export const revalidate = 1800;
+
 import { Metadata } from "next";
 import { constructMediaMetadata } from "@/lib/social-preview";
+import { getMangaTrending, getPopularManhwa, getLatestMangaUpdates } from "@/lib/manga-fetch";
 import MangaHomeClient from "./MangaHomeClient";
 
 export const metadata: Metadata = constructMediaMetadata({
@@ -11,6 +14,22 @@ export const metadata: Metadata = constructMediaMetadata({
   fallbackDescription: "Read manga and manhwa online on CineStream.",
 });
 
-export default function MangaPage() {
-  return <MangaHomeClient />;
+export default async function MangaPage() {
+  const [trendingRes, manhwasRes, mangasRes] = await Promise.allSettled([
+    getMangaTrending(32),
+    getPopularManhwa(32),
+    getLatestMangaUpdates(32),
+  ]);
+
+  const initialTrending = trendingRes.status === "fulfilled" ? trendingRes.value : [];
+  const initialManhwas = manhwasRes.status === "fulfilled" ? manhwasRes.value : [];
+  const initialMangas = mangasRes.status === "fulfilled" ? mangasRes.value : [];
+
+  return (
+    <MangaHomeClient
+      initialTrending={initialTrending}
+      initialManhwas={initialManhwas}
+      initialMangas={initialMangas}
+    />
+  );
 }

@@ -30,12 +30,22 @@ import {
 import { format } from "date-fns";
 import { usePageContentReady } from "@/lib/pageLoad";
 
-export default function MangaDetailsClient({ id }: { id: string }) {
-  const [manga, setManga] = useState<MangaItem | null>(null);
-  const [isDetailsLoading, setIsDetailsLoading] = useState(true);
+export interface MangaDetailsClientProps {
+  id: string;
+  initialManga?: MangaItem | null;
+  initialChapters?: MangaChapter[];
+}
 
-  const [chapters, setChapters] = useState<MangaChapter[]>([]);
-  const [isChaptersLoading, setIsChaptersLoading] = useState(true);
+export default function MangaDetailsClient({
+  id,
+  initialManga = null,
+  initialChapters = [],
+}: MangaDetailsClientProps) {
+  const [manga, setManga] = useState<MangaItem | null>(initialManga);
+  const [isDetailsLoading, setIsDetailsLoading] = useState(!initialManga);
+
+  const [chapters, setChapters] = useState<MangaChapter[]>(initialChapters);
+  const [isChaptersLoading, setIsChaptersLoading] = useState(initialChapters.length === 0);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -75,44 +85,47 @@ export default function MangaDetailsClient({ id }: { id: string }) {
     window.addEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
 
     let isMounted = true;
-    setIsDetailsLoading(true);
-    setIsChaptersLoading(true);
-    setError(null);
 
-    // 1. Fetch metadata/details first and display immediately
-    fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${id}`)
-      .then((data) => {
-        if (!isMounted) return;
-        if (data.success && data.item) {
-          setManga(data.item);
-        } else {
-          setError("Failed to load manga details");
-        }
-      })
-      .catch((err: any) => {
-        if (!isMounted) return;
-        console.error("Failed to load manga details:", err);
-        setError(err.message || "Failed to load manga details");
-      })
-      .finally(() => {
-        if (isMounted) setIsDetailsLoading(false);
-      });
+    // 1. Fetch metadata/details if not provided
+    if (!initialManga) {
+      setIsDetailsLoading(true);
+      fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${id}`)
+        .then((data) => {
+          if (!isMounted) return;
+          if (data.success && data.item) {
+            setManga(data.item);
+          } else {
+            setError("Failed to load manga details");
+          }
+        })
+        .catch((err: any) => {
+          if (!isMounted) return;
+          console.error("Failed to load manga details:", err);
+          setError(err.message || "Failed to load manga details");
+        })
+        .finally(() => {
+          if (isMounted) setIsDetailsLoading(false);
+        });
+    }
 
-    // 2. Simultaneously fetch chapters and stream them in as soon as ready
-    fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${id}?order=asc&limit=500`)
-      .then((data) => {
-        if (!isMounted) return;
-        if (data.success && data.chapters) {
-          setChapters(data.chapters || []);
-        }
-      })
-      .catch((err: any) => {
-        if (!isMounted) return;
-        console.warn("Failed to load chapters:", err);
-      })
-      .finally(() => {
-        if (isMounted) setIsChaptersLoading(false);
-      });
+    // 2. Fetch chapters if not provided
+    if (initialChapters.length === 0) {
+      setIsChaptersLoading(true);
+      fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${id}?order=asc&limit=500`)
+        .then((data) => {
+          if (!isMounted) return;
+          if (data.success && data.chapters) {
+            setChapters(data.chapters || []);
+          }
+        })
+        .catch((err: any) => {
+          if (!isMounted) return;
+          console.warn("Failed to load chapters:", err);
+        })
+        .finally(() => {
+          if (isMounted) setIsChaptersLoading(false);
+        });
+    }
 
     return () => {
       isMounted = false;

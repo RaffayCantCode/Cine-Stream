@@ -10,6 +10,15 @@ import {
   getChapterPages,
 } from "@/lib/manga-fetch";
 
+function jsonWithCache(data: any, sMaxAge = 1800, staleWhileRevalidate = 86400, status = 200) {
+  return NextResponse.json(data, {
+    status,
+    headers: {
+      "Cache-Control": `public, s-maxage=${sMaxAge}, stale-while-revalidate=${staleWhileRevalidate}`,
+    },
+  });
+}
+
 export async function GET(
   request: NextRequest,
   props: { params: Promise<{ route: string[] }> }
@@ -22,19 +31,19 @@ export async function GET(
     if (action === "trending") {
       const limit = parseInt(searchParams.get("limit") || "24", 10);
       const items = await getMangaTrending(limit);
-      return NextResponse.json({ success: true, items });
+      return jsonWithCache({ success: true, items }, 1800);
     }
 
     if (action === "manhwa") {
       const limit = parseInt(searchParams.get("limit") || "24", 10);
       const items = await getPopularManhwa(limit);
-      return NextResponse.json({ success: true, items });
+      return jsonWithCache({ success: true, items }, 1800);
     }
 
     if (action === "latest") {
       const limit = parseInt(searchParams.get("limit") || "24", 10);
       const items = await getLatestMangaUpdates(limit);
-      return NextResponse.json({ success: true, items });
+      return jsonWithCache({ success: true, items }, 1800);
     }
 
     if (action === "search") {
@@ -47,7 +56,7 @@ export async function GET(
       const genreName = searchParams.get("genreName") || undefined;
 
       const data = await searchManga(query, { type, limit, offset, sortBy, genreId, genreName });
-      return NextResponse.json({ success: true, ...data });
+      return jsonWithCache({ success: true, ...data }, 1200);
     }
 
     if (action === "details" && route[1]) {
@@ -56,7 +65,7 @@ export async function GET(
       if (!item) {
         return NextResponse.json({ success: false, error: "Manga not found" }, { status: 404 });
       }
-      return NextResponse.json({ success: true, item });
+      return jsonWithCache({ success: true, item }, 1800);
     }
 
     if (action === "chapters" && route[1]) {
@@ -66,7 +75,7 @@ export async function GET(
       const offset = parseInt(searchParams.get("offset") || "0", 10);
 
       const data = await getMangaChapters(id, { order, limit, offset });
-      return NextResponse.json({ success: true, ...data });
+      return jsonWithCache({ success: true, ...data }, 900);
     }
 
     if (action === "chapter" && route[1]) {
@@ -77,7 +86,7 @@ export async function GET(
       if (!data) {
         return NextResponse.json({ success: false, error: "Chapter pages not found" }, { status: 404 });
       }
-      return NextResponse.json({ success: true, ...data });
+      return jsonWithCache({ success: true, ...data }, 1800);
     }
 
     return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });

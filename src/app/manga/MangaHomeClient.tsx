@@ -42,15 +42,31 @@ const GENRES = [
 
 const ITEMS_PER_PAGE = 24;
 
-export default function MangaHomeClient() {
-  const [trendingNow, setTrendingNow] = useState<MangaItem[]>([]);
-  const [isTrendingNowLoading, setIsTrendingNowLoading] = useState(true);
+export interface MangaHomeClientProps {
+  initialTrending?: MangaItem[];
+  initialManhwas?: MangaItem[];
+  initialMangas?: MangaItem[];
+}
 
-  const [trendingManhwas, setTrendingManhwas] = useState<MangaItem[]>([]);
-  const [isTrendingManhwasLoading, setIsTrendingManhwasLoading] = useState(true);
+export default function MangaHomeClient({
+  initialTrending = [],
+  initialManhwas = [],
+  initialMangas = [],
+}: MangaHomeClientProps = {}) {
+  const [trendingNow, setTrendingNow] = useState<MangaItem[]>(() =>
+    initialTrending.length > 0 ? shuffleArray<MangaItem>(initialTrending).slice(0, 15) : []
+  );
+  const [isTrendingNowLoading, setIsTrendingNowLoading] = useState(initialTrending.length === 0);
 
-  const [trendingMangas, setTrendingMangas] = useState<MangaItem[]>([]);
-  const [isTrendingMangasLoading, setIsTrendingMangasLoading] = useState(true);
+  const [trendingManhwas, setTrendingManhwas] = useState<MangaItem[]>(() =>
+    initialManhwas.length > 0 ? shuffleArray<MangaItem>(initialManhwas).slice(0, 15) : []
+  );
+  const [isTrendingManhwasLoading, setIsTrendingManhwasLoading] = useState(initialManhwas.length === 0);
+
+  const [trendingMangas, setTrendingMangas] = useState<MangaItem[]>(() =>
+    initialMangas.length > 0 ? shuffleArray<MangaItem>(initialMangas).slice(0, 15) : []
+  );
+  const [isTrendingMangasLoading, setIsTrendingMangasLoading] = useState(initialMangas.length === 0);
 
   const [history, setHistory] = useState<MangaReadingProgress[]>([]);
   
@@ -126,47 +142,53 @@ export default function MangaHomeClient() {
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Load Trending Now first (appears immediately!)
-    fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=32")
-      .then((data) => {
-        if (!isMounted) return;
-        const items = data.items || [];
-        if (items.length > 0) {
-          setTrendingNow(shuffleArray<MangaItem>(items).slice(0, 15));
-        }
-      })
-      .catch((err) => console.warn("Failed to load trending now:", err))
-      .finally(() => {
-        if (isMounted) setIsTrendingNowLoading(false);
-      });
+    // 1. Load Trending Now if not provided
+    if (initialTrending.length === 0) {
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=32")
+        .then((data) => {
+          if (!isMounted) return;
+          const items = data.items || [];
+          if (items.length > 0) {
+            setTrendingNow(shuffleArray<MangaItem>(items).slice(0, 15));
+          }
+        })
+        .catch((err) => console.warn("Failed to load trending now:", err))
+        .finally(() => {
+          if (isMounted) setIsTrendingNowLoading(false);
+        });
+    }
 
-    // 2. Load Trending Manhwas as soon as ready
-    fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=32")
-      .then((data) => {
-        if (!isMounted) return;
-        const items = data.items || [];
-        if (items.length > 0) {
-          setTrendingManhwas(shuffleArray<MangaItem>(items).slice(0, 15));
-        }
-      })
-      .catch((err) => console.warn("Failed to load trending manhwas:", err))
-      .finally(() => {
-        if (isMounted) setIsTrendingManhwasLoading(false);
-      });
+    // 2. Load Trending Manhwas if not provided
+    if (initialManhwas.length === 0) {
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=32")
+        .then((data) => {
+          if (!isMounted) return;
+          const items = data.items || [];
+          if (items.length > 0) {
+            setTrendingManhwas(shuffleArray<MangaItem>(items).slice(0, 15));
+          }
+        })
+        .catch((err) => console.warn("Failed to load trending manhwas:", err))
+        .finally(() => {
+          if (isMounted) setIsTrendingManhwasLoading(false);
+        });
+    }
 
-    // 3. Load Trending Mangas as soon as ready
-    fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=32")
-      .then((data) => {
-        if (!isMounted) return;
-        const items = data.items || [];
-        if (items.length > 0) {
-          setTrendingMangas(shuffleArray<MangaItem>(items).slice(0, 15));
-        }
-      })
-      .catch((err) => console.warn("Failed to load trending mangas:", err))
-      .finally(() => {
-        if (isMounted) setIsTrendingMangasLoading(false);
-      });
+    // 3. Load Trending Mangas if not provided
+    if (initialMangas.length === 0) {
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=32")
+        .then((data) => {
+          if (!isMounted) return;
+          const items = data.items || [];
+          if (items.length > 0) {
+            setTrendingMangas(shuffleArray<MangaItem>(items).slice(0, 15));
+          }
+        })
+        .catch((err) => console.warn("Failed to load trending mangas:", err))
+        .finally(() => {
+          if (isMounted) setIsTrendingMangasLoading(false);
+        });
+    }
 
     // Background pre-fetch top genres for instant 0ms switching
     const timer = setTimeout(() => {

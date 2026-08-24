@@ -1,6 +1,6 @@
 export const runtime = 'edge';
 import { Metadata } from "next";
-import { getMangaDetails } from "@/lib/manga-fetch";
+import { getMangaDetails, getMangaChapters } from "@/lib/manga-fetch";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import MangaDetailsClient from "./MangaDetailsClient";
 
@@ -36,7 +36,25 @@ export async function generateMetadata(
   });
 }
 
+export const revalidate = 1800;
+
 export default async function MangaDetailsPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  return <MangaDetailsClient id={params.id} />;
+  const id = params?.id || "";
+
+  const [detailsRes, chaptersRes] = await Promise.allSettled([
+    getMangaDetails(id),
+    getMangaChapters(id, { order: "asc", limit: 500 }),
+  ]);
+
+  const initialManga = detailsRes.status === "fulfilled" ? detailsRes.value : null;
+  const initialChapters = chaptersRes.status === "fulfilled" ? chaptersRes.value?.chapters || [] : [];
+
+  return (
+    <MangaDetailsClient
+      id={id}
+      initialManga={initialManga}
+      initialChapters={initialChapters}
+    />
+  );
 }
