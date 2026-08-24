@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { MangaCard } from "@/components/manga/MangaCard";
 import { MangaItem } from "@/lib/manga-fetch";
@@ -65,14 +66,19 @@ export interface MangaHomeClientProps {
   initialTrending?: MangaItem[];
   initialManhwas?: MangaItem[];
   initialMangas?: MangaItem[];
+  initialType?: string;
+  initialGenre?: string;
 }
 
 export default function MangaHomeClient({
   initialTrending = [],
   initialManhwas = [],
   initialMangas = [],
+  initialType = "all",
+  initialGenre = "",
 }: MangaHomeClientProps = {}) {
   const { status } = useSession();
+  const router = useRouter();
   const [trendingNow, setTrendingNow] = useState<MangaItem[]>(() =>
     initialTrending.length > 0 ? shuffleArray<MangaItem>(initialTrending).slice(0, 15) : []
   );
@@ -106,7 +112,7 @@ export default function MangaHomeClient({
     {
       revalidateOnFocus: true,
       revalidateOnMount: true,
-      dedupingInterval: 2000,
+      dedupingInterval: 30000,
     }
   );
 
@@ -119,9 +125,40 @@ export default function MangaHomeClient({
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Simplified type filter: All, Manhwa, Manga
-  const [selectedType, setSelectedType] = useState<"all" | "manhwa" | "manga">("all");
-  const [selectedGenre, setSelectedGenre] = useState<string>("");
+  // Simplified type filter: All, Manhwa, Manga — persisted via URL search params
+  const [selectedType, setSelectedType] = useState<"all" | "manhwa" | "manga">(
+    () => (initialType as "all" | "manhwa" | "manga") || "all"
+  );
+  const [selectedGenre, setSelectedGenre] = useState<string>(() => initialGenre || "");
+
+  // Update URL search params when filters change so state persists across navigation
+  const updateFilterParams = useCallback(
+    (type: string, genre: string) => {
+      const params = new URLSearchParams();
+      if (type && type !== "all") params.set("type", type);
+      if (genre) params.set("genre", genre);
+      const qs = params.toString();
+      router.replace(`/manga${qs ? `?${qs}` : ""}`, { scroll: false });
+    },
+    [router]
+  );
+
+  const handleSetSelectedType = useCallback(
+    (t: "all" | "manhwa" | "manga") => {
+      setSelectedType(t);
+      updateFilterParams(t, selectedGenre);
+    },
+    [selectedGenre, updateFilterParams]
+  );
+
+  const handleSetSelectedGenre = useCallback(
+    (genreId: string) => {
+      const newGenre = selectedGenre === genreId ? "" : genreId;
+      setSelectedGenre(newGenre);
+      updateFilterParams(selectedType, newGenre);
+    },
+    [selectedType, selectedGenre, updateFilterParams]
+  );
   const [genreResults, setGenreResults] = useState<MangaItem[]>([]);
   const [isGenreLoading, setIsGenreLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -161,7 +198,7 @@ export default function MangaHomeClient({
 
   // Sync Reading History — SWR for authenticated users, localStorage for guests
   useEffect(() => {
-    if (status === "authenticated" && serverHistoryData?.items) {
+    if (status === "authenticated" && serverHistoryData?.items?.length > 0) {
       const serverItems: MangaReadingProgress[] = serverHistoryData.items.map((item: any) => ({
         mangaId: item.mangaId,
         mangaTitle: item.mangaTitle,
@@ -236,7 +273,7 @@ export default function MangaHomeClient({
 
     // 1. Load Trending Now if not provided
     if (initialTrending.length === 0) {
-      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=32")
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=16")
         .then((data) => {
           if (!isMounted) return;
           const items = data.items || [];
@@ -252,7 +289,7 @@ export default function MangaHomeClient({
 
     // 2. Load Trending Manhwas if not provided
     if (initialManhwas.length === 0) {
-      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=32")
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=16")
         .then((data) => {
           if (!isMounted) return;
           const items = data.items || [];
@@ -268,7 +305,7 @@ export default function MangaHomeClient({
 
     // 3. Load Trending Mangas if not provided
     if (initialMangas.length === 0) {
-      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=32")
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=16")
         .then((data) => {
           if (!isMounted) return;
           const items = data.items || [];
@@ -282,26 +319,8 @@ export default function MangaHomeClient({
         });
     }
 
-    // Background pre-fetch top genres for instant 0ms switching
-    const timer = setTimeout(() => {
-      if (!isMounted) return;
-      ["Action", "Fantasy", "Romance"].forEach(async (gName) => {
-        const cacheKey = `genre_${gName}_all_0`;
-        if (!clientCache.current.has(cacheKey)) {
-          try {
-            const res = await fetch(`/api/manga/search?limit=24&offset=0&genreName=${encodeURIComponent(gName)}&sortBy=followedCount`);
-            if (res.ok) {
-              const d = await res.json();
-              if (d.items) clientCache.current.set(cacheKey, d.items);
-            }
-          } catch {}
-        }
-      });
-    }, 800);
-
     return () => {
       isMounted = false;
-      clearTimeout(timer);
     };
   }, []);
 
@@ -518,7 +537,7 @@ export default function MangaHomeClient({
               {(["all", "manhwa", "manga"] as const).map((t) => (
                 <button
                   key={t}
-                  onClick={() => setSelectedType(t)}
+                  onClick={() => handleSetSelectedType(t)}
                   className={`px-4 py-2 rounded-xl text-xs font-black capitalize transition-all cursor-pointer ${
                     selectedType === t
                       ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-102"
@@ -565,7 +584,7 @@ export default function MangaHomeClient({
                 return (
                   <button
                     key={g.label}
-                    onClick={() => setSelectedGenre(isActive ? "" : g.id)}
+                    onClick={() => handleSetSelectedGenre(g.id)}
                     className={`shrink-0 px-4 py-2 rounded-xl text-xs transition-all cursor-pointer ${
                       isActive
                         ? "bg-primary text-primary-foreground border border-primary shadow-lg shadow-primary/30 font-black scale-105"

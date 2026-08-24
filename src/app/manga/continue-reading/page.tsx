@@ -59,7 +59,7 @@ export default function ContinueReadingPage() {
     {
       revalidateOnFocus: true,
       revalidateOnMount: true,
-      dedupingInterval: 2000,
+      dedupingInterval: 30000,
     }
   );
 

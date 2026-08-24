@@ -14,11 +14,16 @@ export const metadata: Metadata = constructMediaMetadata({
   fallbackDescription: "Read manga and manhwa online on CineStream.",
 });
 
-export default async function MangaPage() {
+export default async function MangaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string; genre?: string }>;
+}) {
+  const params = await searchParams;
   const [trendingRes, manhwasRes, mangasRes] = await Promise.allSettled([
-    getMangaTrending(32),
-    getPopularManhwa(32),
-    getLatestMangaUpdates(32),
+    getMangaTrending(16),
+    getPopularManhwa(16),
+    getLatestMangaUpdates(16),
   ]);
 
   const initialTrending = trendingRes.status === "fulfilled" ? trendingRes.value : [];
@@ -30,6 +35,8 @@ export default async function MangaPage() {
       initialTrending={initialTrending}
       initialManhwas={initialManhwas}
       initialMangas={initialMangas}
+      initialType={params.type || "all"}
+      initialGenre={params.genre || ""}
     />
   );
 }
