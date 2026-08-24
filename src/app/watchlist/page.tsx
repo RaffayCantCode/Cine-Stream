@@ -57,7 +57,7 @@ export default function WatchlistPage() {
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
-        <div className="px-5 md:px-12 max-w-screen-2xl mx-auto">
+        <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           <div className="mb-8">
             <h1 className="flex items-center gap-3 text-4xl md:text-5xl font-black text-foreground tracking-tight">
               Your Watchlist
@@ -115,8 +115,8 @@ export default function WatchlistPage() {
               {/* Cards */}
               <div className="flex-1">
                 {loading && items.length === 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-5 md:gap-6">
-                    {Array.from({ length: 10 }).map((_, i) => (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
+                    {Array.from({ length: 15 }).map((_, i) => (
                       <div key={i} className="aspect-[2/3] w-full rounded-2xl bg-muted/50 animate-pulse" />
                     ))}
                   </div>
@@ -127,7 +127,7 @@ export default function WatchlistPage() {
                     hasItems={items.length > 0}
                   />
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-5 md:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                     {filtered.map((item) => (
                       <div key={`${item.mediaType}-${item.mediaId}`} className="group relative">
                         <GridMediaCard

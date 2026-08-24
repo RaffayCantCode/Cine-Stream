@@ -612,7 +612,7 @@ export default function ProviderPage() {
 
         {searchQuery.trim() ? (
           /* ─── SEARCH MODE ─── */
-          <div className="px-6 md:px-12 max-w-screen-2xl mx-auto py-8">
+          <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto py-8">
             <div className="flex items-center gap-3 mb-8">
               <Search className="w-5 h-5 text-primary" />
               <h2 className="text-xl font-black text-white tracking-tight">
@@ -624,13 +624,13 @@ export default function ProviderPage() {
             </div>
             
             {isSearching ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 md:gap-5">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <div key={i} className="aspect-[2/3] rounded-2xl shimmer" style={{ animationDelay: `${i * 40}ms` }} />
                 ))}
               </div>
             ) : searchResults.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 md:gap-5">
                 {searchResults.map((item, idx) => (
                   <motion.div
                     key={`search-${item.id}`}
@@ -760,7 +760,7 @@ export default function ProviderPage() {
           </div>
         ) : (
           /* ─── GRID MODE: sorted flat grid ─── */
-          <div className="px-6 md:px-12 max-w-screen-2xl mx-auto py-8">
+          <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto py-8">
             {/* Section label */}
             {filterType !== "tv" && displayMovies.length > 0 && (
               <div className="mb-6">
@@ -771,7 +771,7 @@ export default function ProviderPage() {
                   </h2>
                   <span className="text-xs text-white/30 font-medium">{displayMovies.length} titles</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5 mb-12">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 md:gap-5 mb-12">
                   {displayMovies.map((item, idx) => (
                     <motion.div
                       key={`movie-${item.id}`}
@@ -799,7 +799,7 @@ export default function ProviderPage() {
                   </h2>
                   <span className="text-xs text-white/30 font-medium">{displayTv.length} titles</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 md:gap-5">
                   {displayTv.map((item, idx) => (
                     <motion.div
                       key={`tv-${item.id}`}

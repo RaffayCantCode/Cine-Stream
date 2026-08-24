@@ -216,7 +216,7 @@ export default function BrowseMoviesPage() {
 
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
         <ContinueWatching filterType="movie" />
-        <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
+        <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
             <div>
               <h1 className="text-4xl font-black text-white tracking-tight">Movies</h1>
@@ -311,13 +311,13 @@ export default function BrowseMoviesPage() {
         )}
 
         {isLoading && movies.length === 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-5 md:gap-6">
-            {Array.from({ length: 10 }).map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
+            {Array.from({ length: 15 }).map((_, i) => (
               <div key={i} className="aspect-[2/3] w-full rounded-lg bg-white/[0.03] animate-pulse" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-5 md:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
             {movies.map((item) => (
               <div key={item.id} className="w-full h-full flex justify-center">
                 <MediaCard item={{ ...item, media_type: "movie" }} />

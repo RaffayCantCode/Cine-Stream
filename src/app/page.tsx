@@ -1146,8 +1146,8 @@ export default function Home() {
                 subtitle="Binge your favorite universes in order"
                 href="/browse/franchises"
               />
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4 md:gap-5">
-                {collections.slice(0, 5).map((col) => {
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 md:gap-5">
+                {collections.slice(0, 12).map((col) => {
                   const posterUrl = col.poster_path
                     ? col.poster_path.startsWith("http")
                       ? col.poster_path

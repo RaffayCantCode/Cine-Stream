@@ -53,6 +53,12 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-outfit)", "system-ui", "sans-serif"],
       },
+      screens: {
+        xs: "475px",
+        "3xl": "2000px",
+        "4xl": "2800px",
+        ultrawide: "3800px",
+      },
     },
   },
   plugins: [animate],

@@ -382,7 +382,7 @@ export default function MangaHomeClient() {
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
-        <div className="px-5 sm:px-8 md:px-12 max-w-screen-2xl mx-auto space-y-12">
+        <div className="px-5 sm:px-8 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto space-y-12">
           
           {/* Header Section */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -579,14 +579,14 @@ export default function MangaHomeClient() {
               </div>
 
               {isSearching ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                   ))}
                 </div>
               ) : searchResults.length > 0 ? (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                     {searchResults.map((item) => (
                       <MangaCard key={item.id} item={item} />
                     ))}
@@ -638,14 +638,14 @@ export default function MangaHomeClient() {
               </div>
 
               {isGenreLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                   ))}
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                     {genreResults.map((item) => (
                       <MangaCard key={item.id} item={item} />
                     ))}
@@ -678,7 +678,7 @@ export default function MangaHomeClient() {
                   <span className="text-xs font-bold text-primary/80">Real-Time Picks</span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                   {isTrendingNowLoading
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
@@ -703,7 +703,7 @@ export default function MangaHomeClient() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                   {isTrendingManhwasLoading
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
@@ -728,7 +728,7 @@ export default function MangaHomeClient() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                   {isTrendingMangasLoading
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />

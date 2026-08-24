@@ -27,6 +27,7 @@ import {
   SunMedium,
   SunDim,
   X,
+  Check,
 } from "lucide-react";
 import { usePageContentReady } from "@/lib/pageLoad";
 
@@ -50,7 +51,7 @@ export default function MangaReaderClient({
   const [error, setError] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [zoomLevel, setZoomLevel] = useState<number>(100); // 50% to 200%
+  const [zoomLevel, setZoomLevel] = useState<number>(50); // 50% default for desktop, 100% for mobile
   const [brightness, setBrightness] = useState<number>(100); // 30% to 150%
   const [brightnessPickerOpen, setBrightnessPickerOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -63,15 +64,21 @@ export default function MangaReaderClient({
 
   usePageContentReady(!isLoading);
 
-  // Load Saved Preferences (Brightness & Zoom Level)
+  // Load Saved Preferences (Brightness & Zoom Level with 50% desktop / 100% mobile default)
   useEffect(() => {
     try {
+      const isMobile = window.innerWidth < 768;
+      const defaultZoom = isMobile ? 100 : 50;
       const savedZoom = localStorage.getItem("cinestream.manga_zoom_level");
       if (savedZoom) {
         const parsed = parseInt(savedZoom, 10);
-        if (!isNaN(parsed) && parsed >= 50 && parsed <= 200) {
+        if (!isNaN(parsed) && parsed >= 30 && parsed <= 200) {
           setZoomLevel(parsed);
+        } else {
+          setZoomLevel(defaultZoom);
         }
+      } else {
+        setZoomLevel(defaultZoom);
       }
       const savedBrightness = localStorage.getItem("cinestream.manga_brightness");
       if (savedBrightness) {
@@ -269,7 +276,7 @@ export default function MangaReaderClient({
   const handleZoomOut = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setZoomLevel((prev) => {
-      const next = Math.max(50, prev - 15);
+      const next = Math.max(30, prev - 10);
       try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
       return next;
     });
@@ -277,8 +284,10 @@ export default function MangaReaderClient({
 
   const handleZoomReset = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setZoomLevel(100);
-    try { localStorage.setItem("cinestream.manga_zoom_level", "100"); } catch {}
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+    const targetZoom = isMobile ? 100 : 50;
+    setZoomLevel(targetZoom);
+    try { localStorage.setItem("cinestream.manga_zoom_level", String(targetZoom)); } catch {}
   };
 
   // Proper Fullscreen Toggle
@@ -537,7 +546,7 @@ export default function MangaReaderClient({
 
             {/* Brightness Popover Menu */}
             {brightnessPickerOpen && (
-              <div className="fixed left-4 right-4 sm:left-auto sm:-translate-x-1/3 sm:w-72 top-16 sm:top-full mt-2 flex flex-col bg-[#0c0d14] border-2 border-primary/50 rounded-2xl p-4 shadow-[0_25px_80px_rgba(0,0,0,0.98)] z-50 space-y-3.5">
+              <div className="fixed left-4 right-4 sm:left-auto sm:-translate-x-1/3 sm:w-80 top-16 sm:top-full mt-2 flex flex-col bg-[#0c0d14] border-2 border-primary/60 rounded-2xl p-4 shadow-[0_25px_80px_rgba(0,0,0,0.98)] z-50 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <SunMedium className="w-4 h-4 text-primary" />
@@ -545,9 +554,20 @@ export default function MangaReaderClient({
                       Brightness
                     </span>
                   </div>
-                  <span className="text-xs font-black text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-md border border-primary/30">
-                    {brightness}%
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-primary font-mono bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/30">
+                      {brightness}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setBrightnessPickerOpen(false)}
+                      className="p-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/30 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+                      title="Apply & Close"
+                      aria-label="Close Brightness Popup"
+                    >
+                      <Check className="w-4 h-4 stroke-[3]" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Range Slider */}
@@ -590,22 +610,22 @@ export default function MangaReaderClient({
         {/* Right: Zoom Controls, Fullscreen & Next Chapter Button */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           
-          {/* Zoom In / Out Controls */}
-          <div className="flex items-center bg-white/[0.06] border border-white/10 rounded-xl p-0.5">
+          {/* Zoom In / Out Controls (Bold & Prominent) */}
+          <div className="flex items-center bg-[#141622] border-2 border-primary/40 hover:border-primary/80 rounded-2xl p-1 shadow-lg shadow-black/50 transition-all">
             <button
               onClick={handleZoomOut}
-              disabled={zoomLevel <= 50}
-              className="p-1 sm:p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-primary disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
+              disabled={zoomLevel <= 30}
+              className="p-1.5 sm:p-2 rounded-xl bg-white/[0.04] hover:bg-white/10 text-white/90 hover:text-primary disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
               title="Zoom Out (-)"
               aria-label="Zoom Out"
             >
-              <ZoomOut className="w-3.5 h-3.5" />
+              <ZoomOut className="w-4 h-4 stroke-[2.5]" />
             </button>
 
             <button
               onClick={handleZoomReset}
-              className="px-1.5 py-0.5 text-[10px] sm:text-xs font-black text-primary hover:bg-white/10 rounded-md transition-all cursor-pointer touch-manipulation"
-              title="Reset Zoom (100%)"
+              className="px-2 sm:px-2.5 py-1 text-xs sm:text-sm font-black text-primary font-mono tracking-tight hover:bg-primary/15 rounded-lg transition-all cursor-pointer touch-manipulation"
+              title="Reset Zoom"
             >
               {zoomLevel}%
             </button>
@@ -613,11 +633,11 @@ export default function MangaReaderClient({
             <button
               onClick={handleZoomIn}
               disabled={zoomLevel >= 200}
-              className="p-1 sm:p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-primary disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
+              className="p-1.5 sm:p-2 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/50 hover:border-primary font-black shadow-md shadow-primary/20 hover:scale-105 disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
               title="Zoom In (+)"
               aria-label="Zoom In"
             >
-              <ZoomIn className="w-3.5 h-3.5" />
+              <ZoomIn className="w-4 h-4 stroke-[2.5]" />
             </button>
           </div>
 
@@ -660,8 +680,7 @@ export default function MangaReaderClient({
         <div
           style={{
             width: `${zoomLevel}%`,
-            minWidth: zoomLevel < 100 ? `${zoomLevel}%` : "100%",
-            maxWidth: `${Math.round(768 * (zoomLevel / 100))}px`,
+            maxWidth: `${Math.max(360, Math.round(1400 * (zoomLevel / 100)))}px`,
             filter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
           }}
           className="flex flex-col items-center mx-auto transition-[width,filter] duration-150"

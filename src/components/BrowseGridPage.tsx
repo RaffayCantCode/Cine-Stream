@@ -137,7 +137,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
-        <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
+        <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">{title}</h1>
             {description ? <p className="text-sm text-white/40 mt-2">{description}</p> : null}
@@ -209,7 +209,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-5 md:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
             {items.map((item, idx) => (
               <div key={`${item.media_type ?? "item"}-${item.id}`} className="w-full h-full flex justify-center">
                 <MediaCard item={item} index={idx} showMediaBadge={shouldShowCardBadges} />
