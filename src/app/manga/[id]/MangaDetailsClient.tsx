@@ -59,8 +59,12 @@ export default function MangaDetailsClient({
   const { isSaved, toggle } = useWatchlist();
   const inWatchlist = manga ? isSaved(manga.id, manga.type || "manga") : false;
 
-  // Shell is immediately ready for instant page entry
-  usePageContentReady(true);
+  // Shell signals ready after mount so NavigationLoader hides properly
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  usePageContentReady(isMounted);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });

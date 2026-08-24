@@ -9,9 +9,10 @@ import { cn } from "@/lib/utils";
 interface MangaCardProps {
   item: MangaItem;
   priority?: boolean;
+  showBadges?: boolean;
 }
 
-export const MangaCard = memo(function MangaCard({ item, priority = false }: MangaCardProps) {
+export const MangaCard = memo(function MangaCard({ item, priority = false, showBadges = true }: MangaCardProps) {
   const typeLabels = {
     manga: "Manga",
     manhwa: "Manhwa",
@@ -36,24 +37,26 @@ export const MangaCard = memo(function MangaCard({ item, priority = false }: Man
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90 group-hover:opacity-95 transition-opacity" />
 
       {/* Top Floating Badges (Solid Pitch-Black Box with Bold High-Contrast Text) */}
-      <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-none z-10">
-        <span className="px-2.5 py-1 rounded-lg bg-black/95 text-primary border border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.95)] text-[10px] font-black uppercase tracking-wider backdrop-blur-md">
-          {typeLabels[item.type] || "Manga"}
-        </span>
-
-        {item.status && (
-          <span
-            className={cn(
-              "px-2.5 py-1 rounded-lg bg-black/95 border border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.95)] text-[9px] font-black uppercase tracking-wider backdrop-blur-md",
-              item.status === "completed"
-                ? "text-emerald-400"
-                : "text-white"
-            )}
-          >
-            {item.status}
+      {showBadges && (
+        <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-none z-10">
+          <span className="px-2.5 py-1 rounded-lg bg-black/95 text-primary border border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.95)] text-[10px] font-black uppercase tracking-wider backdrop-blur-md">
+            {typeLabels[item.type] || "Manga"}
           </span>
-        )}
-      </div>
+
+          {item.status && (
+            <span
+              className={cn(
+                "px-2.5 py-1 rounded-lg bg-black/95 border border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.95)] text-[9px] font-black uppercase tracking-wider backdrop-blur-md",
+                item.status === "completed"
+                  ? "text-emerald-400"
+                  : "text-white"
+              )}
+            >
+              {item.status}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Center Read Now Action on Hover */}
       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 pointer-events-none">

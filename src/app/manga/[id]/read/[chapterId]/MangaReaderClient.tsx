@@ -229,16 +229,21 @@ export default function MangaReaderClient({
   );
 
   // Sync initial page or saved page on mount (local + cloud account sync)
+  // Also re-saves progress on mount so the manga moves to the top of Continue Reading
   useEffect(() => {
     if (totalPages > 0) {
       const saved = getMangaProgress(mangaId);
       if (saved && saved.chapterId === chapterId && saved.pageNumber <= totalPages) {
         setCurrentPage(saved.pageNumber);
+        // Re-save to bump updatedAt so this manga moves to the top of Continue Reading
+        updateProgress(saved.pageNumber);
       } else {
         syncMangaHistoryFromServer().then((syncedList) => {
           const serverSaved = syncedList.find((item) => item.mangaId === mangaId);
           if (serverSaved && serverSaved.chapterId === chapterId && serverSaved.pageNumber <= totalPages) {
             setCurrentPage(serverSaved.pageNumber);
+            // Re-save to bump updatedAt so this manga moves to the top of Continue Reading
+            updateProgress(serverSaved.pageNumber);
           } else {
             setCurrentPage(1);
             updateProgress(1);

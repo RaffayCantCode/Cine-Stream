@@ -25,6 +25,8 @@ import {
   ChevronRight
 } from "lucide-react";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { useSession } from "next-auth/react";
+import useSWR, { mutate } from "swr";
 
 const GENRES = [
   { label: "All", id: "", name: "" },
@@ -41,6 +43,23 @@ const GENRES = [
 ];
 
 const ITEMS_PER_PAGE = 24;
+const CONTINUE_READING_CACHE_KEY = "cinestream.cr_cache";
+
+const mangaHistoryFetcher = async (url: string) => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { items: [] };
+    const json = await res.json();
+    if (json?.items && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(CONTINUE_READING_CACHE_KEY, JSON.stringify(json));
+      } catch {}
+    }
+    return json;
+  } catch {
+    return { items: [] };
+  }
+};
 
 export interface MangaHomeClientProps {
   initialTrending?: MangaItem[];
@@ -53,6 +72,7 @@ export default function MangaHomeClient({
   initialManhwas = [],
   initialMangas = [],
 }: MangaHomeClientProps = {}) {
+  const { status } = useSession();
   const [trendingNow, setTrendingNow] = useState<MangaItem[]>(() =>
     initialTrending.length > 0 ? shuffleArray<MangaItem>(initialTrending).slice(0, 15) : []
   );
@@ -68,6 +88,30 @@ export default function MangaHomeClient({
   );
   const [isTrendingMangasLoading, setIsTrendingMangasLoading] = useState(initialMangas.length === 0);
 
+  // Instant cached items for immediate display
+  const [cachedHistory, setCachedHistory] = useState<MangaReadingProgress[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem(CONTINUE_READING_CACHE_KEY);
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed?.items || [];
+    } catch {
+      return [];
+    }
+  });
+
+  const { data: serverHistoryData } = useSWR(
+    status === "authenticated" ? "/api/manga/history" : null,
+    mangaHistoryFetcher,
+    {
+      revalidateOnFocus: true,
+      revalidateOnMount: true,
+      dedupingInterval: 2000,
+    }
+  );
+
+  // Merge server data with localStorage for non-authenticated fallback
+  const [localHistory, setLocalHistory] = useState<MangaReadingProgress[]>([]);
   const [history, setHistory] = useState<MangaReadingProgress[]>([]);
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -84,8 +128,12 @@ export default function MangaHomeClient({
   const [hasMore, setHasMore] = useState(true);
   const [pageOffset, setPageOffset] = useState(0);
 
-  // Page shell is immediately ready for instant navigation feel
-  usePageContentReady(true);
+  // Page shell signals ready after mount so NavigationLoader hides properly
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  usePageContentReady(isMounted);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const clientCache = useRef<Map<string, MangaItem[]>>(new Map());
@@ -111,18 +159,57 @@ export default function MangaHomeClient({
     setHasMore(true);
   }, []);
 
-  // Sync Reading History from Local & DB
-  const refreshHistory = useCallback(async () => {
-    setHistory(getMangaHistory());
-    const synced = await syncMangaHistoryFromServer();
-    setHistory(synced);
-  }, []);
-
+  // Sync Reading History — SWR for authenticated users, localStorage for guests
   useEffect(() => {
-    refreshHistory();
-    window.addEventListener("cinestream:manga-history-updated", () => setHistory(getMangaHistory()));
-    return () => window.removeEventListener("cinestream:manga-history-updated", () => setHistory(getMangaHistory()));
-  }, [refreshHistory]);
+    if (status === "authenticated" && serverHistoryData?.items) {
+      const serverItems: MangaReadingProgress[] = serverHistoryData.items.map((item: any) => ({
+        mangaId: item.mangaId,
+        mangaTitle: item.mangaTitle,
+        mangaCover: item.mangaCover,
+        mangaType: item.mangaType || "manga",
+        chapterId: item.chapterId,
+        chapterNumber: item.chapterNumber,
+        chapterTitle: item.chapterTitle,
+        pageNumber: item.pageNumber || 1,
+        totalPages: item.totalPages || 1,
+        nextChapterId: item.nextChapterId,
+        nextChapterNumber: item.nextChapterNumber,
+        updatedAt: new Date(item.updatedAt).getTime(),
+      }));
+      setHistory(serverItems);
+      setCachedHistory(serverItems);
+    } else if (status === "unauthenticated") {
+      const local = getMangaHistory();
+      setLocalHistory(local);
+      setHistory(local);
+    }
+  }, [status, serverHistoryData]);
+
+  // Fallback: load from localStorage + server sync for non-auth users on mount
+  useEffect(() => {
+    if (status === "loading") {
+      const local = getMangaHistory();
+      setLocalHistory(local);
+      setHistory(local);
+      syncMangaHistoryFromServer().then((synced) => {
+        setLocalHistory(synced);
+        setHistory(synced);
+      });
+    }
+  }, [status]);
+
+  // Listen for local updates (from reader saving progress)
+  useEffect(() => {
+    const handler = () => {
+      const updated = getMangaHistory();
+      setLocalHistory(updated);
+      if (status !== "authenticated") {
+        setHistory(updated);
+      }
+    };
+    window.addEventListener("cinestream:manga-history-updated", handler);
+    return () => window.removeEventListener("cinestream:manga-history-updated", handler);
+  }, [status]);
 
   // Handle Discard item from Continue Reading
   const handleDiscardHistory = (e: React.MouseEvent, mangaId: string) => {
@@ -130,6 +217,11 @@ export default function MangaHomeClient({
     e.stopPropagation();
     removeMangaProgress(mangaId);
     setHistory((prev) => prev.filter((item) => item.mangaId !== mangaId));
+    setCachedHistory((prev) => prev.filter((item) => item.mangaId !== mangaId));
+    // Invalidate SWR cache so next revalidation reflects the removal
+    if (status === "authenticated") {
+      mutate("/api/manga/history");
+    }
   };
 
   // Snappy 250ms debounce for live search
@@ -497,19 +589,32 @@ export default function MangaHomeClient({
                     Continue Reading
                   </h2>
                 </div>
-                <span className="text-xs text-primary font-black bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
-                  {history.length} In Progress
-                </span>
+                <div className="flex items-center gap-3">
+                  {isMounted && history.length > 10 && (
+                    <Link
+                      href="/manga/continue-reading"
+                      className="text-xs font-black text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+                    >
+                      View All
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Link>
+                  )}
+                  {isMounted && (
+                    <span className="text-xs text-primary font-black bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
+                      {history.length} In Progress
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {history.map((item) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {history.slice(0, 10).map((item) => (
                   <div
                     key={item.mangaId}
                     className="group relative flex flex-col justify-between p-4 rounded-3xl bg-zinc-900/90 border border-white/[0.08] hover:border-primary/50 hover:shadow-[0_12px_32px_hsl(var(--primary)/0.2)] transition-all duration-300 overflow-hidden"
                   >
                     {/* Top Discard (Cross X) Button — Only shows after page has mounted & loaded */}
-                    {!isTrendingNowLoading && (
+                    {isMounted && (
                       <button
                         type="button"
                         onClick={(e) => handleDiscardHistory(e, item.mangaId)}
@@ -536,9 +641,11 @@ export default function MangaHomeClient({
 
                       <div className="flex-1 flex flex-col justify-between min-w-0 pr-6">
                         <div>
-                          <span className="text-[10px] font-black text-primary uppercase tracking-wider">
-                            {item.mangaType}
-                          </span>
+                          {isMounted && (
+                            <span className="text-[10px] font-black text-primary uppercase tracking-wider">
+                              {item.mangaType}
+                            </span>
+                          )}
                           <Link
                             href={`/manga/${item.mangaId}`}
                             className="text-sm sm:text-base font-black text-white truncate block hover:text-primary transition-colors mt-0.5"
@@ -610,7 +717,7 @@ export default function MangaHomeClient({
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                     {searchResults.map((item) => (
-                      <MangaCard key={item.id} item={item} />
+                      <MangaCard key={item.id} item={item} showBadges={isMounted} />
                     ))}
                   </div>
 
@@ -655,7 +762,7 @@ export default function MangaHomeClient({
                   </p>
                 </div>
                 <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
-                  {isGenreLoading ? "Loading..." : `${genreResults.length} loaded`}
+                  {isMounted ? (isGenreLoading ? "Loading..." : `${genreResults.length} loaded`) : ""}
                 </span>
               </div>
 
@@ -669,7 +776,7 @@ export default function MangaHomeClient({
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
                     {genreResults.map((item) => (
-                      <MangaCard key={item.id} item={item} />
+                      <MangaCard key={item.id} item={item} showBadges={isMounted} />
                     ))}
                   </div>
 
@@ -697,7 +804,9 @@ export default function MangaHomeClient({
                       Trending Now
                     </h2>
                   </div>
-                  <span className="text-xs font-bold text-primary/80">Real-Time Picks</span>
+                  <span className="text-xs font-bold text-primary/80">
+                    {isMounted && "Real-Time Picks"}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
@@ -706,7 +815,7 @@ export default function MangaHomeClient({
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
                     : trendingNow.map((item) => (
-                        <MangaCard key={item.id} item={item} />
+                        <MangaCard key={item.id} item={item} showBadges={isMounted} />
                       ))}
                 </div>
               </section>
@@ -721,7 +830,7 @@ export default function MangaHomeClient({
                     </h2>
                   </div>
                   <span className="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
-                    Korean Manhwa
+                    {isMounted && "Korean Manhwa"}
                   </span>
                 </div>
 
@@ -731,7 +840,7 @@ export default function MangaHomeClient({
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
                     : trendingManhwas.map((item) => (
-                        <MangaCard key={item.id} item={item} />
+                        <MangaCard key={item.id} item={item} showBadges={isMounted} />
                       ))}
                 </div>
               </section>
@@ -746,7 +855,7 @@ export default function MangaHomeClient({
                     </h2>
                   </div>
                   <span className="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
-                    Japanese Manga
+                    {isMounted && "Japanese Manga"}
                   </span>
                 </div>
 
@@ -756,7 +865,7 @@ export default function MangaHomeClient({
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
                     : trendingMangas.map((item) => (
-                        <MangaCard key={item.id} item={item} />
+                        <MangaCard key={item.id} item={item} showBadges={isMounted} />
                       ))}
                 </div>
               </section>
