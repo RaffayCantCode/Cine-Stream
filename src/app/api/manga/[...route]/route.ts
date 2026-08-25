@@ -27,26 +27,41 @@ export async function GET(
   const action = route[0];
   const searchParams = request.nextUrl.searchParams;
 
-  try {
-    if (action === "trending") {
+  if (action === "trending") {
+    try {
       const limit = parseInt(searchParams.get("limit") || "24", 10);
       const items = await getMangaTrending(limit);
       return jsonWithCache({ success: true, items }, 1800);
+    } catch (err: any) {
+      console.error("[API/Manga] trending error:", err);
+      return jsonWithCache({ success: true, items: [] }, 60);
     }
+  }
 
-    if (action === "manhwa") {
+  if (action === "manhwa") {
+    try {
       const limit = parseInt(searchParams.get("limit") || "24", 10);
       const items = await getPopularManhwa(limit);
       return jsonWithCache({ success: true, items }, 1800);
+    } catch (err: any) {
+      console.error("[API/Manga] manhwa error:", err);
+      return jsonWithCache({ success: true, items: [] }, 60);
     }
+  }
 
-    if (action === "latest") {
+  if (action === "latest") {
+    try {
       const limit = parseInt(searchParams.get("limit") || "24", 10);
       const items = await getLatestMangaUpdates(limit);
       return jsonWithCache({ success: true, items }, 1800);
+    } catch (err: any) {
+      console.error("[API/Manga] latest error:", err);
+      return jsonWithCache({ success: true, items: [] }, 60);
     }
+  }
 
-    if (action === "search") {
+  if (action === "search") {
+    try {
       const query = searchParams.get("q") || "";
       const type = (searchParams.get("type") || "all") as any;
       const limit = parseInt(searchParams.get("limit") || "24", 10);
@@ -57,18 +72,28 @@ export async function GET(
 
       const data = await searchManga(query, { type, limit, offset, sortBy, genreId, genreName });
       return jsonWithCache({ success: true, ...data }, 1200);
+    } catch (err: any) {
+      console.error("[API/Manga] search error:", err);
+      return jsonWithCache({ success: true, items: [], total: 0 }, 60);
     }
+  }
 
-    if (action === "details" && route[1]) {
+  if (action === "details" && route[1]) {
+    try {
       const id = route[1];
       const item = await getMangaDetails(id);
       if (!item) {
         return NextResponse.json({ success: false, error: "Manga not found" }, { status: 404 });
       }
       return jsonWithCache({ success: true, item }, 1800);
+    } catch (err: any) {
+      console.error("[API/Manga] details error:", err);
+      return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
     }
+  }
 
-    if (action === "chapters" && route[1]) {
+  if (action === "chapters" && route[1]) {
+    try {
       const id = route[1];
       const order = (searchParams.get("order") || "asc") as "asc" | "desc";
       const limit = parseInt(searchParams.get("limit") || "500", 10);
@@ -76,9 +101,14 @@ export async function GET(
 
       const data = await getMangaChapters(id, { order, limit, offset });
       return jsonWithCache({ success: true, ...data }, 900);
+    } catch (err: any) {
+      console.error("[API/Manga] chapters error:", err);
+      return jsonWithCache({ success: true, chapters: [], total: 0 }, 60);
     }
+  }
 
-    if (action === "chapter" && route[1]) {
+  if (action === "chapter" && route[1]) {
+    try {
       const chapterId = route[1];
       const mangaTitle = searchParams.get("title") || undefined;
       const chapterNumber = searchParams.get("ch") || undefined;
@@ -87,11 +117,11 @@ export async function GET(
         return NextResponse.json({ success: false, error: "Chapter pages not found" }, { status: 404 });
       }
       return jsonWithCache({ success: true, ...data }, 1800);
+    } catch (err: any) {
+      console.error("[API/Manga] chapter error:", err);
+      return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
     }
-
-    return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
-  } catch (err: any) {
-    console.error("[API/Manga] Error:", err);
-    return NextResponse.json({ success: false, error: err.message || "Internal server error" }, { status: 500 });
   }
+
+  return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
 }

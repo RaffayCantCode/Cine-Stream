@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { MangaItem, MangaChapter } from "@/lib/manga-fetch";
 import { 
-  getMangaProgress, 
-  syncMangaHistoryFromServer, 
+  getLocalMangaProgress, 
+  fetchServerMangaProgress, 
   MangaReadingProgress,
   isChapterRead,
   toggleChapterReadStatus
@@ -41,6 +42,9 @@ export default function MangaDetailsClient({
   initialManga = null,
   initialChapters = [],
 }: MangaDetailsClientProps) {
+  const { data: session, status: authStatus } = useSession();
+  const isAuthed = authStatus === "authenticated" && !!session?.user?.id;
+
   const [manga, setManga] = useState<MangaItem | null>(initialManga);
   const [isDetailsLoading, setIsDetailsLoading] = useState(!initialManga);
 
@@ -66,36 +70,55 @@ export default function MangaDetailsClient({
   }, []);
   usePageContentReady(isMounted);
 
+  // Fetch reading progress strictly based on active auth status
+  const refreshProgress = useCallback(async () => {
+    if (authStatus === "loading") return;
+
+    if (isAuthed) {
+      try {
+        const serverP = await fetchServerMangaProgress(id);
+        setProgress(serverP);
+      } catch (err) {
+        console.warn("[MangaDetailsClient] Failed to fetch server progress:", err);
+        setProgress(null);
+      }
+    } else {
+      setProgress(getLocalMangaProgress(id));
+    }
+  }, [authStatus, isAuthed, id]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
-    
-    // 1. Check local progress first
-    const localP = getMangaProgress(id);
-    if (localP) setProgress(localP);
-
-    // 2. Fetch and sync from user account across all devices
-    syncMangaHistoryFromServer().then((syncedList) => {
-      const serverP = syncedList.find((item) => item.mangaId === id);
-      if (serverP) setProgress(serverP);
-    });
+    refreshProgress();
 
     const handleUpdate = () => {
-      const updated = getMangaProgress(id);
-      setProgress(updated);
+      refreshProgress();
+      setReadTick((t) => t + 1);
+    };
+
+    const handlePageShow = () => {
+      refreshProgress();
+      setReadTick((t) => t + 1);
+    };
+
+    const handleFocus = () => {
+      refreshProgress();
       setReadTick((t) => t + 1);
     };
 
     window.addEventListener("cinestream:manga-history-updated", handleUpdate);
     window.addEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", handleFocus);
 
-    let isMounted = true;
+    let isMountedLocal = true;
 
     // 1. Fetch metadata/details if not provided
     if (!initialManga) {
       setIsDetailsLoading(true);
       fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${id}`)
         .then((data) => {
-          if (!isMounted) return;
+          if (!isMountedLocal) return;
           if (data.success && data.item) {
             setManga(data.item);
           } else {
@@ -103,12 +126,12 @@ export default function MangaDetailsClient({
           }
         })
         .catch((err: any) => {
-          if (!isMounted) return;
+          if (!isMountedLocal) return;
           console.error("Failed to load manga details:", err);
           setError(err.message || "Failed to load manga details");
         })
         .finally(() => {
-          if (isMounted) setIsDetailsLoading(false);
+          if (isMountedLocal) setIsDetailsLoading(false);
         });
     }
 
@@ -117,26 +140,28 @@ export default function MangaDetailsClient({
       setIsChaptersLoading(true);
       fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${id}?order=asc&limit=500`)
         .then((data) => {
-          if (!isMounted) return;
+          if (!isMountedLocal) return;
           if (data.success && data.chapters) {
             setChapters(data.chapters || []);
           }
         })
         .catch((err: any) => {
-          if (!isMounted) return;
+          if (!isMountedLocal) return;
           console.warn("Failed to load chapters:", err);
         })
         .finally(() => {
-          if (isMounted) setIsChaptersLoading(false);
+          if (isMountedLocal) setIsChaptersLoading(false);
         });
     }
 
     return () => {
-      isMounted = false;
+      isMountedLocal = false;
       window.removeEventListener("cinestream:manga-history-updated", handleUpdate);
       window.removeEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", handleFocus);
     };
-  }, [id]);
+  }, [id, initialManga, initialChapters.length, refreshProgress]);
 
   // Filter and sort chapters in strict descending (latest to oldest) or ascending order
   const filteredChapters = useMemo(() => {

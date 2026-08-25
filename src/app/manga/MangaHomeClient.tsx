@@ -7,9 +7,10 @@ import { Sidebar } from "@/components/Sidebar";
 import { MangaCard } from "@/components/manga/MangaCard";
 import { MangaItem } from "@/lib/manga-fetch";
 import { 
-  getMangaHistory, 
-  removeMangaProgress, 
-  syncMangaHistoryFromServer, 
+  getLocalMangaHistory, 
+  removeLocalMangaProgress, 
+  fetchServerMangaHistory, 
+  removeServerMangaProgress, 
   MangaReadingProgress 
 } from "@/lib/manga-history";
 import { fetchJson, shuffleArray } from "@/lib/utils";
@@ -27,40 +28,26 @@ import {
 } from "lucide-react";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { useSession } from "next-auth/react";
-import useSWR, { mutate } from "swr";
 
 const GENRES = [
   { label: "All", id: "", name: "" },
-  { label: "Action", id: "391b0423-d847-456f-aff0-8b040c0d0b04", name: "Action" },
-  { label: "Romance", id: "423e2eae-a7a2-4a8b-ac03-a8351462d71d", name: "Romance" },
-  { label: "Fantasy", id: "cdc58593-87dd-415e-bbc0-2ec27bf404cc", name: "Fantasy" },
-  { label: "Isekai", id: "ace04997-f6bd-4329-856c-70ab7742f351", name: "Isekai" },
-  { label: "Supernatural", id: "eabc54f9-f450-482a-b7e6-8c467a80b852", name: "Supernatural" },
-  { label: "Sci-Fi", id: "256c8bd9-4904-4503-8b03-d40d1f250238", name: "Sci-fi" },
-  { label: "Comedy", id: "4d32cc48-9f00-4cca-9b5a-a839f0764984", name: "Comedy" },
-  { label: "Mystery", id: "ee9683c4-0415-499b-aa2f-f1804aad49ca", name: "Mystery" },
-  { label: "Drama", id: "b9af3a63-f058-444f-a20d-83864c053c83", name: "Drama" },
-  { label: "Slice of Life", id: "e5301a23-ebd9-49dd-a0cb-2add944c7fe9", name: "Slice of Life" },
+  { label: "Action", id: "Action", name: "Action" },
+  { label: "Romance", id: "Romance", name: "Romance" },
+  { label: "Fantasy", id: "Fantasy", name: "Fantasy" },
+  { label: "Isekai", id: "Isekai", name: "Isekai" },
+  { label: "Supernatural", id: "Supernatural", name: "Supernatural" },
+  { label: "Sci-Fi", id: "Sci-Fi", name: "Sci-Fi" },
+  { label: "Comedy", id: "Comedy", name: "Comedy" },
+  { label: "Mystery", id: "Mystery", name: "Mystery" },
+  { label: "Drama", id: "Drama", name: "Drama" },
+  { label: "Slice of Life", id: "Slice of Life", name: "Slice of Life" },
+  { label: "Adventure", id: "Adventure", name: "Adventure" },
+  { label: "Psychological", id: "Psychological", name: "Psychological" },
+  { label: "Horror", id: "Horror", name: "Horror" },
+  { label: "Martial Arts", id: "Martial Arts", name: "Martial Arts" },
 ];
 
 const ITEMS_PER_PAGE = 24;
-const CONTINUE_READING_CACHE_KEY = "cinestream.cr_cache";
-
-const mangaHistoryFetcher = async (url: string) => {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return { items: [] };
-    const json = await res.json();
-    if (json?.items && typeof window !== "undefined") {
-      try {
-        localStorage.setItem(CONTINUE_READING_CACHE_KEY, JSON.stringify(json));
-      } catch {}
-    }
-    return json;
-  } catch {
-    return { items: [] };
-  }
-};
 
 export interface MangaHomeClientProps {
   initialTrending?: MangaItem[];
@@ -94,30 +81,6 @@ export default function MangaHomeClient({
   );
   const [isTrendingMangasLoading, setIsTrendingMangasLoading] = useState(initialMangas.length === 0);
 
-  // Instant cached items for immediate display
-  const [cachedHistory, setCachedHistory] = useState<MangaReadingProgress[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = localStorage.getItem(CONTINUE_READING_CACHE_KEY);
-      const parsed = saved ? JSON.parse(saved) : null;
-      return parsed?.items || [];
-    } catch {
-      return [];
-    }
-  });
-
-  const { data: serverHistoryData } = useSWR(
-    status === "authenticated" ? "/api/manga/history" : null,
-    mangaHistoryFetcher,
-    {
-      revalidateOnFocus: true,
-      revalidateOnMount: true,
-      dedupingInterval: 30000,
-    }
-  );
-
-  // Merge server data with localStorage for non-authenticated fallback
-  const [localHistory, setLocalHistory] = useState<MangaReadingProgress[]>([]);
   const [history, setHistory] = useState<MangaReadingProgress[]>([]);
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -196,68 +159,58 @@ export default function MangaHomeClient({
     setHasMore(true);
   }, []);
 
-  // Sync Reading History — SWR for authenticated users, localStorage for guests
-  useEffect(() => {
-    if (status === "authenticated" && serverHistoryData?.items?.length > 0) {
-      const serverItems: MangaReadingProgress[] = serverHistoryData.items.map((item: any) => ({
-        mangaId: item.mangaId,
-        mangaTitle: item.mangaTitle,
-        mangaCover: item.mangaCover,
-        mangaType: item.mangaType || "manga",
-        chapterId: item.chapterId,
-        chapterNumber: item.chapterNumber,
-        chapterTitle: item.chapterTitle,
-        pageNumber: item.pageNumber || 1,
-        totalPages: item.totalPages || 1,
-        nextChapterId: item.nextChapterId,
-        nextChapterNumber: item.nextChapterNumber,
-        updatedAt: new Date(item.updatedAt).getTime(),
-      }));
-      setHistory(serverItems);
-      setCachedHistory(serverItems);
-    } else if (status === "unauthenticated") {
-      const local = getMangaHistory();
-      setLocalHistory(local);
-      setHistory(local);
-    }
-  }, [status, serverHistoryData]);
+  // Fetch Reading History strictly according to active authentication status
+  const refreshHistory = useCallback(async () => {
+    if (status === "loading") return;
 
-  // Fallback: load from localStorage + server sync for non-auth users on mount
-  useEffect(() => {
-    if (status === "loading") {
-      const local = getMangaHistory();
-      setLocalHistory(local);
-      setHistory(local);
-      syncMangaHistoryFromServer().then((synced) => {
-        setLocalHistory(synced);
-        setHistory(synced);
-      });
-    }
-  }, [status]);
-
-  // Listen for local updates (from reader saving progress)
-  useEffect(() => {
-    const handler = () => {
-      const updated = getMangaHistory();
-      setLocalHistory(updated);
-      if (status !== "authenticated") {
-        setHistory(updated);
+    if (status === "authenticated") {
+      try {
+        const serverHistory = await fetchServerMangaHistory();
+        setHistory(serverHistory);
+      } catch (err) {
+        console.warn("[MangaHomeClient] Failed to fetch server history:", err);
+        setHistory([]);
       }
-    };
-    window.addEventListener("cinestream:manga-history-updated", handler);
-    return () => window.removeEventListener("cinestream:manga-history-updated", handler);
+    } else {
+      setHistory(getLocalMangaHistory());
+    }
   }, [status]);
+
+  useEffect(() => {
+    refreshHistory();
+
+    const handleUpdate = () => {
+      refreshHistory();
+    };
+
+    const handlePageShow = () => {
+      refreshHistory();
+    };
+
+    const handleFocus = () => {
+      refreshHistory();
+    };
+
+    window.addEventListener("cinestream:manga-history-updated", handleUpdate);
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("cinestream:manga-history-updated", handleUpdate);
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [refreshHistory]);
 
   // Handle Discard item from Continue Reading
-  const handleDiscardHistory = (e: React.MouseEvent, mangaId: string) => {
+  const handleDiscardHistory = async (e: React.MouseEvent, mangaId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    removeMangaProgress(mangaId);
     setHistory((prev) => prev.filter((item) => item.mangaId !== mangaId));
-    setCachedHistory((prev) => prev.filter((item) => item.mangaId !== mangaId));
-    // Invalidate SWR cache so next revalidation reflects the removal
     if (status === "authenticated") {
-      mutate("/api/manga/history");
+      await removeServerMangaProgress(mangaId);
+    } else {
+      removeLocalMangaProgress(mangaId);
     }
   };
 
@@ -271,7 +224,7 @@ export default function MangaHomeClient({
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Load Trending Now if not provided
+    // 1. Load Trending Now if not provided by server
     if (initialTrending.length === 0) {
       fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=16")
         .then((data) => {
@@ -285,9 +238,11 @@ export default function MangaHomeClient({
         .finally(() => {
           if (isMounted) setIsTrendingNowLoading(false);
         });
+    } else {
+      setIsTrendingNowLoading(false);
     }
 
-    // 2. Load Trending Manhwas if not provided
+    // 2. Load Trending Manhwas if not provided by server
     if (initialManhwas.length === 0) {
       fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=16")
         .then((data) => {
@@ -301,9 +256,11 @@ export default function MangaHomeClient({
         .finally(() => {
           if (isMounted) setIsTrendingManhwasLoading(false);
         });
+    } else {
+      setIsTrendingManhwasLoading(false);
     }
 
-    // 3. Load Trending Mangas if not provided
+    // 3. Load Trending Mangas if not provided by server
     if (initialMangas.length === 0) {
       fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=16")
         .then((data) => {
@@ -317,6 +274,8 @@ export default function MangaHomeClient({
         .finally(() => {
           if (isMounted) setIsTrendingMangasLoading(false);
         });
+    } else {
+      setIsTrendingMangasLoading(false);
     }
 
     return () => {
@@ -397,8 +356,8 @@ export default function MangaHomeClient({
     }
     if (debouncedSearch.trim()) return;
 
-    const genreObj = GENRES.find((g) => g.id === selectedGenre);
-    const genreName = genreObj?.name || "";
+    // selectedGenre IS the genreName now (e.g. "Action", "Romance", ...)
+    const genreName = selectedGenre;
     const cacheKey = `genre_${genreName}_${selectedType}_0`;
 
     // 1. Check in-memory client cache for instant 0ms response
@@ -416,11 +375,10 @@ export default function MangaHomeClient({
       setHasMore(true);
       try {
         const typeParam = selectedType !== "all" ? `&type=${selectedType}` : "";
-        const genreParam = selectedGenre ? `&genreId=${selectedGenre}` : "";
         const genreNameParam = genreName ? `&genreName=${encodeURIComponent(genreName)}` : "";
 
         const data = await fetchJson<{ success: boolean; items: MangaItem[] }>(
-          `/api/manga/search?limit=${ITEMS_PER_PAGE}&offset=0${typeParam}${genreParam}${genreNameParam}&sortBy=followedCount`
+          `/api/manga/search?limit=${ITEMS_PER_PAGE}&offset=0${typeParam}${genreNameParam}&sortBy=followedCount`
         );
         if (data.success) {
           const items = data.items || [];
@@ -464,12 +422,11 @@ export default function MangaHomeClient({
         }
       } else if (selectedGenre || selectedType !== "all") {
         const typeParam = selectedType !== "all" ? `&type=${selectedType}` : "";
-        const genreObj = GENRES.find((g) => g.id === selectedGenre);
-        const genreParam = selectedGenre ? `&genreId=${selectedGenre}` : "";
-        const genreNameParam = genreObj?.name ? `&genreName=${encodeURIComponent(genreObj.name)}` : "";
+        // selectedGenre IS the genreName
+        const genreNameParam = selectedGenre ? `&genreName=${encodeURIComponent(selectedGenre)}` : "";
 
         const data = await fetchJson<{ success: boolean; items: MangaItem[] }>(
-          `/api/manga/search?limit=${ITEMS_PER_PAGE}&offset=${nextOffset}${typeParam}${genreParam}${genreNameParam}&sortBy=followedCount`
+          `/api/manga/search?limit=${ITEMS_PER_PAGE}&offset=${nextOffset}${typeParam}${genreNameParam}&sortBy=followedCount`
         );
         if (data.success && data.items && data.items.length > 0) {
           setGenreResults((prev) => {

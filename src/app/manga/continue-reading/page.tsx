@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useSession, signIn } from "next-auth/react";
-import useSWR from "swr";
 import {
   Bookmark,
   Play,
@@ -15,109 +14,74 @@ import {
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import {
-  getMangaHistory,
-  removeMangaProgress,
+  getLocalMangaHistory,
+  removeLocalMangaProgress,
+  fetchServerMangaHistory,
+  removeServerMangaProgress,
   MangaReadingProgress,
 } from "@/lib/manga-history";
-
-const CACHE_KEY = "cinestream.cr_cache";
-
-const fetcher = async (url: string) => {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return { items: [] };
-    const json = await res.json();
-    if (json?.items && typeof window !== "undefined") {
-      try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(json));
-      } catch {}
-    }
-    return json;
-  } catch {
-    return { items: [] };
-  }
-};
 
 export default function ContinueReadingPage() {
   const { status } = useSession();
   const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
+  const [items, setItems] = useState<MangaReadingProgress[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [cachedItems, setCachedItems] = useState<MangaReadingProgress[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = localStorage.getItem(CACHE_KEY);
-      const parsed = saved ? JSON.parse(saved) : null;
-      return parsed?.items || [];
-    } catch {
-      return [];
-    }
-  });
+  const refreshHistory = useCallback(async () => {
+    if (status === "loading") return;
 
-  const { data, isLoading } = useSWR(
-    status === "authenticated" ? "/api/manga/history" : null,
-    fetcher,
-    {
-      revalidateOnFocus: true,
-      revalidateOnMount: true,
-      dedupingInterval: 30000,
-    }
-  );
-
-  const [localItems, setLocalItems] = useState<MangaReadingProgress[]>([]);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      setLocalItems(getMangaHistory());
-    }
-  }, [status]);
-
-  useEffect(() => {
-    const handler = () => {
-      if (status !== "authenticated") {
-        setLocalItems(getMangaHistory());
+    if (status === "authenticated") {
+      setIsLoading(true);
+      try {
+        const serverItems = await fetchServerMangaHistory();
+        setItems(serverItems);
+      } catch (err) {
+        console.warn("[ContinueReadingPage] Failed to fetch server history:", err);
+        setItems([]);
+      } finally {
+        setIsLoading(false);
       }
-    };
-    window.addEventListener("cinestream:manga-history-updated", handler);
-    return () => window.removeEventListener("cinestream:manga-history-updated", handler);
+    } else {
+      setIsLoading(false);
+      setItems(getLocalMangaHistory());
+    }
   }, [status]);
 
-  const serverItems: MangaReadingProgress[] = data?.items
-    ? data.items.map((item: any) => ({
-        mangaId: item.mangaId,
-        mangaTitle: item.mangaTitle,
-        mangaCover: item.mangaCover,
-        mangaType: item.mangaType || "manga",
-        chapterId: item.chapterId,
-        chapterNumber: item.chapterNumber,
-        chapterTitle: item.chapterTitle,
-        pageNumber: item.pageNumber || 1,
-        totalPages: item.totalPages || 1,
-        nextChapterId: item.nextChapterId,
-        nextChapterNumber: item.nextChapterNumber,
-        updatedAt: new Date(item.updatedAt).getTime(),
-      }))
-    : [];
+  useEffect(() => {
+    refreshHistory();
 
-  const rawItems =
-    status === "authenticated"
-      ? serverItems.length > 0
-        ? serverItems
-        : cachedItems
-      : localItems;
+    const handler = () => {
+      refreshHistory();
+    };
 
-  const items = useMemo(() => {
-    const sorted = [...rawItems];
+    window.addEventListener("cinestream:manga-history-updated", handler);
+    window.addEventListener("pageshow", handler);
+    window.addEventListener("focus", handler);
+
+    return () => {
+      window.removeEventListener("cinestream:manga-history-updated", handler);
+      window.removeEventListener("pageshow", handler);
+      window.removeEventListener("focus", handler);
+    };
+  }, [refreshHistory]);
+
+  const sortedItems = useMemo(() => {
+    const list = [...items];
     if (sortOrder === "oldest") {
-      sorted.sort((a, b) => a.updatedAt - b.updatedAt);
+      list.sort((a, b) => a.updatedAt - b.updatedAt);
+    } else {
+      list.sort((a, b) => b.updatedAt - a.updatedAt);
     }
-    // "latest" is already sorted by server/localStorage (descending)
-    return sorted;
-  }, [rawItems, sortOrder]);
+    return list;
+  }, [items, sortOrder]);
 
-  const handleRemove = (mangaId: string) => {
-    removeMangaProgress(mangaId);
-    setLocalItems((prev) => prev.filter((item) => item.mangaId !== mangaId));
-    setCachedItems((prev) => prev.filter((item) => item.mangaId !== mangaId));
+  const handleRemove = async (mangaId: string) => {
+    setItems((prev) => prev.filter((item) => item.mangaId !== mangaId));
+    if (status === "authenticated") {
+      await removeServerMangaProgress(mangaId);
+    } else {
+      removeLocalMangaProgress(mangaId);
+    }
   };
 
   if (status === "unauthenticated") {
@@ -237,7 +201,7 @@ export default function ContinueReadingPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {items.map((item) => (
+                {sortedItems.map((item) => (
                   <div
                     key={item.mangaId}
                     className="group relative flex flex-col justify-between p-4 rounded-3xl bg-zinc-900/90 border border-white/[0.08] hover:border-primary/50 hover:shadow-[0_12px_32px_hsl(var(--primary)/0.2)] transition-all duration-300 overflow-hidden"

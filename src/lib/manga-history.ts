@@ -1,7 +1,10 @@
 /**
  * Manga Reading History & Progress Tracker
- * Persists reading position, chapter, and page in browser localStorage and database.
- * Syncs seamlessly across all user devices when logged into your account.
+ * 
+ * Rules:
+ * - Logged-in users: read, save, and delete from Database ONLY (/api/manga/history).
+ * - Logged-out users: read, save, and delete from localStorage ONLY.
+ * - No hybrid fallback or merging.
  */
 
 export interface MangaReadingProgress {
@@ -19,8 +22,183 @@ export interface MangaReadingProgress {
   updatedAt: number;
 }
 
-const STORAGE_KEY = "cinestream.manga_history_v2";
-const READ_CHAPTERS_STORAGE_KEY = "cinestream.manga_read_chapters_v1";
+const STORAGE_KEY = "cinestream.manga_history_v3";
+const READ_CHAPTERS_STORAGE_KEY = "cinestream.manga_read_chapters_v2";
+
+// ----------------------------------------------------
+// 1. GUEST / LOCAL STORAGE OPERATIONS (Logged-out only)
+// ----------------------------------------------------
+
+/**
+ * Gets all saved manga reading progress records from localStorage (for logged-out users).
+ */
+export function getLocalMangaHistory(): MangaReadingProgress[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: MangaReadingProgress[] = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.sort((a, b) => b.updatedAt - a.updatedAt) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Gets reading progress for a single manga ID from localStorage (for logged-out users).
+ */
+export function getLocalMangaProgress(mangaId: string): MangaReadingProgress | null {
+  const history = getLocalMangaHistory();
+  return history.find((item) => item.mangaId === mangaId) || null;
+}
+
+/**
+ * Saves reading progress to localStorage (for logged-out users).
+ */
+export function saveLocalMangaProgress(progress: Omit<MangaReadingProgress, "updatedAt">): void {
+  if (typeof window === "undefined") return;
+  try {
+    const history = getLocalMangaHistory();
+    const existingIndex = history.findIndex((item) => item.mangaId === progress.mangaId);
+
+    const updatedItem: MangaReadingProgress = {
+      ...progress,
+      updatedAt: Date.now(),
+    };
+
+    let newHistory: MangaReadingProgress[];
+    if (existingIndex >= 0) {
+      newHistory = [
+        updatedItem,
+        ...history.slice(0, existingIndex),
+        ...history.slice(existingIndex + 1),
+      ];
+    } else {
+      newHistory = [updatedItem, ...history];
+    }
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory.slice(0, 30)));
+    window.dispatchEvent(new Event("cinestream:manga-history-updated"));
+  } catch (err) {
+    console.warn("[MangaHistory] Failed to save local reading progress:", err);
+  }
+}
+
+/**
+ * Clears reading progress for a specific manga from localStorage (for logged-out users).
+ */
+export function removeLocalMangaProgress(mangaId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const history = getLocalMangaHistory();
+    const filtered = history.filter((item) => item.mangaId !== mangaId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    window.dispatchEvent(new Event("cinestream:manga-history-updated"));
+  } catch (err) {
+    console.warn("[MangaHistory] Failed to remove local progress:", err);
+  }
+}
+
+// ----------------------------------------------------
+// 2. SERVER DATABASE OPERATIONS (Logged-in only)
+// ----------------------------------------------------
+
+function mapDbRowToProgress(row: any): MangaReadingProgress {
+  return {
+    mangaId: row.mangaId,
+    mangaTitle: row.mangaTitle,
+    mangaCover: row.mangaCover,
+    mangaType: row.mangaType === "manhwa" || row.mangaType === "manhua" ? row.mangaType : "manga",
+    chapterId: row.chapterId,
+    chapterNumber: String(row.chapterNumber),
+    chapterTitle: row.chapterTitle ?? null,
+    pageNumber: row.pageNumber || 1,
+    totalPages: row.totalPages || 1,
+    nextChapterId: row.nextChapterId ?? null,
+    nextChapterNumber: row.nextChapterNumber ? String(row.nextChapterNumber) : null,
+    updatedAt: typeof row.updatedAt === "number" ? row.updatedAt : new Date(row.updatedAt).getTime(),
+  };
+}
+
+/**
+ * Fetches user's reading history from server database (for logged-in users).
+ */
+export async function fetchServerMangaHistory(): Promise<MangaReadingProgress[]> {
+  if (typeof window === "undefined") return [];
+  try {
+    const res = await fetch("/api/manga/history", { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data.items)) return [];
+    return data.items.map(mapDbRowToProgress).sort((a: MangaReadingProgress, b: MangaReadingProgress) => b.updatedAt - a.updatedAt);
+  } catch (err) {
+    console.warn("[MangaHistory] Failed to fetch server history:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetches user's reading progress for a single manga from server database (for logged-in users).
+ */
+export async function fetchServerMangaProgress(mangaId: string): Promise<MangaReadingProgress | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const res = await fetch(`/api/manga/history?mangaId=${encodeURIComponent(mangaId)}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.item) return null;
+    return mapDbRowToProgress(data.item);
+  } catch (err) {
+    console.warn("[MangaHistory] Failed to fetch server progress:", err);
+    return null;
+  }
+}
+
+/**
+ * Saves or updates user's reading progress in the server database (for logged-in users).
+ */
+export async function saveServerMangaProgress(progress: Omit<MangaReadingProgress, "updatedAt">): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const res = await fetch("/api/manga/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(progress),
+    });
+    if (res.ok) {
+      window.dispatchEvent(new Event("cinestream:manga-history-updated"));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.warn("[MangaHistory] Failed to save server progress:", err);
+    return false;
+  }
+}
+
+/**
+ * Clears reading progress for a manga in the server database (for logged-in users).
+ */
+export async function removeServerMangaProgress(mangaId: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const res = await fetch(`/api/manga/history?mangaId=${encodeURIComponent(mangaId)}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      window.dispatchEvent(new Event("cinestream:manga-history-updated"));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.warn("[MangaHistory] Failed to remove server progress:", err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// 3. READ CHAPTERS TRACKER (Local helper)
+// ----------------------------------------------------
 
 /**
  * Gets all explicitly marked read chapter IDs for a manga from localStorage.
@@ -108,135 +286,4 @@ export function isChapterRead(
     }
   }
   return false;
-}
-
-/**
- * Gets all saved manga reading progress records from localStorage.
- */
-export function getMangaHistory(): MangaReadingProgress[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: MangaReadingProgress[] = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.sort((a, b) => b.updatedAt - a.updatedAt) : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Gets reading progress for a single manga ID from localStorage.
- */
-export function getMangaProgress(mangaId: string): MangaReadingProgress | null {
-  const history = getMangaHistory();
-  return history.find((item) => item.mangaId === mangaId) || null;
-}
-
-/**
- * Saves or updates reading progress for a manga in localStorage & user account database.
- */
-export function saveMangaProgress(progress: Omit<MangaReadingProgress, "updatedAt">): void {
-  if (typeof window === "undefined") return;
-  try {
-    const history = getMangaHistory();
-    const existingIndex = history.findIndex((item) => item.mangaId === progress.mangaId);
-
-    const updatedItem: MangaReadingProgress = {
-      ...progress,
-      updatedAt: Date.now(),
-    };
-
-    let newHistory: MangaReadingProgress[];
-    if (existingIndex >= 0) {
-      newHistory = [
-        updatedItem,
-        ...history.slice(0, existingIndex),
-        ...history.slice(existingIndex + 1),
-      ];
-    } else {
-      newHistory = [updatedItem, ...history];
-    }
-
-    // Keep up to 30 recent titles in local storage
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory.slice(0, 30)));
-    // Dispatch reactive event
-    window.dispatchEvent(new Event("cinestream:manga-history-updated"));
-
-    // Async sync to user account database
-    fetch("/api/manga/history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedItem),
-    }).catch(() => {});
-  } catch (err) {
-    console.warn("[MangaHistory] Failed to save reading progress:", err);
-  }
-}
-
-/**
- * Clears reading progress for a specific manga from localStorage & user account database.
- */
-export function removeMangaProgress(mangaId: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    const history = getMangaHistory();
-    const filtered = history.filter((item) => item.mangaId !== mangaId);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-    window.dispatchEvent(new Event("cinestream:manga-history-updated"));
-
-    // Async delete from database
-    fetch(`/api/manga/history?mangaId=${encodeURIComponent(mangaId)}`, {
-      method: "DELETE",
-    }).catch(() => {});
-  } catch (err) {
-    console.warn("[MangaHistory] Failed to remove progress:", err);
-  }
-}
-
-/**
- * Synchronizes history from server database on load and merges with localStorage.
- * Ensures cross-device continuity across phones, laptops, and tablets.
- */
-export async function syncMangaHistoryFromServer(): Promise<MangaReadingProgress[]> {
-  if (typeof window === "undefined") return [];
-  try {
-    const res = await fetch("/api/manga/history", { cache: "no-store" });
-    if (!res.ok) return getMangaHistory();
-    const data = await res.json();
-    if (!Array.isArray(data.items) || data.items.length === 0) {
-      return getMangaHistory();
-    }
-
-    const local = getMangaHistory();
-    const localMap = new Map(local.map((item) => [item.mangaId, item]));
-
-    for (const serverItem of data.items) {
-      const serverUpdated = new Date(serverItem.updatedAt).getTime();
-      const existing = localMap.get(serverItem.mangaId);
-      if (!existing || serverUpdated > existing.updatedAt) {
-        localMap.set(serverItem.mangaId, {
-          mangaId: serverItem.mangaId,
-          mangaTitle: serverItem.mangaTitle,
-          mangaCover: serverItem.mangaCover,
-          mangaType: serverItem.mangaType || "manga",
-          chapterId: serverItem.chapterId,
-          chapterNumber: serverItem.chapterNumber,
-          chapterTitle: serverItem.chapterTitle,
-          pageNumber: serverItem.pageNumber || 1,
-          totalPages: serverItem.totalPages || 1,
-          nextChapterId: serverItem.nextChapterId,
-          nextChapterNumber: serverItem.nextChapterNumber,
-          updatedAt: serverUpdated,
-        });
-      }
-    }
-
-    const merged = Array.from(localMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged.slice(0, 30)));
-    window.dispatchEvent(new Event("cinestream:manga-history-updated"));
-    return merged;
-  } catch {
-    return getMangaHistory();
-  }
 }

@@ -50,14 +50,22 @@ export interface ChapterPagesData {
 const WEEBCENTRAL_BASE = "https://weebcentral.com";
 const ASURA_API = "https://api.asurascans.com/api";
 
+// Bump this whenever fetch logic or data shape changes to instantly drop stale in-memory cache
+const CACHE_VERSION = "v3";
+
 // High-speed in-memory response cache
 const serverCache = new Map<string, { data: any; expiry: number }>();
+const inFlightRequests = new Map<string, Promise<any>>();
+
+function ck(key: string) {
+  return `${CACHE_VERSION}:${key}`;
+}
 
 function getFromCache<T>(key: string): T | null {
-  const item = serverCache.get(key);
+  const item = serverCache.get(ck(key));
   if (!item) return null;
   if (Date.now() > item.expiry) {
-    serverCache.delete(key);
+    serverCache.delete(ck(key));
     return null;
   }
   return item.data as T;
@@ -72,7 +80,40 @@ function setInCache(key: string, data: any, ttlSeconds = 1800): void {
       serverCache.delete(next.value);
     }
   }
-  serverCache.set(key, { data, expiry: Date.now() + ttlSeconds * 1000 });
+  serverCache.set(ck(key), { data, expiry: Date.now() + ttlSeconds * 1000 });
+}
+
+
+async function dedupeRequest<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inFlightRequests.get(key);
+  if (existing) {
+    return existing as Promise<T>;
+  }
+  const promise = fn().finally(() => {
+    inFlightRequests.delete(key);
+  });
+  inFlightRequests.set(key, promise);
+  return promise;
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 6000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8",
+        ...options.headers,
+      },
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function decodeHtmlEntities(str: string): string {
@@ -167,10 +208,10 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
  */
 async function getAsuraPopularSeries(limit = 32): Promise<MangaItem[]> {
   try {
-    const res = await fetch(`${ASURA_API}/series?page=1&limit=${limit}`, {
+    const res = await fetchWithTimeout(`${ASURA_API}/series?page=1&limit=${limit}`, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
       next: { revalidate: 1800 },
-    });
+    } as any, 5000);
     if (!res.ok) return [];
     const data = await res.json();
     const seriesList = data.data || [];
@@ -201,55 +242,77 @@ async function getAsuraPopularSeries(limit = 32): Promise<MangaItem[]> {
 }
 
 /**
- * Fetches real-time Trending Now (combined Manga + Manhwa) from WeebCentral with automatic fallbacks.
+ * Fetches real-time Trending Now with guaranteed equal Manga + Manhwa split.
+ * Fetches half from Manhwa and half from Manga in parallel, then interleaves them.
  */
 export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
   const cacheKey = `manga_trending_${limit}`;
   const cached = getFromCache<MangaItem[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
-  try {
-    const res = await fetch(
-      `${WEEBCENTRAL_BASE}/search/data?sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "HX-Request": "true",
-        },
-        next: { revalidate: 1800 },
-      }
-    );
+  return dedupeRequest(cacheKey, async () => {
+    const half = Math.ceil(limit / 2);
 
-    if (res.ok) {
-      const html = await res.text();
-      const items = parseWeebCentralHtml(html);
-      if (items.length > 0) {
-        const result = items.slice(0, limit);
+    try {
+      // Fetch Manhwa and Manga in parallel for equal representation
+      const [manhwaRes, mangaRes] = await Promise.all([
+        fetchWithTimeout(
+          `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${half}`,
+          { headers: { "HX-Request": "true" }, next: { revalidate: 1800 } } as any,
+          5000
+        ).catch(() => null),
+        fetchWithTimeout(
+          `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${half}`,
+          { headers: { "HX-Request": "true" }, next: { revalidate: 1800 } } as any,
+          5000
+        ).catch(() => null),
+      ]);
+
+      let manhwaItems: MangaItem[] = [];
+      let mangaItems: MangaItem[] = [];
+
+      if (manhwaRes && manhwaRes.ok) {
+        manhwaItems = parseWeebCentralHtml(await manhwaRes.text());
+      }
+      if (mangaRes && mangaRes.ok) {
+        mangaItems = parseWeebCentralHtml(await mangaRes.text());
+      }
+
+      // Interleave: Manhwa, Manga, Manhwa, Manga...
+      const combined: MangaItem[] = [];
+      const maxLen = Math.max(manhwaItems.length, mangaItems.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < manhwaItems.length) combined.push(manhwaItems[i]);
+        if (i < mangaItems.length) combined.push(mangaItems[i]);
+      }
+
+      if (combined.length > 0) {
+        const result = combined.slice(0, limit);
         setInCache(cacheKey, result, 1800);
         return result;
       }
+    } catch (err) {
+      console.warn("[MangaFetch] WeebCentral getMangaTrending failed:", err);
     }
-  } catch (err) {
-    console.warn("[MangaFetch] WeebCentral getMangaTrending failed:", err);
-  }
 
-  // Fallback 1: Balanced search for all types
-  try {
-    const fallbackSearch = await searchManga("", { type: "all", limit });
-    if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-      setInCache(cacheKey, fallbackSearch.items, 1200);
-      return fallbackSearch.items;
+    // Fallback 1: Balanced search (already does 50/50 interleave internally)
+    try {
+      const fallbackSearch = await searchManga("", { type: "all", limit });
+      if (fallbackSearch.items && fallbackSearch.items.length > 0) {
+        setInCache(cacheKey, fallbackSearch.items, 1200);
+        return fallbackSearch.items;
+      }
+    } catch {}
+
+    // Fallback 2: Asura Scans popular manhwas
+    const asuraItems = await getAsuraPopularSeries(limit);
+    if (asuraItems.length > 0) {
+      setInCache(cacheKey, asuraItems, 1200);
+      return asuraItems;
     }
-  } catch {}
 
-  // Fallback 2: Asura Scans popular manhwas
-  const asuraItems = await getAsuraPopularSeries(limit);
-  if (asuraItems.length > 0) {
-    setInCache(cacheKey, asuraItems, 1200);
-    return asuraItems;
-  }
-
-  return [];
+    return [];
+  });
 }
 
 /**
@@ -260,48 +323,50 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
   const cached = getFromCache<MangaItem[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
-  try {
-    const res = await fetch(
-      `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "HX-Request": "true",
-        },
-        next: { revalidate: 1800 },
+  return dedupeRequest(cacheKey, async () => {
+    try {
+      const res = await fetchWithTimeout(
+        `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
+        {
+          headers: {
+            "HX-Request": "true",
+          },
+          next: { revalidate: 1800 },
+        } as any,
+        5000
+      );
+
+      if (res.ok) {
+        const html = await res.text();
+        const items = parseWeebCentralHtml(html);
+        if (items.length > 0) {
+          const result = items.slice(0, limit);
+          setInCache(cacheKey, result, 1800);
+          return result;
+        }
       }
-    );
+    } catch (err) {
+      console.warn("[MangaFetch] WeebCentral getPopularManhwa failed:", err);
+    }
 
-    if (res.ok) {
-      const html = await res.text();
-      const items = parseWeebCentralHtml(html);
-      if (items.length > 0) {
-        const result = items.slice(0, limit);
-        setInCache(cacheKey, result, 1800);
-        return result;
+    // Fallback 1: Asura Scans dedicated series API
+    const asuraItems = await getAsuraPopularSeries(limit);
+    if (asuraItems.length > 0) {
+      setInCache(cacheKey, asuraItems, 1200);
+      return asuraItems;
+    }
+
+    // Fallback 2: searchManga for manhwa
+    try {
+      const fallbackSearch = await searchManga("", { type: "manhwa", limit });
+      if (fallbackSearch.items && fallbackSearch.items.length > 0) {
+        setInCache(cacheKey, fallbackSearch.items, 1200);
+        return fallbackSearch.items;
       }
-    }
-  } catch (err) {
-    console.warn("[MangaFetch] WeebCentral getPopularManhwa failed:", err);
-  }
+    } catch {}
 
-  // Fallback 1: Asura Scans dedicated series API
-  const asuraItems = await getAsuraPopularSeries(limit);
-  if (asuraItems.length > 0) {
-    setInCache(cacheKey, asuraItems, 1200);
-    return asuraItems;
-  }
-
-  // Fallback 2: searchManga for manhwa
-  try {
-    const fallbackSearch = await searchManga("", { type: "manhwa", limit });
-    if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-      setInCache(cacheKey, fallbackSearch.items, 1200);
-      return fallbackSearch.items;
-    }
-  } catch {}
-
-  return [];
+    return [];
+  });
 }
 
 /**
@@ -312,41 +377,43 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
   const cached = getFromCache<MangaItem[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
-  try {
-    const res = await fetch(
-      `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "HX-Request": "true",
-        },
-        next: { revalidate: 1800 },
+  return dedupeRequest(cacheKey, async () => {
+    try {
+      const res = await fetchWithTimeout(
+        `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
+        {
+          headers: {
+            "HX-Request": "true",
+          },
+          next: { revalidate: 1800 },
+        } as any,
+        5000
+      );
+
+      if (res.ok) {
+        const html = await res.text();
+        const items = parseWeebCentralHtml(html);
+        if (items.length > 0) {
+          const result = items.slice(0, limit);
+          setInCache(cacheKey, result, 1800);
+          return result;
+        }
       }
-    );
+    } catch (err) {
+      console.warn("[MangaFetch] WeebCentral getLatestMangaUpdates failed:", err);
+    }
 
-    if (res.ok) {
-      const html = await res.text();
-      const items = parseWeebCentralHtml(html);
-      if (items.length > 0) {
-        const result = items.slice(0, limit);
-        setInCache(cacheKey, result, 1800);
-        return result;
+    // Fallback: searchManga for manga
+    try {
+      const fallbackSearch = await searchManga("", { type: "manga", limit });
+      if (fallbackSearch.items && fallbackSearch.items.length > 0) {
+        setInCache(cacheKey, fallbackSearch.items, 1200);
+        return fallbackSearch.items;
       }
-    }
-  } catch (err) {
-    console.warn("[MangaFetch] WeebCentral getLatestMangaUpdates failed:", err);
-  }
+    } catch {}
 
-  // Fallback: searchManga for manga
-  try {
-    const fallbackSearch = await searchManga("", { type: "manga", limit });
-    if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-      setInCache(cacheKey, fallbackSearch.items, 1200);
-      return fallbackSearch.items;
-    }
-  } catch {}
-
-  return [];
+    return [];
+  });
 }
 
 /**
@@ -355,10 +422,10 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
 async function searchAsura(query: string): Promise<MangaItem[]> {
   if (!query?.trim()) return [];
   try {
-    const res = await fetch(`${ASURA_API}/search?q=${encodeURIComponent(query.trim())}`, {
+    const res = await fetchWithTimeout(`${ASURA_API}/search?q=${encodeURIComponent(query.trim())}`, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
       next: { revalidate: 1800 },
-    });
+    } as any, 5000);
     if (!res.ok) return [];
     const data = await res.json();
     const seriesList = data.data || [];
@@ -393,7 +460,7 @@ export async function searchManga(
     type?: "all" | "manga" | "manhwa" | "manhua";
     limit?: number;
     offset?: number;
-    sortBy?: "followedCount" | "relevance" | "latestUploadedChapter" | "rating";
+    sortBy?: "followedCount" | "relevance" | "latestUploadedChapter" | "rating" | "latest";
     genreId?: string;
     genreName?: string;
   }
@@ -408,135 +475,144 @@ export async function searchManga(
   const cached = getFromCache<{ items: MangaItem[]; total: number }>(cacheKey);
   if (cached && cached.items && cached.items.length > 0) return cached;
 
-  try {
-    const tagParam = genreName ? `&included_tag=${encodeURIComponent(genreName)}` : "";
-    const textParam = query?.trim() ? `&text=${encodeURIComponent(query.trim())}` : "";
+  return dedupeRequest(cacheKey, async () => {
+    try {
+      const tagParam = genreName ? `&included_tag=${encodeURIComponent(genreName)}` : "";
+      const textParam = query?.trim() ? `&text=${encodeURIComponent(query.trim())}` : "";
 
-    // 1. Text Search Mode: Query directly for the keyword
-    if (query?.trim()) {
-      const typeParam =
-        type === "manhwa"
-          ? "&included_type=Manhwa"
-          : type === "manga"
-          ? "&included_type=Manga"
-          : "";
-
-      const res = await fetch(
-        `${WEEBCENTRAL_BASE}/search/data?sort=Subscribers&order=Descending${typeParam}${tagParam}${textParam}&adult=False&offset=${offset}&limit=${limit}`,
-        {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "HX-Request": "true",
-          },
-          cache: "no-store",
-        }
-      );
-
-      if (res.ok) {
-        const html = await res.text();
-        const items = parseWeebCentralHtml(html);
-        if (items.length > 0) {
-          const result = { items: items.slice(0, limit), total: 500 };
-          setInCache(cacheKey, result, 1200);
-          return result;
-        }
+      let sortParam = "&sort=Subscribers&order=Descending";
+      if (sortBy === "latestUploadedChapter" || sortBy === "latest") {
+        sortParam = "&sort=Latest%20Update&order=Descending";
+      } else if (sortBy === "rating" || sortBy === "relevance") {
+        sortParam = "&sort=Popularity&order=Descending";
       }
 
-      // Secondary fallback to Asura Scans search if 0 results
-      const asuraResults = await searchAsura(query.trim());
-      if (asuraResults.length > 0) {
-        const result = { items: asuraResults.slice(0, limit), total: asuraResults.length };
-        setInCache(cacheKey, result, 1200);
-        return result;
-      }
-    } else if (type === "all") {
-      // 2. Browse Mode (no search text, type=all): Equal 50/50 balanced combination
-      const halfLimit = Math.max(12, Math.ceil(limit / 2));
-      const halfOffset = Math.floor(offset / 2);
+      // 1. Text Search Mode: Query directly for the keyword
+      if (query?.trim()) {
+        const typeParam =
+          type === "manhwa"
+            ? "&included_type=Manhwa"
+            : type === "manga"
+            ? "&included_type=Manga"
+            : "";
 
-      const [manhwaRes, mangaRes] = await Promise.all([
-        fetch(
-          `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa${tagParam}&sort=Subscribers&order=Descending&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
+        const res = await fetchWithTimeout(
+          `${WEEBCENTRAL_BASE}/search/data?official=Any&anime=Any&adult=False${sortParam}${typeParam}${tagParam}${textParam}&offset=${offset}&limit=${limit}`,
           {
             headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
               "HX-Request": "true",
             },
             cache: "no-store",
-          }
-        ).catch(() => null),
-        fetch(
-          `${WEEBCENTRAL_BASE}/search/data?included_type=Manga${tagParam}&sort=Subscribers&order=Descending&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
-          {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-              "HX-Request": "true",
-            },
-            cache: "no-store",
-          }
-        ).catch(() => null),
-      ]);
-
-      let manhwaItems: MangaItem[] = [];
-      let mangaItems: MangaItem[] = [];
-
-      if (manhwaRes && manhwaRes.ok) {
-        const html = await manhwaRes.text();
-        manhwaItems = parseWeebCentralHtml(html);
-      }
-      if (mangaRes && mangaRes.ok) {
-        const html = await mangaRes.text();
-        mangaItems = parseWeebCentralHtml(html);
-      }
-
-      // Interleave equally (Manhwa, Manga, Manhwa, Manga...)
-      const combined: MangaItem[] = [];
-      const maxLen = Math.max(manhwaItems.length, mangaItems.length);
-      for (let i = 0; i < maxLen; i++) {
-        if (i < manhwaItems.length) combined.push(manhwaItems[i]);
-        if (i < mangaItems.length) combined.push(mangaItems[i]);
-      }
-
-      if (combined.length > 0) {
-        const result = { items: combined.slice(0, limit), total: 500 };
-        setInCache(cacheKey, result, 1200);
-        return result;
-      }
-    } else {
-      // 3. Browse Mode with specific type filter (Manga or Manhwa)
-      const typeParam =
-        type === "manhwa"
-          ? "&included_type=Manhwa"
-          : type === "manga"
-          ? "&included_type=Manga"
-          : "";
-
-      const res = await fetch(
-        `${WEEBCENTRAL_BASE}/search/data?sort=Subscribers&order=Descending${typeParam}${tagParam}&adult=False&offset=${offset}&limit=${limit}`,
-        {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "HX-Request": "true",
           },
-          cache: "no-store",
-        }
-      );
+          6000
+        );
 
-      if (res.ok) {
-        const html = await res.text();
-        const items = parseWeebCentralHtml(html);
-        if (items.length > 0) {
-          const result = { items: items.slice(0, limit), total: 500 };
+        if (res.ok) {
+          const html = await res.text();
+          const items = parseWeebCentralHtml(html);
+          if (items.length > 0) {
+            const result = { items: items.slice(0, limit), total: 500 };
+            setInCache(cacheKey, result, 1200);
+            return result;
+          }
+        }
+
+        // Secondary fallback to Asura Scans search if 0 results
+        const asuraResults = await searchAsura(query.trim());
+        if (asuraResults.length > 0) {
+          const result = { items: asuraResults.slice(0, limit), total: asuraResults.length };
           setInCache(cacheKey, result, 1200);
           return result;
         }
+      } else if (type === "all") {
+        // 2. Browse Mode (no search text, type=all): Equal 50/50 balanced combination
+        const halfLimit = Math.max(12, Math.ceil(limit / 2));
+        const halfOffset = Math.floor(offset / 2);
+
+        const [manhwaRes, mangaRes] = await Promise.all([
+          fetchWithTimeout(
+            `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa${tagParam}${sortParam}&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
+            {
+              headers: {
+                "HX-Request": "true",
+              },
+              cache: "no-store",
+            },
+            5000
+          ).catch(() => null),
+          fetchWithTimeout(
+            `${WEEBCENTRAL_BASE}/search/data?included_type=Manga${tagParam}${sortParam}&adult=False&offset=${halfOffset}&limit=${halfLimit}`,
+            {
+              headers: {
+                "HX-Request": "true",
+              },
+              cache: "no-store",
+            },
+            5000
+          ).catch(() => null),
+        ]);
+
+        let manhwaItems: MangaItem[] = [];
+        let mangaItems: MangaItem[] = [];
+
+        if (manhwaRes && manhwaRes.ok) {
+          const html = await manhwaRes.text();
+          manhwaItems = parseWeebCentralHtml(html);
+        }
+        if (mangaRes && mangaRes.ok) {
+          const html = await mangaRes.text();
+          mangaItems = parseWeebCentralHtml(html);
+        }
+
+        // Interleave equally (Manhwa, Manga, Manhwa, Manga...)
+        const combined: MangaItem[] = [];
+        const maxLen = Math.max(manhwaItems.length, mangaItems.length);
+        for (let i = 0; i < maxLen; i++) {
+          if (i < manhwaItems.length) combined.push(manhwaItems[i]);
+          if (i < mangaItems.length) combined.push(mangaItems[i]);
+        }
+
+        if (combined.length > 0) {
+          const result = { items: combined.slice(0, limit), total: 500 };
+          setInCache(cacheKey, result, 1200);
+          return result;
+        }
+      } else {
+        // 3. Browse Mode with specific type filter (Manga or Manhwa)
+        const typeParam =
+          type === "manhwa"
+            ? "&included_type=Manhwa"
+            : type === "manga"
+            ? "&included_type=Manga"
+            : "";
+
+        const res = await fetchWithTimeout(
+          `${WEEBCENTRAL_BASE}/search/data?official=Any&anime=Any&adult=False${sortParam}${typeParam}${tagParam}&offset=${offset}&limit=${limit}`,
+          {
+            headers: {
+              "HX-Request": "true",
+            },
+            cache: "no-store",
+          },
+          6000
+        );
+
+        if (res.ok) {
+          const html = await res.text();
+          const items = parseWeebCentralHtml(html);
+          if (items.length > 0) {
+            const result = { items: items.slice(0, limit), total: 500 };
+            setInCache(cacheKey, result, 1200);
+            return result;
+          }
+        }
       }
+    } catch (err) {
+      console.warn("[MangaFetch] WeebCentral search failed:", err);
     }
-  } catch (err) {
-    console.warn("[MangaFetch] WeebCentral search failed:", err);
-  }
 
-  return { items: [], total: 0 };
+    return { items: [], total: 0 };
+  });
 }
 
 /**
@@ -547,106 +623,104 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
   const cached = getFromCache<MangaItem>(cacheKey);
   if (cached) return cached;
 
-  // Asura Scans details
-  if (id.startsWith("asura-")) {
-    const slug = id.replace(/^asura-/, "");
+  return dedupeRequest(cacheKey, async () => {
+    // Asura Scans details
+    if (id.startsWith("asura-")) {
+      const slug = id.replace(/^asura-/, "");
+      try {
+        const res = await fetchWithTimeout(`${ASURA_API}/series/${slug}`, {
+          next: { revalidate: 1800 },
+        } as any, 5000);
+        if (res.ok) {
+          const data = await res.json();
+          const s = data.series || data.data || data;
+          const item: MangaItem = {
+            id: `asura-${slug}`,
+            title: decodeHtmlEntities(s.title || slug),
+            altTitles: s.alt_titles || [],
+            description: decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) || `Read ${s.title || slug} on CineStream.`,
+            coverImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
+            bannerImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
+            type: "manhwa",
+            status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
+            releaseYear: s.release_year || null,
+            tags: (s.genres || ["Action", "Manhwa", "Fantasy"]).map((g: any) => typeof g === "string" ? g : g.name || "Action"),
+            contentRating: "safe",
+            originalLanguage: "ko",
+            source: "asura",
+          };
+          setInCache(cacheKey, item, 1800);
+          return item;
+        }
+      } catch (err) {
+        console.warn(`[MangaFetch] Asura getMangaDetails failed for ${id}:`, err);
+      }
+      return null;
+    }
+
+    // WeebCentral details
+    const rawId = id.replace(/^wc-/, "");
     try {
-      const res = await fetch(`${ASURA_API}/series/${slug}`, {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      const res = await fetchWithTimeout(`${WEEBCENTRAL_BASE}/series/${rawId}`, {
         next: { revalidate: 1800 },
-      });
+      } as any, 6000);
       if (res.ok) {
-        const data = await res.json();
-        const s = data.series || data.data || data;
+        const html = await res.text();
+        const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title>([^<|]+)/i);
+        const rawTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").trim() : "Manga";
+        const title = decodeHtmlEntities(rawTitle);
+        const descMatch =
+          html.match(/<strong>Description<\/strong>\s*<p[^>]*>([\s\S]*?)<\/p>/i) ||
+          html.match(/<p class="[^"]*whitespace-pre-wrap[^"]*">([\s\S]*?)<\/p>/i) ||
+          html.match(/<p class="[^"]*leading-relaxed[^"]*">([\s\S]*?)<\/p>/i);
+        const rawDescription = descMatch && descMatch[1]
+          ? descMatch[1].replace(/<[^>]+>/g, "").trim()
+          : `Read ${title} on CineStream.`;
+        const description = decodeHtmlEntities(rawDescription);
+        const coverMatch = html.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/i);
+        const coverImage = coverMatch ? coverMatch[0] : "/icon-512.png";
+
+        const yearMatch = html.match(/<strong>Year:<\/strong>\s*<span>(\d+)<\/span>/i);
+        const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : null;
+
+        const statusMatch = html.match(/<strong>Status:<\/strong>\s*<span>([^<]+)<\/span>/i);
+        const status = (statusMatch ? statusMatch[1].trim().toLowerCase() : "ongoing") as any;
+
+        const typeMatch = html.match(/<strong>Type:<\/strong>\s*<span>([^<]+)<\/span>/i);
+        const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "manga";
+        let type: "manga" | "manhwa" | "manhua" = "manga";
+        if (rawType.includes("manhwa")) type = "manhwa";
+        else if (rawType.includes("manhua")) type = "manhua";
+
+        const tagsMatch = html.match(/<strong>Tag\(s\):<\/strong>([\s\S]*?)<\/div>/i);
+        const tags = tagsMatch
+          ? [...tagsMatch[1].matchAll(/<span>([^<,]+),?<\/span>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
+          : ["Action", "Webtoon"];
+
         const item: MangaItem = {
-          id: `asura-${slug}`,
-          title: decodeHtmlEntities(s.title || slug),
-          altTitles: s.alt_titles || [],
-          description: decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) || `Read ${s.title || slug} on CineStream.`,
-          coverImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
-          bannerImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
-          type: "manhwa",
-          status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
-          releaseYear: s.release_year || null,
-          tags: (s.genres || ["Action", "Manhwa", "Fantasy"]).map((g: any) => typeof g === "string" ? g : g.name || "Action"),
+          id: `wc-${rawId}`,
+          title,
+          description,
+          coverImage,
+          bannerImage: coverImage,
+          type,
+          status,
+          releaseYear,
+          tags,
           contentRating: "safe",
-          originalLanguage: "ko",
-          source: "asura",
+          originalLanguage: "en",
+          source: "weebcentral",
         };
+
         setInCache(cacheKey, item, 1800);
         return item;
       }
     } catch (err) {
-      console.warn(`[MangaFetch] Asura getMangaDetails failed for ${id}:`, err);
+      console.warn(`[MangaFetch] WeebCentral getMangaDetails failed for ${id}:`, err);
     }
+
     return null;
-  }
-
-  // WeebCentral details
-  const rawId = id.replace(/^wc-/, "");
-  try {
-    const res = await fetch(`${WEEBCENTRAL_BASE}/series/${rawId}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-      next: { revalidate: 1800 },
-    });
-    if (res.ok) {
-      const html = await res.text();
-      const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title>([^<|]+)/i);
-      const rawTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").trim() : "Manga";
-      const title = decodeHtmlEntities(rawTitle);
-      const descMatch =
-        html.match(/<strong>Description<\/strong>\s*<p[^>]*>([\s\S]*?)<\/p>/i) ||
-        html.match(/<p class="[^"]*whitespace-pre-wrap[^"]*">([\s\S]*?)<\/p>/i) ||
-        html.match(/<p class="[^"]*leading-relaxed[^"]*">([\s\S]*?)<\/p>/i);
-      const rawDescription = descMatch && descMatch[1]
-        ? descMatch[1].replace(/<[^>]+>/g, "").trim()
-        : `Read ${title} on CineStream.`;
-      const description = decodeHtmlEntities(rawDescription);
-      const coverMatch = html.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/i);
-      const coverImage = coverMatch ? coverMatch[0] : "/icon-512.png";
-
-      const yearMatch = html.match(/<strong>Year:<\/strong>\s*<span>(\d+)<\/span>/i);
-      const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : null;
-
-      const statusMatch = html.match(/<strong>Status:<\/strong>\s*<span>([^<]+)<\/span>/i);
-      const status = (statusMatch ? statusMatch[1].trim().toLowerCase() : "ongoing") as any;
-
-      const typeMatch = html.match(/<strong>Type:<\/strong>\s*<span>([^<]+)<\/span>/i);
-      const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "manga";
-      let type: "manga" | "manhwa" | "manhua" = "manga";
-      if (rawType.includes("manhwa")) type = "manhwa";
-      else if (rawType.includes("manhua")) type = "manhua";
-
-      const tagsMatch = html.match(/<strong>Tag\(s\):<\/strong>([\s\S]*?)<\/div>/i);
-      const tags = tagsMatch
-        ? [...tagsMatch[1].matchAll(/<span>([^<,]+),?<\/span>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
-        : ["Action", "Webtoon"];
-
-      const item: MangaItem = {
-        id: `wc-${rawId}`,
-        title,
-        description,
-        coverImage,
-        bannerImage: coverImage,
-        type,
-        status,
-        releaseYear,
-        tags,
-        contentRating: "safe",
-        originalLanguage: "en",
-        source: "weebcentral",
-      };
-
-      setInCache(cacheKey, item, 1800);
-      return item;
-    }
-  } catch (err) {
-    console.warn(`[MangaFetch] WeebCentral getMangaDetails failed for ${id}:`, err);
-  }
-
-  return null;
+  });
 }
 
 /**
@@ -658,52 +732,53 @@ async function fetchWeebCentralChapters(seriesId: string): Promise<MangaChapter[
   const cached = getFromCache<MangaChapter[]>(cacheKey);
   if (cached) return cached;
 
-  try {
-    const res = await fetch(`${WEEBCENTRAL_BASE}/series/${rawId}/full-chapter-list`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "HX-Request": "true",
-      },
-      next: { revalidate: 900 },
-    });
-    if (!res.ok) return [];
-    const html = await res.text();
+  return dedupeRequest(cacheKey, async () => {
+    try {
+      const res = await fetchWithTimeout(`${WEEBCENTRAL_BASE}/series/${rawId}/full-chapter-list`, {
+        headers: {
+          "HX-Request": "true",
+        },
+        next: { revalidate: 900 },
+      } as any, 6000);
+      if (!res.ok) return [];
+      const html = await res.text();
 
-    const items = html.split('<a href="/chapters/');
-    const chapters: MangaChapter[] = [];
+      const items = html.split('<a href="/chapters/');
+      const chapters: MangaChapter[] = [];
 
-    for (const block of items.slice(1)) {
-      const idMatch = block.match(/^([^"]+)"/);
-      if (!idMatch) continue;
-      const chId = `wc-${idMatch[1]}`;
+      for (const block of items.slice(1)) {
+        const idMatch = block.match(/^([^"]+)"/);
+        if (!idMatch) continue;
+        const chId = `wc-${idMatch[1]}`;
 
-      const titleMatch = block.match(/<span class="">([^<]+)<\/span>/);
-      const name = titleMatch ? titleMatch[1].trim() : "Chapter";
-      const numMatch = name.match(/(\d+(\.\d+)?)/);
-      const chNum = numMatch ? numMatch[1] : "0";
+        const titleMatch = block.match(/<span class="">([^<]+)<\/span>/);
+        const name = titleMatch ? titleMatch[1].trim() : "Chapter";
+        const numMatch = name.match(/(\d+(\.\d+)?)/);
+        const chNum = numMatch ? numMatch[1] : "0";
 
-      // Extract real actual publication datetime from <time datetime="...">
-      const timeMatch = block.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i);
-      const publishAt = timeMatch && timeMatch[1] ? timeMatch[1].trim() : "";
+        // Extract real actual publication datetime from <time datetime="...">
+        const timeMatch = block.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i);
+        const publishAt = timeMatch && timeMatch[1] ? timeMatch[1].trim() : "";
 
-      chapters.push({
-        id: chId,
-        chapterNumber: chNum,
-        title: name,
-        language: "en",
-        pagesCount: 1,
-        publishAt,
-        scanlationGroup: "WeebCentral",
-        source: "weebcentral",
-      });
+        chapters.push({
+          id: chId,
+          chapterNumber: chNum,
+          title: name,
+          language: "en",
+          pagesCount: 1,
+          publishAt,
+          scanlationGroup: "WeebCentral",
+          source: "weebcentral",
+        });
+      }
+
+      setInCache(cacheKey, chapters, 900);
+      return chapters;
+    } catch (err) {
+      console.warn("[MangaFetch] fetchWeebCentralChapters failed:", err);
+      return [];
     }
-
-    setInCache(cacheKey, chapters, 900);
-    return chapters;
-  } catch (err) {
-    console.warn("[MangaFetch] fetchWeebCentralChapters failed:", err);
-    return [];
-  }
+  });
 }
 
 /**
@@ -714,32 +789,33 @@ async function fetchAsuraChapters(seriesSlug: string): Promise<MangaChapter[]> {
   const cached = getFromCache<MangaChapter[]>(cacheKey);
   if (cached) return cached;
 
-  try {
-    const res = await fetch(`${ASURA_API}/series/${seriesSlug}/chapters`, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-      next: { revalidate: 900 },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const list = data.data || [];
+  return dedupeRequest(cacheKey, async () => {
+    try {
+      const res = await fetchWithTimeout(`${ASURA_API}/series/${seriesSlug}/chapters`, {
+        next: { revalidate: 900 },
+      } as any, 5000);
+      if (!res.ok) return [];
+      const data = await res.json();
+      const list = data.data || [];
 
-    const chapters: MangaChapter[] = list.map((c: any) => ({
-      id: `asura-${seriesSlug}---${c.slug || `chapter-${c.number}`}`,
-      chapterNumber: String(c.number || 0),
-      title: `Chapter ${c.number || 0}`,
-      language: "en",
-      pagesCount: c.page_count || 1,
-      publishAt: c.published_at || c.created_at || "",
-      scanlationGroup: "Asura Scans",
-      source: "asura" as const,
-    }));
+      const chapters: MangaChapter[] = list.map((c: any) => ({
+        id: `asura-${seriesSlug}---${c.slug || `chapter-${c.number}`}`,
+        chapterNumber: String(c.number || 0),
+        title: `Chapter ${c.number || 0}`,
+        language: "en",
+        pagesCount: c.page_count || 1,
+        publishAt: c.published_at || c.created_at || "",
+        scanlationGroup: "Asura Scans",
+        source: "asura" as const,
+      }));
 
-    setInCache(cacheKey, chapters, 900);
-    return chapters;
-  } catch (err) {
-    console.warn(`[MangaFetch] fetchAsuraChapters failed for ${seriesSlug}:`, err);
-    return [];
-  }
+      setInCache(cacheKey, chapters, 900);
+      return chapters;
+    } catch (err) {
+      console.warn(`[MangaFetch] fetchAsuraChapters failed for ${seriesSlug}:`, err);
+      return [];
+    }
+  });
 }
 
 /**
@@ -778,10 +854,9 @@ export async function getChapterPages(
     const chapterSlug = parts[1];
 
     try {
-      const res = await fetch(`${ASURA_API}/series/${seriesSlug}/chapters/${chapterSlug}`, {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      const res = await fetchWithTimeout(`${ASURA_API}/series/${seriesSlug}/chapters/${chapterSlug}`, {
         cache: "no-store",
-      });
+      }, 5000);
       if (!res.ok) return null;
       const data = await res.json();
       const pages = data.data?.chapter?.pages || [];
@@ -805,21 +880,17 @@ export async function getChapterPages(
   // 2. WeebCentral chapter pages
   const rawId = chapterId.replace(/^wc-/, "");
   try {
-    let res = await fetch(`${WEEBCENTRAL_BASE}/chapters/${rawId}/images?reading_style=long_strip`, {
+    let res = await fetchWithTimeout(`${WEEBCENTRAL_BASE}/chapters/${rawId}/images?reading_style=long_strip`, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "HX-Request": "true",
       },
       cache: "no-store",
-    });
+    }, 6000);
 
     if (!res.ok) {
-      res = await fetch(`${WEEBCENTRAL_BASE}/chapters/${rawId}`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
+      res = await fetchWithTimeout(`${WEEBCENTRAL_BASE}/chapters/${rawId}`, {
         cache: "no-store",
-      });
+      }, 6000);
     }
 
     if (res.ok) {

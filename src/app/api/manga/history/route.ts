@@ -11,24 +11,46 @@ const SaveMangaProgressSchema = z.object({
   mangaId: z.string(),
   mangaTitle: z.string(),
   mangaCover: z.string(),
-  mangaType: z.enum(["manga", "manhwa", "manhua"]).default("manga"),
+  mangaType: z.string().optional().transform((val) => {
+    if (val === "manhwa" || val === "manhua") return val;
+    return "manga";
+  }),
   chapterId: z.string(),
-  chapterNumber: z.string(),
+  chapterNumber: z.union([z.string(), z.number()]).transform(String),
   chapterTitle: z.string().nullable().optional(),
   pageNumber: z.number().int().default(1),
   totalPages: z.number().int().default(1),
   nextChapterId: z.string().nullable().optional(),
-  nextChapterNumber: z.string().nullable().optional(),
+  nextChapterNumber: z.union([z.string(), z.number()]).transform(String).nullable().optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return Response.json({ items: [] });
+      return Response.json({ items: [], item: null });
     }
 
+    const url = new URL(request.url);
+    const mangaId = url.searchParams.get("mangaId");
+
     const db = getDb();
+
+    if (mangaId) {
+      const rows = await db
+        .select()
+        .from(mangaReadingHistory)
+        .where(
+          and(
+            eq(mangaReadingHistory.userId, session.user.id),
+            eq(mangaReadingHistory.mangaId, mangaId)
+          )
+        )
+        .limit(1);
+
+      return Response.json({ item: rows[0] || null });
+    }
+
     const rows = await db
       .select()
       .from(mangaReadingHistory)
@@ -39,7 +61,7 @@ export async function GET() {
     return Response.json({ items: rows });
   } catch (err: any) {
     console.warn("[API/manga/history] GET failed:", err);
-    return Response.json({ items: [] });
+    return Response.json({ items: [], item: null });
   }
 }
 

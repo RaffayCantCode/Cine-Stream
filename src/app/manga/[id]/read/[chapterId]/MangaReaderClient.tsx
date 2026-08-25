@@ -3,11 +3,13 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { MangaItem, MangaChapter, ChapterPagesData } from "@/lib/manga-fetch";
 import {
-  saveMangaProgress,
-  getMangaProgress,
-  syncMangaHistoryFromServer,
+  getLocalMangaProgress,
+  saveLocalMangaProgress,
+  fetchServerMangaProgress,
+  saveServerMangaProgress,
   markChapterAsRead,
 } from "@/lib/manga-history";
 import { fetchJson } from "@/lib/utils";
@@ -46,6 +48,9 @@ export default function MangaReaderClient({
   initialChapters = [],
   initialPages = null,
 }: MangaReaderClientProps) {
+  const { data: session, status: authStatus } = useSession();
+  const isAuthed = authStatus === "authenticated" && !!session?.user?.id;
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -69,6 +74,9 @@ export default function MangaReaderClient({
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const touchStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const initialSaveDoneRef = useRef(false);
+  const lastSavedPageRef = useRef<number>(1);
 
   usePageContentReady(!isLoading);
 
@@ -206,52 +214,113 @@ export default function MangaReaderClient({
   // Total pages count
   const totalPages = pagesData?.pageUrls?.length || 0;
 
-  // Save Reading Progress
-  const updateProgress = useCallback(
+  // Persist Reading Progress strictly based on active authentication state
+  const persistProgress = useCallback(
     (page: number) => {
-      if (!manga || !currentChapter || totalPages <= 0) return;
-      saveMangaProgress({
-        mangaId: manga.id,
-        mangaTitle: manga.title,
-        mangaCover: manga.coverImage,
-        mangaType: manga.type,
-        chapterId: currentChapter.id,
-        chapterNumber: currentChapter.chapterNumber,
-        chapterTitle: currentChapter.title,
+      if (authStatus === "loading") return;
+
+      const resolvedTitle = manga?.title || queryTitle || "Manga";
+      const resolvedCover = manga?.coverImage || "";
+      const resolvedType = (manga?.type === "manhwa" || manga?.type === "manhua") ? manga.type : "manga";
+      const resolvedChapterNumber = currentChapter?.chapterNumber || queryCh || "1";
+      const resolvedChapterTitle = currentChapter?.title || null;
+      const resolvedTotalPages = totalPages > 0 ? totalPages : 1;
+
+      const payload = {
+        mangaId,
+        mangaTitle: resolvedTitle,
+        mangaCover: resolvedCover,
+        mangaType: resolvedType as "manga" | "manhwa" | "manhua",
+        chapterId,
+        chapterNumber: resolvedChapterNumber,
+        chapterTitle: resolvedChapterTitle,
         pageNumber: page,
-        totalPages,
+        totalPages: resolvedTotalPages,
         nextChapterId: nextChapter ? nextChapter.id : null,
         nextChapterNumber: nextChapter ? nextChapter.chapterNumber : null,
-      });
-      markChapterAsRead(manga.id, currentChapter.id, currentChapter.chapterNumber);
+      };
+
+      if (isAuthed) {
+        saveServerMangaProgress(payload);
+      } else {
+        saveLocalMangaProgress(payload);
+      }
+
+      markChapterAsRead(mangaId, chapterId, resolvedChapterNumber);
     },
-    [manga, currentChapter, totalPages, nextChapter]
+    [authStatus, isAuthed, manga, queryTitle, currentChapter, queryCh, totalPages, mangaId, chapterId, nextChapter]
   );
 
-  // Sync initial page or saved page on mount (local + cloud account sync)
-  // Also re-saves progress on mount so the manga moves to the top of Continue Reading
+  // PHASE 1: Immediately write a stub entry the moment auth state resolves.
+  // This guarantees Continue Reading appears right away even before pages load.
+  const stubSavedRef = useRef(false);
   useEffect(() => {
-    if (totalPages > 0) {
-      const saved = getMangaProgress(mangaId);
-      if (saved && saved.chapterId === chapterId && saved.pageNumber <= totalPages) {
-        setCurrentPage(saved.pageNumber);
-        // Re-save to bump updatedAt so this manga moves to the top of Continue Reading
-        updateProgress(saved.pageNumber);
-      } else {
-        syncMangaHistoryFromServer().then((syncedList) => {
-          const serverSaved = syncedList.find((item) => item.mangaId === mangaId);
-          if (serverSaved && serverSaved.chapterId === chapterId && serverSaved.pageNumber <= totalPages) {
-            setCurrentPage(serverSaved.pageNumber);
-            // Re-save to bump updatedAt so this manga moves to the top of Continue Reading
-            updateProgress(serverSaved.pageNumber);
-          } else {
-            setCurrentPage(1);
-            updateProgress(1);
-          }
-        });
-      }
+    if (authStatus === "loading") return;
+    if (stubSavedRef.current) return;
+    stubSavedRef.current = true;
+
+    const stubPayload = {
+      mangaId,
+      mangaTitle: queryTitle || manga?.title || "Manga",
+      mangaCover: manga?.coverImage || "",
+      mangaType: (manga?.type === "manhwa" || manga?.type === "manhua" ? manga.type : "manga") as "manga" | "manhwa" | "manhua",
+      chapterId,
+      chapterNumber: queryCh || currentChapter?.chapterNumber || "?",
+      chapterTitle: currentChapter?.title || null,
+      pageNumber: 1,
+      totalPages: totalPages > 0 ? totalPages : 1,
+      nextChapterId: nextChapter?.id || null,
+      nextChapterNumber: nextChapter?.chapterNumber || null,
+    };
+
+    if (isAuthed) {
+      saveServerMangaProgress(stubPayload);
+    } else {
+      saveLocalMangaProgress(stubPayload);
     }
-  }, [totalPages, mangaId, chapterId, updateProgress]);
+  }, [authStatus, isAuthed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // PHASE 2: Sync saved page on mount AND update the entry once manga/chapter data is ready
+  useEffect(() => {
+    if (authStatus === "loading") return;
+    // Only run once all real data is available
+    if (!manga?.title || !currentChapter?.chapterNumber) return;
+
+    let cancelled = false;
+
+    const initReadingState = async () => {
+      let savedPage = 1;
+
+      if (isAuthed) {
+        const serverSaved = await fetchServerMangaProgress(mangaId);
+        if (cancelled) return;
+        if (serverSaved && serverSaved.chapterId === chapterId && serverSaved.pageNumber > 1) {
+          savedPage = (totalPages > 0 && serverSaved.pageNumber <= totalPages) ? serverSaved.pageNumber : 1;
+        }
+      } else {
+        const localSaved = getLocalMangaProgress(mangaId);
+        if (localSaved && localSaved.chapterId === chapterId && localSaved.pageNumber > 1) {
+          savedPage = (totalPages > 0 && localSaved.pageNumber <= totalPages) ? localSaved.pageNumber : 1;
+        }
+      }
+
+      if (!cancelled) {
+        if (savedPage > 1) {
+          setCurrentPage(savedPage);
+          lastSavedPageRef.current = savedPage;
+        }
+        // Full save with complete data
+        persistProgress(savedPage);
+        initialSaveDoneRef.current = true;
+      }
+    };
+
+    initReadingState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, isAuthed, mangaId, chapterId, totalPages, manga?.title, currentChapter?.chapterNumber, persistProgress]);
 
   // Preload Next 3 Pages in Memory
   useEffect(() => {
@@ -275,7 +344,10 @@ export default function MangaReaderClient({
             const pageNum = parseInt(entry.target.getAttribute("data-page") || "1", 10);
             if (pageNum && pageNum !== currentPage) {
               setCurrentPage(pageNum);
-              updateProgress(pageNum);
+              if (initialSaveDoneRef.current && pageNum !== lastSavedPageRef.current) {
+                lastSavedPageRef.current = pageNum;
+                persistProgress(pageNum);
+              }
             }
           }
         }
@@ -288,7 +360,7 @@ export default function MangaReaderClient({
     });
 
     return () => observer.disconnect();
-  }, [totalPages, currentPage, updateProgress]);
+  }, [totalPages, currentPage, persistProgress]);
 
   // Zoom Handler Functions (+ / - / reset in clean steps of 10)
   const handleZoomIn = (e?: React.MouseEvent) => {
