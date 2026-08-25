@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { mangaReadingHistory, MangaReadingHistoryItem } from "@/lib/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, or } from "drizzle-orm";
 import { z } from "zod";
 
 const SaveMangaProgressSchema = z.object({
@@ -200,12 +200,19 @@ export async function DELETE(request: Request) {
     }
 
     const db = getDb();
+    const cleanId = mangaId.replace(/^(wc|asura)-/, "");
+
     await db
       .delete(mangaReadingHistory)
       .where(
         and(
           eq(mangaReadingHistory.userId, session.user.id),
-          eq(mangaReadingHistory.mangaId, mangaId)
+          or(
+            eq(mangaReadingHistory.mangaId, mangaId),
+            eq(mangaReadingHistory.mangaId, cleanId),
+            eq(mangaReadingHistory.mangaId, `wc-${cleanId}`),
+            eq(mangaReadingHistory.mangaId, `asura-${cleanId}`)
+          )
         )
       );
 

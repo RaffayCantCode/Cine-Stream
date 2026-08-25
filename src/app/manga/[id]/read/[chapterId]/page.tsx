@@ -3,6 +3,7 @@ export const revalidate = 900;
 import { Metadata } from "next";
 import { getMangaDetails, getMangaChapters, getChapterPages } from "@/lib/manga-fetch";
 import { constructMediaMetadata } from "@/lib/social-preview";
+import { Suspense } from "react";
 import MangaReaderClient from "./MangaReaderClient";
 
 export async function generateMetadata(
@@ -52,12 +53,14 @@ export default async function MangaReaderPage(
   const initialPages = pagesRes.status === "fulfilled" ? pagesRes.value : null;
 
   return (
-    <MangaReaderClient
-      mangaId={id}
-      chapterId={chapterId}
-      initialManga={initialManga}
-      initialChapters={initialChapters}
-      initialPages={initialPages}
-    />
+    <Suspense fallback={null}>
+      <MangaReaderClient
+        mangaId={id}
+        chapterId={chapterId}
+        initialManga={initialManga}
+        initialChapters={initialChapters}
+        initialPages={initialPages}
+      />
+    </Suspense>
   );
 }

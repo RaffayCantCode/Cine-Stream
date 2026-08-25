@@ -86,11 +86,17 @@ export default function ContinueReadingPage() {
   }, [items, sortOrder]);
 
   const handleRemove = async (mangaId: string) => {
-    setItems((prev) => prev.filter((item) => item.mangaId !== mangaId));
+    const cleanTarget = mangaId.replace(/^(wc|asura)-/, "");
+    setItems((prev) =>
+      prev.filter(
+        (item) =>
+          item.mangaId !== mangaId &&
+          item.mangaId.replace(/^(wc|asura)-/, "") !== cleanTarget
+      )
+    );
+    removeLocalMangaProgress(mangaId);
     if (status === "authenticated") {
       await removeServerMangaProgress(mangaId);
-    } else {
-      removeLocalMangaProgress(mangaId);
     }
   };
 

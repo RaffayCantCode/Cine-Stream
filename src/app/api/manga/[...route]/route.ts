@@ -23,9 +23,15 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ route: string[] }> }
 ) {
-  const { route } = await props.params;
-  const action = route[0];
-  const searchParams = request.nextUrl.searchParams;
+  try {
+    const params = await props.params;
+    const route = params?.route || [];
+    const action = route[0];
+    const searchParams = request.nextUrl.searchParams;
+
+    if (!action) {
+      return jsonWithCache({ success: true, items: [] }, 60);
+    }
 
   if (action === "trending") {
     try {
@@ -124,4 +130,8 @@ export async function GET(
   }
 
   return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
+  } catch (outerErr: any) {
+    console.error("[API/Manga] Outer GET error:", outerErr);
+    return jsonWithCache({ success: true, items: [] }, 60);
+  }
 }

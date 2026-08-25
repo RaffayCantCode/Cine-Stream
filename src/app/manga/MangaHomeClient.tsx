@@ -219,11 +219,17 @@ export default function MangaHomeClient({
   const handleDiscardHistory = async (e: React.MouseEvent, mangaId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setHistory((prev) => prev.filter((item) => item.mangaId !== mangaId));
+    const cleanTarget = mangaId.replace(/^(wc|asura)-/, "");
+    setHistory((prev) =>
+      prev.filter(
+        (item) =>
+          item.mangaId !== mangaId &&
+          item.mangaId.replace(/^(wc|asura)-/, "") !== cleanTarget
+      )
+    );
+    removeLocalMangaProgress(mangaId);
     if (status === "authenticated") {
       await removeServerMangaProgress(mangaId);
-    } else {
-      removeLocalMangaProgress(mangaId);
     }
   };
 
