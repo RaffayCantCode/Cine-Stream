@@ -81,7 +81,9 @@ export default function MangaHomeClient({
   );
   const [isTrendingMangasLoading, setIsTrendingMangasLoading] = useState(initialMangas.length === 0);
 
-  const [history, setHistory] = useState<MangaReadingProgress[]>([]);
+  const [history, setHistory] = useState<MangaReadingProgress[]>(() =>
+    typeof window !== "undefined" ? getLocalMangaHistory() : []
+  );
   
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -161,7 +163,11 @@ export default function MangaHomeClient({
 
   // Fetch Reading History strictly according to active authentication status
   const refreshHistory = useCallback(async () => {
-    if (status === "loading") return;
+    if (status === "loading") {
+      const local = getLocalMangaHistory();
+      if (local.length > 0) setHistory(local);
+      return;
+    }
 
     if (status === "authenticated") {
       try {
@@ -169,7 +175,6 @@ export default function MangaHomeClient({
         setHistory(serverHistory);
       } catch (err) {
         console.warn("[MangaHomeClient] Failed to fetch server history:", err);
-        setHistory([]);
       }
     } else {
       setHistory(getLocalMangaHistory());
@@ -183,22 +188,18 @@ export default function MangaHomeClient({
       refreshHistory();
     };
 
-    const handlePageShow = () => {
-      refreshHistory();
-    };
-
-    const handleFocus = () => {
-      refreshHistory();
-    };
-
     window.addEventListener("cinestream:manga-history-updated", handleUpdate);
-    window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("focus", handleFocus);
+    window.addEventListener("pageshow", handleUpdate);
+    window.addEventListener("focus", handleUpdate);
+    window.addEventListener("visibilitychange", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
 
     return () => {
       window.removeEventListener("cinestream:manga-history-updated", handleUpdate);
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pageshow", handleUpdate);
+      window.removeEventListener("focus", handleUpdate);
+      window.removeEventListener("visibilitychange", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
     };
   }, [refreshHistory]);
 

@@ -192,7 +192,14 @@ export default function MangaReaderClient({
 
   // Current Chapter Metadata
   const currentChapter = useMemo(() => {
-    return chapters.find((c) => c.id === chapterId) || null;
+    const cleanTarget = chapterId.replace(/^(wc|asura)-/, "");
+    return (
+      chapters.find(
+        (c) =>
+          c.id === chapterId ||
+          c.id.replace(/^(wc|asura)-/, "") === cleanTarget
+      ) || null
+    );
   }, [chapters, chapterId]);
 
   // Sorted Chapters List (Ascending 1, 2, 3...)
@@ -202,7 +209,12 @@ export default function MangaReaderClient({
 
   // Previous and Next Chapters
   const currentChapterIdx = useMemo(() => {
-    return sortedChapters.findIndex((c) => c.id === chapterId);
+    const cleanTarget = chapterId.replace(/^(wc|asura)-/, "");
+    return sortedChapters.findIndex(
+      (c) =>
+        c.id === chapterId ||
+        c.id.replace(/^(wc|asura)-/, "") === cleanTarget
+    );
   }, [sortedChapters, chapterId]);
 
   const nextChapter = useMemo(() => {
@@ -217,11 +229,10 @@ export default function MangaReaderClient({
   // Persist Reading Progress strictly based on active authentication state
   const persistProgress = useCallback(
     (page: number) => {
-      if (authStatus === "loading") return;
-
-      const resolvedTitle = manga?.title || queryTitle || "Manga";
-      const resolvedCover = manga?.coverImage || "";
-      const resolvedType = (manga?.type === "manhwa" || manga?.type === "manhua") ? manga.type : "manga";
+      const resolvedTitle = manga?.title || initialManga?.title || queryTitle || "Manga";
+      const resolvedCover = manga?.coverImage || initialManga?.coverImage || "/icon-512.png";
+      const rawType = manga?.type || initialManga?.type;
+      const resolvedType = (rawType === "manhwa" || rawType === "manhua") ? rawType : "manga";
       const resolvedChapterNumber = currentChapter?.chapterNumber || queryCh || "1";
       const resolvedChapterTitle = currentChapter?.title || null;
       const resolvedTotalPages = totalPages > 0 ? totalPages : 1;
@@ -234,7 +245,7 @@ export default function MangaReaderClient({
         chapterId,
         chapterNumber: resolvedChapterNumber,
         chapterTitle: resolvedChapterTitle,
-        pageNumber: page,
+        pageNumber: page > 0 ? page : 1,
         totalPages: resolvedTotalPages,
         nextChapterId: nextChapter ? nextChapter.id : null,
         nextChapterNumber: nextChapter ? nextChapter.chapterNumber : null,
@@ -248,43 +259,12 @@ export default function MangaReaderClient({
 
       markChapterAsRead(mangaId, chapterId, resolvedChapterNumber);
     },
-    [authStatus, isAuthed, manga, queryTitle, currentChapter, queryCh, totalPages, mangaId, chapterId, nextChapter]
+    [isAuthed, manga, initialManga, queryTitle, currentChapter, queryCh, totalPages, mangaId, chapterId, nextChapter]
   );
 
-  // PHASE 1: Immediately write a stub entry the moment auth state resolves.
-  // This guarantees Continue Reading appears right away even before pages load.
-  const stubSavedRef = useRef(false);
+  // Restore saved page position and immediately save current entry on mount
   useEffect(() => {
     if (authStatus === "loading") return;
-    if (stubSavedRef.current) return;
-    stubSavedRef.current = true;
-
-    const stubPayload = {
-      mangaId,
-      mangaTitle: queryTitle || manga?.title || "Manga",
-      mangaCover: manga?.coverImage || "",
-      mangaType: (manga?.type === "manhwa" || manga?.type === "manhua" ? manga.type : "manga") as "manga" | "manhwa" | "manhua",
-      chapterId,
-      chapterNumber: queryCh || currentChapter?.chapterNumber || "?",
-      chapterTitle: currentChapter?.title || null,
-      pageNumber: 1,
-      totalPages: totalPages > 0 ? totalPages : 1,
-      nextChapterId: nextChapter?.id || null,
-      nextChapterNumber: nextChapter?.chapterNumber || null,
-    };
-
-    if (isAuthed) {
-      saveServerMangaProgress(stubPayload);
-    } else {
-      saveLocalMangaProgress(stubPayload);
-    }
-  }, [authStatus, isAuthed]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // PHASE 2: Sync saved page on mount AND update the entry once manga/chapter data is ready
-  useEffect(() => {
-    if (authStatus === "loading") return;
-    // Only run once all real data is available
-    if (!manga?.title || !currentChapter?.chapterNumber) return;
 
     let cancelled = false;
 
@@ -294,12 +274,12 @@ export default function MangaReaderClient({
       if (isAuthed) {
         const serverSaved = await fetchServerMangaProgress(mangaId);
         if (cancelled) return;
-        if (serverSaved && serverSaved.chapterId === chapterId && serverSaved.pageNumber > 1) {
+        if (serverSaved && (serverSaved.chapterId === chapterId || serverSaved.chapterId.replace(/^(wc|asura)-/, "") === chapterId.replace(/^(wc|asura)-/, "")) && serverSaved.pageNumber > 0) {
           savedPage = (totalPages > 0 && serverSaved.pageNumber <= totalPages) ? serverSaved.pageNumber : 1;
         }
       } else {
         const localSaved = getLocalMangaProgress(mangaId);
-        if (localSaved && localSaved.chapterId === chapterId && localSaved.pageNumber > 1) {
+        if (localSaved && (localSaved.chapterId === chapterId || localSaved.chapterId.replace(/^(wc|asura)-/, "") === chapterId.replace(/^(wc|asura)-/, "")) && localSaved.pageNumber > 0) {
           savedPage = (totalPages > 0 && localSaved.pageNumber <= totalPages) ? localSaved.pageNumber : 1;
         }
       }
@@ -309,7 +289,6 @@ export default function MangaReaderClient({
           setCurrentPage(savedPage);
           lastSavedPageRef.current = savedPage;
         }
-        // Full save with complete data
         persistProgress(savedPage);
         initialSaveDoneRef.current = true;
       }
@@ -320,7 +299,7 @@ export default function MangaReaderClient({
     return () => {
       cancelled = true;
     };
-  }, [authStatus, isAuthed, mangaId, chapterId, totalPages, manga?.title, currentChapter?.chapterNumber, persistProgress]);
+  }, [authStatus, isAuthed, mangaId, chapterId, totalPages, persistProgress]);
 
   // Preload Next 3 Pages in Memory
   useEffect(() => {

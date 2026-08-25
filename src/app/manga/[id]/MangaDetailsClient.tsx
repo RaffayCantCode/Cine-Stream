@@ -57,7 +57,9 @@ export default function MangaDetailsClient({
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [chapterSearch, setChapterSearch] = useState("");
   const [isDescExpanded, setIsDescExpanded] = useState(false);
-  const [progress, setProgress] = useState<MangaReadingProgress | null>(null);
+  const [progress, setProgress] = useState<MangaReadingProgress | null>(() =>
+    typeof window !== "undefined" ? getLocalMangaProgress(id) : null
+  );
   const [readTick, setReadTick] = useState(0);
 
   const { isSaved, toggle } = useWatchlist();
@@ -72,15 +74,18 @@ export default function MangaDetailsClient({
 
   // Fetch reading progress strictly based on active auth status
   const refreshProgress = useCallback(async () => {
-    if (authStatus === "loading") return;
+    if (authStatus === "loading") {
+      const local = getLocalMangaProgress(id);
+      if (local) setProgress(local);
+      return;
+    }
 
     if (isAuthed) {
       try {
         const serverP = await fetchServerMangaProgress(id);
-        setProgress(serverP);
+        if (serverP) setProgress(serverP);
       } catch (err) {
         console.warn("[MangaDetailsClient] Failed to fetch server progress:", err);
-        setProgress(null);
       }
     } else {
       setProgress(getLocalMangaProgress(id));
@@ -96,20 +101,12 @@ export default function MangaDetailsClient({
       setReadTick((t) => t + 1);
     };
 
-    const handlePageShow = () => {
-      refreshProgress();
-      setReadTick((t) => t + 1);
-    };
-
-    const handleFocus = () => {
-      refreshProgress();
-      setReadTick((t) => t + 1);
-    };
-
     window.addEventListener("cinestream:manga-history-updated", handleUpdate);
     window.addEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
-    window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("focus", handleFocus);
+    window.addEventListener("pageshow", handleUpdate);
+    window.addEventListener("focus", handleUpdate);
+    window.addEventListener("visibilitychange", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
 
     let isMountedLocal = true;
 
@@ -158,8 +155,10 @@ export default function MangaDetailsClient({
       isMountedLocal = false;
       window.removeEventListener("cinestream:manga-history-updated", handleUpdate);
       window.removeEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pageshow", handleUpdate);
+      window.removeEventListener("focus", handleUpdate);
+      window.removeEventListener("visibilitychange", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
     };
   }, [id, initialManga, initialChapters.length, refreshProgress]);
 

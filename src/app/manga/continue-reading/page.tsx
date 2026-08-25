@@ -24,11 +24,18 @@ import {
 export default function ContinueReadingPage() {
   const { status } = useSession();
   const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
-  const [items, setItems] = useState<MangaReadingProgress[]>([]);
+  const [items, setItems] = useState<MangaReadingProgress[]>(() =>
+    typeof window !== "undefined" ? getLocalMangaHistory() : []
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshHistory = useCallback(async () => {
-    if (status === "loading") return;
+    if (status === "loading") {
+      const local = getLocalMangaHistory();
+      if (local.length > 0) setItems(local);
+      setIsLoading(false);
+      return;
+    }
 
     if (status === "authenticated") {
       setIsLoading(true);
@@ -37,7 +44,6 @@ export default function ContinueReadingPage() {
         setItems(serverItems);
       } catch (err) {
         console.warn("[ContinueReadingPage] Failed to fetch server history:", err);
-        setItems([]);
       } finally {
         setIsLoading(false);
       }
@@ -57,11 +63,15 @@ export default function ContinueReadingPage() {
     window.addEventListener("cinestream:manga-history-updated", handler);
     window.addEventListener("pageshow", handler);
     window.addEventListener("focus", handler);
+    window.addEventListener("visibilitychange", handler);
+    window.addEventListener("storage", handler);
 
     return () => {
       window.removeEventListener("cinestream:manga-history-updated", handler);
       window.removeEventListener("pageshow", handler);
       window.removeEventListener("focus", handler);
+      window.removeEventListener("visibilitychange", handler);
+      window.removeEventListener("storage", handler);
     };
   }, [refreshHistory]);
 
@@ -84,7 +94,7 @@ export default function ContinueReadingPage() {
     }
   };
 
-  if (status === "unauthenticated") {
+  if (status === "unauthenticated" && items.length === 0) {
     return (
       <div className="min-h-screen bg-background text-foreground pb-20">
         <Sidebar />
@@ -95,19 +105,27 @@ export default function ContinueReadingPage() {
                 <Bookmark className="w-10 h-10" />
               </div>
               <h2 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">
-                Sign in to view your Continue Reading
+                No Reading History Found
               </h2>
               <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-md">
-                Your reading progress is synced across all your devices. Sign in
-                or create a free account to keep reading where you left off.
+                Start reading any manga or manhwa, and your progress will automatically be saved here. Sign in to sync across all your devices.
               </p>
-              <button
-                onClick={() => signIn()}
-                className="mt-8 inline-flex items-center gap-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all active:scale-95 shadow-xl shadow-black/40 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Sign In to Continue</span>
-              </button>
+              <div className="flex items-center gap-4 mt-8">
+                <Link
+                  href="/manga"
+                  className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 py-4 rounded-xl text-sm transition-all active:scale-95 shadow-xl shadow-black/40 cursor-pointer"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>Browse Manga</span>
+                </Link>
+                <button
+                  onClick={() => signIn()}
+                  className="inline-flex items-center gap-2.5 bg-white/[0.08] hover:bg-white/[0.15] text-white font-bold px-8 py-4 rounded-xl text-sm transition-all active:scale-95 border border-white/10 cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In</span>
+                </button>
+              </div>
             </div>
           </div>
         </main>

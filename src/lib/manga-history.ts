@@ -22,8 +22,19 @@ export interface MangaReadingProgress {
   updatedAt: number;
 }
 
-const STORAGE_KEY = "cinestream.manga_history_v3";
-const READ_CHAPTERS_STORAGE_KEY = "cinestream.manga_read_chapters_v2";
+const STORAGE_KEYS = [
+  "cinestream.manga_history_v3",
+  "cinestream.manga_history_v2",
+  "cinestream.manga_history",
+];
+const PRIMARY_STORAGE_KEY = "cinestream.manga_history_v3";
+
+const READ_CHAPTERS_STORAGE_KEYS = [
+  "cinestream.manga_read_chapters_v2",
+  "cinestream.manga_read_chapters_v1",
+  "cinestream.manga_read_chapters",
+];
+const PRIMARY_READ_CHAPTERS_KEY = "cinestream.manga_read_chapters_v2";
 
 // ----------------------------------------------------
 // 1. GUEST / LOCAL STORAGE OPERATIONS (Logged-out only)
@@ -35,10 +46,16 @@ const READ_CHAPTERS_STORAGE_KEY = "cinestream.manga_read_chapters_v2";
 export function getLocalMangaHistory(): MangaReadingProgress[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: MangaReadingProgress[] = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.sort((a, b) => b.updatedAt - a.updatedAt) : [];
+    for (const key of STORAGE_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed: MangaReadingProgress[] = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.sort((a, b) => b.updatedAt - a.updatedAt);
+        }
+      }
+    }
+    return [];
   } catch {
     return [];
   }
@@ -49,7 +66,11 @@ export function getLocalMangaHistory(): MangaReadingProgress[] {
  */
 export function getLocalMangaProgress(mangaId: string): MangaReadingProgress | null {
   const history = getLocalMangaHistory();
-  return history.find((item) => item.mangaId === mangaId) || null;
+  return (
+    history.find(
+      (item) => item.mangaId === mangaId || item.mangaId.replace(/^wc-/, "") === mangaId.replace(/^wc-/, "")
+    ) || null
+  );
 }
 
 /**
@@ -59,7 +80,11 @@ export function saveLocalMangaProgress(progress: Omit<MangaReadingProgress, "upd
   if (typeof window === "undefined") return;
   try {
     const history = getLocalMangaHistory();
-    const existingIndex = history.findIndex((item) => item.mangaId === progress.mangaId);
+    const existingIndex = history.findIndex(
+      (item) =>
+        item.mangaId === progress.mangaId ||
+        item.mangaId.replace(/^wc-/, "") === progress.mangaId.replace(/^wc-/, "")
+    );
 
     const updatedItem: MangaReadingProgress = {
       ...progress,
@@ -77,7 +102,13 @@ export function saveLocalMangaProgress(progress: Omit<MangaReadingProgress, "upd
       newHistory = [updatedItem, ...history];
     }
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory.slice(0, 30)));
+    const payloadStr = JSON.stringify(newHistory.slice(0, 30));
+    for (const key of STORAGE_KEYS) {
+      try {
+        localStorage.setItem(key, payloadStr);
+      } catch {}
+    }
+
     window.dispatchEvent(new Event("cinestream:manga-history-updated"));
   } catch (err) {
     console.warn("[MangaHistory] Failed to save local reading progress:", err);
@@ -91,8 +122,17 @@ export function removeLocalMangaProgress(mangaId: string): void {
   if (typeof window === "undefined") return;
   try {
     const history = getLocalMangaHistory();
-    const filtered = history.filter((item) => item.mangaId !== mangaId);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    const filtered = history.filter(
+      (item) =>
+        item.mangaId !== mangaId &&
+        item.mangaId.replace(/^wc-/, "") !== mangaId.replace(/^wc-/, "")
+    );
+    const payloadStr = JSON.stringify(filtered);
+    for (const key of STORAGE_KEYS) {
+      try {
+        localStorage.setItem(key, payloadStr);
+      } catch {}
+    }
     window.dispatchEvent(new Event("cinestream:manga-history-updated"));
   } catch (err) {
     console.warn("[MangaHistory] Failed to remove local progress:", err);
@@ -206,11 +246,17 @@ export async function removeServerMangaProgress(mangaId: string): Promise<boolea
 export function getReadChapters(mangaId: string): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(READ_CHAPTERS_STORAGE_KEY);
-    if (!raw) return new Set();
-    const map = JSON.parse(raw);
-    const list = map[mangaId];
-    return Array.isArray(list) ? new Set(list) : new Set();
+    for (const key of READ_CHAPTERS_STORAGE_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const map = JSON.parse(raw);
+        const list = map[mangaId] || map[mangaId.replace(/^wc-/, "")];
+        if (Array.isArray(list) && list.length > 0) {
+          return new Set(list);
+        }
+      }
+    }
+    return new Set();
   } catch {
     return new Set();
   }
@@ -222,13 +268,28 @@ export function getReadChapters(mangaId: string): Set<string> {
 export function markChapterAsRead(mangaId: string, chapterId: string, chapterNumber?: string): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = localStorage.getItem(READ_CHAPTERS_STORAGE_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    const set = new Set<string>(Array.isArray(map[mangaId]) ? map[mangaId] : []);
+    let existingMap: Record<string, string[]> = {};
+    for (const key of READ_CHAPTERS_STORAGE_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          existingMap = { ...existingMap, ...JSON.parse(raw) };
+        } catch {}
+      }
+    }
+
+    const set = new Set<string>(Array.isArray(existingMap[mangaId]) ? existingMap[mangaId] : []);
     set.add(chapterId);
+    set.add(chapterId.replace(/^wc-/, ""));
     if (chapterNumber) set.add(`num-${chapterNumber}`);
-    map[mangaId] = Array.from(set);
-    localStorage.setItem(READ_CHAPTERS_STORAGE_KEY, JSON.stringify(map));
+    existingMap[mangaId] = Array.from(set);
+
+    const payload = JSON.stringify(existingMap);
+    for (const key of READ_CHAPTERS_STORAGE_KEYS) {
+      try {
+        localStorage.setItem(key, payload);
+      } catch {}
+    }
     window.dispatchEvent(new Event("cinestream:manga-read-chapters-updated"));
   } catch (err) {
     console.warn("[MangaHistory] Failed to mark chapter as read:", err);
@@ -241,23 +302,38 @@ export function markChapterAsRead(mangaId: string, chapterId: string, chapterNum
 export function toggleChapterReadStatus(mangaId: string, chapterId: string, chapterNumber?: string): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const raw = localStorage.getItem(READ_CHAPTERS_STORAGE_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    const set = new Set<string>(Array.isArray(map[mangaId]) ? map[mangaId] : []);
+    let existingMap: Record<string, string[]> = {};
+    for (const key of READ_CHAPTERS_STORAGE_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          existingMap = { ...existingMap, ...JSON.parse(raw) };
+        } catch {}
+      }
+    }
+
+    const set = new Set<string>(Array.isArray(existingMap[mangaId]) ? existingMap[mangaId] : []);
     
     let isNowRead = false;
     if (set.has(chapterId) || (chapterNumber && set.has(`num-${chapterNumber}`))) {
       set.delete(chapterId);
+      set.delete(chapterId.replace(/^wc-/, ""));
       if (chapterNumber) set.delete(`num-${chapterNumber}`);
       isNowRead = false;
     } else {
       set.add(chapterId);
+      set.add(chapterId.replace(/^wc-/, ""));
       if (chapterNumber) set.add(`num-${chapterNumber}`);
       isNowRead = true;
     }
 
-    map[mangaId] = Array.from(set);
-    localStorage.setItem(READ_CHAPTERS_STORAGE_KEY, JSON.stringify(map));
+    existingMap[mangaId] = Array.from(set);
+    const payload = JSON.stringify(existingMap);
+    for (const key of READ_CHAPTERS_STORAGE_KEYS) {
+      try {
+        localStorage.setItem(key, payload);
+      } catch {}
+    }
     window.dispatchEvent(new Event("cinestream:manga-read-chapters-updated"));
     return isNowRead;
   } catch {

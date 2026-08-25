@@ -95,26 +95,12 @@ export async function POST(request: Request) {
 
     const db = getDb();
 
-    await db
-      .insert(mangaReadingHistory)
-      .values({
-        userId: session.user.id,
-        mangaId,
-        mangaTitle,
-        mangaCover,
-        mangaType,
-        chapterId,
-        chapterNumber,
-        chapterTitle: chapterTitle ?? null,
-        pageNumber,
-        totalPages,
-        nextChapterId: nextChapterId ?? null,
-        nextChapterNumber: nextChapterNumber ?? null,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [mangaReadingHistory.userId, mangaReadingHistory.mangaId],
-        set: {
+    try {
+      await db
+        .insert(mangaReadingHistory)
+        .values({
+          userId: session.user.id,
+          mangaId,
           mangaTitle,
           mangaCover,
           mangaType,
@@ -126,8 +112,71 @@ export async function POST(request: Request) {
           nextChapterId: nextChapterId ?? null,
           nextChapterNumber: nextChapterNumber ?? null,
           updatedAt: new Date(),
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: [mangaReadingHistory.userId, mangaReadingHistory.mangaId],
+          set: {
+            mangaTitle,
+            mangaCover,
+            mangaType,
+            chapterId,
+            chapterNumber,
+            chapterTitle: chapterTitle ?? null,
+            pageNumber,
+            totalPages,
+            nextChapterId: nextChapterId ?? null,
+            nextChapterNumber: nextChapterNumber ?? null,
+            updatedAt: new Date(),
+          },
+        });
+    } catch (upsertErr) {
+      // Fallback for database instances where explicit unique index target differs
+      const existing = await db
+        .select({ id: mangaReadingHistory.id })
+        .from(mangaReadingHistory)
+        .where(
+          and(
+            eq(mangaReadingHistory.userId, session.user.id),
+            eq(mangaReadingHistory.mangaId, mangaId)
+          )
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(mangaReadingHistory)
+          .set({
+            mangaTitle,
+            mangaCover,
+            mangaType,
+            chapterId,
+            chapterNumber,
+            chapterTitle: chapterTitle ?? null,
+            pageNumber,
+            totalPages,
+            nextChapterId: nextChapterId ?? null,
+            nextChapterNumber: nextChapterNumber ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(mangaReadingHistory.id, existing[0].id));
+      } else {
+        await db.insert(mangaReadingHistory).values({
+          userId: session.user.id,
+          mangaId,
+          mangaTitle,
+          mangaCover,
+          mangaType,
+          chapterId,
+          chapterNumber,
+          chapterTitle: chapterTitle ?? null,
+          pageNumber,
+          totalPages,
+          nextChapterId: nextChapterId ?? null,
+          nextChapterNumber: nextChapterNumber ?? null,
+          updatedAt: new Date(),
+        });
+      }
+    }
 
     return Response.json({ success: true });
   } catch (err: any) {
