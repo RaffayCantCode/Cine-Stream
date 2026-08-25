@@ -10,6 +10,7 @@ import {
   getLocalMangaHistory, 
   removeLocalMangaProgress, 
   fetchServerMangaHistory, 
+  saveServerMangaProgress,
   removeServerMangaProgress, 
   MangaReadingProgress 
 } from "@/lib/manga-history";
@@ -172,7 +173,18 @@ export default function MangaHomeClient({
     if (status === "authenticated") {
       try {
         const serverHistory = await fetchServerMangaHistory();
-        setHistory(serverHistory);
+        if (serverHistory.length > 0) {
+          setHistory(serverHistory);
+        } else {
+          // If server history is empty, sync any local items to server so nothing is lost
+          const local = getLocalMangaHistory();
+          if (local.length > 0) {
+            setHistory(local);
+            Promise.all(local.map((item) => saveServerMangaProgress(item))).catch(() => {});
+          } else {
+            setHistory([]);
+          }
+        }
       } catch (err) {
         console.warn("[MangaHomeClient] Failed to fetch server history:", err);
       }

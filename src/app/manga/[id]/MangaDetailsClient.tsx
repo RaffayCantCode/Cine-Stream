@@ -8,6 +8,7 @@ import { MangaItem, MangaChapter } from "@/lib/manga-fetch";
 import { 
   getLocalMangaProgress, 
   fetchServerMangaProgress, 
+  saveServerMangaProgress,
   MangaReadingProgress,
   isChapterRead,
   toggleChapterReadStatus
@@ -83,7 +84,15 @@ export default function MangaDetailsClient({
     if (isAuthed) {
       try {
         const serverP = await fetchServerMangaProgress(id);
-        if (serverP) setProgress(serverP);
+        if (serverP) {
+          setProgress(serverP);
+        } else {
+          const local = getLocalMangaProgress(id);
+          if (local) {
+            setProgress(local);
+            saveServerMangaProgress(local).catch(() => {});
+          }
+        }
       } catch (err) {
         console.warn("[MangaDetailsClient] Failed to fetch server progress:", err);
       }
