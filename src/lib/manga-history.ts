@@ -121,11 +121,12 @@ export function saveLocalMangaProgress(progress: Omit<MangaReadingProgress, "upd
 export function removeLocalMangaProgress(mangaId: string): void {
   if (typeof window === "undefined") return;
   try {
+    const cleanId = mangaId.replace(/^(wc|asura)-/, "");
     const history = getLocalMangaHistory();
     const filtered = history.filter(
       (item) =>
         item.mangaId !== mangaId &&
-        item.mangaId.replace(/^wc-/, "") !== mangaId.replace(/^wc-/, "")
+        item.mangaId.replace(/^(wc|asura)-/, "") !== cleanId
     );
     const payloadStr = JSON.stringify(filtered);
     for (const key of STORAGE_KEYS) {

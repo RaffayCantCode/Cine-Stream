@@ -142,6 +142,7 @@ export default function MangaHomeClient({
   const clientCache = useRef<Map<string, MangaItem[]>>(new Map());
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeSearchIdRef = useRef<number>(0);
+  const discardedIdsRef = useRef<Set<string>>(new Set());
 
   // Instant clear handler for search input
   const handleClearSearch = useCallback((e?: React.MouseEvent) => {
@@ -164,8 +165,13 @@ export default function MangaHomeClient({
 
   // Fetch Reading History strictly according to active authentication status
   const refreshHistory = useCallback(async () => {
+    const isDiscarded = (id: string) => {
+      const clean = id.replace(/^(wc|asura)-/, "");
+      return discardedIdsRef.current.has(id) || discardedIdsRef.current.has(clean);
+    };
+
     if (status === "loading") {
-      const local = getLocalMangaHistory();
+      const local = getLocalMangaHistory().filter((item) => !isDiscarded(item.mangaId));
       if (local.length > 0) setHistory(local);
       return;
     }
@@ -173,11 +179,12 @@ export default function MangaHomeClient({
     if (status === "authenticated") {
       try {
         const serverHistory = await fetchServerMangaHistory();
-        if (serverHistory.length > 0) {
-          setHistory(serverHistory);
+        const filteredServer = serverHistory.filter((item) => !isDiscarded(item.mangaId));
+        if (filteredServer.length > 0) {
+          setHistory(filteredServer);
         } else {
-          // If server history is empty, sync any local items to server so nothing is lost
-          const local = getLocalMangaHistory();
+          // If server history is empty, sync any non-discarded local items to server
+          const local = getLocalMangaHistory().filter((item) => !isDiscarded(item.mangaId));
           if (local.length > 0) {
             setHistory(local);
             Promise.all(local.map((item) => saveServerMangaProgress(item))).catch(() => {});
@@ -189,7 +196,8 @@ export default function MangaHomeClient({
         console.warn("[MangaHomeClient] Failed to fetch server history:", err);
       }
     } else {
-      setHistory(getLocalMangaHistory());
+      const local = getLocalMangaHistory().filter((item) => !isDiscarded(item.mangaId));
+      setHistory(local);
     }
   }, [status]);
 
@@ -220,6 +228,13 @@ export default function MangaHomeClient({
     e.preventDefault();
     e.stopPropagation();
     const cleanTarget = mangaId.replace(/^(wc|asura)-/, "");
+    
+    // Register in discarded set immediately so no background refresh can resurrect it
+    discardedIdsRef.current.add(mangaId);
+    discardedIdsRef.current.add(cleanTarget);
+    discardedIdsRef.current.add(`wc-${cleanTarget}`);
+    discardedIdsRef.current.add(`asura-${cleanTarget}`);
+
     setHistory((prev) =>
       prev.filter(
         (item) =>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSession, signIn } from "next-auth/react";
 import {
@@ -28,10 +28,16 @@ export default function ContinueReadingPage() {
     typeof window !== "undefined" ? getLocalMangaHistory() : []
   );
   const [isLoading, setIsLoading] = useState(true);
+  const discardedIdsRef = useRef<Set<string>>(new Set());
 
   const refreshHistory = useCallback(async () => {
+    const isDiscarded = (id: string) => {
+      const clean = id.replace(/^(wc|asura)-/, "");
+      return discardedIdsRef.current.has(id) || discardedIdsRef.current.has(clean);
+    };
+
     if (status === "loading") {
-      const local = getLocalMangaHistory();
+      const local = getLocalMangaHistory().filter((item) => !isDiscarded(item.mangaId));
       if (local.length > 0) setItems(local);
       setIsLoading(false);
       return;
@@ -41,7 +47,8 @@ export default function ContinueReadingPage() {
       setIsLoading(true);
       try {
         const serverItems = await fetchServerMangaHistory();
-        setItems(serverItems);
+        const filtered = serverItems.filter((item) => !isDiscarded(item.mangaId));
+        setItems(filtered);
       } catch (err) {
         console.warn("[ContinueReadingPage] Failed to fetch server history:", err);
       } finally {
@@ -49,7 +56,8 @@ export default function ContinueReadingPage() {
       }
     } else {
       setIsLoading(false);
-      setItems(getLocalMangaHistory());
+      const local = getLocalMangaHistory().filter((item) => !isDiscarded(item.mangaId));
+      setItems(local);
     }
   }, [status]);
 
@@ -87,6 +95,11 @@ export default function ContinueReadingPage() {
 
   const handleRemove = async (mangaId: string) => {
     const cleanTarget = mangaId.replace(/^(wc|asura)-/, "");
+    discardedIdsRef.current.add(mangaId);
+    discardedIdsRef.current.add(cleanTarget);
+    discardedIdsRef.current.add(`wc-${cleanTarget}`);
+    discardedIdsRef.current.add(`asura-${cleanTarget}`);
+
     setItems((prev) =>
       prev.filter(
         (item) =>
