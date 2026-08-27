@@ -54,7 +54,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers with in-memory and session cache ─────────────
-const ANIME_API_VERSION = "v46-erased-override-fix";
+const ANIME_API_VERSION = "v48-rating-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 const clientAnilistCache = new Map<string, { data: any; timestamp: number }>();
 
@@ -968,8 +968,8 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
       poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
       description: media.description || "",
       type: media.format || media.type || "TV",
-      rating: media.averageScore ? String(media.averageScore) : null,
-      score: media.averageScore ? String(media.averageScore) : null,
+      rating: media.averageScore ? (media.averageScore / 10).toFixed(1) : null,
+      score: media.averageScore ? (media.averageScore / 10).toFixed(1) : null,
       status: media.status || null,
       genres: media.genres || [],
       totalEpisodes: media.episodes || 0,
@@ -2473,9 +2473,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     <span>{anime.format || anime.type || "Anime"}</span>
                     {anime.duration && <span>• {anime.duration} min</span>}
                     {anime.seasonYear && <span>• {anime.seasonYear}</span>}
-                    {anime.rating && (
+                    {animeScore > 0 && (
                       <span className="flex items-center gap-1 text-amber-400 font-bold">
-                        <Star className="w-3 h-3 fill-current" /> {anime.rating}
+                        <Star className="w-3 h-3 fill-current" /> {animeScore.toFixed(1)}
                       </span>
                     )}
                   </div>

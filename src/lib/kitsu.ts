@@ -292,8 +292,60 @@ export async function fetchEpisodesFromKitsu(
 
     if (cleanInput.startsWith("kitsu-")) {
       kitsuId = cleanInput.replace("kitsu-", "");
+    } else if (cleanInput.startsWith("mal-")) {
+      const malNum = cleanInput.replace("mal-", "");
+      try {
+        const azRes = await fetch(`https://api.ani.zip/mappings?mal_id=${malNum}`, {
+          signal: AbortSignal.timeout(3000),
+          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+          next: { revalidate: 86400 } as any,
+        });
+        if (azRes.ok) {
+          const az = await azRes.json();
+          if (az?.mappings?.kitsu_id) kitsuId = String(az.mappings.kitsu_id);
+        }
+      } catch {}
+      if (!kitsuId) {
+        try {
+          const kMap = await fetch(`${KITSU_BASE}/mappings?filter[external_site]=myanimelist/anime&filter[external_id]=${malNum}&include=item`, {
+            signal: AbortSignal.timeout(3000),
+            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT, "Accept": "application/vnd.api+json" },
+            next: { revalidate: 86400 } as any,
+          });
+          if (kMap.ok) {
+            const kJson = await kMap.json();
+            const it = kJson.included?.[0] || kJson.data?.[0]?.relationships?.item?.data;
+            if (it?.id) kitsuId = String(it.id);
+          }
+        } catch {}
+      }
     } else if (!isNaN(Number(cleanInput))) {
-      kitsuId = cleanInput;
+      // It is a numeric AniList ID - resolve it to Kitsu ID via AniZip or Kitsu mappings
+      try {
+        const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${cleanInput}`, {
+          signal: AbortSignal.timeout(3000),
+          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+          next: { revalidate: 86400 } as any,
+        });
+        if (azRes.ok) {
+          const az = await azRes.json();
+          if (az?.mappings?.kitsu_id) kitsuId = String(az.mappings.kitsu_id);
+        }
+      } catch {}
+      if (!kitsuId) {
+        try {
+          const kMap = await fetch(`${KITSU_BASE}/mappings?filter[external_site]=anilist/anime&filter[external_id]=${cleanInput}&include=item`, {
+            signal: AbortSignal.timeout(3000),
+            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT, "Accept": "application/vnd.api+json" },
+            next: { revalidate: 86400 } as any,
+          });
+          if (kMap.ok) {
+            const kJson = await kMap.json();
+            const it = kJson.included?.[0] || kJson.data?.[0]?.relationships?.item?.data;
+            if (it?.id) kitsuId = String(it.id);
+          }
+        } catch {}
+      }
     } else {
       const searchRes = await fetch(
         `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(cleanInput)}&page[limit]=1`,
@@ -423,8 +475,8 @@ export async function getAnimeDetailsViaKitsu(
     } catch {}
   }
 
-  // Step 3: If still no kitsuId and id is a title string, search Kitsu by title
-  if (!kitsuId) {
+  // Step 3: If still no kitsuId and id is a title string (NOT a numeric ID), search Kitsu by title
+  if (!kitsuId && isNaN(numId) && !isKitsuInput && !isMalInput) {
     try {
       const cleanTitle = id.replace(/[-_]/g, " ").trim();
       const sResults = await searchViaKitsu(cleanTitle, 1);

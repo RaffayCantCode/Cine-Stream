@@ -290,7 +290,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     bannerImage: media.bannerImage || null,
     type: media.type || "TV",
     episodes: { sub: media.episodes || null, dub: null },
-    rating: media.averageScore ? String(media.averageScore / 10) : null,
+    rating: media.averageScore ? (media.averageScore / 10).toFixed(1) : null,
     description: cleanAnimeDescription(media.description),
     genres: media.genres || [],
     status,
@@ -1534,20 +1534,23 @@ export async function getAnimeDetails(
       });
     }
 
-    try {
-      const searchResults = await searchAnime(id.replace(/[-_]/g, " ").trim());
-      const firstMatch = searchResults?.[0];
-      if (firstMatch && firstMatch.id && firstMatch.id !== id) {
-        return getAnimeDetails(firstMatch.id, epLimit, skipEpisodes);
-      }
-    } catch {}
-
-    // Fallback 3: Kitsu + AniZip + TMDB (when both AniList and Jikan are down)
+    // Fallback 2: Direct Kitsu + AniZip + TMDB metadata resolution
     try {
       const kitsuFallback = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
       if (kitsuFallback) return cacheAndReturn(kitsuFallback);
     } catch (e) {
       console.warn("Kitsu details fallback failed:", e);
+    }
+
+    // Fallback 3: Text search ONLY when id is an explicit non-numeric slug/title string
+    if (isNaN(numId) && !isMalInput && !id.startsWith("kitsu-") && !id.startsWith("tmdb-")) {
+      try {
+        const searchResults = await searchAnime(id.replace(/[-_]/g, " ").trim());
+        const firstMatch = searchResults?.[0];
+        if (firstMatch && firstMatch.id && firstMatch.id !== id) {
+          return getAnimeDetails(firstMatch.id, epLimit, skipEpisodes);
+        }
+      } catch {}
     }
 
     return null;
