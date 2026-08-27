@@ -53,19 +53,51 @@ interface FranchiseNode {
   episodeOffset?: number;
 }
 
-// ── Client-side AniList helpers ────────────────────────────────────────────
-const ANIME_API_VERSION = "v41-instant-load";
+// ── Client-side AniList helpers with in-memory and session cache ─────────────
+const ANIME_API_VERSION = "v42-fast-load";
 const ANILIST_API = "https://graphql.anilist.co";
+const clientAnilistCache = new Map<string, { data: any; timestamp: number }>();
 
 async function anilistQuery(query: string, variables: Record<string, any>): Promise<any> {
+  const cacheKey = `al_${query.length}_${JSON.stringify(variables)}`;
+  const cached = clientAnilistCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 30 * 60 * 1000) {
+    return cached.data;
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const sCached = sessionStorage.getItem(cacheKey);
+      if (sCached) {
+        const parsed = JSON.parse(sCached);
+        if (parsed) {
+          clientAnilistCache.set(cacheKey, { data: parsed, timestamp: Date.now() });
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+
   const res = await fetch(ANILIST_API, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Accept": "application/json" },
     body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(6000),
   });
+  if (res.status === 429) {
+    throw new Error("AniList rate limited");
+  }
   if (!res.ok) throw new Error("AniList query failed");
-  return res.json();
+  const json = await res.json();
+  if (json?.data) {
+    clientAnilistCache.set(cacheKey, { data: json, timestamp: Date.now() });
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(json));
+      } catch {}
+    }
+  }
+  return json;
 }
 
 function transformRecItem(media: any): any {
@@ -160,6 +192,19 @@ async function fetchAnilistRecommendations(
   minItems = 12,
   animeGenres: string[] = []
 ): Promise<any[]> {
+  const RECS_SESSION_KEY = `cs_recs_${anilistId}`;
+  if (typeof window !== "undefined") {
+    try {
+      const cached = sessionStorage.getItem(RECS_SESSION_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return balanceRecommendations(parsed, animeTitle, String(anilistId), excludeIds, 4, Math.max(minItems, 12));
+        }
+      }
+    } catch {}
+  }
+
   let items: any[] = [];
 
   try {
@@ -267,6 +312,12 @@ async function fetchAnilistRecommendations(
     } catch { /* Kitsu recs fallback failed */ }
   }
 
+  if (typeof window !== "undefined" && items.length > 0) {
+    try {
+      sessionStorage.setItem(RECS_SESSION_KEY, JSON.stringify(items));
+    } catch {}
+  }
+
   return balanceRecommendations(items, animeTitle, String(anilistId), excludeIds, 4, Math.max(minItems, 12));
 }
 
@@ -328,18 +379,25 @@ async function fetchEpisodesClientSide(
       }
 
       if (azData?.episodes) {
-        const isSingleCap = totalEpisodes === 1 || seasonName.toLowerCase().includes("movie");
+        const ep1Title = (azData.episodes?.["1"]?.title?.en || azData.episodes?.["1"]?.title?.['x-jat'] || "").toLowerCase();
+        const hasPartSplits = Object.values(azData.episodes).some((e: any) => {
+          const t = (e?.title?.en || e?.title?.['x-jat'] || "").toLowerCase();
+          return t.startsWith("part 1 of") || t.startsWith("part 2 of");
+        });
+        const isSingleCap = totalEpisodes === 1 || seasonName.toLowerCase().includes("movie") || ep1Title.includes("complete movie") || hasPartSplits;
         for (const k of Object.keys(azData.episodes)) {
           const num = parseInt(k, 10);
           if (isNaN(num)) continue;
           if (isSingleCap && num > 1) continue;
           const ep = azData.episodes[k];
+          const rawTitle = ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${num}`;
+          const isPartCut = rawTitle.toLowerCase().startsWith("part ");
           aniZipEps.push({
             episodeId: `${seasonId}-${num}`,
             episodeNum: num,
-            title: (isSingleCap && (ep.title?.en || "").toLowerCase().includes("part"))
-              ? (seasonName || "Complete Movie")
-              : (ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${num}`),
+            title: isSingleCap
+              ? (isPartCut ? (seasonName || "Complete Movie") : rawTitle)
+              : rawTitle,
             description: ep.overview || ep.summary || null,
             thumbnail: ep.image || null,
             releasedDate: ep.airDate || ep.airdate || null,
@@ -352,15 +410,16 @@ async function fetchEpisodesClientSide(
       }
     }
 
-    const isMovie = totalEpisodes === 1 || seasonName.toLowerCase().includes("movie") || seasonId.startsWith("kitsu-") && totalEpisodes === 1;
+    const isMovie = totalEpisodes === 1 || seasonName.toLowerCase().includes("movie") || (seasonId.startsWith("kitsu-") && totalEpisodes === 1) || (aniZipEps.length > 0 && ((aniZipEps[0]?.title || "").toLowerCase().includes("complete movie") || (aniZipEps[0]?.title || "") === seasonName));
 
     // For movies, if AniZip returned the complete movie or a single cut, return it directly
     if (isMovie && aniZipEps.length > 0) {
       const first = aniZipEps[0];
+      const isPartTitle = (first.title || "").toLowerCase().startsWith("part ");
       return [{
         ...first,
         episodeNum: 1,
-        title: seasonName || "Complete Movie",
+        title: (first.title && !isPartTitle && first.title !== "Episode 1") ? first.title : (seasonName || "Complete Movie"),
       }];
     }
 
@@ -1013,7 +1072,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [descExpanded, setDescExpanded] = useState(false);
 
   // Franchise node data for Season Guide
-  const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>([]);
+  const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>(() => {
+    if (initialData?.franchiseNodes && Array.isArray(initialData.franchiseNodes)) {
+      return initialData.franchiseNodes as FranchiseNode[];
+    }
+    return [];
+  });
   const [showSeasonGuide, setShowSeasonGuide] = useState(false);
   const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
   const [hasRestoredState, setHasRestoredState] = useState(false);
@@ -1100,6 +1164,34 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const tmdbSeasonQuery = clientTmdbSeason != null ? `&tmdbSeason=${clientTmdbSeason}` : "";
     const episodeOffsetQuery = clientEpisodeOffset != null ? `&episodeOffset=${clientEpisodeOffset}` : "";
 
+    // ── Check session cache for instant episode hydration ──────────────────
+    const EP_SESSION_KEY = `cs_anime_eps_${id}_${seasonId}_${ANIME_API_VERSION}`;
+    if (!forceReload) {
+      try {
+        const cachedEps = sessionStorage.getItem(EP_SESSION_KEY);
+        if (cachedEps) {
+          const parsed = JSON.parse(cachedEps);
+          if (parsed?.episodes && Array.isArray(parsed.episodes) && parsed.episodes.length > 0 && parsed._cachedAt) {
+            const age = Date.now() - parsed._cachedAt;
+            // 5 minutes for finished, 2 min for ongoing
+            const maxAge = (parsed.status || "").toUpperCase().includes("RELEASING") ? 2 * 60 * 1000 : 5 * 60 * 1000;
+            if (age < maxAge) {
+              setEpisodes(prev => {
+                const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
+                return [...other, ...parsed.episodes].sort((a, b) => a.episodeNum - b.episodeNum);
+              });
+              if (parsed.seasonOverview) setSeasonOverview(parsed.seasonOverview);
+              loadedSeasonIds.current.add(seasonId);
+              setEpisodesLoading(false);
+              return;
+            } else {
+              sessionStorage.removeItem(EP_SESSION_KEY);
+            }
+          }
+        }
+      } catch {}
+    }
+
     try {
       const epData = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean; isHidden?: boolean } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbIdQuery}${tmdbSeasonQuery}${episodeOffsetQuery}&v=${ANIME_API_VERSION}`
@@ -1184,6 +1276,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         setSeasonOverview(epData.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
         setEpisodesLoading(false);
+
+        // Save to session cache for instant rehydration on back-navigation
+        try {
+          const statusForCache = anime?.status || "";
+          sessionStorage.setItem(EP_SESSION_KEY, JSON.stringify({
+            episodes: withRelease.map(ep => ({ ...ep, seasonId: String(ep.seasonId || seasonId) })),
+            seasonOverview: epData.data.seasonOverview || null,
+            status: statusForCache,
+            _cachedAt: Date.now(),
+          }));
+        } catch {}
 
         // Preload first 4 episode thumbnails for instant visual appearance (matching TV shows)
         if (typeof document !== "undefined" && sorted.length > 0) {
@@ -1334,9 +1437,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     // Fire episode loading immediately on mount — no waiting for server meta
     loadSeasonEpisodes(targetSeasonId, false);
 
-    // Fire fast client-side Watch Order graph fetch immediately on mount
+    // Only fetch client-side franchise graph if not already provided by server initialData
+    const hasInitialFranchise = Boolean(initialData?.franchiseNodes && initialData.franchiseNodes.length > 1);
     const numId = parseInt(String(id).replace(/\D/g, ""), 10);
-    if (!isNaN(numId) && numId > 0) {
+    if (!hasInitialFranchise && !isNaN(numId) && numId > 0) {
       fetchFranchiseClientSide(numId)
         .then((clientNodes) => {
           if (clientNodes && clientNodes.length > 0) {
@@ -1354,7 +1458,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         })
         .catch(() => {});
     }
-  }, [id, loadSeasonEpisodes]);
+  }, [id, loadSeasonEpisodes, initialData]);
 
   // ── 2) Background Server Meta & TMDB Mapping Enrichment ─────────────────
   useEffect(() => {
@@ -1371,13 +1475,40 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       setError(null);
       try {
         let data: any = null;
+
+        // 0. Check session cache first — avoids re-fetching on back-navigation or tab switch
+        const SESSION_CACHE_KEY = `cs_anime_meta_${id}_${ANIME_API_VERSION}`;
         try {
-          data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
-            `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
-            { signal: AbortSignal.timeout(12000) }
-          );
-        } catch (e) {
-          console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
+          const cached = sessionStorage.getItem(SESSION_CACHE_KEY);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed?.success && parsed?.data?.anime && parsed._cachedAt) {
+              const age = Date.now() - parsed._cachedAt;
+              const maxAge = (parsed.data.anime?.status || "").toUpperCase().includes("RELEASING") ? 2 * 60 * 1000 : 5 * 60 * 1000;
+              if (age < maxAge) {
+                data = parsed;
+              } else {
+                sessionStorage.removeItem(SESSION_CACHE_KEY);
+              }
+            }
+          }
+        } catch {}
+
+        if (!data) {
+          try {
+            data = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
+              `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
+              { signal: AbortSignal.timeout(10000) }
+            );
+            // Cache in session storage for fast back-navigation
+            if (data?.success && data?.data?.anime) {
+              try {
+                sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({ ...data, _cachedAt: Date.now() }));
+              } catch {}
+            }
+          } catch (e) {
+            console.warn("[Anime Client] Server meta fetch failed, trying client side fallback...", e);
+          }
         }
 
         if (!data || !data.success || !data.data?.anime) {
@@ -1513,6 +1644,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // ── Fetch You May Like recommendations (client-side AniList + server route fallback) ────────────
   useEffect(() => {
     if (!id) return;
+    let active = true;
     setRecsLoading(true);
     const franchiseIds = new Set(franchiseNodes.map(n => String(n.id)).filter(Boolean));
     const excludeIds = new Set([id, ...franchiseIds]);
@@ -1522,30 +1654,41 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const currentGenres = anime?.genres || initialData?.genres || [];
     const animeTitle = anime?.name || initialData?.name || "";
 
-    fetchAnilistRecommendations(validAnilistId, animeTitle, excludeIds, 12, currentGenres)
-      .then(async (items) => {
-        if (items.length === 0 && validAnilistId > 1) {
-          // Server route fallback if client GraphQL query returned no items
-          try {
-            const excludeParam = [...excludeIds].join(",");
-            const res = await fetch(`/api/anime/recommendations/${validAnilistId}?title=${encodeURIComponent(animeTitle)}&genres=${encodeURIComponent(currentGenres.join(","))}&excludeIds=${encodeURIComponent(excludeParam)}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data?.items?.length > 0) items = data.items;
-            }
-          } catch { /* fallback failed */ }
-        }
+    // Short 150ms non-blocking deferral so main content & episode data hydrate first
+    const timer = setTimeout(() => {
+      fetchAnilistRecommendations(validAnilistId, animeTitle, excludeIds, 12, currentGenres)
+        .then(async (items) => {
+          if (!active) return;
+          if (items.length === 0 && validAnilistId > 1) {
+            // Server route fallback if client GraphQL query returned no items
+            try {
+              const excludeParam = [...excludeIds].join(",");
+              const res = await fetch(`/api/anime/recommendations/${validAnilistId}?title=${encodeURIComponent(animeTitle)}&genres=${encodeURIComponent(currentGenres.join(","))}&excludeIds=${encodeURIComponent(excludeParam)}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data?.items?.length > 0) items = data.items;
+              }
+            } catch { /* fallback failed */ }
+          }
 
-        if (items.length > 0) {
-          const withReasons = items.map((item: any) => ({
-            ...item,
-            reason: getRecommendationReason(currentGenres.map((g: string) => g.charCodeAt(0)), item.genres?.map((g: string) => g.charCodeAt(0)) || [])
-          }));
-          setRecommendations(withReasons);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setRecsLoading(false));
+          if (active && items.length > 0) {
+            const withReasons = items.map((item: any) => ({
+              ...item,
+              reason: getRecommendationReason(currentGenres.map((g: string) => g.charCodeAt(0)), item.genres?.map((g: string) => g.charCodeAt(0)) || [])
+            }));
+            setRecommendations(withReasons);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active) setRecsLoading(false);
+        });
+    }, 150);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [anime?.id, anime?.name, id, franchiseNodes, initialData]);
 
   // ── Background Mapping Verification & Suspicious Mapping Corrector ─────
@@ -1849,47 +1992,72 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const targetKey = String(currentSeasonId || id || "").trim().toLowerCase();
     const cleanNum = targetKey.replace(/\D/g, "");
 
-    // 1. Direct exact key match
-    const direct = episodesBySeason[targetKey] || episodesBySeason[String(currentSeasonId)];
-    if (direct && direct.length > 0) {
-      return [...direct].sort((a, b) => a.episodeNum - b.episodeNum);
-    }
+    const rawList = (() => {
+      // 1. Direct exact key match
+      const direct = episodesBySeason[targetKey] || episodesBySeason[String(currentSeasonId)];
+      if (direct && direct.length > 0) {
+        return [...direct].sort((a, b) => a.episodeNum - b.episodeNum);
+      }
 
-    // 2. Prefix-normalized match (e.g. mal-16498, kitsu-16498, 16498)
-    if (cleanNum) {
-      for (const [k, list] of Object.entries(episodesBySeason)) {
-        if (k.replace(/\D/g, "") === cleanNum && list.length > 0) {
-          return [...list].sort((a, b) => a.episodeNum - b.episodeNum);
+      // 2. Prefix-normalized match (e.g. mal-16498, kitsu-16498, 16498)
+      if (cleanNum) {
+        for (const [k, list] of Object.entries(episodesBySeason)) {
+          if (k.replace(/\D/g, "") === cleanNum && list.length > 0) {
+            return [...list].sort((a, b) => a.episodeNum - b.episodeNum);
+          }
         }
       }
-    }
 
-    // 3. Match from active season in anime.seasons
-    if (anime?.seasons && anime.seasons.length > 0) {
-      const activeSeason = anime.seasons.find(s => String(s.id).toLowerCase() === targetKey || (cleanNum && String(s.id).replace(/\D/g, "") === cleanNum)) || anime.seasons[0];
-      if (activeSeason) {
-        const sKey = String(activeSeason.id);
-        const sList = episodesBySeason[sKey] || episodesBySeason[sKey.replace(/\D/g, "")];
-        if (sList && sList.length > 0) {
-          return [...sList].sort((a, b) => a.episodeNum - b.episodeNum);
+      // 3. Match from active season in anime.seasons
+      if (anime?.seasons && anime.seasons.length > 0) {
+        const activeSeason = anime.seasons.find(s => String(s.id).toLowerCase() === targetKey || (cleanNum && String(s.id).replace(/\D/g, "") === cleanNum)) || anime.seasons[0];
+        if (activeSeason) {
+          const sKey = String(activeSeason.id);
+          const sList = episodesBySeason[sKey] || episodesBySeason[sKey.replace(/\D/g, "")];
+          if (sList && sList.length > 0) {
+            return [...sList].sort((a, b) => a.episodeNum - b.episodeNum);
+          }
         }
       }
-    }
 
-    // 4. If all loaded episodes are present, return the matching ones or the full list
-    if (episodes.length > 0) {
-      const filtered = episodes.filter(e => {
-        const eKey = String(e.seasonId || "").toLowerCase();
-        return eKey === targetKey || (cleanNum && eKey.replace(/\D/g, "") === cleanNum);
-      });
-      if (filtered.length > 0) {
-        return [...filtered].sort((a, b) => a.episodeNum - b.episodeNum);
+      // 4. If all loaded episodes are present, return the matching ones or the full list
+      if (episodes.length > 0) {
+        const filtered = episodes.filter(e => {
+          const eKey = String(e.seasonId || "").toLowerCase();
+          return eKey === targetKey || (cleanNum && eKey.replace(/\D/g, "") === cleanNum);
+        });
+        if (filtered.length > 0) {
+          return [...filtered].sort((a, b) => a.episodeNum - b.episodeNum);
+        }
+        return [...episodes].sort((a, b) => a.episodeNum - b.episodeNum);
       }
-      return [...episodes].sort((a, b) => a.episodeNum - b.episodeNum);
+
+      return [];
+    })();
+
+    if (rawList.length === 0) return [];
+
+    // Movie safety cap: If this anime is a movie format or has split part titles, enforce single complete movie episode
+    const firstEpTitle = (rawList[0]?.title || "").toLowerCase();
+    const hasPartSplits = rawList.some(e => {
+      const t = (e?.title || "").toLowerCase();
+      return t.startsWith("part 1 of") || t.startsWith("part 2 of");
+    });
+    const activeSeason = anime?.seasons?.find(s => String(s.id).toLowerCase() === targetKey || (cleanNum && String(s.id).replace(/\D/g, "") === cleanNum));
+    const isSeasonMovie = (activeSeason?.seasonLabel || "").startsWith("Movie") || anime?.format === "MOVIE" || anime?.type === "MOVIE" || firstEpTitle.includes("complete movie") || hasPartSplits;
+
+    if (isSeasonMovie && rawList.length > 1) {
+      const first = rawList[0];
+      const isPart = (first.title || "").toLowerCase().startsWith("part ");
+      return [{
+        ...first,
+        episodeNum: 1,
+        title: (first.title && !isPart && first.title !== "Episode 1") ? first.title : (activeSeason?.name || anime?.name || "Complete Movie"),
+      }];
     }
 
-    return [];
-  }, [episodesBySeason, currentSeasonId, id, episodes, anime?.seasons]);
+    return rawList;
+  }, [episodesBySeason, currentSeasonId, id, episodes, anime?.seasons, anime?.format, anime?.type, anime?.name]);
 
   const upcomingAnimeThisWeek = useMemo(
     () => currentSeasonEps

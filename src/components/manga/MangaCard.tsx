@@ -22,6 +22,7 @@ export const MangaCard = memo(function MangaCard({ item, priority = false, showB
   return (
     <Link
       href={`/manga/${item.id}`}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 320px" }}
       className="group relative flex flex-col w-full aspect-[2/3] rounded-3xl overflow-hidden bg-zinc-950 border border-white/[0.08] hover:border-primary/70 hover:shadow-[0_16px_40px_hsl(var(--primary)/0.25)] hover:scale-[1.03] hover:-translate-y-1.5 active:scale-[0.98] transition-all duration-300 select-none focus:outline-none cursor-pointer touch-manipulation"
     >
       {/* Full-Bleed Poster Image */}
@@ -30,6 +31,7 @@ export const MangaCard = memo(function MangaCard({ item, priority = false, showB
         alt={item.title}
         referrerPolicy="no-referrer"
         loading={priority ? "eager" : "lazy"}
+        decoding="async"
         className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
       />
 

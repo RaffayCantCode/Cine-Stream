@@ -304,7 +304,7 @@ function sessionShuffle<T>(array: T[] | null | undefined, salt: string = ""): T[
 
 function LazySection({ children, show, placeholderHeight = 0 }: { children: React.ReactNode; show: boolean; placeholderHeight?: number }) {
   return show ? (
-    <section className="animate-fade-in-up opacity-0" style={{ animationFillMode: "forwards" }}>
+    <section>
       {children}
     </section>
   ) : (

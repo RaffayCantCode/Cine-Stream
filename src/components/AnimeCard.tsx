@@ -145,13 +145,12 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
 
         {/* Persistent Title & Hover Genre / Reason Layer */}
         <div className="absolute bottom-0 inset-x-0 z-30 p-3 pointer-events-none flex flex-col justify-end">
-          {item.reason ? (
-            <p className="text-[10px] font-bold text-emerald-400 line-clamp-1 drop-shadow-md mb-0.5">
-              ✨ {item.reason}
-            </p>
-          ) : null}
-
           <div className="transform transition-transform duration-300 group-hover:-translate-y-4">
+            {item.reason ? (
+              <p className="text-[10px] font-bold text-emerald-400 line-clamp-1 drop-shadow-md mb-0.5">
+                ✨ {item.reason}
+              </p>
+            ) : null}
             <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
               {item.name}
             </h3>

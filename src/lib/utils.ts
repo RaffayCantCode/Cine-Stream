@@ -292,7 +292,8 @@ const ADULT_KEYWORDS = [
 export function isTmdbAnime(item: { original_language?: string; genre_ids?: number[]; origin_country?: string[] }): boolean {
   if (!item) return false;
   const isJapanese = item.original_language === "ja" || (Array.isArray(item.origin_country) && item.origin_country.includes("JP"));
-  return Boolean(isJapanese);
+  const isAnimation = Array.isArray(item.genre_ids) && item.genre_ids.includes(16);
+  return Boolean(isJapanese && isAnimation);
 }
 
 /**
@@ -316,6 +317,7 @@ export function filterExcludeAnime<T extends { original_language?: string; genre
 }
 
 export function filterReleasedSafeContent<T extends {
+  id?: number;
   adult?: boolean;
   release_date?: string;
   first_air_date?: string;
@@ -333,17 +335,10 @@ export function filterReleasedSafeContent<T extends {
 
     if (item.adult === true) return false;
 
-    const textToCheck = `${item.title || ""} ${item.name || ""} ${item.overview || ""}`.toLowerCase();
-    
-    // For non-search (browse feeds), filter aggressively out any softcore/erotic titles
+    // For non-search (browse feeds), filter out explicitly adult/erotic titles
     if (!isSearch) {
-      if (ADULT_KEYWORDS.some((keyword) => textToCheck.includes(keyword))) {
-        return false;
-      }
-    } else {
-      // In search, allow moderate/R-rated/softcore titles to be found, but block hardcore items
-      const hardcoreKeywords = ["porn", "hardcore", "xxx", "onlyfans", "camgirl", "webcam", "masturbation", "orgy", "adults only"];
-      if (hardcoreKeywords.some((keyword) => textToCheck.includes(keyword))) {
+      const titleText = `${item.title || ""} ${item.name || ""}`.toLowerCase();
+      if (ADULT_KEYWORDS.some((keyword) => titleText.includes(keyword))) {
         return false;
       }
     }

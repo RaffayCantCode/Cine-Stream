@@ -4,11 +4,35 @@ import { NextRequest } from "next/server";
 import { getAnimeDetails } from "@/lib/anime-fetch";
 import { getMediaOverride, applyMediaOverride, getAllMediaOverrides } from "@/lib/media-overrides";
 
+// no-store: for hidden/error responses or uncacheable content
 const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
   "CDN-Cache-Control": "no-store",
   "Cloudflare-CDN-Cache-Control": "no-store",
 } as const;
+
+// Short CDN cache for ongoing/airing anime (2 min CDN, 5 min stale)
+const ongoingCacheHeaders = {
+  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, stale-if-error=3600",
+  "CDN-Cache-Control": "public, max-age=120, stale-while-revalidate=300",
+  "Cloudflare-CDN-Cache-Control": "public, max-age=120, stale-while-revalidate=300",
+} as const;
+
+// Longer CDN cache for completed anime (5 min CDN, 15 min stale)
+const finishedCacheHeaders = {
+  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900, stale-if-error=86400",
+  "CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=900",
+  "Cloudflare-CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=900",
+} as const;
+
+function getAnimeCacheHeaders(status?: string | null) {
+  const s = (status || "").toUpperCase();
+  if (s.includes("RELEASING") || s.includes("AIRING") || s.includes("NOT_YET")) {
+    return ongoingCacheHeaders;
+  }
+  return finishedCacheHeaders;
+}
+
 
 export async function GET(
   _request: NextRequest,
@@ -131,6 +155,11 @@ export async function GET(
       tmdbId,
     }, effectiveOverride);
 
+    // Use smart caching: ongoing/airing anime get 2min CDN cache, finished anime get 5min CDN cache
+    const cacheHeaders = (isParentUpcoming || isParentUnavailable)
+      ? noStoreHeaders
+      : getAnimeCacheHeaders((finalAnime as any)?.status || anime?.status);
+
     return Response.json({
       success: true,
       data: {
@@ -138,7 +167,7 @@ export async function GET(
         franchiseNodes,
         tmdbSeasonMap,
       },
-    }, { headers: noStoreHeaders });
+    }, { headers: cacheHeaders });
   } catch (error) {
     console.error("[Anime Meta Error]:", error);
     const fallbackOverride = await getMediaOverride("anime", id).catch(() => null);

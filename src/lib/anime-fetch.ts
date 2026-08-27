@@ -770,8 +770,10 @@ async function buildFranchiseGraph(startId: number): Promise<FranchiseNode[]> {
     let toFetch = collectRelationIds(rootMedia);
     let depth = 0;
 
-    // Multi-level batch traversal (up to 6 levels deep, max 120 nodes)
-    while (toFetch.length > 0 && depth < 6 && visited.size < 120) {
+    // Multi-level batch traversal (up to 3 levels deep, max 60 nodes)
+    // 3 hops is enough to capture full franchise chains (e.g. S1→S2→S3→Movie)
+    // without making 6 sequential AniList round-trips on every page load.
+    while (toFetch.length > 0 && depth < 3 && visited.size < 60) {
       depth++;
       const batchIds = toFetch.splice(0, 50);
       try {
@@ -1224,46 +1226,49 @@ export async function getAnimeDetails(
               episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
             }
           }`;
-          const data = await anilistQuery(q, { id: numId }, 1, 86400);
-          return data?.data?.Media || null;
-        } catch {
-          try {
-            const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, {
-              signal: AbortSignal.timeout(4000),
-              headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }
-            });
-            if (tRes.ok) {
-              const tData = await tRes.json();
-              if (tData) {
-                return {
-                  id: tData.id,
-                  idMal: tData.malId || null,
-                  isAdult: false,
-                  title: {
-                    romaji: tData.title?.romaji,
-                    english: tData.title?.english,
-                    native: tData.title?.native,
-                  },
-                  coverImage: {
-                    large: tData.image,
-                    extraLarge: tData.cover || tData.image,
-                  },
-                  episodes: tData.totalEpisodes,
-                  genres: tData.genres || [],
-                  averageScore: tData.rating || null,
-                  description: tData.description || "",
-                  status: tData.status || null,
-                  type: tData.type || "TV",
-                  format: tData.type || "TV",
-                  season: tData.season || null,
-                  seasonYear: tData.releaseDate || null,
-                  duration: tData.duration || null,
-                };
-              }
+          const data = await anilistQuery(q, { id: numId }, 0, 86400);
+          if (data?.data?.Media) {
+            return data.data.Media;
+          }
+        } catch {}
+
+        // Immediate fallback if AniList returns null or rate limits
+        try {
+          const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, {
+            signal: AbortSignal.timeout(3000),
+            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }
+          });
+          if (tRes.ok) {
+            const tData = await tRes.json();
+            if (tData?.id || tData?.title) {
+              return {
+                id: tData.id,
+                idMal: tData.malId || null,
+                isAdult: false,
+                title: {
+                  romaji: tData.title?.romaji,
+                  english: tData.title?.english,
+                  native: tData.title?.native,
+                },
+                coverImage: {
+                  large: tData.image,
+                  extraLarge: tData.cover || tData.image,
+                },
+                episodes: tData.totalEpisodes,
+                genres: tData.genres || [],
+                averageScore: tData.rating || null,
+                description: tData.description || "",
+                status: tData.status || null,
+                type: tData.type || "TV",
+                format: tData.type || "TV",
+                season: tData.season || null,
+                seasonYear: tData.releaseDate || null,
+                duration: tData.duration || null,
+              };
             }
-          } catch { /* ignore */ }
-          return null;
-        }
+          }
+        } catch { /* ignore */ }
+        return null;
       })()
     : Promise.resolve(null);
 
@@ -1983,7 +1988,12 @@ export async function fetchEpisodesFromAniZip(
     if (!json.episodes) return null;
 
     const eps: EpisodeDetail[] = [];
-    const isSingleEpCap = seasonCap === 1;
+    const ep1Title = (json.episodes?.['1']?.title?.en || json.episodes?.['1']?.title?.['x-jat'] || "").toLowerCase();
+    const hasPartSplits = Object.values(json.episodes || {}).some((e: any) => {
+      const t = (e?.title?.en || e?.title?.['x-jat'] || "").toLowerCase();
+      return t.startsWith("part 1 of") || t.startsWith("part 2 of");
+    });
+    const isSingleEpCap = seasonCap === 1 || ep1Title.includes("complete movie") || hasPartSplits;
     const effectiveCap = isSingleEpCap ? 1 : (seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500);
     for (const key of Object.keys(json.episodes)) {
       const epNum = parseInt(key, 10);

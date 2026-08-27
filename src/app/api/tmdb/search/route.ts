@@ -34,16 +34,17 @@ function scoreResult(item: any, query: string): number {
   const normalizedQuery = normalizeQuery(query);
   const title = normalizeQuery(item.title || item.name || "");
   if (!title) return 0;
-  if (title === normalizedQuery) return 1000;
-  if (title.startsWith(normalizedQuery)) return 850;
-  if (title.includes(normalizedQuery)) return 720;
+  if (title === normalizedQuery) return 1000 + Math.min(Number(item.popularity || 0), 200);
+  if (title.startsWith(normalizedQuery)) return 850 + Math.min(Number(item.popularity || 0), 100);
+  if (title.includes(normalizedQuery)) return 720 + Math.min(Number(item.popularity || 0), 100);
 
   const queryWords = normalizedQuery.split(" ").filter(word => !STOP_WORDS.has(word));
   const titleWords = new Set(title.split(" "));
   const matches = queryWords.filter(word => titleWords.has(word)).length;
   const coverage = queryWords.length ? matches / queryWords.length : 0;
   const popularity = Math.min(Number(item.popularity || 0), 100) / 100;
-  return Math.round(coverage * 600 + popularity * 80 + Number(item.vote_count || 0) / 1000);
+  const voteBonus = Math.min(Number(item.vote_count || 0), 10000) / 50;
+  return Math.round(coverage * 600 + popularity * 80 + voteBonus);
 }
 
 /**

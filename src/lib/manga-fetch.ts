@@ -51,7 +51,7 @@ const WEEBCENTRAL_BASE = "https://weebcentral.com";
 const ASURA_API = "https://api.asurascans.com/api";
 
 // Bump this whenever fetch logic or data shape changes to instantly drop stale in-memory cache
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 
 // High-speed in-memory response cache
 const serverCache = new Map<string, { data: any; expiry: number }>();
@@ -254,16 +254,16 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
     const half = Math.ceil(limit / 2);
 
     try {
-      // Fetch Manhwa and Manga in parallel for equal representation
+      // Fetch dynamic daily trending Manhwa and Manga in parallel (using Popularity for live daily trends)
       const [manhwaRes, mangaRes] = await Promise.all([
         fetchWithTimeout(
-          `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${half}`,
-          { headers: { "HX-Request": "true" }, next: { revalidate: 1800 } } as any,
+          `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Popularity&order=Descending&official=Any&anime=Any&adult=False&limit=${half}`,
+          { headers: { "HX-Request": "true" }, next: { revalidate: 900 } } as any,
           5000
         ).catch(() => null),
         fetchWithTimeout(
-          `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${half}`,
-          { headers: { "HX-Request": "true" }, next: { revalidate: 1800 } } as any,
+          `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Popularity&order=Descending&official=Any&anime=Any&adult=False&limit=${half}`,
+          { headers: { "HX-Request": "true" }, next: { revalidate: 900 } } as any,
           5000
         ).catch(() => null),
       ]);
@@ -288,7 +288,7 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
 
       if (combined.length > 0) {
         const result = combined.slice(0, limit);
-        setInCache(cacheKey, result, 1800);
+        setInCache(cacheKey, result, 900);
         return result;
       }
     } catch (err) {
@@ -297,9 +297,9 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
 
     // Fallback 1: Balanced search (already does 50/50 interleave internally)
     try {
-      const fallbackSearch = await searchManga("", { type: "all", limit });
+      const fallbackSearch = await searchManga("", { type: "all", limit, sortBy: "rating" });
       if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-        setInCache(cacheKey, fallbackSearch.items, 1200);
+        setInCache(cacheKey, fallbackSearch.items, 900);
         return fallbackSearch.items;
       }
     } catch {}
@@ -307,7 +307,7 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
     // Fallback 2: Asura Scans popular manhwas
     const asuraItems = await getAsuraPopularSeries(limit);
     if (asuraItems.length > 0) {
-      setInCache(cacheKey, asuraItems, 1200);
+      setInCache(cacheKey, asuraItems, 900);
       return asuraItems;
     }
 
@@ -326,12 +326,12 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
   return dedupeRequest(cacheKey, async () => {
     try {
       const res = await fetchWithTimeout(
-        `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
+        `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Popularity&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
         {
           headers: {
             "HX-Request": "true",
           },
-          next: { revalidate: 1800 },
+          next: { revalidate: 900 },
         } as any,
         5000
       );
@@ -341,7 +341,7 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
         const items = parseWeebCentralHtml(html);
         if (items.length > 0) {
           const result = items.slice(0, limit);
-          setInCache(cacheKey, result, 1800);
+          setInCache(cacheKey, result, 900);
           return result;
         }
       }
@@ -352,15 +352,15 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
     // Fallback 1: Asura Scans dedicated series API
     const asuraItems = await getAsuraPopularSeries(limit);
     if (asuraItems.length > 0) {
-      setInCache(cacheKey, asuraItems, 1200);
+      setInCache(cacheKey, asuraItems, 900);
       return asuraItems;
     }
 
     // Fallback 2: searchManga for manhwa
     try {
-      const fallbackSearch = await searchManga("", { type: "manhwa", limit });
+      const fallbackSearch = await searchManga("", { type: "manhwa", limit, sortBy: "rating" });
       if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-        setInCache(cacheKey, fallbackSearch.items, 1200);
+        setInCache(cacheKey, fallbackSearch.items, 900);
         return fallbackSearch.items;
       }
     } catch {}
@@ -380,12 +380,12 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
   return dedupeRequest(cacheKey, async () => {
     try {
       const res = await fetchWithTimeout(
-        `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Subscribers&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
+        `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Latest%20Updates&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
         {
           headers: {
             "HX-Request": "true",
           },
-          next: { revalidate: 1800 },
+          next: { revalidate: 900 },
         } as any,
         5000
       );
@@ -395,7 +395,7 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
         const items = parseWeebCentralHtml(html);
         if (items.length > 0) {
           const result = items.slice(0, limit);
-          setInCache(cacheKey, result, 1800);
+          setInCache(cacheKey, result, 900);
           return result;
         }
       }
@@ -405,9 +405,9 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
 
     // Fallback: searchManga for manga
     try {
-      const fallbackSearch = await searchManga("", { type: "manga", limit });
+      const fallbackSearch = await searchManga("", { type: "manga", limit, sortBy: "latestUploadedChapter" });
       if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-        setInCache(cacheKey, fallbackSearch.items, 1200);
+        setInCache(cacheKey, fallbackSearch.items, 900);
         return fallbackSearch.items;
       }
     } catch {}

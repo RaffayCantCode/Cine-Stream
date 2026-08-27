@@ -165,8 +165,9 @@ function SearchContent() {
   const initialMode = searchParams.get("mode") || "";
 
   const [query, setQuery] = useState(initialQuery);
-  const debouncedQuery = useDebounce(query, 350);
+  const debouncedQuery = useDebounce(query, 250);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchCacheRef = useRef<Map<string, { tmdb: MediaItem[]; anime: AnimeItem[]; corrected: string | null; suggestions: string[] }>>(new Map());
   
   const [results, setResults] = useState<MediaItem[]>([]);
   const [animeResults, setAnimeResults] = useState<AnimeItem[]>([]);
@@ -208,13 +209,26 @@ function SearchContent() {
     let cancelled = false;
 
     const executeSearch = async () => {
-      if (debouncedQuery.length < 2) {
+      const qLower = debouncedQuery.trim().toLowerCase();
+      if (qLower.length < 2) {
         setResults([]);
         setAnimeResults([]);
         setRelatedSuggestions([]);
         setCorrectedQuery(null);
         setError(null);
         setIsLoading(false);
+        return;
+      }
+
+      // Check client memory cache for 0ms instant display
+      if (searchCacheRef.current.has(qLower)) {
+        const cached = searchCacheRef.current.get(qLower)!;
+        setResults(cached.tmdb);
+        setAnimeResults(cached.anime);
+        setCorrectedQuery(cached.corrected);
+        setRelatedSuggestions(cached.suggestions);
+        setIsLoading(false);
+        setError(null);
         return;
       }
 
@@ -340,10 +354,24 @@ function SearchContent() {
         setCorrectedQuery(correctedTitle);
         if (!cancelled) setIsLoading(false);
 
+        // Cache initial results
+        searchCacheRef.current.set(qLower, {
+          tmdb: mainTmdb,
+          anime: mainAnime,
+          corrected: correctedTitle,
+          suggestions: [],
+        });
+
         // 3. Phase 2 — Deferred: fetch related suggestions in background (non-blocking)
         if (!cancelled) {
           fetchRelatedSuggestions(mainTmdb, mainAnime, correctedTitle, debouncedQuery).then(suggestions => {
-            if (!cancelled) setRelatedSuggestions(suggestions);
+            if (!cancelled) {
+              setRelatedSuggestions(suggestions);
+              const existing = searchCacheRef.current.get(qLower);
+              if (existing) {
+                existing.suggestions = suggestions;
+              }
+            }
           });
         }
 

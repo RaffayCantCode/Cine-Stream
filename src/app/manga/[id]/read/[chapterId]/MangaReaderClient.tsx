@@ -15,7 +15,9 @@ import {
 import { fetchJson } from "@/lib/utils";
 import {
   ArrowLeft,
+  ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Maximize,
   Minimize,
   ZoomIn,
@@ -70,6 +72,7 @@ export default function MangaReaderClient({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [chapterPickerOpen, setChapterPickerOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -216,6 +219,12 @@ export default function MangaReaderClient({
         c.id.replace(/^(wc|asura)-/, "") === cleanTarget
     );
   }, [sortedChapters, chapterId]);
+
+  const prevChapter = useMemo(() => {
+    return currentChapterIdx > 0
+      ? sortedChapters[currentChapterIdx - 1]
+      : null;
+  }, [sortedChapters, currentChapterIdx]);
 
   const nextChapter = useMemo(() => {
     return currentChapterIdx >= 0 && currentChapterIdx < sortedChapters.length - 1
@@ -500,8 +509,8 @@ export default function MangaReaderClient({
           showControls ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"
         } bg-black/95 backdrop-blur-2xl border-b border-white/10 px-2.5 sm:px-6 flex items-center justify-between gap-2 shadow-2xl`}
       >
-        {/* Left: Back & (Desktop-only) Title/Chapter */}
-        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink">
+        {/* Left: Back, (Desktop) Prev Chapter Button & Title/Chapter */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
           <Link
             href={`/manga/${mangaId}`}
             className="p-2 rounded-xl bg-white/[0.06] hover:bg-primary/20 hover:text-primary text-white/80 transition-colors shrink-0 touch-manipulation active:scale-90"
@@ -510,7 +519,19 @@ export default function MangaReaderClient({
             <ArrowLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </Link>
 
-          <div className="hidden md:flex flex-col min-w-0">
+          {/* Previous Chapter Button (Desktop) */}
+          {prevChapter && (
+            <Link
+              href={`/manga/${mangaId}/read/${prevChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(prevChapter.chapterNumber)}`}
+              className="hidden sm:flex items-center gap-1 px-3 py-1.5 sm:py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 hover:border-primary/50 text-xs font-black shadow-md transition-all cursor-pointer shrink-0 touch-manipulation active:scale-95"
+              title={`Previous Chapter (Ch. ${prevChapter.chapterNumber})`}
+            >
+              <ChevronLeft className="w-3.5 h-3.5 stroke-[3]" />
+              <span>Prev Ch.</span>
+            </Link>
+          )}
+
+          <div className="hidden lg:flex flex-col min-w-0">
             <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[180px] md:max-w-xs">
               {manga?.title || queryTitle || "Manga"}
             </h1>
@@ -660,7 +681,8 @@ export default function MangaReaderClient({
                     step="5"
                     value={brightness}
                     onChange={(e) => handleSetBrightness(parseInt(e.target.value, 10))}
-                    className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary"
+                    onInput={(e: any) => handleSetBrightness(parseInt(e.target.value, 10))}
+                    className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary touch-manipulation"
                   />
                   <Sun className="w-4 h-4 text-primary shrink-0" />
                 </div>
@@ -672,7 +694,7 @@ export default function MangaReaderClient({
                       key={preset}
                       type="button"
                       onClick={() => handleSetBrightness(preset)}
-                      className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer touch-manipulation ${
                         brightness === preset
                           ? "bg-primary text-primary-foreground font-black shadow-md shadow-primary/30 scale-102"
                           : "bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white"
@@ -702,13 +724,9 @@ export default function MangaReaderClient({
               <ZoomOut className="w-4 h-4 stroke-[2.5]" />
             </button>
 
-            <button
-              onClick={handleZoomReset}
-              className="px-2 sm:px-2.5 py-1 text-xs sm:text-sm font-black text-primary font-mono tracking-tight hover:bg-primary/15 rounded-lg transition-all cursor-pointer touch-manipulation"
-              title="Reset Zoom (50% Desktop / 100% Mobile)"
-            >
+            <span className="px-2 font-mono text-[11px] sm:text-xs font-black text-primary select-none min-w-[42px] text-center">
               {zoomLevel}%
-            </button>
+            </span>
 
             <button
               onClick={handleZoomIn}
@@ -731,17 +749,94 @@ export default function MangaReaderClient({
             {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
           </button>
 
-          {/* Next Chapter Button */}
+          {/* Desktop Next Chapter Button */}
           {nextChapter && (
             <Link
               href={`/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`}
-              className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-primary hover:opacity-90 text-primary-foreground text-xs font-black shadow-lg shadow-primary/25 transition-all cursor-pointer shrink-0 touch-manipulation active:scale-95"
+              className="hidden sm:flex items-center gap-1 px-3.5 py-2 rounded-xl bg-primary hover:opacity-90 text-primary-foreground text-xs font-black shadow-lg shadow-primary/25 transition-all cursor-pointer shrink-0 touch-manipulation active:scale-95"
               title={`Next Chapter (Ch. ${nextChapter.chapterNumber})`}
             >
-              <span className="hidden sm:inline">Next Ch.</span>
-              <span className="sm:hidden">Next</span>
+              <span>Next Ch.</span>
               <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
             </Link>
+          )}
+
+          {/* Mobile Chapter Navigation Dropdown (Only appears if prev or next chapter exists) */}
+          {(prevChapter || nextChapter) && (
+            <div className="relative sm:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(!mobileNavOpen);
+                  setChapterPickerOpen(false);
+                  setBrightnessPickerOpen(false);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-black shadow-lg shadow-primary/25 transition-all cursor-pointer touch-manipulation active:scale-95"
+                title="Navigate Chapters"
+                aria-label="Navigate Chapters"
+              >
+                <span>Nav</span>
+                <ChevronDown className={`w-3.5 h-3.5 stroke-[3] transition-transform duration-200 ${mobileNavOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Mobile Nav Overlay & Menu */}
+              {mobileNavOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+                    onClick={() => setMobileNavOpen(false)}
+                  />
+                  <div className="fixed right-2.5 top-16 w-60 flex flex-col bg-[#0c0d14] border-2 border-primary/60 rounded-2xl p-2.5 shadow-[0_25px_80px_rgba(0,0,0,0.98)] z-50 space-y-2">
+                    <div className="flex items-center justify-between px-2 pb-1.5 border-b border-white/10">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-primary">
+                        Chapter Navigation
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setMobileNavOpen(false)}
+                        className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {prevChapter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileNavOpen(false);
+                          router.push(`/manga/${mangaId}/read/${prevChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(prevChapter.chapterNumber)}`);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-bold transition-all active:scale-95 cursor-pointer border border-white/10"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <ChevronLeft className="w-4 h-4 text-primary shrink-0 stroke-[2.5]" />
+                          <span>Prev Chapter</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-400">Ch. {prevChapter.chapterNumber}</span>
+                      </button>
+                    )}
+
+                    {nextChapter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileNavOpen(false);
+                          router.push(`/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black shadow-md shadow-primary/30 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <span>Next Chapter</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-mono opacity-80">Ch. {nextChapter.chapterNumber}</span>
+                          <ChevronRight className="w-4 h-4 shrink-0 stroke-[3]" />
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </header>
@@ -762,8 +857,9 @@ export default function MangaReaderClient({
             width: `${zoomLevel}%`,
             maxWidth: `${Math.max(360, Math.round(1400 * (zoomLevel / 100)))}px`,
             filter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
+            WebkitFilter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
           }}
-          className="flex flex-col items-center mx-auto transition-[width,filter] duration-150"
+          className="flex flex-col items-center mx-auto transition-[width,filter] duration-150 relative"
         >
           {pagesData.pageUrls.map((url, idx) => {
             const pageNum = idx + 1;
@@ -775,7 +871,7 @@ export default function MangaReaderClient({
                   if (el) pageRefs.current.set(pageNum, el);
                   else pageRefs.current.delete(pageNum);
                 }}
-                className="relative w-full flex justify-center bg-black min-h-[400px] sm:min-h-[600px]"
+                className="relative w-full flex justify-center bg-black min-h-[400px] sm:min-h-[600px] overflow-hidden"
               >
                 <img
                   src={url}
@@ -783,6 +879,10 @@ export default function MangaReaderClient({
                   referrerPolicy="no-referrer"
                   loading={pageNum <= 4 ? "eager" : "lazy"}
                   decoding="async"
+                  style={{
+                    filter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
+                    WebkitFilter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
+                  }}
                   onError={(e) => {
                     const target = e.currentTarget;
                     if (!target.dataset.retried) {
@@ -790,10 +890,17 @@ export default function MangaReaderClient({
                       target.src = `${url}${url.includes("?") ? "&" : "?"}_retry=${Date.now()}`;
                     }
                   }}
-                  className="w-full h-auto object-contain block select-none"
+                  className="w-full h-auto object-contain block select-none transition-[filter] duration-150"
                 />
+                {/* Hardware-accelerated dimmer overlay for mobile when brightness < 100 */}
+                {brightness < 100 && (
+                  <div
+                    className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-150 z-10"
+                    style={{ opacity: Math.max(0, (100 - brightness) / 100 * 0.75) }}
+                  />
+                )}
                 {/* Subtle Page Watermark */}
-                <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/70 text-[9px] text-white/60 backdrop-blur-md pointer-events-none font-bold z-10">
+                <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/70 text-[9px] text-white/60 backdrop-blur-md pointer-events-none font-bold z-20">
                   {pageNum} / {totalPages}
                 </span>
               </div>
@@ -810,8 +917,18 @@ export default function MangaReaderClient({
                 Finished {currentChapter ? currentChapter.title || `Chapter ${currentChapter.chapterNumber}` : "Chapter"}!
               </h3>
 
-              {nextChapter ? (
-                <div className="pt-2">
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                {prevChapter && (
+                  <Link
+                    href={`/manga/${mangaId}/read/${prevChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(prevChapter.chapterNumber)}`}
+                    className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 font-bold text-sm shadow-lg transition-all cursor-pointer touch-manipulation active:scale-95"
+                  >
+                    <ChevronLeft className="w-4 h-4 stroke-[3]" />
+                    <span>Previous Ch. {prevChapter.chapterNumber}</span>
+                  </Link>
+                )}
+
+                {nextChapter ? (
                   <Link
                     href={`/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`}
                     className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-primary hover:opacity-90 text-primary-foreground font-black text-sm shadow-xl shadow-primary/30 transition-all cursor-pointer touch-manipulation active:scale-95"
@@ -819,12 +936,12 @@ export default function MangaReaderClient({
                     <span>Read Next Chapter {nextChapter.chapterNumber}</span>
                     <ChevronRight className="w-4 h-4 stroke-[3]" />
                   </Link>
-                </div>
-              ) : (
-                <p className="text-xs text-primary font-bold">
-                  🎉 You are caught up with the latest released chapter!
-                </p>
-              )}
+                ) : (
+                  <p className="text-xs text-primary font-bold w-full">
+                    🎉 You are caught up with the latest released chapter!
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
