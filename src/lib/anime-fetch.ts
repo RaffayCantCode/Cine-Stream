@@ -1989,18 +1989,19 @@ export async function fetchEpisodesFromAniZip(
 
     const eps: EpisodeDetail[] = [];
     const ep1Title = (json.episodes?.['1']?.title?.en || json.episodes?.['1']?.title?.['x-jat'] || "").toLowerCase();
-    const hasPartSplits = Object.values(json.episodes || {}).some((e: any) => {
+    const isExplicitMovie = seasonCap === 1 || ep1Title.includes("complete movie");
+    const hasPartSplits = isExplicitMovie && Object.values(json.episodes || {}).some((e: any) => {
       const t = (e?.title?.en || e?.title?.['x-jat'] || "").toLowerCase();
       return t.startsWith("part 1 of") || t.startsWith("part 2 of");
     });
-    const isSingleEpCap = seasonCap === 1 || ep1Title.includes("complete movie") || hasPartSplits;
+    const isSingleEpCap = isExplicitMovie || hasPartSplits;
     const effectiveCap = isSingleEpCap ? 1 : (seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500);
     for (const key of Object.keys(json.episodes)) {
       const epNum = parseInt(key, 10);
       if (isNaN(epNum) || epNum > effectiveCap) continue;
 
       const ep = json.episodes[key];
-      // If single episode cap is requested or this is a multi-part movie cut, skip secondary parts
+      // If single episode cap is requested for a movie cut, skip secondary parts
       if (isSingleEpCap && epNum > 1) continue;
       const title = ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${epNum}`;
       const description = ep.overview || ep.summary || null;

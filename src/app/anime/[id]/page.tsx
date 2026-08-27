@@ -47,32 +47,7 @@ export async function generateMetadata(
   });
 }
 
-export default async function AnimePage(
-  props: { params: Promise<{ id: string }> }
-) {
-  const params = await props.params;
-  const id = params?.id || "";
-
-  let initialData: any = null;
-  try {
-    const [details, override] = await Promise.all([
-      getAnimeDetails(id, 0, true).catch(() => null),
-      getMediaOverride("anime", id).catch(() => null),
-    ]);
-
-    if (details?.anime) {
-      const merged = applyMediaOverride({
-        ...details.anime,
-        seasons: details.seasons || [],
-        franchiseNodes: details.franchiseNodes || [],
-        tmdbId: details.tmdbId || null,
-        tmdbSeasonMap: details.tmdbSeasonMap || {},
-      }, override);
-      initialData = merged;
-    }
-  } catch (err) {
-    console.warn(`[AnimePage] Server initialData load failed for ${id}:`, err);
-  }
-
-  return <AnimeClient initialData={initialData} />;
+export default function AnimePage() {
+  return <AnimeClient />;
 }
+

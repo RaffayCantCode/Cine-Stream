@@ -168,17 +168,12 @@ function isAnimeSeasonFinished(season: any, meta?: any): boolean {
 function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): any[] {
   if (!episodes || episodes.length === 0) return [];
 
-  const firstTitle = (episodes[0]?.title || "").toLowerCase();
-  const hasPartSplits = episodes.some((e: any) => {
-    const t = (e?.title || "").toLowerCase();
-    return t.startsWith("part 1 of") || t.startsWith("part 2 of");
-  });
+  const isExplicitMovie = 
+    (season?.seasonLabel || "").toLowerCase().startsWith("movie") ||
+    season?.format === "MOVIE" ||
+    (meta?.anime?.format === "MOVIE" && (!season?.format || season?.format === "MOVIE") && (season?.totalEpisodes === 1 || !season?.totalEpisodes));
 
-  const isMovie = (season?.seasonLabel || "").startsWith("Movie") ||
-    meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE" || meta?.anime?.subtype === "MOVIE" ||
-    firstTitle.includes("complete movie") || hasPartSplits;
-
-  if (isMovie) {
+  if (isExplicitMovie && episodes.length > 1) {
     const firstEp = episodes[0];
     return [{
       ...firstEp,
@@ -952,17 +947,16 @@ export async function GET(
       // ABSOLUTE FINAL HARD CEILING: Apply knownEpisodeCount cap one last time
       // regardless of any code path taken above. This is the last line of defense
       // against edge-cache stale data or any path that bypassed the cap logic.
-      const firstEpTitle = (seasonEps[0]?.title || "").toLowerCase();
-      const hasPartSplitsFinal = seasonEps.some((e: any) => {
-        const t = (e?.title || "").toLowerCase();
-        return t.startsWith("part 1 of") || t.startsWith("part 2 of");
-      });
-      const isMovieFormatFinal = (season?.seasonLabel || "").startsWith("Movie") || meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE" || firstEpTitle.includes("complete movie") || hasPartSplitsFinal;
-      const isMovieOrSpecialFinal = ["Movie", "OVA", "Special"].some(t => (season?.seasonLabel || "").startsWith(t)) || isMovieFormatFinal;
-      const finalKnownCount = isMovieFormatFinal ? 1 : (season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null);
-      const finalCap = isMovieFormatFinal ? 1 : (finalKnownCount && finalKnownCount > 0 ? finalKnownCount : (isMovieOrSpecialFinal ? 1 : null));
-      if (finalCap && finalCap > 0) {
-        seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalCap);
+      const isExplicitMovieFinal = 
+        (season?.seasonLabel || "").toLowerCase().startsWith("movie") ||
+        season?.format === "MOVIE" ||
+        (meta?.anime?.format === "MOVIE" && (!season?.format || season?.format === "MOVIE") && (season?.totalEpisodes === 1 || !season?.totalEpisodes));
+
+      const finalKnownCount = isExplicitMovieFinal ? 1 : (season?.totalEpisodes && season.totalEpisodes > 0 && season.totalEpisodes < 1499 ? season.totalEpisodes : null);
+      if (isExplicitMovieFinal) {
+        seasonEps = seasonEps.slice(0, 1);
+      } else if (finalKnownCount && finalKnownCount > 0) {
+        seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalKnownCount);
       }
 
       console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId} (knownCount=${finalKnownCount})`);
