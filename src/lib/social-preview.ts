@@ -49,9 +49,12 @@ export function constructMediaMetadata(options: MediaMetadataOptions): Metadata 
   const yearStr = options.releaseYear ? ` (${options.releaseYear})` : "";
   const pageTitle = cleanTitle === SITE_NAME ? SITE_NAME : `${cleanTitle}${yearStr} - ${SITE_NAME}`;
 
-  const defaultDesc = options.mediaTypeLabel
-    ? `Stream ${cleanTitle} in Full HD on CineStream. Watch ${options.mediaTypeLabel.toLowerCase()}s, movies, TV shows, and anime online for free.`
-    : `Stream ${cleanTitle} in Full HD on CineStream. Watch movies, TV shows, and anime online for free.`;
+  const isReadingMedia = options.mediaTypeLabel === "Manga" || options.mediaTypeLabel === "Manhwa" || options.mediaTypeLabel === "Manhua";
+  const defaultDesc = isReadingMedia
+    ? `Read ${cleanTitle} online in full color on CineStream with all chapters. Zero ads.`
+    : options.mediaTypeLabel
+      ? `Stream ${cleanTitle} in Full HD on CineStream. Watch ${options.mediaTypeLabel.toLowerCase()}s, movies, TV shows, and anime online for free.`
+      : `Stream ${cleanTitle} in Full HD on CineStream. Watch movies, TV shows, and anime online for free.`;
 
   const description = cleanDescription(options.overview) || options.fallbackDescription || defaultDesc;
 

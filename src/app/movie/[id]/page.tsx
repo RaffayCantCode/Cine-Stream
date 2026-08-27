@@ -1,7 +1,6 @@
 export const runtime = 'edge';
 import { Metadata } from "next";
 import { tmdbFetch } from "@/lib/tmdb";
-import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import MovieClient from "./MovieClient";
 
@@ -12,22 +11,17 @@ export async function generateMetadata(
   const id = params?.id || "";
 
   try {
-    const [rawMovie, override] = await Promise.all([
-      tmdbFetch(`/movie/${id}`).catch(() => null),
-      getMediaOverride("movie", id).catch(() => null),
-    ]);
+    const rawMovie = await tmdbFetch(`/movie/${id}`).catch(() => null) as any;
 
-    const movie = applyMediaOverride(rawMovie as any, override) as any;
-
-    if (movie && !movie.isHidden) {
-      const title = movie.title || movie.name || "Movie";
-      const year = movie.release_date ? String(movie.release_date).split("-")[0] : null;
+    if (rawMovie && rawMovie.id && !rawMovie.adult) {
+      const title = rawMovie.title || rawMovie.name || "Movie";
+      const year = rawMovie.release_date ? String(rawMovie.release_date).split("-")[0] : null;
 
       return constructMediaMetadata({
         title,
-        overview: typeof movie.overview === "string" ? movie.overview : "",
-        backdropPath: typeof movie.backdrop_path === "string" ? movie.backdrop_path : null,
-        posterPath: typeof movie.poster_path === "string" ? movie.poster_path : null,
+        overview: typeof rawMovie.overview === "string" ? rawMovie.overview : "",
+        backdropPath: typeof rawMovie.backdrop_path === "string" ? rawMovie.backdrop_path : null,
+        posterPath: typeof rawMovie.poster_path === "string" ? rawMovie.poster_path : null,
         releaseYear: year,
         mediaTypeLabel: "Movie",
         urlPath: `/movie/${id}`,

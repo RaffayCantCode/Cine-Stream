@@ -54,7 +54,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers with in-memory and session cache ─────────────
-const ANIME_API_VERSION = "v43-fix-episodes";
+const ANIME_API_VERSION = "v45-cache-update";
 const ANILIST_API = "https://graphql.anilist.co";
 const clientAnilistCache = new Map<string, { data: any; timestamp: number }>();
 
@@ -1264,12 +1264,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         });
 
         setEpisodes(prev => {
-          const otherSeasons = prev.filter(e => String(e.seasonId) !== String(seasonId));
-          const withNormalizedSeason = withRelease.map(ep => ({
-            ...ep,
-            seasonId: String(ep.seasonId || seasonId),
-          }));
-          const merged = [...otherSeasons, ...withNormalizedSeason].sort((a, b) => {
+          const otherSeasons = prev.filter(e => String(e.seasonId) !== String(seasonId) && String(e.seasonId).replace(/\D/g, "") !== String(seasonId).replace(/\D/g, ""));
+          const seenNums = new Set<number>();
+          const dedupedThisSeason: Episode[] = [];
+          for (const ep of withRelease) {
+            if (!seenNums.has(ep.episodeNum)) {
+              seenNums.add(ep.episodeNum);
+              dedupedThisSeason.push({
+                ...ep,
+                seasonId: String(ep.seasonId || seasonId),
+              });
+            }
+          }
+          const merged = [...otherSeasons, ...dedupedThisSeason].sort((a, b) => {
             if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
             return a.episodeNum - b.episodeNum;
           });
@@ -2024,7 +2031,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }];
     }
 
-    return rawList;
+    // Deduplicate by episodeNum to guarantee no duplicate episode cards can ever exist
+    const seenEpNums = new Set<number>();
+    const dedupedList: Episode[] = [];
+    for (const ep of rawList) {
+      if (!seenEpNums.has(ep.episodeNum)) {
+        seenEpNums.add(ep.episodeNum);
+        dedupedList.push(ep);
+      }
+    }
+
+    return dedupedList.sort((a, b) => a.episodeNum - b.episodeNum);
   }, [episodesBySeason, currentSeasonId, id, episodes, anime?.seasons, anime?.format, anime?.type, anime?.name]);
 
   const upcomingAnimeThisWeek = useMemo(

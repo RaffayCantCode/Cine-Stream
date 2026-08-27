@@ -1,7 +1,6 @@
 export const runtime = 'edge';
 import { Metadata } from "next";
 import { tmdbFetch } from "@/lib/tmdb";
-import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import TvClient from "./TvClient";
 
@@ -12,22 +11,17 @@ export async function generateMetadata(
   const id = params?.id || "";
 
   try {
-    const [rawShow, override] = await Promise.all([
-      tmdbFetch(`/tv/${id}`).catch(() => null),
-      getMediaOverride("tv", id).catch(() => null),
-    ]);
+    const rawShow = await tmdbFetch(`/tv/${id}`).catch(() => null) as any;
 
-    const show = applyMediaOverride(rawShow as any, override) as any;
-
-    if (show && !show.isHidden) {
-      const title = show.name || show.title || "TV Show";
-      const year = show.first_air_date ? String(show.first_air_date).split("-")[0] : null;
+    if (rawShow && rawShow.id && !rawShow.adult) {
+      const title = rawShow.name || rawShow.title || "TV Show";
+      const year = rawShow.first_air_date ? String(rawShow.first_air_date).split("-")[0] : null;
 
       return constructMediaMetadata({
         title,
-        overview: typeof show.overview === "string" ? show.overview : "",
-        backdropPath: typeof show.backdrop_path === "string" ? show.backdrop_path : null,
-        posterPath: typeof show.poster_path === "string" ? show.poster_path : null,
+        overview: typeof rawShow.overview === "string" ? rawShow.overview : "",
+        backdropPath: typeof rawShow.backdrop_path === "string" ? rawShow.backdrop_path : null,
+        posterPath: typeof rawShow.poster_path === "string" ? rawShow.poster_path : null,
         releaseYear: year,
         mediaTypeLabel: "TV Series",
         urlPath: `/tv/${id}`,

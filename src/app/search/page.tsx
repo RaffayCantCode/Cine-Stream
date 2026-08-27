@@ -8,7 +8,7 @@ import { MediaCard } from "@/components/MediaCard";
 import { PersonCard } from "@/components/PersonCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { useDebounce } from "@/hooks/useDebounce";
-import { Search as SearchIcon, Sparkles, HelpCircle } from "lucide-react";
+import { Search as SearchIcon, Sparkles, HelpCircle, Loader2, X } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { fetchJson, filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -165,7 +165,7 @@ function SearchContent() {
   const initialMode = searchParams.get("mode") || "";
 
   const [query, setQuery] = useState(initialQuery);
-  const debouncedQuery = useDebounce(query, 250);
+  const debouncedQuery = useDebounce(query, 120);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchCacheRef = useRef<Map<string, { tmdb: MediaItem[]; anime: AnimeItem[]; corrected: string | null; suggestions: string[] }>>(new Map());
   
@@ -176,9 +176,12 @@ function SearchContent() {
   // Related / Similar title word suggestions (clickable pills, zero media cards, zero gibberish)
   const [relatedSuggestions, setRelatedSuggestions] = useState<string[]>([]);
   
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSearchingMedia, setIsSearchingMedia] = useState(false);
+  const [isSearchingAnime, setIsSearchingAnime] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { mode, setMode } = useContentMode();
+
+  const isSearching = isSearchingMedia || isSearchingAnime;
 
   useEffect(() => {
     if (initialMode && ["all", "movies", "tv", "anime", "people"].includes(initialMode)) {
@@ -204,7 +207,7 @@ function SearchContent() {
     inputRef.current?.focus();
   }, []);
 
-  // Main search effect: ONLY depends on debouncedQuery (decoupled from tab mode changes)
+  // Main search effect: Real-time progressive streaming from parallel providers
   useEffect(() => {
     let cancelled = false;
 
@@ -216,7 +219,8 @@ function SearchContent() {
         setRelatedSuggestions([]);
         setCorrectedQuery(null);
         setError(null);
-        setIsLoading(false);
+        setIsSearchingMedia(false);
+        setIsSearchingAnime(false);
         return;
       }
 
@@ -227,158 +231,170 @@ function SearchContent() {
         setAnimeResults(cached.anime);
         setCorrectedQuery(cached.corrected);
         setRelatedSuggestions(cached.suggestions);
-        setIsLoading(false);
+        setIsSearchingMedia(false);
+        setIsSearchingAnime(false);
         setError(null);
         return;
       }
 
-      setIsLoading(true);
+      setIsSearchingMedia(true);
+      setIsSearchingAnime(true);
       setError(null);
 
-      try {
-        // 1. Fetch main anime search with multi-tier fallbacks (Server API -> Direct Browser Client AniList -> Direct Browser Client Jikan)
-        const fetchAnimeWithFallback = async (qTerm: string) => {
-          // Tier 1: Try server API route first
-          try {
-            const res = await fetchJson<{ success: boolean; data?: any }>(
-              `/api/anime/search?q=${encodeURIComponent(qTerm)}&v=anime-v18-force-cloud-flush`,
-              { cacheTtlMs: 0 }
-            );
-            const list = Array.isArray(res?.data) ? res.data : res?.data?.animes;
-            if (res?.success && Array.isArray(list) && list.length > 0) {
-              return list;
-            }
-          } catch {}
+      let currentTmdb: MediaItem[] = [];
+      let currentAnime: AnimeItem[] = [];
+      let mediaDone = false;
+      let animeDone = false;
 
-          // Tier 2: Direct browser client AniList GraphQL search
-          const clientAniListResults = await directClientAniListSearch(qTerm);
-          if (clientAniListResults.length > 0) {
-            return clientAniListResults;
-          }
-
-          // Tier 3: Cleaned punctuation query on direct browser AniList client
-          const cleaned = qTerm.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
-          if (cleaned && cleaned !== qTerm) {
-            const cleanedAniListResults = await directClientAniListSearch(cleaned);
-            if (cleanedAniListResults.length > 0) {
-              return cleanedAniListResults;
-            }
-          }
-
-          // Tier 4: Direct browser client Jikan search
-          const clientJikanResults = await directClientJikanSearch(qTerm);
-          if (clientJikanResults.length > 0) {
-            return clientJikanResults;
-          }
-
-          // Tier 5: Direct browser client Kitsu search (when AniList and Jikan are down)
-          const clientKitsuResults = await directClientKitsuSearch(qTerm);
-          if (clientKitsuResults.length > 0) {
-            return clientKitsuResults;
-          }
-
-          return [];
-        };
-
-        // 2. Phase 1 — Main query search (TMDB + Anime simultaneously)
-        const [tmdbRes, animeRes] = await Promise.allSettled([
-          fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`, { cacheTtlMs: 0 }),
-          fetchAnimeWithFallback(debouncedQuery),
-        ]);
-
+      const checkAutoCorrectAndFinish = async () => {
         if (cancelled) return;
+        if (mediaDone && animeDone) {
+          // If 0 results found from all sources, run typo auto-correct fallback
+          if (currentTmdb.length === 0 && currentAnime.length === 0) {
+            const candidates = generateSearchCandidates(debouncedQuery);
+            if (candidates.length > 0) {
+              const candidateResults = await Promise.allSettled(
+                candidates.slice(0, 3).map(async (cand) => {
+                  const [ct, ca] = await Promise.allSettled([
+                    fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(cand)}`),
+                    directClientAniListSearch(cand),
+                  ]);
+                  let cTmdb: MediaItem[] = [];
+                  let cAnime: AnimeItem[] = [];
+                  if (ct.status === "fulfilled" && ct.value?.results) {
+                    cTmdb = filterExcludeAnime(
+                      filterReleasedSafeContent(
+                        ct.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
+                        true
+                      ) as MediaItem[]
+                    ) as MediaItem[];
+                  }
+                  if (ca.status === "fulfilled" && Array.isArray(ca.value)) {
+                    cAnime = ca.value;
+                  }
+                  if (cTmdb.length > 0 || cAnime.length > 0) {
+                    return { tmdb: cTmdb, anime: cAnime, title: cand.charAt(0).toUpperCase() + cand.slice(1) };
+                  }
+                  return null;
+                })
+              );
 
-        let mainTmdb: MediaItem[] = [];
-        let mainAnime: AnimeItem[] = [];
-
-        if (tmdbRes.status === "fulfilled" && tmdbRes.value?.results) {
-          // Apply filterExcludeAnime as a client-side safety net: ensures that
-          // any anime title that slipped through the server filter (e.g. TMDB
-          // entries lacking the anime keyword) never appears under Movies or TV.
-          // Person results are preserved by filterExcludeAnime's type guard.
-          mainTmdb = filterExcludeAnime(
-            filterReleasedSafeContent(
-              tmdbRes.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
-              true
-            ) as MediaItem[]
-          ) as MediaItem[];
-        }
-
-        if (animeRes.status === "fulfilled" && Array.isArray(animeRes.value)) {
-          mainAnime = animeRes.value;
-        }
-
-        // AUTO-CORRECT TYPO FALLBACK: If 0 results found, try all candidates in parallel
-        let correctedTitle: string | null = null;
-        if (mainTmdb.length === 0 && mainAnime.length === 0) {
-          const candidates = generateSearchCandidates(debouncedQuery);
-          // Fire all candidates in parallel and pick the first one that returns results
-          const candidateResults = await Promise.allSettled(
-            candidates.map(async (cand) => {
-              const [ct, ca] = await Promise.allSettled([
-                fetchJson<{ results: MediaItem[] }>(`/api/tmdb/search?query=${encodeURIComponent(cand)}`),
-                fetchAnimeWithFallback(cand),
-              ]);
-              let cTmdb: MediaItem[] = [];
-              let cAnime: AnimeItem[] = [];
-              if (ct.status === "fulfilled" && ct.value?.results) {
-                cTmdb = filterExcludeAnime(
-                  filterReleasedSafeContent(
-                    ct.value.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
-                    true
-                  ) as MediaItem[]
-                ) as MediaItem[];
+              if (!cancelled) {
+                for (const r of candidateResults) {
+                  if (r.status === "fulfilled" && r.value) {
+                    currentTmdb = r.value.tmdb;
+                    currentAnime = r.value.anime;
+                    setResults(currentTmdb);
+                    setAnimeResults(currentAnime);
+                    setCorrectedQuery(r.value.title);
+                    break;
+                  }
+                }
               }
-              if (ca.status === "fulfilled" && Array.isArray(ca.value)) {
-                cAnime = ca.value;
-              }
-              if (cTmdb.length > 0 || cAnime.length > 0) {
-                return { tmdb: cTmdb, anime: cAnime, title: cand.charAt(0).toUpperCase() + cand.slice(1) };
-              }
-              return null;
-            })
-          );
-          for (const r of candidateResults) {
-            if (r.status === "fulfilled" && r.value) {
-              mainTmdb = r.value.tmdb;
-              mainAnime = r.value.anime;
-              correctedTitle = r.value.title;
-              break;
             }
           }
-        }
 
-        // Show main results immediately — stop loading NOW
-        setResults(mainTmdb);
-        setAnimeResults(mainAnime);
-        setCorrectedQuery(correctedTitle);
-        if (!cancelled) setIsLoading(false);
+          // Cache completed results
+          if (!cancelled) {
+            searchCacheRef.current.set(qLower, {
+              tmdb: currentTmdb,
+              anime: currentAnime,
+              corrected: null,
+              suggestions: [],
+            });
 
-        // Cache initial results
-        searchCacheRef.current.set(qLower, {
-          tmdb: mainTmdb,
-          anime: mainAnime,
-          corrected: correctedTitle,
-          suggestions: [],
-        });
-
-        // 3. Phase 2 — Deferred: fetch related suggestions in background (non-blocking)
-        if (!cancelled) {
-          fetchRelatedSuggestions(mainTmdb, mainAnime, correctedTitle, debouncedQuery).then(suggestions => {
-            if (!cancelled) {
-              setRelatedSuggestions(suggestions);
-              const existing = searchCacheRef.current.get(qLower);
-              if (existing) {
-                existing.suggestions = suggestions;
+            // Deferred background fetch for related suggestions
+            fetchRelatedSuggestions(currentTmdb, currentAnime, null, debouncedQuery).then(suggestions => {
+              if (!cancelled) {
+                setRelatedSuggestions(suggestions);
+                const existing = searchCacheRef.current.get(qLower);
+                if (existing) {
+                  existing.suggestions = suggestions;
+                }
               }
-            }
-          });
+            });
+          }
         }
+      };
 
-      } catch (err) {
-        if (!cancelled) setError("Search failed");
-        if (!cancelled) setIsLoading(false);
-      }
+      // ── Pipeline A: TMDB Search (Movies, TV Shows & People) ──────────────────
+      const searchMedia = async () => {
+        try {
+          const res = await fetchJson<{ results: MediaItem[] }>(
+            `/api/tmdb/search?query=${encodeURIComponent(debouncedQuery)}`,
+            { cacheTtlMs: 0 }
+          );
+          if (cancelled) return;
+          if (res?.results) {
+            currentTmdb = filterExcludeAnime(
+              filterReleasedSafeContent(
+                res.results.filter((r) => r.media_type === "movie" || r.media_type === "tv" || r.media_type === "person"),
+                true
+              ) as MediaItem[]
+            ) as MediaItem[];
+            setResults(currentTmdb);
+          }
+        } catch {
+          // Keep empty if failed
+        } finally {
+          if (!cancelled) {
+            setIsSearchingMedia(false);
+            mediaDone = true;
+            checkAutoCorrectAndFinish();
+          }
+        }
+      };
+
+      // ── Pipeline B: Anime Search (Fast AniList Direct GraphQL Priority) ──────
+      const searchAnime = async () => {
+        try {
+          // Priority 1: Fast direct AniList GraphQL (~200ms)
+          let animeList = await directClientAniListSearch(debouncedQuery);
+
+          // Priority 2: If AniList direct returned empty, try cleaned punctuation
+          if (animeList.length === 0) {
+            const cleaned = debouncedQuery.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
+            if (cleaned && cleaned !== debouncedQuery) {
+              animeList = await directClientAniListSearch(cleaned);
+            }
+          }
+
+          // Priority 3: Server anime API route fallback
+          if (animeList.length === 0) {
+            try {
+              const res = await fetchJson<{ success: boolean; data?: any }>(
+                `/api/anime/search?q=${encodeURIComponent(debouncedQuery)}&v=anime-v19-fast`,
+                { cacheTtlMs: 0 }
+              );
+              const list = Array.isArray(res?.data) ? res.data : res?.data?.animes;
+              if (res?.success && Array.isArray(list) && list.length > 0) {
+                animeList = list;
+              }
+            } catch {}
+          }
+
+          // Priority 4: Direct Kitsu search fallback
+          if (animeList.length === 0) {
+            animeList = await directClientKitsuSearch(debouncedQuery);
+          }
+
+          if (cancelled) return;
+          currentAnime = animeList;
+          setAnimeResults(animeList);
+        } catch {
+          // Keep empty if failed
+        } finally {
+          if (!cancelled) {
+            setIsSearchingAnime(false);
+            animeDone = true;
+            checkAutoCorrectAndFinish();
+          }
+        }
+      };
+
+      // Launch both pipelines concurrently in true real time!
+      searchMedia();
+      searchAnime();
     };
 
     executeSearch();
@@ -480,21 +496,40 @@ function SearchContent() {
         <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           
           {/* Search Bar Input */}
-          <div className="relative max-w-3xl mx-auto mb-10">
+          <div className="relative max-w-3xl mx-auto mb-8">
             <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
               <SearchIcon className="h-6 w-6 text-white/30" />
             </div>
             <Input
               ref={inputRef}
               type="text"
-              className="w-full h-16 pl-14 pr-4 premium-glass text-xl rounded-2xl focus-visible:ring-[#7288AE] focus-visible:ring-offset-0 text-white placeholder:text-white/30 shadow-xl"
+              className="w-full h-16 pl-14 pr-24 premium-glass text-xl rounded-2xl focus-visible:ring-[#7288AE] focus-visible:ring-offset-0 text-white placeholder:text-white/30 shadow-xl"
               placeholder="Search movies, TV shows, anime, actors & directors..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
+            {/* Live Search Indicator & Quick Clear Button */}
+            <div className="absolute inset-y-0 right-0 pr-4 flex items-center gap-2">
+              {isSearching && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#4B5694]/25 border border-[#7288AE]/30 text-[#9EB2D1] text-xs font-semibold animate-pulse shadow-sm">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#9EB2D1]" />
+                  <span className="hidden sm:inline">Searching...</span>
+                </div>
+              )}
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(""); inputRef.current?.focus(); }}
+                  className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Filter Tabs */}
+          {/* Filter Tabs & Live Status Bar */}
           {debouncedQuery.length >= 2 && (
             <div className="flex items-center gap-2 mb-8 max-w-3xl mx-auto flex-wrap">
               {(["all", "movies", "tv", "anime", "people"] as const).map((tab) => (
@@ -516,7 +551,13 @@ function SearchContent() {
                   {tab === "people" && "People"}
                 </button>
               ))}
-              {!isLoading && totalMainCount > 0 && (
+              {isSearching && hasMainResults && (
+                <div className="ml-auto flex items-center gap-1.5 text-xs text-[#9EB2D1] font-medium animate-pulse">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Loading more results...</span>
+                </div>
+              )}
+              {!isSearching && totalMainCount > 0 && (
                 <span className="ml-auto text-xs text-white/30 font-medium">
                   {totalMainCount} result{totalMainCount !== 1 ? "s" : ""}
                 </span>
@@ -546,8 +587,8 @@ function SearchContent() {
               <h3 className="text-lg font-bold text-white mb-2">Search unavailable</h3>
               <p className="text-sm text-white/50">{error}</p>
             </div>
-          ) : isLoading ? (
-            /* Loading Skeletons */
+          ) : isSearching && !hasMainResults ? (
+            /* Loading Skeletons when 0 results have arrived yet */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
               {Array.from({ length: 15 }).map((_, i) => (
                 <div key={i} className="aspect-[2/3] w-full rounded-2xl bg-muted/40 skeleton-pulse" />
@@ -565,7 +606,7 @@ function SearchContent() {
                 </div>
               )}
 
-              {/* Main Search Results */}
+              {/* Main Search Results — rendered progressively as each source streams in! */}
               {hasMainResults && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">

@@ -59,7 +59,7 @@ export default function BrowseTvPage() {
   hasMoreRef.current = hasMore;
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 150);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 

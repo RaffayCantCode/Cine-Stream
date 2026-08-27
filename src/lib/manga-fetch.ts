@@ -51,7 +51,7 @@ const WEEBCENTRAL_BASE = "https://weebcentral.com";
 const ASURA_API = "https://api.asurascans.com/api";
 
 // Bump this whenever fetch logic or data shape changes to instantly drop stale in-memory cache
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 
 // High-speed in-memory response cache
 const serverCache = new Map<string, { data: any; expiry: number }>();

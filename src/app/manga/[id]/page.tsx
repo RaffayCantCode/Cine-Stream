@@ -15,10 +15,11 @@ export async function generateMetadata(
     if (manga) {
       const typeLabel = manga.type === "manhwa" ? "Manhwa" : manga.type === "manhua" ? "Manhua" : "Manga";
       return constructMediaMetadata({
-        title: `${manga.title || "Manga"} (${typeLabel})`,
+        title: manga.title || "Manga",
         overview: typeof manga.description === "string" ? manga.description : "",
         posterPath: typeof manga.coverImage === "string" ? manga.coverImage : null,
         backdropPath: typeof manga.coverImage === "string" ? manga.coverImage : null,
+        mediaTypeLabel: typeLabel,
         type: "website",
         urlPath: `/manga/${id}`,
         fallbackDescription: `Read ${manga.title || "manga"} online in full color on CineStream with all chapters.`,
@@ -30,6 +31,7 @@ export async function generateMetadata(
 
   return constructMediaMetadata({
     title: "Manga & Manhwa",
+    mediaTypeLabel: "Manga",
     type: "website",
     urlPath: `/manga/${id}`,
     fallbackDescription: "Read full manga and manhwa webtoons online on CineStream.",

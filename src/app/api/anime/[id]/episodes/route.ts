@@ -229,7 +229,17 @@ function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): an
     }
   }
 
-  return result;
+  // Deduplicate by episodeNum so duplicate episode numbers can never exist
+  const seenEpNums = new Set<number>();
+  const dedupedResult: any[] = [];
+  for (const ep of result) {
+    if (!seenEpNums.has(ep.episodeNum)) {
+      seenEpNums.add(ep.episodeNum);
+      dedupedResult.push(ep);
+    }
+  }
+
+  return dedupedResult;
 }
 
 // Robust helper to consolidate and enrich episode lists from AniZip, Jikan, Tatakai, and Kitsu
@@ -576,9 +586,9 @@ export async function GET(
       let seasonOverview: string | null = null;
 
       const isMovieOrSpecial = ["Movie", "OVA", "Special"].some(t => season.seasonLabel?.startsWith(t)) ||
-        meta?.anime?.format === "MOVIE" || meta?.anime?.type === "MOVIE" ||
-        meta?.anime?.subtype === "MOVIE" || (season?.totalEpisodes === 1 && season.seasonLabel?.toLowerCase().includes("movie"));
-      const safeTotalEpisodes = isMovieOrSpecial ? 1 : Math.max(season.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : 0, 1);
+        (season.format === "MOVIE") ||
+        (meta?.anime?.format === "MOVIE" && (season?.totalEpisodes === 1 || !season?.totalEpisodes) && season.format !== "TV");
+      const safeTotalEpisodes = isMovieOrSpecial ? 1 : (season.totalEpisodes && season.totalEpisodes < 1499 && season.totalEpisodes > 0 ? season.totalEpisodes : 1500);
 
       console.log(`[Episodes API] TMDB ready: ${isTMDBReady}, tmdbId: ${tmdbId}, tmdbSeasonNum: ${tmdbSeasonNum}, totalEpisodes: ${safeTotalEpisodes}, isMovieOrSpecial: ${isMovieOrSpecial}`);
 

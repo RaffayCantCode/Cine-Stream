@@ -56,7 +56,7 @@ let globalMangaHomeCache: {
   trendingMangas: MangaItem[];
 } | null = null;
 
-const SESSION_MANGA_HOME_KEY = "sv_manga_home_cache_v3";
+const SESSION_MANGA_HOME_KEY = "sv_manga_home_cache_v4";
 
 function saveMangaHomeToSession(data: { trendingNow: MangaItem[]; trendingManhwas: MangaItem[]; trendingMangas: MangaItem[] }): void {
   if (typeof window === "undefined") return;
@@ -295,9 +295,9 @@ export default function MangaHomeClient({
     }
   };
 
-  // Snappy 250ms debounce for live search
+  // Snappy 150ms debounce for live search
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 250);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 150);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 

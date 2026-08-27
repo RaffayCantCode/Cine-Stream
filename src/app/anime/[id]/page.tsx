@@ -1,7 +1,6 @@
 export const runtime = 'edge';
 import { Metadata } from "next";
 import { getAnimeDetails } from "@/lib/anime-fetch";
-import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import AnimeClient from "./AnimeClient";
 
@@ -12,22 +11,17 @@ export async function generateMetadata(
   const id = params?.id || "";
 
   try {
-    const [details, override] = await Promise.all([
-      getAnimeDetails(id, 0, true).catch(() => null),
-      getMediaOverride("anime", id).catch(() => null),
-    ]);
+    const details = await getAnimeDetails(id, 0, true).catch(() => null);
+    const anime = details?.anime || null;
 
-    const rawAnime = details?.anime || null;
-    const anime = applyMediaOverride(rawAnime as any, override) as any;
-
-    if (anime && !anime.isHidden) {
-      const title = anime.name || anime.title || "Anime";
-      const bannerUrl = anime.bannerImage || anime.backdrop || null;
-      const posterUrl = anime.poster || null;
+    if (anime && !(anime as any).isHidden) {
+      const title = (anime as any).name || (anime as any).title || "Anime";
+      const bannerUrl = (anime as any).bannerImage || (anime as any).backdrop || null;
+      const posterUrl = (anime as any).poster || null;
 
       return constructMediaMetadata({
         title,
-        overview: typeof (anime.description || anime.overview) === "string" ? (anime.description || anime.overview) : "",
+        overview: typeof ((anime as any).description || (anime as any).overview) === "string" ? ((anime as any).description || (anime as any).overview) : "",
         backdropPath: typeof bannerUrl === "string" ? bannerUrl : null,
         posterPath: typeof posterUrl === "string" ? posterUrl : null,
         mediaTypeLabel: "Anime",
@@ -50,4 +44,3 @@ export async function generateMetadata(
 export default function AnimePage() {
   return <AnimeClient />;
 }
-

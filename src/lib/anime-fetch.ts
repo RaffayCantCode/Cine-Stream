@@ -1988,14 +1988,15 @@ export async function fetchEpisodesFromAniZip(
     if (!json.episodes) return null;
 
     const eps: EpisodeDetail[] = [];
+    const isMovieType = (json.mappings?.type || "").toUpperCase() === "MOVIE";
     const ep1Title = (json.episodes?.['1']?.title?.en || json.episodes?.['1']?.title?.['x-jat'] || "").toLowerCase();
-    const isExplicitMovie = seasonCap === 1 || ep1Title.includes("complete movie");
+    const isExplicitMovie = isMovieType || (seasonCap === 1 && ep1Title.includes("complete movie"));
     const hasPartSplits = isExplicitMovie && Object.values(json.episodes || {}).some((e: any) => {
       const t = (e?.title?.en || e?.title?.['x-jat'] || "").toLowerCase();
       return t.startsWith("part 1 of") || t.startsWith("part 2 of");
     });
     const isSingleEpCap = isExplicitMovie || hasPartSplits;
-    const effectiveCap = isSingleEpCap ? 1 : (seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500);
+    const effectiveCap = isSingleEpCap ? 1 : (seasonCap && seasonCap > 1 ? seasonCap : 1500);
     for (const key of Object.keys(json.episodes)) {
       const epNum = parseInt(key, 10);
       if (isNaN(epNum) || epNum > effectiveCap) continue;

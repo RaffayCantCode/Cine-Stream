@@ -15,13 +15,16 @@ export async function generateMetadata(
   try {
     const manga = await getMangaDetails(id);
     if (manga) {
+      const typeLabel = manga.type === "manhwa" ? "Manhwa" : manga.type === "manhua" ? "Manhua" : "Manga";
       return constructMediaMetadata({
-        title: `Read ${manga.title}`,
-        overview: `Read ${manga.title} online in high definition on CineStream.`,
-        posterPath: manga.coverImage,
+        title: `Read ${manga.title || "Manga"}`,
+        overview: typeof manga.description === "string" ? manga.description : `Read ${manga.title} online in high definition on CineStream with all chapters.`,
+        posterPath: typeof manga.coverImage === "string" ? manga.coverImage : null,
+        backdropPath: typeof manga.coverImage === "string" ? manga.coverImage : null,
+        mediaTypeLabel: typeLabel,
         type: "website",
         urlPath: `/manga/${id}/read/${chapterId}`,
-        fallbackDescription: `Read ${manga.title} online on CineStream.`,
+        fallbackDescription: `Read ${manga.title || "manga"} online on CineStream with zero ads.`,
       });
     }
   } catch (err) {
@@ -30,6 +33,7 @@ export async function generateMetadata(
 
   return constructMediaMetadata({
     title: "Manga Reader",
+    mediaTypeLabel: "Manga",
     type: "website",
     urlPath: `/manga/${id}/read/${chapterId}`,
     fallbackDescription: "Read full manga and manhwa online on CineStream.",
