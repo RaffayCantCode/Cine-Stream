@@ -99,16 +99,20 @@ export async function getMediaOverride(
   mediaId: string | number
 ): Promise<MediaOverride | null> {
   if (!mediaType || !mediaId) return null;
+  const cleanType = (mediaType || "movie").toLowerCase().trim();
   try {
     const db = getDb();
-    const { candidateIds, candidateMediaIds } = extractCandidateMediaIds(mediaType, mediaId);
+    const { candidateIds, candidateMediaIds } = extractCandidateMediaIds(cleanType, mediaId);
 
     if (candidateIds.length === 0) return null;
 
     const override = await db.query.mediaOverrides.findFirst({
-      where: or(
-        inArray(mediaOverrides.id, candidateIds),
-        inArray(mediaOverrides.mediaId, candidateMediaIds)
+      where: and(
+        eq(mediaOverrides.mediaType, cleanType),
+        or(
+          inArray(mediaOverrides.id, candidateIds),
+          inArray(mediaOverrides.mediaId, candidateMediaIds)
+        )
       ),
     });
 
@@ -376,9 +380,8 @@ export async function enrichMediaListWithOverrides<T extends { id?: string | num
         const cleanType = o.mediaType.toLowerCase().trim();
         const cleanId = String(o.mediaId).toLowerCase().trim();
         overrideMap.set(`${cleanType}-${cleanId}`, o);
-        overrideMap.set(cleanId, o);
-        if (cleanId.startsWith("kitsu-")) overrideMap.set(cleanId.replace("kitsu-", ""), o);
-        if (cleanId.startsWith("mal-")) overrideMap.set(cleanId.replace("mal-", ""), o);
+        if (cleanId.startsWith("kitsu-")) overrideMap.set(`${cleanType}-${cleanId.replace("kitsu-", "")}`, o);
+        if (cleanId.startsWith("mal-")) overrideMap.set(`${cleanType}-${cleanId.replace("mal-", "")}`, o);
       }
     }
 
@@ -386,15 +389,22 @@ export async function enrichMediaListWithOverrides<T extends { id?: string | num
     for (const item of items) {
       if (isMediaItemHidden(item, hiddenSet)) continue;
 
-      const mType = (item.media_type || item.mediaType || item.type || "movie").toLowerCase().trim();
+      const rawType = (item.media_type || item.mediaType || item.type || "movie").toLowerCase().trim();
+      const mType = rawType === "tv" || rawType === "show" ? "tv" : rawType === "anime" ? "anime" : "movie";
       const idStr = String(item.id || "").toLowerCase().trim();
       const compoundKey = `${mType}-${idStr}`;
       const rawStripped = idStr.replace(/^(kitsu-|mal-|tmdb-|anime-|tv-|movie-)/, "");
 
       const ov =
         overrideMap.get(compoundKey) ||
-        overrideMap.get(idStr) ||
-        (rawStripped ? overrideMap.get(`${mType}-${rawStripped}`) || overrideMap.get(rawStripped) : null);
+        (rawStripped ? overrideMap.get(`${mType}-${rawStripped}`) : null) ||
+        overrideMap.get(idStr);
+
+      if (ov && ov.mediaType && ov.mediaType.toLowerCase().trim() !== mType && !(mType === "tv" && ov.mediaType.toLowerCase().trim() === "anime")) {
+        // Reject cross-type mismatch (e.g. movie override applied to anime)
+        results.push(item);
+        continue;
+      }
 
       if (ov?.isHidden || ov?.status === "hidden") continue;
 

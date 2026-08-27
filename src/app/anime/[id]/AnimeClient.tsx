@@ -54,7 +54,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers with in-memory and session cache ─────────────
-const ANIME_API_VERSION = "v45-cache-update";
+const ANIME_API_VERSION = "v46-erased-override-fix";
 const ANILIST_API = "https://graphql.anilist.co";
 const clientAnilistCache = new Map<string, { data: any; timestamp: number }>();
 

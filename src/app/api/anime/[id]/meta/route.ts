@@ -75,14 +75,17 @@ export async function GET(
 
     const { anime, totalEpisodes, seasons, openedSeasonId, franchiseNodes, tmdbId, tmdbSeasonMap } = data;
 
-    // Apply season-level overrides if individual seasons are overridden
+    // Apply season-level overrides strictly for anime overrides (prevent movie/tv overrides matching plain numeric IDs)
     const overrideMap = new Map<string, any>();
     for (const o of allOverrides) {
-      if (o.id) overrideMap.set(o.id.toLowerCase().trim(), o);
-      if (o.mediaType && o.mediaId) {
-        const cleanType = o.mediaType.toLowerCase().trim();
+      const cleanType = (o.mediaType || "").toLowerCase().trim();
+      const oId = (o.id || "").toLowerCase().trim();
+      if (cleanType !== "anime" && !oId.startsWith("anime-")) continue;
+
+      if (o.id) overrideMap.set(oId, o);
+      if (o.mediaId) {
         const cleanId = String(o.mediaId).toLowerCase().trim();
-        overrideMap.set(`${cleanType}-${cleanId}`, o);
+        overrideMap.set(`anime-${cleanId}`, o);
         overrideMap.set(cleanId, o);
         if (cleanId.startsWith("kitsu-")) overrideMap.set(cleanId.replace("kitsu-", ""), o);
         if (cleanId.startsWith("mal-")) overrideMap.set(cleanId.replace("mal-", ""), o);

@@ -94,7 +94,7 @@ export default function RootLayout({
             } catch(e) {}
           })();
           (function() {
-            var BUILD_VER = 'v31-manga-social-preview';
+            var BUILD_VER = 'v32-erased-override-fix';
             try {
               if (typeof sessionStorage !== 'undefined') {
                 var ver = sessionStorage.getItem('sv_build_ver');
