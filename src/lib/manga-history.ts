@@ -23,11 +23,12 @@ export interface MangaReadingProgress {
 }
 
 const STORAGE_KEYS = [
+  "cinestream.manga_history_v4",
   "cinestream.manga_history_v3",
   "cinestream.manga_history_v2",
   "cinestream.manga_history",
 ];
-const PRIMARY_STORAGE_KEY = "cinestream.manga_history_v3";
+const PRIMARY_STORAGE_KEY = "cinestream.manga_history_v4";
 
 const READ_CHAPTERS_STORAGE_KEYS = [
   "cinestream.manga_read_chapters_v2",
@@ -144,6 +145,18 @@ export function removeLocalMangaProgress(mangaId: string): void {
 // 2. SERVER DATABASE OPERATIONS (Logged-in only)
 // ----------------------------------------------------
 
+let serverHistoryCache: { data: MangaReadingProgress[]; timestamp: number } | null = null;
+let serverHistoryInFlight: Promise<MangaReadingProgress[]> | null = null;
+const SERVER_HISTORY_TTL = 30_000; // 30 seconds
+
+const serverProgressCache = new Map<string, { data: MangaReadingProgress | null; timestamp: number }>();
+let pendingServerProgressSave: { progress: Omit<MangaReadingProgress, "updatedAt">; timer: any } | null = null;
+
+export function invalidateServerMangaHistoryCache(): void {
+  serverHistoryCache = null;
+  serverProgressCache.clear();
+}
+
 function mapDbRowToProgress(row: any): MangaReadingProgress {
   return {
     mangaId: row.mangaId,
@@ -163,43 +176,72 @@ function mapDbRowToProgress(row: any): MangaReadingProgress {
 
 /**
  * Fetches user's reading history from server database (for logged-in users).
+ * Includes 30s in-memory caching and in-flight request deduplication.
  */
-export async function fetchServerMangaHistory(): Promise<MangaReadingProgress[]> {
+export async function fetchServerMangaHistory(force = false): Promise<MangaReadingProgress[]> {
   if (typeof window === "undefined") return [];
-  try {
-    const res = await fetch("/api/manga/history", { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data.items)) return [];
-    return data.items.map(mapDbRowToProgress).sort((a: MangaReadingProgress, b: MangaReadingProgress) => b.updatedAt - a.updatedAt);
-  } catch (err) {
-    console.warn("[MangaHistory] Failed to fetch server history:", err);
-    return [];
+
+  const now = Date.now();
+  if (!force && serverHistoryCache && now - serverHistoryCache.timestamp < SERVER_HISTORY_TTL) {
+    return serverHistoryCache.data;
   }
+
+  if (serverHistoryInFlight) {
+    return serverHistoryInFlight;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const res = await fetch("/api/manga/history", { cache: "no-store" });
+      if (!res.ok) return serverHistoryCache?.data || [];
+      const data = await res.json();
+      if (!Array.isArray(data.items)) return serverHistoryCache?.data || [];
+      const items = data.items.map(mapDbRowToProgress).sort((a: MangaReadingProgress, b: MangaReadingProgress) => b.updatedAt - a.updatedAt);
+      serverHistoryCache = { data: items, timestamp: Date.now() };
+      return items;
+    } catch (err) {
+      console.warn("[MangaHistory] Failed to fetch server history:", err);
+      return serverHistoryCache?.data || [];
+    } finally {
+      serverHistoryInFlight = null;
+    }
+  })();
+
+  serverHistoryInFlight = fetchPromise;
+  return fetchPromise;
 }
 
 /**
  * Fetches user's reading progress for a single manga from server database (for logged-in users).
+ * Uses in-memory caching with a 30s TTL.
  */
-export async function fetchServerMangaProgress(mangaId: string): Promise<MangaReadingProgress | null> {
-  if (typeof window === "undefined") return null;
+export async function fetchServerMangaProgress(mangaId: string, force = false): Promise<MangaReadingProgress | null> {
+  if (typeof window === "undefined" || !mangaId) return null;
+
+  const now = Date.now();
+  const cached = serverProgressCache.get(mangaId);
+  if (!force && cached && now - cached.timestamp < SERVER_HISTORY_TTL) {
+    return cached.data;
+  }
+
   try {
     const res = await fetch(`/api/manga/history?mangaId=${encodeURIComponent(mangaId)}`, { cache: "no-store" });
-    if (!res.ok) return null;
+    if (!res.ok) return cached?.data || null;
     const data = await res.json();
-    if (!data.item) return null;
-    return mapDbRowToProgress(data.item);
+    if (!data.item) {
+      serverProgressCache.set(mangaId, { data: null, timestamp: now });
+      return null;
+    }
+    const mapped = mapDbRowToProgress(data.item);
+    serverProgressCache.set(mangaId, { data: mapped, timestamp: now });
+    return mapped;
   } catch (err) {
     console.warn("[MangaHistory] Failed to fetch server progress:", err);
-    return null;
+    return cached?.data || null;
   }
 }
 
-/**
- * Saves or updates user's reading progress in the server database (for logged-in users).
- */
-export async function saveServerMangaProgress(progress: Omit<MangaReadingProgress, "updatedAt">): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+async function executeServerSave(progress: Omit<MangaReadingProgress, "updatedAt">): Promise<boolean> {
   try {
     const res = await fetch("/api/manga/history", {
       method: "POST",
@@ -207,6 +249,15 @@ export async function saveServerMangaProgress(progress: Omit<MangaReadingProgres
       body: JSON.stringify(progress),
     });
     if (res.ok) {
+      // Update local memory cache with latest save
+      const fullItem: MangaReadingProgress = { ...progress, updatedAt: Date.now() };
+      serverProgressCache.set(progress.mangaId, { data: fullItem, timestamp: Date.now() });
+
+      if (serverHistoryCache) {
+        const filtered = serverHistoryCache.data.filter((i) => i.mangaId !== progress.mangaId);
+        serverHistoryCache = { data: [fullItem, ...filtered], timestamp: Date.now() };
+      }
+
       window.dispatchEvent(new Event("cinestream:manga-history-updated"));
       return true;
     }
@@ -218,11 +269,75 @@ export async function saveServerMangaProgress(progress: Omit<MangaReadingProgres
 }
 
 /**
+ * Flushes any pending debounced progress save immediately (e.g. before unmount or chapter change).
+ */
+export async function flushPendingServerMangaProgress(): Promise<void> {
+  if (pendingServerProgressSave) {
+    clearTimeout(pendingServerProgressSave.timer);
+    const p = pendingServerProgressSave.progress;
+    pendingServerProgressSave = null;
+    await executeServerSave(p);
+  }
+}
+
+/**
+ * Saves or updates user's reading progress in the server database (for logged-in users).
+ * By default, debounces by 8 seconds during active reading to eliminate redundant scroll POSTs.
+ * Set immediate = true on chapter transitions or finish events to save instantly.
+ */
+export async function saveServerMangaProgress(
+  progress: Omit<MangaReadingProgress, "updatedAt">,
+  immediate = false
+): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+
+  // Update in-memory progress cache immediately so synchronous reads reflect current position
+  serverProgressCache.set(progress.mangaId, {
+    data: { ...progress, updatedAt: Date.now() },
+    timestamp: Date.now(),
+  });
+
+  if (immediate) {
+    if (pendingServerProgressSave) {
+      clearTimeout(pendingServerProgressSave.timer);
+      pendingServerProgressSave = null;
+    }
+    return executeServerSave(progress);
+  }
+
+  // Debounce saving: replace existing pending save timer
+  if (pendingServerProgressSave) {
+    clearTimeout(pendingServerProgressSave.timer);
+  }
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(async () => {
+      pendingServerProgressSave = null;
+      const ok = await executeServerSave(progress);
+      resolve(ok);
+    }, 8000); // 8s debounce window for continuous scrolling
+
+    pendingServerProgressSave = { progress, timer };
+  });
+}
+
+/**
  * Clears reading progress for a manga in the server database (for logged-in users).
  */
 export async function removeServerMangaProgress(mangaId: string): Promise<boolean> {
   if (typeof window === "undefined") return false;
   try {
+    if (pendingServerProgressSave && pendingServerProgressSave.progress.mangaId === mangaId) {
+      clearTimeout(pendingServerProgressSave.timer);
+      pendingServerProgressSave = null;
+    }
+
+    serverProgressCache.delete(mangaId);
+    if (serverHistoryCache) {
+      const filtered = serverHistoryCache.data.filter((i) => i.mangaId !== mangaId && i.mangaId.replace(/^(wc|asura)-/, "") !== mangaId.replace(/^(wc|asura)-/, ""));
+      serverHistoryCache = { data: filtered, timestamp: Date.now() };
+    }
+
     const res = await fetch(`/api/manga/history?mangaId=${encodeURIComponent(mangaId)}`, {
       method: "DELETE",
     });

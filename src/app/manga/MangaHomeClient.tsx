@@ -697,7 +697,6 @@ export default function MangaHomeClient({
 
               <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
                 {history.slice(0, 6).map((item) => {
-                  const progressPct = item.totalPages > 0 ? Math.min(100, Math.max(5, Math.round((item.pageNumber / item.totalPages) * 100))) : 0;
                   return (
                     <div
                       key={item.mangaId}
@@ -727,11 +726,11 @@ export default function MangaHomeClient({
                             <button
                               type="button"
                               onClick={(e) => handleDiscardHistory(e, item.mangaId)}
-                              className="p-1 rounded-full bg-black/80 hover:bg-rose-600 text-white/70 hover:text-white border border-white/20 backdrop-blur-md transition-all shadow-md active:scale-90 cursor-pointer"
+                              className="w-7 h-7 rounded-full bg-black/85 hover:bg-rose-600 text-white/80 hover:text-white border border-white/20 backdrop-blur-md transition-all shadow-md active:scale-90 flex items-center justify-center cursor-pointer"
                               title="Remove from Continue Reading"
                               aria-label="Remove"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -747,26 +746,11 @@ export default function MangaHomeClient({
                           </div>
                         </Link>
 
-                        {/* Bottom Chapter & Progress Overlay on Poster */}
-                        <div className="absolute bottom-1 sm:bottom-1.5 inset-x-1.5 sm:inset-x-2 z-10 space-y-0.5 sm:space-y-1">
-                          <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-black text-white drop-shadow">
-                            <span className="text-primary font-mono bg-black/85 px-1.5 py-0.5 rounded border border-white/10 text-[9px] sm:text-[11px]">
-                              Ch. {item.chapterNumber}
-                            </span>
-                            {item.totalPages > 1 && (
-                              <span className="text-white/80 text-[8px] sm:text-[10px] bg-black/70 px-1 py-0.5 rounded">
-                                {item.pageNumber}/{item.totalPages}
-                              </span>
-                            )}
-                          </div>
-                          {item.totalPages > 1 && (
-                            <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-primary rounded-full transition-all duration-300"
-                                style={{ width: `${progressPct}%` }}
-                              />
-                            </div>
-                          )}
+                        {/* Bottom Chapter Overlay on Poster */}
+                        <div className="absolute bottom-2 left-2 z-10">
+                          <span className="text-primary font-mono font-black bg-black/90 px-2.5 py-1 rounded-lg border border-white/20 text-xs sm:text-sm shadow-lg backdrop-blur-md">
+                            Ch. {item.chapterNumber}
+                          </span>
                         </div>
                       </div>
 

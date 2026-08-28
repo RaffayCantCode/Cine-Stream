@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
@@ -73,8 +73,14 @@ export default function MangaDetailsClient({
   }, []);
   usePageContentReady(isMounted);
 
+  const lastProgressFetchRef = useRef<number>(0);
+
   // Fetch reading progress strictly based on active auth status
-  const refreshProgress = useCallback(async () => {
+  const refreshProgress = useCallback(async (isBackground = false) => {
+    if (isBackground && Date.now() - lastProgressFetchRef.current < 60_000) {
+      return;
+    }
+
     if (authStatus === "loading") {
       const local = getLocalMangaProgress(id);
       if (local) setProgress(local);
@@ -83,6 +89,7 @@ export default function MangaDetailsClient({
 
     if (isAuthed) {
       try {
+        lastProgressFetchRef.current = Date.now();
         const serverP = await fetchServerMangaProgress(id);
         if (serverP) {
           setProgress(serverP);
@@ -90,7 +97,7 @@ export default function MangaDetailsClient({
           const local = getLocalMangaProgress(id);
           if (local) {
             setProgress(local);
-            saveServerMangaProgress(local).catch(() => {});
+            saveServerMangaProgress(local, true).catch(() => {});
           }
         }
       } catch (err) {
@@ -103,19 +110,24 @@ export default function MangaDetailsClient({
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
-    refreshProgress();
+    refreshProgress(false);
 
-    const handleUpdate = () => {
-      refreshProgress();
+    const handleImmediateUpdate = () => {
+      refreshProgress(false);
       setReadTick((t) => t + 1);
     };
 
-    window.addEventListener("cinestream:manga-history-updated", handleUpdate);
-    window.addEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
-    window.addEventListener("pageshow", handleUpdate);
-    window.addEventListener("focus", handleUpdate);
-    window.addEventListener("visibilitychange", handleUpdate);
-    window.addEventListener("storage", handleUpdate);
+    const handleBackgroundUpdate = () => {
+      refreshProgress(true);
+      setReadTick((t) => t + 1);
+    };
+
+    window.addEventListener("cinestream:manga-history-updated", handleImmediateUpdate);
+    window.addEventListener("cinestream:manga-read-chapters-updated", handleImmediateUpdate);
+    window.addEventListener("pageshow", handleBackgroundUpdate);
+    window.addEventListener("focus", handleBackgroundUpdate);
+    window.addEventListener("visibilitychange", handleBackgroundUpdate);
+    window.addEventListener("storage", handleImmediateUpdate);
 
     let isMountedLocal = true;
 
@@ -162,12 +174,12 @@ export default function MangaDetailsClient({
 
     return () => {
       isMountedLocal = false;
-      window.removeEventListener("cinestream:manga-history-updated", handleUpdate);
-      window.removeEventListener("cinestream:manga-read-chapters-updated", handleUpdate);
-      window.removeEventListener("pageshow", handleUpdate);
-      window.removeEventListener("focus", handleUpdate);
-      window.removeEventListener("visibilitychange", handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("cinestream:manga-history-updated", handleImmediateUpdate);
+      window.removeEventListener("cinestream:manga-read-chapters-updated", handleImmediateUpdate);
+      window.removeEventListener("pageshow", handleBackgroundUpdate);
+      window.removeEventListener("focus", handleBackgroundUpdate);
+      window.removeEventListener("visibilitychange", handleBackgroundUpdate);
+      window.removeEventListener("storage", handleImmediateUpdate);
     };
   }, [id, initialManga, initialChapters.length, refreshProgress]);
 

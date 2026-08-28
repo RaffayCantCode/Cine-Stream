@@ -8,7 +8,6 @@ import { MangaItem, MangaChapter, ChapterPagesData } from "@/lib/manga-fetch";
 import {
   getLocalMangaProgress,
   saveLocalMangaProgress,
-  fetchServerMangaProgress,
   saveServerMangaProgress,
   markChapterAsRead,
 } from "@/lib/manga-history";
@@ -77,9 +76,6 @@ export default function MangaReaderClient({
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const touchStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  const initialSaveDoneRef = useRef(false);
-  const lastSavedPageRef = useRef<number>(1);
 
   usePageContentReady(!isLoading);
 
@@ -235,80 +231,44 @@ export default function MangaReaderClient({
   // Total pages count
   const totalPages = pagesData?.pageUrls?.length || 0;
 
-  // Persist Reading Progress strictly based on active authentication state
-  const persistProgress = useCallback(
-    (page: number) => {
-      const resolvedTitle = manga?.title || initialManga?.title || queryTitle || "Manga";
-      const resolvedCover = manga?.coverImage || initialManga?.coverImage || "/icon-512.png";
-      const rawType = manga?.type || initialManga?.type;
-      const resolvedType = (rawType === "manhwa" || rawType === "manhua") ? rawType : "manga";
-      const resolvedChapterNumber = currentChapter?.chapterNumber || queryCh || "1";
-      const resolvedChapterTitle = currentChapter?.title || null;
-      const resolvedTotalPages = totalPages > 0 ? totalPages : 1;
+  // Persist Chapter Reading Progress (1 request per chapter opened)
+  const persistChapterProgress = useCallback(() => {
+    const resolvedTitle = manga?.title || initialManga?.title || queryTitle || "Manga";
+    const resolvedCover = manga?.coverImage || initialManga?.coverImage || "/icon-512.png";
+    const rawType = manga?.type || initialManga?.type;
+    const resolvedType = (rawType === "manhwa" || rawType === "manhua") ? rawType : "manga";
+    const resolvedChapterNumber = currentChapter?.chapterNumber || queryCh || "1";
+    const resolvedChapterTitle = currentChapter?.title || null;
+    const resolvedTotalPages = totalPages > 0 ? totalPages : 1;
 
-      const payload = {
-        mangaId,
-        mangaTitle: resolvedTitle,
-        mangaCover: resolvedCover,
-        mangaType: resolvedType as "manga" | "manhwa" | "manhua",
-        chapterId,
-        chapterNumber: resolvedChapterNumber,
-        chapterTitle: resolvedChapterTitle,
-        pageNumber: page > 0 ? page : 1,
-        totalPages: resolvedTotalPages,
-        nextChapterId: nextChapter ? nextChapter.id : null,
-        nextChapterNumber: nextChapter ? nextChapter.chapterNumber : null,
-      };
+    const payload = {
+      mangaId,
+      mangaTitle: resolvedTitle,
+      mangaCover: resolvedCover,
+      mangaType: resolvedType as "manga" | "manhwa" | "manhua",
+      chapterId,
+      chapterNumber: resolvedChapterNumber,
+      chapterTitle: resolvedChapterTitle,
+      pageNumber: 1,
+      totalPages: resolvedTotalPages,
+      nextChapterId: nextChapter ? nextChapter.id : null,
+      nextChapterNumber: nextChapter ? nextChapter.chapterNumber : null,
+    };
 
-      if (isAuthed) {
-        saveServerMangaProgress(payload);
-      } else {
-        saveLocalMangaProgress(payload);
-      }
+    if (isAuthed) {
+      saveServerMangaProgress(payload, true);
+    } else {
+      saveLocalMangaProgress(payload);
+    }
 
-      markChapterAsRead(mangaId, chapterId, resolvedChapterNumber);
-    },
-    [isAuthed, manga, initialManga, queryTitle, currentChapter, queryCh, totalPages, mangaId, chapterId, nextChapter]
-  );
+    markChapterAsRead(mangaId, chapterId, resolvedChapterNumber);
+  }, [isAuthed, manga, initialManga, queryTitle, currentChapter, queryCh, totalPages, mangaId, chapterId, nextChapter]);
 
-  // Restore saved page position and immediately save current entry on mount
+  // Save chapter progress once when entering the chapter
   useEffect(() => {
     if (authStatus === "loading") return;
-
-    let cancelled = false;
-
-    const initReadingState = async () => {
-      let savedPage = 1;
-
-      if (isAuthed) {
-        const serverSaved = await fetchServerMangaProgress(mangaId);
-        if (cancelled) return;
-        if (serverSaved && (serverSaved.chapterId === chapterId || serverSaved.chapterId.replace(/^(wc|asura)-/, "") === chapterId.replace(/^(wc|asura)-/, "")) && serverSaved.pageNumber > 0) {
-          savedPage = (totalPages > 0 && serverSaved.pageNumber <= totalPages) ? serverSaved.pageNumber : 1;
-        }
-      } else {
-        const localSaved = getLocalMangaProgress(mangaId);
-        if (localSaved && (localSaved.chapterId === chapterId || localSaved.chapterId.replace(/^(wc|asura)-/, "") === chapterId.replace(/^(wc|asura)-/, "")) && localSaved.pageNumber > 0) {
-          savedPage = (totalPages > 0 && localSaved.pageNumber <= totalPages) ? localSaved.pageNumber : 1;
-        }
-      }
-
-      if (!cancelled) {
-        if (savedPage > 1) {
-          setCurrentPage(savedPage);
-          lastSavedPageRef.current = savedPage;
-        }
-        persistProgress(savedPage);
-        initialSaveDoneRef.current = true;
-      }
-    };
-
-    initReadingState();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authStatus, isAuthed, mangaId, chapterId, totalPages, persistProgress]);
+    persistChapterProgress();
+  }, [authStatus, chapterId, persistChapterProgress]);
 
   // Preload Next 3 Pages in Memory
   useEffect(() => {
@@ -321,7 +281,7 @@ export default function MangaReaderClient({
     }
   }, [pagesData, currentPage]);
 
-  // Webtoon Scroll Intersection Observer for Current Page tracking
+  // Webtoon Scroll Intersection Observer (100% local React state - ZERO network requests on scroll)
   useEffect(() => {
     if (totalPages <= 0) return;
 
@@ -332,10 +292,6 @@ export default function MangaReaderClient({
             const pageNum = parseInt(entry.target.getAttribute("data-page") || "1", 10);
             if (pageNum && pageNum !== currentPage) {
               setCurrentPage(pageNum);
-              if (initialSaveDoneRef.current && pageNum !== lastSavedPageRef.current) {
-                lastSavedPageRef.current = pageNum;
-                persistProgress(pageNum);
-              }
             }
           }
         }
@@ -348,7 +304,7 @@ export default function MangaReaderClient({
     });
 
     return () => observer.disconnect();
-  }, [totalPages, currentPage, persistProgress]);
+  }, [totalPages, currentPage]);
 
   // Zoom Handler Functions (+ / - / reset in clean steps of 10)
   const handleZoomIn = (e?: React.MouseEvent) => {
