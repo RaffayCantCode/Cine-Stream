@@ -189,6 +189,14 @@ export default function MangaReaderClient({
     loadChapter();
   }, [loadChapter]);
 
+  // Ensure scroll is at the very top on chapter switch
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    if (readerContainerRef.current) {
+      readerContainerRef.current.scrollTop = 0;
+    }
+  }, [chapterId]);
+
   // Current Chapter Metadata
   const currentChapter = useMemo(() => {
     const cleanTarget = chapterId.replace(/^(wc|asura)-/, "");
@@ -335,13 +343,14 @@ export default function MangaReaderClient({
     try { localStorage.setItem("cinestream.manga_zoom_level", String(targetZoom)); } catch {}
   };
 
-  // Proper Fullscreen Toggle
+  // Proper Fullscreen Toggle (Standard document-level fullscreen)
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      if (readerContainerRef.current?.requestFullscreen) {
-        readerContainerRef.current.requestFullscreen().catch(() => {});
-      } else if ((document.documentElement as any).webkitRequestFullscreen) {
-        (document.documentElement as any).webkitRequestFullscreen();
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if ((el as any).webkitRequestFullscreen) {
+        (el as any).webkitRequestFullscreen();
       }
     } else {
       if (document.exitFullscreen) {
@@ -380,7 +389,7 @@ export default function MangaReaderClient({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  });
+  }, [brightness]);
 
   // Handle tap to toggle controls with touch drag discrimination
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -441,18 +450,16 @@ export default function MangaReaderClient({
   return (
     <div
       ref={readerContainerRef}
-      className="min-h-screen w-full bg-black text-white flex flex-col select-none relative overflow-x-hidden"
+      className="min-h-screen w-full bg-black text-white flex flex-col justify-start select-none relative overflow-x-hidden"
+      style={
+        {
+          "--primary": "48 100% 50%",
+          "--primary-foreground": "0 0% 0%",
+          "--ring": "48 100% 50%",
+          "--accent": "48 100% 50%",
+        } as React.CSSProperties
+      }
     >
-      {/* Sleek Top Micro Progress Bar (Zero Intrusion) */}
-      {totalPages > 0 && (
-        <div
-          className="fixed top-0 left-0 h-[2.5px] bg-primary z-[60] transition-[width] duration-150 pointer-events-none shadow-[0_0_8px_hsl(var(--primary))]"
-          style={{
-            width: `${Math.min(100, Math.round((currentPage / totalPages) * 100))}%`,
-          }}
-        />
-      )}
-
       {/* TOP FLOATING NAVIGATION BAR (Clean, Responsive & Fully Accessible on Mobile & Desktop) */}
       <header
         style={{
@@ -806,7 +813,7 @@ export default function MangaReaderClient({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onClick={() => setShowControls((prev) => !prev)}
-        className="flex-1 flex flex-col items-center justify-center min-h-screen w-full cursor-default overflow-x-auto"
+        className="flex-1 flex flex-col items-center justify-start min-h-screen w-full cursor-default overflow-x-hidden"
       >
         <div
           style={{

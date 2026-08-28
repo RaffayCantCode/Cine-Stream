@@ -125,7 +125,17 @@ export default function ContinueReadingPage() {
 
   if (status === "unauthenticated" && items.length === 0) {
     return (
-      <div className="min-h-screen bg-background text-foreground pb-20">
+      <div
+        className="min-h-screen bg-background text-foreground pb-20"
+        style={
+          {
+            "--primary": "48 100% 50%",
+            "--primary-foreground": "0 0% 0%",
+            "--ring": "48 100% 50%",
+            "--accent": "48 100% 50%",
+          } as React.CSSProperties
+        }
+      >
         <Sidebar />
         <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
           <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
@@ -163,7 +173,17 @@ export default function ContinueReadingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20">
+    <div
+      className="min-h-screen bg-background text-foreground pb-20"
+      style={
+        {
+          "--primary": "48 100% 50%",
+          "--primary-foreground": "0 0% 0%",
+          "--ring": "48 100% 50%",
+          "--accent": "48 100% 50%",
+        } as React.CSSProperties
+      }
+    >
       <Sidebar />
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
         <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { MangaCard } from "@/components/manga/MangaCard";
-import { MangaItem } from "@/lib/manga-fetch";
+import { MangaItem, isCleanManga } from "@/lib/manga-fetch";
 import { 
   getLocalMangaHistory, 
   removeLocalMangaProgress, 
@@ -56,7 +56,7 @@ let globalMangaHomeCache: {
   trendingMangas: MangaItem[];
 } | null = null;
 
-const SESSION_MANGA_HOME_KEY = "sv_manga_home_cache_v4";
+const SESSION_MANGA_HOME_KEY = "sv_manga_home_cache_v7";
 
 function saveMangaHomeToSession(data: { trendingNow: MangaItem[]; trendingManhwas: MangaItem[]; trendingMangas: MangaItem[] }): void {
   if (typeof window === "undefined") return;
@@ -91,10 +91,10 @@ export default function MangaHomeClient({
   const router = useRouter();
 
   const [trendingNow, setTrendingNow] = useState<MangaItem[]>(() => {
-    if (initialTrending.length > 0) return shuffleArray<MangaItem>(initialTrending).slice(0, 15);
-    if (globalMangaHomeCache?.trendingNow && globalMangaHomeCache.trendingNow.length > 0) return globalMangaHomeCache.trendingNow;
+    if (initialTrending.length > 0) return shuffleArray<MangaItem>(initialTrending.filter(isCleanManga)).slice(0, 15);
+    if (globalMangaHomeCache?.trendingNow && globalMangaHomeCache.trendingNow.length > 0) return globalMangaHomeCache.trendingNow.filter(isCleanManga);
     const sessionData = loadMangaHomeFromSession();
-    return sessionData?.trendingNow || [];
+    return (sessionData?.trendingNow || []).filter(isCleanManga);
   });
   const [isTrendingNowLoading, setIsTrendingNowLoading] = useState(() => {
     if (initialTrending.length > 0) return false;
@@ -104,10 +104,10 @@ export default function MangaHomeClient({
   });
 
   const [trendingManhwas, setTrendingManhwas] = useState<MangaItem[]>(() => {
-    if (initialManhwas.length > 0) return shuffleArray<MangaItem>(initialManhwas).slice(0, 15);
-    if (globalMangaHomeCache?.trendingManhwas && globalMangaHomeCache.trendingManhwas.length > 0) return globalMangaHomeCache.trendingManhwas;
+    if (initialManhwas.length > 0) return shuffleArray<MangaItem>(initialManhwas.filter((item) => item.type === "manhwa" && isCleanManga(item))).slice(0, 15);
+    if (globalMangaHomeCache?.trendingManhwas && globalMangaHomeCache.trendingManhwas.length > 0) return globalMangaHomeCache.trendingManhwas.filter((item) => item.type === "manhwa" && isCleanManga(item));
     const sessionData = loadMangaHomeFromSession();
-    return sessionData?.trendingManhwas || [];
+    return (sessionData?.trendingManhwas || []).filter((item) => item.type === "manhwa" && isCleanManga(item));
   });
   const [isTrendingManhwasLoading, setIsTrendingManhwasLoading] = useState(() => {
     if (initialManhwas.length > 0) return false;
@@ -117,10 +117,10 @@ export default function MangaHomeClient({
   });
 
   const [trendingMangas, setTrendingMangas] = useState<MangaItem[]>(() => {
-    if (initialMangas.length > 0) return shuffleArray<MangaItem>(initialMangas).slice(0, 15);
-    if (globalMangaHomeCache?.trendingMangas && globalMangaHomeCache.trendingMangas.length > 0) return globalMangaHomeCache.trendingMangas;
+    if (initialMangas.length > 0) return shuffleArray<MangaItem>(initialMangas.filter((item) => item.type === "manga" && isCleanManga(item))).slice(0, 15);
+    if (globalMangaHomeCache?.trendingMangas && globalMangaHomeCache.trendingMangas.length > 0) return globalMangaHomeCache.trendingMangas.filter((item) => item.type === "manga" && isCleanManga(item));
     const sessionData = loadMangaHomeFromSession();
-    return sessionData?.trendingMangas || [];
+    return (sessionData?.trendingMangas || []).filter((item) => item.type === "manga" && isCleanManga(item));
   });
   const [isTrendingMangasLoading, setIsTrendingMangasLoading] = useState(() => {
     if (initialMangas.length > 0) return false;
@@ -332,14 +332,14 @@ export default function MangaHomeClient({
 
     // 1. Load Trending Now if not provided by server
     if (initialTrending.length === 0 && (!globalMangaHomeCache?.trendingNow || globalMangaHomeCache.trendingNow.length === 0)) {
-      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=16")
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/trending?limit=40")
         .then((data) => {
           if (!isMounted) return;
-          const items = data.items || [];
+          const items = (data.items || []).filter(isCleanManga);
           if (items.length > 0) {
-            const shuffled = shuffleArray<MangaItem>(items).slice(0, 15);
-            setTrendingNow(shuffled);
-            syncCache(shuffled);
+            const list = shuffleArray<MangaItem>(items).slice(0, 15);
+            setTrendingNow(list);
+            syncCache(list);
           }
         })
         .catch((err) => console.warn("Failed to load trending now:", err))
@@ -352,14 +352,14 @@ export default function MangaHomeClient({
 
     // 2. Load Trending Manhwas if not provided by server
     if (initialManhwas.length === 0 && (!globalMangaHomeCache?.trendingManhwas || globalMangaHomeCache.trendingManhwas.length === 0)) {
-      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=16")
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manhwa?limit=40")
         .then((data) => {
           if (!isMounted) return;
-          const items = data.items || [];
+          const items = (data.items || []).filter((item) => item.type === "manhwa" && isCleanManga(item));
           if (items.length > 0) {
-            const shuffled = shuffleArray<MangaItem>(items).slice(0, 15);
-            setTrendingManhwas(shuffled);
-            syncCache(undefined, shuffled);
+            const list = shuffleArray<MangaItem>(items).slice(0, 15);
+            setTrendingManhwas(list);
+            syncCache(undefined, list);
           }
         })
         .catch((err) => console.warn("Failed to load trending manhwas:", err))
@@ -372,14 +372,14 @@ export default function MangaHomeClient({
 
     // 3. Load Trending Mangas if not provided by server
     if (initialMangas.length === 0 && (!globalMangaHomeCache?.trendingMangas || globalMangaHomeCache.trendingMangas.length === 0)) {
-      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/latest?limit=16")
+      fetchJson<{ success: boolean; items: MangaItem[] }>("/api/manga/manga?limit=40")
         .then((data) => {
           if (!isMounted) return;
-          const items = data.items || [];
+          const items = (data.items || []).filter((item) => item.type === "manga" && isCleanManga(item));
           if (items.length > 0) {
-            const shuffled = shuffleArray<MangaItem>(items).slice(0, 15);
-            setTrendingMangas(shuffled);
-            syncCache(undefined, undefined, shuffled);
+            const list = shuffleArray<MangaItem>(items).slice(0, 15);
+            setTrendingMangas(list);
+            syncCache(undefined, undefined, list);
           }
         })
         .catch((err) => console.warn("Failed to load trending mangas:", err))
@@ -580,7 +580,17 @@ export default function MangaHomeClient({
   const activeGenreObj = useMemo(() => GENRES.find((g) => g.id === selectedGenre), [selectedGenre]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
+    <div
+      className="min-h-screen bg-background text-foreground pb-24"
+      style={
+        {
+          "--primary": "48 100% 50%",
+          "--primary-foreground": "0 0% 0%",
+          "--ring": "48 100% 50%",
+          "--accent": "48 100% 50%",
+        } as React.CSSProperties
+      }
+    >
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
@@ -949,9 +959,11 @@ export default function MangaHomeClient({
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
-                    : trendingManhwas.map((item) => (
-                        <MangaCard key={item.id} item={item} showBadges={isMounted} />
-                      ))}
+                    : trendingManhwas
+                        .filter((item) => item.type === "manhwa")
+                        .map((item) => (
+                          <MangaCard key={item.id} item={item} showBadges={isMounted} />
+                        ))}
                 </div>
               </section>
 
@@ -974,9 +986,11 @@ export default function MangaHomeClient({
                     ? Array.from({ length: 10 }).map((_, i) => (
                         <div key={i} className="aspect-[2/3] rounded-3xl bg-white/[0.03] animate-pulse" />
                       ))
-                    : trendingMangas.map((item) => (
-                        <MangaCard key={item.id} item={item} showBadges={isMounted} />
-                      ))}
+                    : trendingMangas
+                        .filter((item) => item.type === "manga")
+                        .map((item) => (
+                          <MangaCard key={item.id} item={item} showBadges={isMounted} />
+                        ))}
                 </div>
               </section>
             </>

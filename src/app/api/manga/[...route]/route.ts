@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getMangaTrending,
   getPopularManhwa,
+  getPopularManga,
   getLatestMangaUpdates,
   searchManga,
   getMangaDetails,
@@ -51,6 +52,17 @@ export async function GET(
       return jsonWithCache({ success: true, items }, 1800);
     } catch (err: any) {
       console.error("[API/Manga] manhwa error:", err);
+      return jsonWithCache({ success: true, items: [] }, 60);
+    }
+  }
+
+  if (action === "manga" || action === "popular-manga") {
+    try {
+      const limit = parseInt(searchParams.get("limit") || "24", 10);
+      const items = await getPopularManga(limit);
+      return jsonWithCache({ success: true, items }, 1800);
+    } catch (err: any) {
+      console.error("[API/Manga] popular manga error:", err);
       return jsonWithCache({ success: true, items: [] }, 60);
     }
   }

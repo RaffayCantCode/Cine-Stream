@@ -58,6 +58,8 @@ export default function MangaDetailsClient({
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [chapterSearch, setChapterSearch] = useState("");
   const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+  const descRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState<MangaReadingProgress | null>(() =>
     typeof window !== "undefined" ? getLocalMangaProgress(id) : null
   );
@@ -65,6 +67,20 @@ export default function MangaDetailsClient({
 
   const { isSaved, toggle } = useWatchlist();
   const inWatchlist = manga ? isSaved(manga.id, manga.type || "manga") : false;
+
+  // Check if description text overflows 3 lines
+  useEffect(() => {
+    const el = descRef.current;
+    if (!el) return;
+    const checkOverflow = () => {
+      if (!isDescExpanded) {
+        setCanExpand(el.scrollHeight > el.clientHeight + 4);
+      }
+    };
+    checkOverflow();
+    window.addEventListener("resize", checkOverflow);
+    return () => window.removeEventListener("resize", checkOverflow);
+  }, [manga?.description, isDescExpanded]);
 
   // Shell signals ready after mount so NavigationLoader hides properly
   const [isMounted, setIsMounted] = useState(false);
@@ -218,7 +234,17 @@ export default function MangaDetailsClient({
   }, [progress, chapters]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24 select-none">
+    <div
+      className="min-h-screen bg-background text-foreground pb-24 select-none"
+      style={
+        {
+          "--primary": "48 100% 50%",
+          "--primary-foreground": "0 0% 0%",
+          "--ring": "48 100% 50%",
+          "--accent": "48 100% 50%",
+        } as React.CSSProperties
+      }
+    >
       <Sidebar />
 
       <main className="md:pl-56 lg:pl-64 pt-4 md:pt-6">
@@ -318,13 +344,14 @@ export default function MangaDetailsClient({
                   {/* Synopsis */}
                   <div className="max-w-3xl text-sm leading-relaxed text-zinc-300 font-medium">
                     <div
+                      ref={descRef}
                       className={`whitespace-pre-line text-zinc-300 ${
                         !isDescExpanded ? "line-clamp-3" : "line-clamp-none"
                       }`}
                     >
                       {manga.description}
                     </div>
-                    {manga.description && (manga.description.length > 160 || manga.description.includes("\n")) && (
+                    {canExpand && (
                       <button
                         type="button"
                         onClick={() => setIsDescExpanded((prev) => !prev)}

@@ -51,7 +51,73 @@ const WEEBCENTRAL_BASE = "https://weebcentral.com";
 const ASURA_API = "https://api.asurascans.com/api";
 
 // Bump this whenever fetch logic or data shape changes to instantly drop stale in-memory cache
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v11";
+
+const BLOCKED_TAGS = new Set([
+  "smut",
+  "erotica",
+  "hentai",
+  "pornographic",
+  "doujinshi",
+  "sexual violence",
+  "r-18",
+  "nsfw",
+]);
+
+const BLOCKED_TITLE_PATTERNS = [
+  /\bhentai\b/i,
+  /\berotic\b/i,
+  /\berotica\b/i,
+  /\buncensored\b/i,
+  /\bsex\b/i,
+  /\bporn\b/i,
+  /\bxxx\b/i,
+  /\bbondage\b/i,
+  /\bsmut\b/i,
+  /\braw.*adult\b/i,
+  /\br-18\b/i,
+  /\bnsfw\b/i,
+  /\bnetorare\b/i,
+  /\bntr\b/i,
+  /\bfuck\b/i,
+  /\bcondom\b/i,
+  /\bcreampie\b/i,
+];
+
+/**
+ * Validates that a manga item is clean from straight hentai / pornographic content.
+ * Note: Mainstream "Adult", "Mature", "18+", and "Ecchi" series (e.g. Berserk, Chainsaw Man, High School DxD, Gantz) are permitted.
+ */
+export function isCleanManga(item: MangaItem): boolean {
+  if (!item) return false;
+  if (item.contentRating === "erotica" || item.contentRating === "pornographic") return false;
+
+  if (Array.isArray(item.tags)) {
+    const hasBlockedTag = item.tags.some((t) => {
+      const lower = t.trim().toLowerCase();
+      return BLOCKED_TAGS.has(lower);
+    });
+    if (hasBlockedTag) return false;
+  }
+
+  if (item.title) {
+    const titleLower = item.title.toLowerCase();
+    for (const pat of BLOCKED_TITLE_PATTERNS) {
+      if (pat.test(titleLower)) return false;
+    }
+  }
+
+  if (Array.isArray(item.altTitles)) {
+    for (const alt of item.altTitles) {
+      const altLower = alt.toLowerCase();
+      for (const pat of BLOCKED_TITLE_PATTERNS) {
+        if (pat.test(altLower)) return false;
+      }
+    }
+  }
+
+  return true;
+}
 
 // High-speed in-memory response cache
 const serverCache = new Map<string, { data: any; expiry: number }>();
@@ -173,16 +239,53 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
     const statusMatch = block.match(/<strong>\s*Status:\s*<\/strong>\s*<span>([^<]+)<\/span>/i);
     const status = (statusMatch ? statusMatch[1].trim().toLowerCase() : "ongoing") as any;
 
-    const typeMatch = block.match(/<strong>\s*Type:\s*<\/strong>\s*<span>([^<]+)<\/span>/i);
-    const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "manga";
-    let type: "manga" | "manhwa" | "manhua" = "manga";
-    if (rawType.includes("manhwa") || slug.toLowerCase().includes("manhwa")) type = "manhwa";
-    else if (rawType.includes("manhua")) type = "manhua";
-
     const tagsMatch = block.match(/<strong>\s*Tag\(s\):\s*<\/strong>([\s\S]*?)<\/div>/i);
     const tags = tagsMatch
       ? [...tagsMatch[1].matchAll(/<span>\s*([^<,]+),?\s*<\/span>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
       : [];
+
+    const lowerTags = tags.map((t) => t.toLowerCase());
+
+    const typeMatch = block.match(/<strong>\s*Type:\s*<\/strong>\s*<span>([^<]+)<\/span>/i);
+    const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "";
+    const lowerSlug = slug.toLowerCase();
+
+    let type: "manga" | "manhwa" | "manhua" = "manga";
+    if (
+      rawType === "manhwa" ||
+      rawType.includes("manhwa") ||
+      lowerSlug.includes("manhwa") ||
+      lowerTags.includes("manhwa") ||
+      lowerTags.includes("webtoon") ||
+      lowerTags.includes("korean")
+    ) {
+      type = "manhwa";
+    } else if (
+      rawType === "manhua" ||
+      rawType.includes("manhua") ||
+      lowerSlug.includes("manhua") ||
+      lowerTags.includes("manhua") ||
+      lowerTags.includes("chinese")
+    ) {
+      type = "manhua";
+    } else {
+      type = "manga";
+    }
+
+    let contentRating: "safe" | "suggestive" | "erotica" | "pornographic" = "safe";
+    if (
+      lowerTags.some((t) => ["hentai", "pornographic", "doujinshi", "sexual violence"].includes(t))
+    ) {
+      contentRating = "pornographic";
+    } else if (
+      lowerTags.some((t) => ["smut", "erotica", "nsfw", "18+", "r-18"].includes(t))
+    ) {
+      contentRating = "erotica";
+    } else if (
+      lowerTags.some((t) => ["adult", "mature", "ecchi", "harem"].includes(t))
+    ) {
+      contentRating = "suggestive";
+    }
 
     items.push({
       id,
@@ -194,8 +297,8 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
       status,
       releaseYear,
       tags,
-      contentRating: "safe",
-      originalLanguage: "en",
+      contentRating,
+      originalLanguage: type === "manhwa" ? "ko" : type === "manhua" ? "zh" : "ja",
       source: "weebcentral",
     });
   }
@@ -272,10 +375,14 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
       let mangaItems: MangaItem[] = [];
 
       if (manhwaRes && manhwaRes.ok) {
-        manhwaItems = parseWeebCentralHtml(await manhwaRes.text());
+        manhwaItems = parseWeebCentralHtml(await manhwaRes.text()).filter(
+          (item) => item.type === "manhwa" && isCleanManga(item)
+        );
       }
       if (mangaRes && mangaRes.ok) {
-        mangaItems = parseWeebCentralHtml(await mangaRes.text());
+        mangaItems = parseWeebCentralHtml(await mangaRes.text()).filter(
+          (item) => item.type === "manga" && isCleanManga(item)
+        );
       }
 
       // Interleave: Manhwa, Manga, Manhwa, Manga...
@@ -299,13 +406,16 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
     try {
       const fallbackSearch = await searchManga("", { type: "all", limit, sortBy: "rating" });
       if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-        setInCache(cacheKey, fallbackSearch.items, 900);
-        return fallbackSearch.items;
+        const clean = fallbackSearch.items.filter(isCleanManga);
+        setInCache(cacheKey, clean, 900);
+        return clean;
       }
     } catch {}
 
     // Fallback 2: Asura Scans popular manhwas
-    const asuraItems = await getAsuraPopularSeries(limit);
+    const asuraItems = (await getAsuraPopularSeries(limit)).filter(
+      (item) => item.type === "manhwa" && isCleanManga(item)
+    );
     if (asuraItems.length > 0) {
       setInCache(cacheKey, asuraItems, 900);
       return asuraItems;
@@ -316,7 +426,7 @@ export async function getMangaTrending(limit = 32): Promise<MangaItem[]> {
 }
 
 /**
- * Fetches real-time Trending Korean Manhwas from WeebCentral with Asura fallback.
+ * Fetches real-time Trending Korean Manhwas combining WeebCentral popularity and Asura live active series.
  */
 export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
   const cacheKey = `manga_manhwa_${limit}`;
@@ -325,8 +435,97 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
 
   return dedupeRequest(cacheKey, async () => {
     try {
+      const [wcRes, asuraItems] = await Promise.all([
+        fetchWithTimeout(
+          `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Popularity&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
+          {
+            headers: {
+              "HX-Request": "true",
+            },
+            next: { revalidate: 900 },
+          } as any,
+          5000
+        ).catch(() => null),
+        getAsuraPopularSeries(limit).then((items) =>
+          items.filter((item) => item.type === "manhwa" && isCleanManga(item))
+        ).catch(() => [] as MangaItem[]),
+      ]);
+
+      let wcItems: MangaItem[] = [];
+      if (wcRes && wcRes.ok) {
+        const html = await wcRes.text();
+        wcItems = parseWeebCentralHtml(html).filter(
+          (item) => item.type === "manhwa" && isCleanManga(item)
+        );
+      }
+
+      // Merge WC popular + Asura active trending deduplicated by normalized title
+      const seen = new Set<string>();
+      const combined: MangaItem[] = [];
+      const maxLen = Math.max(wcItems.length, asuraItems.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < wcItems.length) {
+          const norm = wcItems[i].title.toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (!seen.has(norm)) {
+            seen.add(norm);
+            combined.push(wcItems[i]);
+          }
+        }
+        if (i < asuraItems.length) {
+          const norm = asuraItems[i].title.toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (!seen.has(norm)) {
+            seen.add(norm);
+            combined.push(asuraItems[i]);
+          }
+        }
+      }
+
+      if (combined.length > 0) {
+        const result = combined.slice(0, limit);
+        setInCache(cacheKey, result, 900);
+        return result;
+      }
+    } catch (err) {
+      console.warn("[MangaFetch] WeebCentral getPopularManhwa failed:", err);
+    }
+
+    // Fallback 1: Asura Scans dedicated series API (all manhwas)
+    const asuraItems = (await getAsuraPopularSeries(limit)).filter(
+      (item) => item.type === "manhwa" && isCleanManga(item)
+    );
+    if (asuraItems.length > 0) {
+      setInCache(cacheKey, asuraItems, 900);
+      return asuraItems;
+    }
+
+    // Fallback 2: searchManga for manhwa
+    try {
+      const fallbackSearch = await searchManga("", { type: "manhwa", limit, sortBy: "rating" });
+      if (fallbackSearch.items && fallbackSearch.items.length > 0) {
+        const clean = fallbackSearch.items.filter(
+          (item) => item.type === "manhwa" && isCleanManga(item)
+        );
+        setInCache(cacheKey, clean, 900);
+        return clean;
+      }
+    } catch {}
+
+    return [];
+  });
+}
+
+/**
+ * Fetches real-time Popular / Trending Japanese Mangas from WeebCentral with search fallback.
+ */
+export async function getPopularManga(limit = 32): Promise<MangaItem[]> {
+  const cacheKey = `manga_popular_manga_${limit}`;
+  const cached = getFromCache<MangaItem[]>(cacheKey);
+  if (cached && cached.length > 0) return cached;
+
+  return dedupeRequest(cacheKey, async () => {
+    try {
       const res = await fetchWithTimeout(
-        `${WEEBCENTRAL_BASE}/search/data?included_type=Manhwa&sort=Popularity&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
+        `${WEEBCENTRAL_BASE}/search/data?included_type=Manga&sort=Popularity&order=Descending&official=Any&anime=Any&adult=False&limit=${limit}`,
         {
           headers: {
             "HX-Request": "true",
@@ -338,7 +537,9 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
 
       if (res.ok) {
         const html = await res.text();
-        const items = parseWeebCentralHtml(html);
+        const items = parseWeebCentralHtml(html).filter(
+          (item) => item.type === "manga" && isCleanManga(item)
+        );
         if (items.length > 0) {
           const result = items.slice(0, limit);
           setInCache(cacheKey, result, 900);
@@ -346,22 +547,18 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
         }
       }
     } catch (err) {
-      console.warn("[MangaFetch] WeebCentral getPopularManhwa failed:", err);
+      console.warn("[MangaFetch] WeebCentral getPopularManga failed:", err);
     }
 
-    // Fallback 1: Asura Scans dedicated series API
-    const asuraItems = await getAsuraPopularSeries(limit);
-    if (asuraItems.length > 0) {
-      setInCache(cacheKey, asuraItems, 900);
-      return asuraItems;
-    }
-
-    // Fallback 2: searchManga for manhwa
+    // Fallback: searchManga for manga sorted by followedCount
     try {
-      const fallbackSearch = await searchManga("", { type: "manhwa", limit, sortBy: "rating" });
+      const fallbackSearch = await searchManga("", { type: "manga", limit, sortBy: "followedCount" });
       if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-        setInCache(cacheKey, fallbackSearch.items, 900);
-        return fallbackSearch.items;
+        const clean = fallbackSearch.items.filter(
+          (item) => item.type === "manga" && isCleanManga(item)
+        );
+        setInCache(cacheKey, clean, 900);
+        return clean;
       }
     } catch {}
 
@@ -370,7 +567,7 @@ export async function getPopularManhwa(limit = 32): Promise<MangaItem[]> {
 }
 
 /**
- * Fetches real-time Trending Japanese Mangas from WeebCentral with search fallback.
+ * Fetches real-time Latest Updated Japanese Mangas from WeebCentral with search fallback.
  */
 export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
   const cacheKey = `manga_latest_${limit}`;
@@ -392,7 +589,7 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
 
       if (res.ok) {
         const html = await res.text();
-        const items = parseWeebCentralHtml(html);
+        const items = parseWeebCentralHtml(html).filter(isCleanManga);
         if (items.length > 0) {
           const result = items.slice(0, limit);
           setInCache(cacheKey, result, 900);
@@ -407,8 +604,9 @@ export async function getLatestMangaUpdates(limit = 32): Promise<MangaItem[]> {
     try {
       const fallbackSearch = await searchManga("", { type: "manga", limit, sortBy: "latestUploadedChapter" });
       if (fallbackSearch.items && fallbackSearch.items.length > 0) {
-        setInCache(cacheKey, fallbackSearch.items, 900);
-        return fallbackSearch.items;
+        const clean = fallbackSearch.items.filter(isCleanManga);
+        setInCache(cacheKey, clean, 900);
+        return clean;
       }
     } catch {}
 
@@ -509,7 +707,7 @@ export async function searchManga(
 
         if (res.ok) {
           const html = await res.text();
-          const items = parseWeebCentralHtml(html);
+          const items = parseWeebCentralHtml(html).filter(isCleanManga);
           if (items.length > 0) {
             const result = { items: items.slice(0, limit), total: 500 };
             setInCache(cacheKey, result, 1200);
@@ -518,7 +716,7 @@ export async function searchManga(
         }
 
         // Secondary fallback to Asura Scans search if 0 results
-        const asuraResults = await searchAsura(query.trim());
+        const asuraResults = (await searchAsura(query.trim())).filter(isCleanManga);
         if (asuraResults.length > 0) {
           const result = { items: asuraResults.slice(0, limit), total: asuraResults.length };
           setInCache(cacheKey, result, 1200);
@@ -557,11 +755,11 @@ export async function searchManga(
 
         if (manhwaRes && manhwaRes.ok) {
           const html = await manhwaRes.text();
-          manhwaItems = parseWeebCentralHtml(html);
+          manhwaItems = parseWeebCentralHtml(html).filter(isCleanManga);
         }
         if (mangaRes && mangaRes.ok) {
           const html = await mangaRes.text();
-          mangaItems = parseWeebCentralHtml(html);
+          mangaItems = parseWeebCentralHtml(html).filter(isCleanManga);
         }
 
         // Interleave equally (Manhwa, Manga, Manhwa, Manga...)
@@ -599,7 +797,7 @@ export async function searchManga(
 
         if (res.ok) {
           const html = await res.text();
-          const items = parseWeebCentralHtml(html);
+          const items = parseWeebCentralHtml(html).filter(isCleanManga);
           if (items.length > 0) {
             const result = { items: items.slice(0, limit), total: 500 };
             setInCache(cacheKey, result, 1200);

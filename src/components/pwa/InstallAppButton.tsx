@@ -27,15 +27,49 @@ export function InstallAppButton({ compact = false, className }: InstallAppButto
         (window.navigator as any).standalone === true ||
         document.referrer.includes("android-app://");
 
-      setIsStandalone(Boolean(isStandaloneMode));
+      let isStored = false;
+      try {
+        isStored =
+          sessionStorage.getItem("cine_stream_standalone") === "true" ||
+          localStorage.getItem("cine_stream_installed") === "true";
+      } catch {}
+
+      if (isStandaloneMode || isStored) {
+        try {
+          sessionStorage.setItem("cine_stream_standalone", "true");
+        } catch {}
+        setIsStandalone(true);
+      }
     };
 
     checkStandalone();
 
-    const mql = window.matchMedia("(display-mode: standalone)");
-    if (mql?.addEventListener) {
-      mql.addEventListener("change", checkStandalone);
+    // Check if browser recognizes app as installed
+    if (typeof navigator !== "undefined" && "getInstalledRelatedApps" in navigator) {
+      (navigator as any)
+        .getInstalledRelatedApps()
+        .then((apps: any[]) => {
+          if (Array.isArray(apps) && apps.length > 0) {
+            setIsStandalone(true);
+            try {
+              sessionStorage.setItem("cine_stream_standalone", "true");
+              localStorage.setItem("cine_stream_installed", "true");
+            } catch {}
+          }
+        })
+        .catch(() => {});
     }
+
+    const mqlStandalone = window.matchMedia("(display-mode: standalone)");
+    const mqlWco = window.matchMedia("(display-mode: window-controls-overlay)");
+    const mqlMinimal = window.matchMedia("(display-mode: minimal-ui)");
+    const mqlFullscreen = window.matchMedia("(display-mode: fullscreen)");
+
+    if (mqlStandalone?.addEventListener) mqlStandalone.addEventListener("change", checkStandalone);
+    if (mqlWco?.addEventListener) mqlWco.addEventListener("change", checkStandalone);
+    if (mqlMinimal?.addEventListener) mqlMinimal.addEventListener("change", checkStandalone);
+    if (mqlFullscreen?.addEventListener) mqlFullscreen.addEventListener("change", checkStandalone);
+    window.addEventListener("fullscreenchange", checkStandalone);
 
     // Listen for beforeinstallprompt event on Chrome/Edge/Brave/Android
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -48,15 +82,21 @@ export function InstallAppButton({ compact = false, className }: InstallAppButto
     // Listen for appinstalled event
     const handleAppInstalled = () => {
       setIsStandalone(true);
+      try {
+        sessionStorage.setItem("cine_stream_standalone", "true");
+        localStorage.setItem("cine_stream_installed", "true");
+      } catch {}
       setDeferredPrompt(null);
     };
 
     window.addEventListener("appinstalled", handleAppInstalled);
 
     return () => {
-      if (mql?.removeEventListener) {
-        mql.removeEventListener("change", checkStandalone);
-      }
+      if (mqlStandalone?.removeEventListener) mqlStandalone.removeEventListener("change", checkStandalone);
+      if (mqlWco?.removeEventListener) mqlWco.removeEventListener("change", checkStandalone);
+      if (mqlMinimal?.removeEventListener) mqlMinimal.removeEventListener("change", checkStandalone);
+      if (mqlFullscreen?.removeEventListener) mqlFullscreen.removeEventListener("change", checkStandalone);
+      window.removeEventListener("fullscreenchange", checkStandalone);
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
@@ -69,6 +109,10 @@ export function InstallAppButton({ compact = false, className }: InstallAppButto
         const choiceResult = await deferredPrompt.userChoice;
         if (choiceResult.outcome === "accepted") {
           setIsStandalone(true);
+          try {
+            sessionStorage.setItem("cine_stream_standalone", "true");
+            localStorage.setItem("cine_stream_installed", "true");
+          } catch {}
         }
         setDeferredPrompt(null);
       } catch (err) {
