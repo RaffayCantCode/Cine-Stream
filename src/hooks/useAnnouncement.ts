@@ -10,10 +10,12 @@ interface AnnouncementData {
 
 // Global in-memory cache to share across components without extra fetch
 let globalAnnouncementCache: AnnouncementData | null = null;
+let lastAnnouncementFetchAt = 0;
 const listeners = new Set<(data: AnnouncementData) => void>();
 
 function notifyListeners(data: AnnouncementData) {
   globalAnnouncementCache = data;
+  lastAnnouncementFetchAt = Date.now();
   listeners.forEach((listener) => listener(data));
 }
 
@@ -46,6 +48,13 @@ export function useAnnouncement() {
       setIsLoading(false);
     }
   }, []);
+
+  // Throttled fetch — only fires if cache is older than 5 minutes
+  const ANNOUNCEMENT_REFETCH_TTL = 5 * 60_000;
+  const fetchAnnouncementThrottled = useCallback(async () => {
+    if (Date.now() - lastAnnouncementFetchAt < ANNOUNCEMENT_REFETCH_TTL) return;
+    await fetchAnnouncement();
+  }, [fetchAnnouncement]);
 
   useEffect(() => {
     // Register listener for shared state updates
@@ -102,19 +111,19 @@ export function useAnnouncement() {
       console.warn("[useAnnouncement] Realtime subscription error:", realtimeErr);
     }
 
-    // Re-validate on window focus / visibility change
+    // Re-validate on window focus / visibility change — throttled to 5 minutes
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        fetchAnnouncement();
+        fetchAnnouncementThrottled();
       }
     };
     window.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("focus", fetchAnnouncement);
+    window.addEventListener("focus", fetchAnnouncementThrottled);
 
     return () => {
       listeners.delete(handleUpdate);
       window.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("focus", fetchAnnouncement);
+      window.removeEventListener("focus", fetchAnnouncementThrottled);
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.close();
       }
@@ -122,7 +131,7 @@ export function useAnnouncement() {
         supabase.removeChannel(channel);
       }
     };
-  }, [fetchAnnouncement]);
+  }, [fetchAnnouncement, fetchAnnouncementThrottled]);
 
   const saveAnnouncement = useCallback(async (newMessage: string): Promise<{ success: boolean; error?: string }> => {
     try {

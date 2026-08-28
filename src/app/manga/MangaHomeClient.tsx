@@ -190,6 +190,7 @@ export default function MangaHomeClient({
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeSearchIdRef = useRef<number>(0);
   const discardedIdsRef = useRef<Set<string>>(new Set());
+  const lastHistoryFetchRef = useRef<number>(0);
 
   // Instant clear handler for search input
   const handleClearSearch = useCallback((e?: React.MouseEvent) => {
@@ -211,11 +212,15 @@ export default function MangaHomeClient({
   }, []);
 
   // Fetch Reading History strictly according to active authentication status
-  const refreshHistory = useCallback(async () => {
+  const refreshHistory = useCallback(async (isBackground = false) => {
     const isDiscarded = (id: string) => {
       const clean = id.replace(/^(wc|asura)-/, "");
       return discardedIdsRef.current.has(id) || discardedIdsRef.current.has(clean);
     };
+
+    if (isBackground && Date.now() - lastHistoryFetchRef.current < 60_000) {
+      return;
+    }
 
     if (status === "loading") {
       const local = getLocalMangaHistory().filter((item) => !isDiscarded(item.mangaId));
@@ -225,6 +230,7 @@ export default function MangaHomeClient({
 
     if (status === "authenticated") {
       try {
+        lastHistoryFetchRef.current = Date.now();
         const serverHistory = await fetchServerMangaHistory();
         const filteredServer = serverHistory.filter((item) => !isDiscarded(item.mangaId));
         if (filteredServer.length > 0) {
@@ -249,24 +255,28 @@ export default function MangaHomeClient({
   }, [status]);
 
   useEffect(() => {
-    refreshHistory();
+    refreshHistory(false);
 
-    const handleUpdate = () => {
-      refreshHistory();
+    const handleImmediateUpdate = () => {
+      refreshHistory(false);
     };
 
-    window.addEventListener("cinestream:manga-history-updated", handleUpdate);
-    window.addEventListener("pageshow", handleUpdate);
-    window.addEventListener("focus", handleUpdate);
-    window.addEventListener("visibilitychange", handleUpdate);
-    window.addEventListener("storage", handleUpdate);
+    const handleBackgroundUpdate = () => {
+      refreshHistory(true);
+    };
+
+    window.addEventListener("cinestream:manga-history-updated", handleImmediateUpdate);
+    window.addEventListener("pageshow", handleBackgroundUpdate);
+    window.addEventListener("focus", handleBackgroundUpdate);
+    window.addEventListener("visibilitychange", handleBackgroundUpdate);
+    window.addEventListener("storage", handleImmediateUpdate);
 
     return () => {
-      window.removeEventListener("cinestream:manga-history-updated", handleUpdate);
-      window.removeEventListener("pageshow", handleUpdate);
-      window.removeEventListener("focus", handleUpdate);
-      window.removeEventListener("visibilitychange", handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("cinestream:manga-history-updated", handleImmediateUpdate);
+      window.removeEventListener("pageshow", handleBackgroundUpdate);
+      window.removeEventListener("focus", handleBackgroundUpdate);
+      window.removeEventListener("visibilitychange", handleBackgroundUpdate);
+      window.removeEventListener("storage", handleImmediateUpdate);
     };
   }, [refreshHistory]);
 

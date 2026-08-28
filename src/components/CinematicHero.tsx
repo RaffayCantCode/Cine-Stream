@@ -258,7 +258,7 @@ export function CinematicHero({
           args: []
         }), "*");
       }
-    }, 250);
+    }, 1000);
 
     return () => {
       window.removeEventListener("message", handleMessage);

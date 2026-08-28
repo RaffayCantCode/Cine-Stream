@@ -1,6 +1,6 @@
+export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-export const revalidate = 900;
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { getMangaDetails, getMangaChapters, getChapterPages } from "@/lib/manga-fetch";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import { Suspense } from "react";

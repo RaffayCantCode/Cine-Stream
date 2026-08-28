@@ -14,10 +14,17 @@ export async function GET() {
       orderBy: [desc(customThemes.createdAt)],
     });
 
-    return NextResponse.json({
-      success: true,
-      themes,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        themes,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=600, s-maxage=600, stale-while-revalidate=120",
+        },
+      }
+    );
   } catch (error) {
     console.error("[Themes API] GET Error:", error);
     return NextResponse.json({ success: false, themes: [] }, { status: 500 });

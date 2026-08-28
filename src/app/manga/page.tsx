@@ -1,6 +1,7 @@
+export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import MangaHomeClient from "./MangaHomeClient";
 

@@ -14,7 +14,9 @@ export async function GET() {
     });
 
     if (!spotlight || !spotlight.enabled || !spotlight.title) {
-      return NextResponse.json({ success: true, enabled: false, spotlight: null });
+      return NextResponse.json({ success: true, enabled: false, spotlight: null }, {
+        headers: { "Cache-Control": "public, max-age=300, s-maxage=300, stale-while-revalidate=60" },
+      });
     }
 
     return NextResponse.json({
@@ -31,6 +33,8 @@ export async function GET() {
         media_type: spotlight.mediaType,
         badge: spotlight.badge,
       },
+    }, {
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=300, stale-while-revalidate=60" },
     });
   } catch (error) {
     console.error("[Spotlight API] GET Error:", error);

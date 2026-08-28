@@ -20,20 +20,34 @@ export async function GET() {
         rows.filter((r) => r.category === category)
       );
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        movie: forCategory("movie"),
-        anime: forCategory("anime"),
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          movie: forCategory("movie"),
+          anime: forCategory("anime"),
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "public, max-age=600, s-maxage=600, stale-while-revalidate=120",
+        },
+      }
+    );
   } catch (error) {
-    return NextResponse.json({
-      success: true,
-      data: {
-        movie: resolveSourceConfig("movie", []),
-        anime: resolveSourceConfig("anime", []),
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          movie: resolveSourceConfig("movie", []),
+          anime: resolveSourceConfig("anime", []),
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "public, max-age=600, s-maxage=600, stale-while-revalidate=120",
+        },
+      }
+    );
   }
 }

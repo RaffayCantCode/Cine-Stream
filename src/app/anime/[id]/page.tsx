@@ -1,5 +1,6 @@
+export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { getAnimeDetails } from "@/lib/anime-fetch";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import AnimeClient from "./AnimeClient";

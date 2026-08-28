@@ -131,6 +131,12 @@ function syncThemeMetaColor(color: string) {
   } catch {}
 }
 
+// Module-level cache to prevent re-fetching on every page navigation
+// (ThemeProvider is mounted at the root, so refreshCustomThemes runs on every nav)
+let themesRefreshTs = 0;
+let themesRefreshInFlight: Promise<void> | null = null;
+const THEMES_CACHE_TTL = 10 * 60_000; // 10 minutes
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(
     () => (typeof window === "undefined" ? DEFAULT_THEME : readLocalTheme())
@@ -149,32 +155,47 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshCustomThemes = useCallback(async () => {
-    try {
-      const res = await fetch("/api/themes");
-      if (res.ok) {
-        const json = await res.json();
-        if (json.themes && Array.isArray(json.themes)) {
-          const list: ThemeDefinition[] = json.themes.map((t: any) => ({
-            id: t.id,
-            label: t.label,
-            tagline: t.tagline || "Custom",
-            description: t.description || "",
-            preview: t.preview || `linear-gradient(135deg, ${t.background} 0%, ${t.card} 45%, ${t.primary} 100%)`,
-            accent: t.primary,
-            isCustom: true,
-            background: t.background,
-            card: t.card,
-            primary: t.primary,
-            foreground: t.foreground,
-          }));
-          setCustomThemes(list);
-          try {
-            window.localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(list));
-          } catch {}
+    // Deduplicate: if a fetch is already in-flight, wait for it
+    if (themesRefreshInFlight) {
+      return themesRefreshInFlight;
+    }
+    // Skip if recently fetched (auto-mount calls only — explicit admin calls bypass via forceRefresh)
+    if (Date.now() - themesRefreshTs < THEMES_CACHE_TTL && customThemes.length > 0) {
+      return;
+    }
+    const doFetch = (async () => {
+      try {
+        const res = await fetch("/api/themes");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.themes && Array.isArray(json.themes)) {
+            const list: ThemeDefinition[] = json.themes.map((t: any) => ({
+              id: t.id,
+              label: t.label,
+              tagline: t.tagline || "Custom",
+              description: t.description || "",
+              preview: t.preview || `linear-gradient(135deg, ${t.background} 0%, ${t.card} 45%, ${t.primary} 100%)`,
+              accent: t.primary,
+              isCustom: true,
+              background: t.background,
+              card: t.card,
+              primary: t.primary,
+              foreground: t.foreground,
+            }));
+            setCustomThemes(list);
+            themesRefreshTs = Date.now();
+            try {
+              window.localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(list));
+            } catch {}
+          }
         }
+      } catch {} finally {
+        themesRefreshInFlight = null;
       }
-    } catch {}
-  }, []);
+    })();
+    themesRefreshInFlight = doFetch;
+    return doFetch;
+  }, [customThemes.length]);
 
   useEffect(() => {
     refreshCustomThemes();

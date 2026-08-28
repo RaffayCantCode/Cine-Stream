@@ -95,8 +95,8 @@ export function TrendingProvidersHub() {
         const ids = [selectedProvider.id, ...(selectedProvider.additionalIds || [])].join("|");
         
         const [moviesRes, showsRes] = await Promise.all([
-          fetchJson<{ results: any[] }>(`/api/tmdb/discover/provider?providerId=${ids}&mediaType=movie`),
-          fetchJson<{ results: any[] }>(`/api/tmdb/discover/provider?providerId=${ids}&mediaType=tv`)
+          fetchJson<{ results: any[] }>(`/api/tmdb/discover/provider?providerId=${ids}&mediaType=movie`, { cacheTtlMs: 3600000 }),
+          fetchJson<{ results: any[] }>(`/api/tmdb/discover/provider?providerId=${ids}&mediaType=tv`, { cacheTtlMs: 3600000 })
         ]);
 
         if (active) {

@@ -95,7 +95,7 @@ export function resolveSourceConfig(
 let fetchCache: { ts: number; data: Record<SourceCategory, SourceConfigEntry[]> } | null = null;
 
 export async function fetchSourceConfig(): Promise<Record<SourceCategory, SourceConfigEntry[]>> {
-  if (fetchCache && Date.now() - fetchCache.ts < 30000) {
+  if (fetchCache && Date.now() - fetchCache.ts < 600_000) { // 10 minutes
     return fetchCache.data;
   }
   try {

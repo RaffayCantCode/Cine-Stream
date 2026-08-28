@@ -1,4 +1,4 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 
 export const SITE_NAME = "CineStream";
 export const SITE_URL = "https://cine-stream.site";

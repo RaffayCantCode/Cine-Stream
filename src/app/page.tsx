@@ -75,6 +75,8 @@ let globalHomeCache: {
 } | null = null;
 
 let globalCustomSectionsCache: any[] | null = null;
+let globalCustomSectionsCachedAt = 0;
+let globalSpotlightCachedAt = 0;
 const SESSION_CUSTOM_SECTIONS_KEY = "sv_custom_sections_v2";
 
 function saveCustomSectionsToSession(sections: any[]): void {
@@ -485,37 +487,46 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    const ADMIN_CACHE_TTL = 5 * 60_000; // 5 minutes
 
-    // Fetch dynamic admin-curated custom homepage sections unconditionally on mount
-    fetch("/api/home-sections", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.sections && Array.isArray(data.sections) && !cancelled) {
-          globalCustomSectionsCache = data.sections;
-          if (globalHomeCache) globalHomeCache.customSections = data.sections;
-          saveCustomSectionsToSession(data.sections);
-          setCustomSections(data.sections);
-        }
-      })
-      .catch(() => {});
+    // Fetch admin-curated custom homepage sections — only if cache is stale
+    if (globalCustomSectionsCache === null || Date.now() - globalCustomSectionsCachedAt > ADMIN_CACHE_TTL) {
+      fetch("/api/home-sections")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.sections && Array.isArray(data.sections) && !cancelled) {
+            globalCustomSectionsCache = data.sections;
+            globalCustomSectionsCachedAt = Date.now();
+            if (globalHomeCache) globalHomeCache.customSections = data.sections;
+            saveCustomSectionsToSession(data.sections);
+            setCustomSections(data.sections);
+          }
+        })
+        .catch(() => {});
+    }
 
-    // Fetch spotlight banner unconditionally on mount
-    fetch("/api/spotlight")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.enabled && data.spotlight && !cancelled) {
-          globalSpotlightCache = { fetched: true, spotlight: data.spotlight };
-          if (globalHomeCache) globalHomeCache.spotlightBanner = data.spotlight;
-          saveSpotlightToSession(data.spotlight);
-          setSpotlightBanner(data.spotlight);
-        } else if (!cancelled) {
-          globalSpotlightCache = { fetched: true, spotlight: null };
-          if (globalHomeCache) globalHomeCache.spotlightBanner = null;
-          saveSpotlightToSession(null);
-          setSpotlightBanner(null);
-        }
-      })
-      .catch(() => {});
+    // Fetch spotlight banner — only if cache is stale
+    if (!globalSpotlightCache || Date.now() - globalSpotlightCachedAt > ADMIN_CACHE_TTL) {
+      fetch("/api/spotlight")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled) return;
+          if (data?.enabled && data.spotlight) {
+            globalSpotlightCache = { fetched: true, spotlight: data.spotlight };
+            globalSpotlightCachedAt = Date.now();
+            if (globalHomeCache) globalHomeCache.spotlightBanner = data.spotlight;
+            saveSpotlightToSession(data.spotlight);
+            setSpotlightBanner(data.spotlight);
+          } else {
+            globalSpotlightCache = { fetched: true, spotlight: null };
+            globalSpotlightCachedAt = Date.now();
+            if (globalHomeCache) globalHomeCache.spotlightBanner = null;
+            saveSpotlightToSession(null);
+            setSpotlightBanner(null);
+          }
+        })
+        .catch(() => {});
+    }
 
     if (globalHomeCache && globalHomeCache.heroPool && globalHomeCache.heroPool.length > 0) {
       // Hydrate states from cache on back-navigation, even if React state
@@ -561,26 +572,10 @@ export default function Home() {
       }
       setLoadError(null);
 
-      let activeHeroPool: MediaItem[] = [];
-
       try {
-        // Priority 1: Fetch Hero Banner feed immediately via light home-hero endpoint
-        const heroDataPromise = fetchJson<{
-          trending: { results: MediaItem[] };
-          popularMovies: { results: MediaItem[] };
-          topRatedTv: { results: MediaItem[] };
-          nowPlaying: { results: MediaItem[] };
-          popularTv: { results: MediaItem[] };
-          topRatedMovies: { results: MediaItem[] };
-          onTheAir: { results: MediaItem[] };
-          animeMovies: { results: MediaItem[] };
-          animeTv: { results: MediaItem[] };
-          trendingMoviesToday: { results: MediaItem[] };
-          trendingTvToday: { results: MediaItem[] };
-        }>("/api/tmdb/home-hero?v=3", { cacheTtlMs: 3600000 }).catch(() => null);
-
-        // Priority 3 background promises
-        const fullHomePromise = fetchJson<{
+        // Single consolidated home endpoint — returns identical data to home-hero
+        // plus genre list. Eliminates the duplicate 15-TMDB-call home-hero fetch.
+        const homePromise = fetchJson<{
           trending: { results: MediaItem[] };
           popularMovies: { results: MediaItem[] };
           topRatedMovies: { results: MediaItem[] };
@@ -613,101 +608,8 @@ export default function Home() {
         }).catch(() => ({ items: [], trending: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        // Priority 1: Await fast TMDB hero payload IMMEDIATELY (resolves in ~100-200ms)
-        const heroData = await heroDataPromise;
-        if (cancelled) return;
-
-        if (heroData) {
-          const trendingSafe = filterReleasedSafeContent(heroData.trending?.results || [])
-            .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const popularSafe = filterReleasedSafeContent(heroData.popularMovies?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const heroTopSafe = filterReleasedSafeContent(heroData.topRatedTv?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const heroRecentSafe = filterReleasedSafeContent(heroData.nowPlaying?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-
-          const topRatedMovieSafe = filterReleasedSafeContent(heroData.topRatedMovies?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const popularTvSafe = filterReleasedSafeContent(heroData.popularTv?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const onTheAirSafe = filterReleasedSafeContent(heroData.onTheAir?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const animeMovieSafe = filterReleasedSafeContent(heroData.animeMovies?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const animeTvSafe = filterReleasedSafeContent(heroData.animeTv?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const trendingMoviesTodaySafe = filterReleasedSafeContent(heroData.trendingMoviesToday?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const trendingTvTodaySafe = filterReleasedSafeContent(heroData.trendingTvToday?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
-
-          setTrending(trendingSafe);
-          setPopular(sessionShuffle(popularSafe, "popular"));
-          setTopRated(sessionShuffle(heroTopSafe, "toprated"));
-          setTopRatedMovies(topRatedMovieSafe.slice(0, 10));
-          setTopRatedTv(heroTopSafe.slice(0, 10));
-          setRecent(heroRecentSafe);
-          setTrendingMoviesToday(trendingMoviesTodaySafe);
-          setTrendingTvToday(trendingTvTodaySafe);
-          // Build recommended pool excluding anime — Recommended For You is a
-          // Movies + TV row and should not surface anime titles.
-          const daySalt = Math.floor(Date.now() / 86400000).toString();
-          const recPool = filterExcludeAnime([...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe]);
-          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
-          setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
-          setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
-          setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
-
-          const initialHeroFeed = [
-            ...trendingSafe,
-            ...popularSafe,
-            ...heroTopSafe,
-            ...heroRecentSafe,
-            ...topRatedMovieSafe,
-            ...popularTvSafe,
-            ...onTheAirSafe,
-            ...animeMovieSafe,
-            ...animeTvSafe,
-          ];
-
-          setHeroFeed(initialHeroFeed);
-
-          const animeListSource = globalHomeCache?.animeList;
-          const initialPool = buildHeroPool(initialHeroFeed, animeListSource);
-          if (initialPool.length > 0) {
-            activeHeroPool = initialPool;
-            setHeroPool((currentPool) => (currentPool.length > 0 ? currentPool : initialPool));
-            saveHeroPoolToSession(initialPool);
-
-            // Preload hero slide 1 backdrop image immediately
-            if (typeof document !== "undefined" && initialPool[0]?.backdrop_path) {
-              const bg = initialPool[0].backdrop_path;
-              const link = document.createElement("link");
-              link.rel = "preload";
-              link.as = "image";
-              link.href = bg.startsWith("http") ? bg : `https://image.tmdb.org/t/p/w1280${bg}`;
-              link.fetchPriority = "high";
-              document.head.appendChild(link);
-            }
-          }
-
-          // Reveal Hero Banner and Continue Watching instantly
-          setIsLoading(false);
-        }
-
-        // Priority 3: Wait for full home, anime, and collections background promises
-        const [homeData, animeResponse, collectionsData] = await Promise.all([fullHomePromise, animePromise, collectionsPromise]);
+        // Await all data together — home endpoint is fast (CDN-cached after first hit)
+        const [homeData, animeResponse, collectionsData] = await Promise.all([homePromise, animePromise, collectionsPromise]);
         if (cancelled) return;
 
         if (homeData) {
@@ -805,6 +707,17 @@ export default function Home() {
           if (fullHeroPool.length > 0) {
             setHeroPool((current) => (current && current.length >= 3 ? current : fullHeroPool));
             saveHeroPoolToSession(fullHeroPool);
+
+            // Preload hero slide 1 backdrop image immediately
+            if (typeof document !== "undefined" && fullHeroPool[0]?.backdrop_path) {
+              const bg = fullHeroPool[0].backdrop_path;
+              const link = document.createElement("link");
+              link.rel = "preload";
+              link.as = "image";
+              link.href = bg.startsWith("http") ? bg : `https://image.tmdb.org/t/p/w1280${bg}`;
+              link.fetchPriority = "high";
+              document.head.appendChild(link);
+            }
           }
 
           globalHomeCache = {
