@@ -74,6 +74,9 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    const { invalidateThemesCache } = await import("@/lib/server-cache");
+    invalidateThemesCache();
+
     return NextResponse.json({
       success: true,
       theme: newTheme,
@@ -132,6 +135,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Theme not found" }, { status: 404 });
     }
 
+    const { invalidateThemesCache } = await import("@/lib/server-cache");
+    invalidateThemesCache();
+
     return NextResponse.json({
       success: true,
       theme: updated,
@@ -157,6 +163,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     await db.delete(customThemes).where(eq(customThemes.id, id));
+
+    const { invalidateThemesCache } = await import("@/lib/server-cache");
+    invalidateThemesCache();
 
     return NextResponse.json({
       success: true,

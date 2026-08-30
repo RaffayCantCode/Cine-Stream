@@ -114,20 +114,35 @@ export default function MangaReaderClient({
     } catch {}
   };
 
-  // Listen to standard fullscreen change events
+  const exitFullscreenIfActive = useCallback(() => {
+    if (typeof document !== "undefined" && (document.fullscreenElement || (document as any).webkitFullscreenElement)) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+    }
+  }, []);
+
+  // Listen to standard fullscreen change events & automatically exit fullscreen when leaving reader
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      setIsFullscreen(Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement));
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    window.addEventListener("popstate", exitFullscreenIfActive);
+    window.addEventListener("beforeunload", exitFullscreenIfActive);
 
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      window.removeEventListener("popstate", exitFullscreenIfActive);
+      window.removeEventListener("beforeunload", exitFullscreenIfActive);
+      exitFullscreenIfActive();
     };
-  }, []);
+  }, [exitFullscreenIfActive]);
 
   // Fetch Manga Details, Chapter List, and Chapter Pages
   const loadChapter = useCallback(async () => {
@@ -437,6 +452,7 @@ export default function MangaReaderClient({
           </button>
           <Link
             href={`/manga/${mangaId}`}
+            onClick={exitFullscreenIfActive}
             className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.08] hover:bg-white/[0.15] text-white font-bold text-sm border border-white/10 active:scale-95 cursor-pointer touch-manipulation"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -476,6 +492,7 @@ export default function MangaReaderClient({
         <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
           <Link
             href={`/manga/${mangaId}`}
+            onClick={exitFullscreenIfActive}
             className="p-2 rounded-xl bg-white/[0.06] hover:bg-primary/20 hover:text-primary text-white/80 transition-colors shrink-0 touch-manipulation active:scale-90"
             title="Back to Details"
           >

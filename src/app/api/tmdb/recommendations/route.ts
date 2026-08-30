@@ -1,10 +1,8 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 import { filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
-
-export const revalidate = 0; // Don't cache personalized recommendations
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -23,9 +21,9 @@ export async function GET(request: NextRequest) {
         media_type: mediaType,
       }))
     );
-    return Response.json({ results });
+    return Response.json({ results }, { headers: cacheHeaders(86400) });
   } catch (error) {
     console.error("[TMDB Recommendations API Error]:", error);
-    return Response.json({ error: "Failed to fetch recommendations" }, { status: 500 });
+    return Response.json({ error: "Failed to fetch recommendations" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

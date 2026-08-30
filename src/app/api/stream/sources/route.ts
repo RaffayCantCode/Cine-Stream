@@ -5,8 +5,24 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { streamingSourceConfig } from "@/lib/db/schema";
 import { resolveSourceConfig, type SourceCategory } from "@/lib/streaming-config";
+import { getCachedStreamingSources, setCachedStreamingSources } from "@/lib/server-cache";
 
 export async function GET() {
+  const cached = getCachedStreamingSources();
+  if (cached) {
+    return NextResponse.json(
+      {
+        success: true,
+        data: cached,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+        },
+      }
+    );
+  }
+
   try {
     let rows: { category: string; sourceKey: string; position: number; tag: string }[] = [];
     try {
@@ -20,32 +36,38 @@ export async function GET() {
         rows.filter((r) => r.category === category)
       );
 
+    const payload = {
+      movie: forCategory("movie"),
+      anime: forCategory("anime"),
+    };
+
+    setCachedStreamingSources(payload);
+
     return NextResponse.json(
       {
         success: true,
-        data: {
-          movie: forCategory("movie"),
-          anime: forCategory("anime"),
-        },
+        data: payload,
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=600, s-maxage=600, stale-while-revalidate=120",
+          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
         },
       }
     );
   } catch (error) {
+    const fallback = {
+      movie: resolveSourceConfig("movie", []),
+      anime: resolveSourceConfig("anime", []),
+    };
+
     return NextResponse.json(
       {
         success: true,
-        data: {
-          movie: resolveSourceConfig("movie", []),
-          anime: resolveSourceConfig("anime", []),
-        },
+        data: fallback,
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=600, s-maxage=600, stale-while-revalidate=120",
+          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
         },
       }
     );

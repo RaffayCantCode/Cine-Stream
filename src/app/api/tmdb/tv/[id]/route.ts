@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";
 
 export async function GET(
@@ -30,7 +30,7 @@ export async function GET(
     } catch (fetchErr) {
       if (override) {
         const synthetic = applyMediaOverride(null, override);
-        return Response.json(synthetic);
+        return Response.json(synthetic, { headers: cacheHeaders(1800) });
       }
       throw fetchErr;
     }
@@ -72,20 +72,16 @@ export async function GET(
 
     const finalResult = applyMediaOverride(result, override);
     return Response.json(finalResult, {
-      headers: {
-        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
-      },
+      headers: cacheHeaders(3600),
     });
   } catch (error) {
     const fallbackOverride = await getMediaOverride("tv", id).catch(() => null);
     if (fallbackOverride) {
       const synthetic = applyMediaOverride(null, fallbackOverride);
       return Response.json(synthetic, {
-        headers: {
-          "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
-        },
+        headers: cacheHeaders(1800),
       });
     }
-    return Response.json({ error: "Failed to fetch TV show details" }, { status: 500 });
+    return Response.json({ error: "Failed to fetch TV show details" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

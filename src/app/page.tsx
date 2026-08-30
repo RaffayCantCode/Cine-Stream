@@ -1059,18 +1059,30 @@ export default function Home() {
                 subtitle="Binge your favorite universes in order"
                 href="/browse/franchises"
               />
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 md:gap-5">
-                {collections.slice(0, 12).map((col) => {
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-6 gap-4 md:gap-5">
+                {collections.slice(0, 12).map((col, idx) => {
                   const posterUrl = col.poster_path
                     ? col.poster_path.startsWith("http")
                       ? col.poster_path
                       : `https://image.tmdb.org/t/p/w342${col.poster_path}`
                     : null;
+
+                  const visibilityClass =
+                    idx < 4
+                      ? "block"
+                      : idx < 6
+                      ? "hidden sm:block"
+                      : idx < 8
+                      ? "hidden md:block"
+                      : idx < 10
+                      ? "hidden lg:block"
+                      : "hidden 3xl:block";
+
                   return (
                     <Link
                       key={col.id}
                       href={`/browse/franchise/${col.id}`}
-                      className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-[#4B5694]/5 aspect-[2/3] hover:border-[#7288AE]/45 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/25 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className={`${visibilityClass} group relative overflow-hidden rounded-xl border border-white/[0.06] bg-[#4B5694]/5 aspect-[2/3] hover:border-[#7288AE]/45 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/25 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
                     >
                       {posterUrl ? (
                         <>

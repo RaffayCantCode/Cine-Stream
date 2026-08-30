@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    const { invalidateHomeSectionsCache } = await import("@/lib/server-cache");
+    invalidateHomeSectionsCache();
+
     return NextResponse.json({
       success: true,
       section: newSection,
@@ -74,6 +77,7 @@ export async function PUT(request: NextRequest) {
   try {
     const db = auth.db;
     const rawBody = await request.json().catch(() => ({}));
+    const { invalidateHomeSectionsCache } = await import("@/lib/server-cache");
     
     // Bulk reordering of sections
     if (Array.isArray(rawBody.sections)) {
@@ -85,6 +89,7 @@ export async function PUT(request: NextRequest) {
             .where(eq(customHomeSections.id, sec.id));
         }
       }
+      invalidateHomeSectionsCache();
       return NextResponse.json({ success: true });
     }
 
@@ -117,6 +122,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Section not found" }, { status: 404 });
     }
 
+    invalidateHomeSectionsCache();
+
     return NextResponse.json({
       success: true,
       section: updatedSection,
@@ -142,6 +149,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     await db.delete(customHomeSections).where(eq(customHomeSections.id, id));
+
+    const { invalidateHomeSectionsCache } = await import("@/lib/server-cache");
+    invalidateHomeSectionsCache();
 
     return NextResponse.json({
       success: true,

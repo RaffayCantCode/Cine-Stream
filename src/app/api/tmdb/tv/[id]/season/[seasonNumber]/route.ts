@@ -1,14 +1,6 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import { tmdbFetch } from "@/lib/tmdb";
-
-const NO_STORE_HEADERS = {
-  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-  "CDN-Cache-Control": "no-store",
-  "Cloudflare-CDN-Cache-Control": "no-store",
-  "Pragma": "no-cache",
-  "Expires": "0",
-};
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(
   request: Request,
@@ -20,13 +12,13 @@ export async function GET(
     const data = await tmdbFetch(
       `/tv/${id}/season/${seasonNumber}`,
       { append_to_response: "videos" },
-      { noCache: true }
+      { noCache: false }
     );
-    return Response.json(data, { headers: NO_STORE_HEADERS });
+    return Response.json(data, { headers: cacheHeaders(3600) });
   } catch (error) {
     return Response.json(
       { error: "Failed to fetch season details" },
-      { status: 500, headers: NO_STORE_HEADERS }
+      { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } }
     );
   }
 }

@@ -3,12 +3,17 @@ export const runtime = 'edge';
 import { NextResponse } from "next/server";
 import { FRANCHISES } from "@/lib/franchises";
 import { cacheHeaders } from "@/lib/tmdb";
-
 import { getDb } from "@/lib/db";
 import { customFranchises } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getCachedCollectionsList, setCachedCollectionsList } from "@/lib/server-cache";
 
 export async function GET() {
+  const cached = getCachedCollectionsList();
+  if (cached) {
+    return NextResponse.json({ collections: cached }, { headers: cacheHeaders(3600) });
+  }
+
   try {
     const staticCols = FRANCHISES.map(f => ({
       id: f.id,
@@ -59,10 +64,11 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ collections }, { headers: cacheHeaders(60) });
+    setCachedCollectionsList(collections);
+
+    return NextResponse.json({ collections }, { headers: cacheHeaders(3600) });
   } catch (error) {
     console.error("Collections error:", error);
     return NextResponse.json({ collections: [] }, { status: 500 });
   }
 }
-

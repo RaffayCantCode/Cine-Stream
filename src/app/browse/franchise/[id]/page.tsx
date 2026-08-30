@@ -114,7 +114,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
     hydratedPosterIds.current.clear();
     const load = async () => {
       try {
-        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}?v=franchise-v27-live-fix`, { skipCache: true });
+        const data = await fetchJson<Collection>(`/api/tmdb/collection/${id}`, { cacheTtlMs: 3600000 });
         setCollection(data);
       } catch (err) {
         setError("Failed to load franchise");

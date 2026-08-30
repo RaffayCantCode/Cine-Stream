@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 // Post-filter to strip Japanese animated content (anime) from movie/tv trending lists.
 // When type="all" (home hero pool), we leave results intact so anime can appear in the hero.
@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
       (data as any).results = excludeAnime(data.results as any[]);
     }
 
-    return Response.json(data);
+    return Response.json(data, { headers: cacheHeaders(3600) });
   } catch (error) {
-    return Response.json({ error: "Failed to fetch trending" }, { status: 500 });
+    return Response.json({ error: "Failed to fetch trending" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

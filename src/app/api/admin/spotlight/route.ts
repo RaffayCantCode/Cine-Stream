@@ -92,6 +92,9 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    const { invalidateSpotlightCache } = await import("@/lib/server-cache");
+    invalidateSpotlightCache();
+
     return NextResponse.json({
       success: true,
       spotlight: saved,

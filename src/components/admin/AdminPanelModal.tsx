@@ -181,9 +181,29 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
   const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
 
+  const [purgingCache, setPurgingCache] = useState(false);
+
   const showToast = (type: "success" | "error", text: string) => {
     setStatusMessage({ type, text });
     setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  const handlePurgeAllCaches = async () => {
+    setPurgingCache(true);
+    try {
+      const res = await fetch("/api/admin/purge-cache", { method: "POST" });
+      clearAllClientCaches();
+      if (res.ok) {
+        showToast("success", "All server, CDN, and local caches purged successfully!");
+      } else {
+        showToast("error", "Failed to purge server caches.");
+      }
+    } catch {
+      clearAllClientCaches();
+      showToast("error", "Error connecting to cache purge service.");
+    } finally {
+      setPurgingCache(false);
+    }
   };
 
   // Sync announcement on open
@@ -710,6 +730,43 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
             >
               <Layers className="w-4 h-4 text-amber-400 shrink-0" />
               <span className="truncate">New Franchise</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Smart Cache & Performance Management */}
+      <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+              <Zap className="w-4 h-4 text-emerald-400" />
+              Smart Cache & High-Load Optimization
+            </h4>
+            <p className="text-xs text-zinc-400 mt-1 max-w-xl">
+              All TMDB and Neon DB requests are automatically deduplicated and cached in bounded in-memory LRU storage (zero storage bloat, zero startup freeze). If you make database edits and want to instantly push changes everywhere, purge cache below.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                clearAllClientCaches();
+                showToast("success", "Browser memory cache cleared.");
+              }}
+              className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors border border-zinc-700/70 cursor-pointer"
+            >
+              Clear Local Cache
+            </button>
+            <button
+              type="button"
+              disabled={purgingCache}
+              onClick={handlePurgeAllCaches}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950/40 cursor-pointer"
+            >
+              {purgingCache ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+              <span>{purgingCache ? "Purging..." : "Purge All Site & CDN Cache"}</span>
             </button>
           </div>
         </div>

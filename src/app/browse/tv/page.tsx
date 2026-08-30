@@ -113,7 +113,7 @@ export default function BrowseTvPage() {
       try {
         const pagesToFetch = initialLoad.current
           ? [page]
-          : [nextBatchRef.current, nextBatchRef.current + 1, nextBatchRef.current + 2];
+          : [nextBatchRef.current, nextBatchRef.current + 1];
 
         const results = await Promise.all(
           pagesToFetch.map(async (p) => {
@@ -159,7 +159,7 @@ export default function BrowseTvPage() {
         setHasMore(results[0]?.page ? results[0].page < totalPages : true);
 
         if (!initialLoad.current) {
-          nextBatchRef.current += 3;
+          nextBatchRef.current += 2;
         } else {
           nextBatchRef.current = page + 1;
         }
@@ -190,7 +190,7 @@ export default function BrowseTvPage() {
           check();
         }
       },
-      { rootMargin: "400px" } // Fixed dead zone: match threshold closely
+      { rootMargin: "400px" }
     );
 
     if (sentinelRef.current) {
@@ -199,15 +199,6 @@ export default function BrowseTvPage() {
 
     return () => observer.disconnect();
   }, []);
-
-  // Re-check after items change
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-    const rect = sentinelRef.current.getBoundingClientRect();
-    if (rect.top <= window.innerHeight + 800) {
-      triggerLoadRef.current?.();
-    }
-  }, [shows.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">

@@ -124,17 +124,16 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
   };
 
   const handlePlay = (item: WatchHistoryItem) => {
-    const timeParam = item.progress && item.progress > 0 ? `&t=${item.progress}` : "";
     if (item.mediaType === "movie") {
-      router.push(`/movie/${item.mediaId}?autoplay=1${timeParam}`);
+      router.push(`/movie/${item.mediaId}?autoplay=1`);
     } else if (item.mediaType === "anime") {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
-      router.push(`/anime/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}${timeParam}`);
+      router.push(`/anime/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
     } else {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
-      router.push(`/tv/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}${timeParam}`);
+      router.push(`/tv/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
     }
   };
 

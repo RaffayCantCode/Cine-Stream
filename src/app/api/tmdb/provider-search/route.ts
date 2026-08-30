@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -69,10 +69,10 @@ export async function GET(request: Request) {
       page: searchData.page,
       total_pages: searchData.total_pages,
       total_results: searchData.total_results
-    });
+    }, { headers: cacheHeaders(1800) });
 
   } catch (error: any) {
     console.error("Provider search error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

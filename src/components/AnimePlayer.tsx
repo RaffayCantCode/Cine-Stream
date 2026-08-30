@@ -416,7 +416,6 @@ export function AnimePlayer({
     }
   }, [episode]);
 
-  const lastSaveTimeRef = useRef<number>(0);
   const autoPlayTriggeredRef = useRef(false);
 
   // Listen to postMessage for progress + playback-detection events:
@@ -451,27 +450,6 @@ export function AnimePlayer({
             if (onAutoNext && !autoPlayTriggeredRef.current) {
               autoPlayTriggeredRef.current = true;
               onAutoNext();
-            }
-          }
-
-          const now = Date.now();
-          if (now - lastSaveTimeRef.current > 10000) {
-            lastSaveTimeRef.current = now;
-            const cleanId = animeId?.replace(/\D/g, "");
-            const numericId = parseInt(cleanId || "", 10);
-            if (!Number.isNaN(numericId)) {
-              fetch('/api/watch-history/progress', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  mediaId: numericId,
-                  mediaType: "anime",
-                  season: tmdbSeason || 1,
-                  episode: episode || 1,
-                  progress: Math.floor(vidTime),
-                  duration: Math.floor(vidDuration || 0)
-                })
-              }).catch(() => {});
             }
           }
         }
@@ -509,27 +487,6 @@ export function AnimePlayer({
             if (onAutoNext && !autoPlayTriggeredRef.current) {
               autoPlayTriggeredRef.current = true;
               onAutoNext();
-            }
-          }
-
-          const now = Date.now();
-          if (now - lastSaveTimeRef.current > 10000) {
-            lastSaveTimeRef.current = now;
-            const cleanId = animeId?.replace(/\D/g, "");
-            const numericId = parseInt(cleanId || "", 10);
-            if (!Number.isNaN(numericId)) {
-              fetch('/api/watch-history/progress', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  mediaId: numericId,
-                  mediaType: "anime",
-                  season: tmdbSeason || 1,
-                  episode: episode || 1,
-                  progress: Math.floor(time),
-                  duration: Math.floor(duration || 0)
-                })
-              }).catch(() => {});
             }
           }
         }

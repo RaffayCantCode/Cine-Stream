@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -42,13 +42,12 @@ export async function GET(request: NextRequest) {
   params.without_original_language = "ja";
 
   try {
-    // Skip all caches for provider-filtered requests — ensures fresh results after any config change
     const data = await tmdbFetch("/discover/movie", {
       ...params,
       include_adult: "false",
-    }, { noCache: !!withProviders });
-    return Response.json(data);
+    }, { noCache: false });
+    return Response.json(data, { headers: cacheHeaders(3600) });
   } catch (error) {
-    return Response.json({ error: "Failed to discover movies" }, { status: 500 });
+    return Response.json({ error: "Failed to discover movies" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

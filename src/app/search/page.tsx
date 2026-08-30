@@ -158,6 +158,8 @@ async function directClientKitsuSearch(queryTerm: string): Promise<AnimeItem[]> 
   return [];
 }
 
+const globalSearchCache = new Map<string, { tmdb: MediaItem[]; anime: AnimeItem[]; corrected: string | null; suggestions: string[] }>();
+
 function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -165,9 +167,9 @@ function SearchContent() {
   const initialMode = searchParams.get("mode") || "";
 
   const [query, setQuery] = useState(initialQuery);
-  const debouncedQuery = useDebounce(query, 120);
+  const debouncedQuery = useDebounce(query, 280);
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchCacheRef = useRef<Map<string, { tmdb: MediaItem[]; anime: AnimeItem[]; corrected: string | null; suggestions: string[] }>>(new Map());
+  const searchCacheRef = useRef(globalSearchCache);
   
   const [results, setResults] = useState<MediaItem[]>([]);
   const [animeResults, setAnimeResults] = useState<AnimeItem[]>([]);

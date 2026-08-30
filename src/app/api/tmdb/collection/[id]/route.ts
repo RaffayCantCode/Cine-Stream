@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 import { FRANCHISES } from "@/lib/franchises";
 
 const noStoreHeaders = {
@@ -13,6 +13,7 @@ const noStoreHeaders = {
 import { getDb } from "@/lib/db";
 import { customFranchises } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getCachedCollection, setCachedCollection } from "@/lib/server-cache";
 
 export async function GET(
   request: NextRequest,
@@ -20,6 +21,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+
+    const cached = getCachedCollection(id);
+    if (cached) {
+      return NextResponse.json(cached, {
+        headers: cacheHeaders(86400),
+      });
+    }
 
     // First check DB for custom franchise or preset override
     let dbCol: any = null;
@@ -231,10 +239,10 @@ export async function GET(
       groups: resolvedGroups.length > 0 ? resolvedGroups : undefined,
     };
 
+    setCachedCollection(id, response);
+
     return NextResponse.json(response, {
-      headers: {
-        ...noStoreHeaders,
-      },
+      headers: cacheHeaders(86400),
     });
   } catch (error) {
     return NextResponse.json(

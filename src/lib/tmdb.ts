@@ -53,6 +53,8 @@ function isTmdbReadAccessToken(token: string): boolean {
 // NOTE: No module-level Map cache here — it is wiped on every Cloudflare Pages
 // cold start. CDN caching is handled by `next: { revalidate }` on fetch calls.
 
+const inFlightTmdb = new Map<string, Promise<unknown>>();
+
 export async function tmdbFetch(
   path: string,
   params?: Record<string, string>,
@@ -79,6 +81,11 @@ export async function tmdbFetch(
       }
     }
 
+    const fullUrl = url.toString();
+    if (!options?.noCache && inFlightTmdb.has(fullUrl)) {
+      return await inFlightTmdb.get(fullUrl);
+    }
+
     // Dynamic cache times (in seconds) based on path type
     let revalidate = 21600; // default 6 hours
     if (path.includes("/movie/") || path.includes("/tv/")) {
@@ -100,28 +107,37 @@ export async function tmdbFetch(
         : { next: { revalidate } }),
     };
 
-    const res = await fetch(url.toString(), { ...fetchOptions, signal: AbortSignal.timeout(8000) });
+    const fetchPromise = (async () => {
+      const res = await fetch(fullUrl, { ...fetchOptions, signal: AbortSignal.timeout(8000) });
 
-    if (!res.ok) {
-      console.warn(`[TMDB] fetch failed (${res.status}): ${url.toString()}`);
-      return null;
+      if (!res.ok) {
+        console.warn(`[TMDB] fetch failed (${res.status}): ${fullUrl}`);
+        return null;
+      }
+
+      const data = await res.json();
+      const filtered: any = filterTmdbResponse(data, isSearch);
+
+      // Filter out any Movie or TV show marked as "hidden" in admin overrides
+      if (filtered && typeof filtered === "object" && "results" in filtered && Array.isArray(filtered.results)) {
+        try {
+          const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
+          const hiddenSet = await getHiddenMediaSet();
+          if (hiddenSet.size > 0) {
+            filtered.results = filtered.results.filter((item: any) => !isMediaItemHidden(item, hiddenSet));
+          }
+        } catch {}
+      }
+
+      return filtered;
+    })();
+
+    if (!options?.noCache) {
+      inFlightTmdb.set(fullUrl, fetchPromise);
+      fetchPromise.finally(() => inFlightTmdb.delete(fullUrl));
     }
 
-    const data = await res.json();
-    const filtered: any = filterTmdbResponse(data, isSearch);
-
-    // Filter out any Movie or TV show marked as "hidden" in admin overrides
-    if (filtered && typeof filtered === "object" && "results" in filtered && Array.isArray(filtered.results)) {
-      try {
-        const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
-        const hiddenSet = await getHiddenMediaSet();
-        if (hiddenSet.size > 0) {
-          filtered.results = filtered.results.filter((item: any) => !isMediaItemHidden(item, hiddenSet));
-        }
-      } catch {}
-    }
-
-    return filtered;
+    return await fetchPromise;
   } catch (err) {
     console.warn(`[TMDB] tmdbFetch failed for path ${path}:`, err);
     return null;

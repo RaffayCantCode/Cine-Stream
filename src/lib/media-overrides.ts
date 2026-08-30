@@ -94,12 +94,57 @@ export function extractCandidateMediaIds(mediaType: string, mediaId: string | nu
   };
 }
 
+let cachedOverridesList: { list: MediaOverride[]; expiresAt: number } | null = null;
+let cachedHiddenSet: { set: Set<string>; expiresAt: number } | null = null;
+const singleOverrideCache = new Map<string, { override: MediaOverride | null; expiresAt: number }>();
+const SINGLE_CACHE_MAX_SIZE = 500;
+const OVERRIDES_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+export function invalidateMediaOverridesCache(): void {
+  cachedOverridesList = null;
+  cachedHiddenSet = null;
+  singleOverrideCache.clear();
+}
+
 export async function getMediaOverride(
   mediaType: string,
   mediaId: string | number
 ): Promise<MediaOverride | null> {
   if (!mediaType || !mediaId) return null;
   const cleanType = (mediaType || "movie").toLowerCase().trim();
+  const rawIdStr = String(mediaId || "").trim();
+  const cacheKey = `${cleanType}:${rawIdStr.toLowerCase()}`;
+  const now = Date.now();
+
+  // 1. Fast in-memory single cache check
+  const cachedSingle = singleOverrideCache.get(cacheKey);
+  if (cachedSingle && cachedSingle.expiresAt > now) {
+    return cachedSingle.override;
+  }
+
+  // 2. Check full overrides list if already fresh in memory
+  if (cachedOverridesList && cachedOverridesList.expiresAt > now) {
+    const { candidateIds, candidateMediaIds } = extractCandidateMediaIds(cleanType, mediaId);
+    const candidateIdSet = new Set(candidateIds.map(id => id.toLowerCase()));
+    const candidateMediaIdSet = new Set(candidateMediaIds.map(id => id.toLowerCase()));
+
+    const match = cachedOverridesList.list.find((o) => {
+      if (o.mediaType.toLowerCase() !== cleanType) return false;
+      const oId = (o.id || "").toLowerCase();
+      const oMediaId = String(o.mediaId || "").toLowerCase();
+      return candidateIdSet.has(oId) || candidateMediaIdSet.has(oMediaId);
+    });
+
+    const result = match || null;
+    if (singleOverrideCache.size >= SINGLE_CACHE_MAX_SIZE) {
+      const oldestKey = singleOverrideCache.keys().next().value;
+      if (oldestKey) singleOverrideCache.delete(oldestKey);
+    }
+    singleOverrideCache.set(cacheKey, { override: result, expiresAt: now + OVERRIDES_CACHE_TTL });
+    return result;
+  }
+
+  // 3. Fallback to database query
   try {
     const db = getDb();
     const { candidateIds, candidateMediaIds } = extractCandidateMediaIds(cleanType, mediaId);
@@ -116,19 +161,17 @@ export async function getMediaOverride(
       ),
     });
 
-    return override || null;
+    const result = override || null;
+    if (singleOverrideCache.size >= SINGLE_CACHE_MAX_SIZE) {
+      const oldestKey = singleOverrideCache.keys().next().value;
+      if (oldestKey) singleOverrideCache.delete(oldestKey);
+    }
+    singleOverrideCache.set(cacheKey, { override: result, expiresAt: now + OVERRIDES_CACHE_TTL });
+    return result;
   } catch (error) {
     console.error("[Media Overrides] getMediaOverride Error:", error);
     return null;
   }
-}
-
-let cachedOverridesList: { list: MediaOverride[]; expiresAt: number } | null = null;
-let cachedHiddenSet: { set: Set<string>; expiresAt: number } | null = null;
-
-export function invalidateMediaOverridesCache(): void {
-  cachedOverridesList = null;
-  cachedHiddenSet = null;
 }
 
 export async function getAllMediaOverrides(): Promise<MediaOverride[]> {
@@ -142,7 +185,7 @@ export async function getAllMediaOverrides(): Promise<MediaOverride[]> {
     const list = await db.query.mediaOverrides.findMany({
       orderBy: [desc(mediaOverrides.updatedAt)],
     });
-    cachedOverridesList = { list, expiresAt: now + 5000 }; // 5s TTL memory cache
+    cachedOverridesList = { list, expiresAt: now + OVERRIDES_CACHE_TTL };
     return list;
   } catch (error) {
     console.error("[Media Overrides] getAllMediaOverrides Error:", error);

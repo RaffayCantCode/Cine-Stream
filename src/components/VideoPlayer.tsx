@@ -112,7 +112,6 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.videasy;
-  const lastSaveTimeRef = useRef<number>(0);
 
   // Manual fallback: switch to the next source in the list (user initiated)
   const switchToNext = useCallback(() => {
@@ -213,24 +212,6 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
               autoPlayTriggeredRef.current = true;
               onVideoEnd();
             }
-          }
-          
-          const now = Date.now();
-          // Save every 10 seconds
-          if (now - lastSaveTimeRef.current > 10000) {
-            lastSaveTimeRef.current = now;
-            fetch('/api/watch-history/progress', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                mediaId: id,
-                mediaType: type,
-                season: actualSeason,
-                episode: actualEpisode,
-                progress: Math.floor(time),
-                duration: Math.floor(duration || 0)
-              })
-            }).catch(() => {});
           }
         }
       }

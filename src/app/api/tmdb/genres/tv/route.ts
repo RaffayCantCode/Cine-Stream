@@ -1,12 +1,12 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import { tmdbFetch } from "@/lib/tmdb";
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export async function GET() {
   try {
     const data = await tmdbFetch("/genre/tv/list");
-    return Response.json(data);
+    return Response.json(data, { headers: cacheHeaders(86400) });
   } catch (error) {
-    return Response.json({ error: "Failed to fetch genres" }, { status: 500 });
+    return Response.json({ error: "Failed to fetch genres" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

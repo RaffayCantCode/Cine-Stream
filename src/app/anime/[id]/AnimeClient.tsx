@@ -15,6 +15,13 @@ import { WatchlistButton } from "@/components/WatchlistButton";
 import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { usePageContentReady } from "@/lib/pageLoad";
 
+import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
+import type { SeasonInfo } from "@/lib/anime-fetch";
+import { cleanAnimeDescription } from "@/lib/anime-fetch";
+import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
+import { isEpisodeAvailable, isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv } from "lucide-react";
+
 function AnimeHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
   if (!hasTrailer) return null;
@@ -28,12 +35,6 @@ function AnimeHeroTrailerButton() {
     </button>
   );
 }
-import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
-import type { SeasonInfo } from "@/lib/anime-fetch";
-import { cleanAnimeDescription } from "@/lib/anime-fetch";
-import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
-import { isEpisodeAvailable, isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv } from "lucide-react";
 
 interface FranchiseNode {
   id: number;

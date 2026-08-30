@@ -115,7 +115,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
       (entries) => {
         const entry = entries[0];
         if (entry.isIntersecting && !isLoadingRef.current && hasMoreRef.current) {
-          setPage((p) => p + 3);
+          setPage((p) => p + 1);
         }
       },
       { rootMargin: "400px" }
@@ -124,11 +124,6 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, []);
-
-  // Re-check after items change
-  useEffect(() => {
-    triggerLoadRef.current?.();
-  }, [items.length]);
 
   const showFilter = !mediaType && (availableTypes.length === 0 || availableTypes.length > 1);
   const shouldShowCardBadges = !mediaType && typeFilter === "all" && (availableTypes.length === 0 || availableTypes.length > 1);

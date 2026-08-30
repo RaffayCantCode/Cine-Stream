@@ -107,12 +107,12 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 609681, media_type: "movie", title: "The Marvels" },
       { id: 138501, media_type: "tv", title: "Agatha All Along", poster_path: "/mGsxKwXUjojitRv2E9qMTbxbBRd.jpg" },
       { id: 202555, media_type: "tv", title: "Daredevil: Born Again", poster_path: "/xDUoAsU8lQHOOoRkFiBuarmACDN.jpg" },
+      { id: 198178, media_type: "tv", title: "Wonder Man", poster_path: "/6yy9nQlFt2l6UVWzrfhszFCaZ5C.jpg" },
       { id: 822119, media_type: "movie", title: "Captain America: Brave New World", poster_path: "/pzIddUEMWhWzfvLI3TwxUG2wGoi.jpg" },
       { id: 986056, media_type: "movie", title: "Thunderbolts*", poster_path: "/hqcexYHbiTBfDIdDWxrxPtVndBX.jpg" },
-      { id: 617126, media_type: "movie", title: "The Fantastic Four: First Steps", poster_path: "/nf5qaSEvyYSNeFH0YhSs5EsBLX9.jpg" },
+      { id: 1439930, media_type: "movie", title: "The Punisher: One Last Kill", poster_path: "/qQclTgLMDvGBuUBFGHRipxkEwWR.jpg" },
       { id: 969681, media_type: "movie", title: "Spider-Man: Brand New Day", poster_path: "/iPOn6DinuVyLY17YM9mKuPofV08.jpg" },
-      { id: 198178, media_type: "tv", title: "Wonder Man", poster_path: "/6yy9nQlFt2l6UVWzrfhszFCaZ5C.jpg" },
-      { id: 1439930, media_type: "movie", title: "The Punisher: One Last Kill", poster_path: "/qQclTgLMDvGBuUBFGHRipxkEwWR.jpg" }
+      { id: 617126, media_type: "movie", title: "The Fantastic Four: First Steps", poster_path: "/nf5qaSEvyYSNeFH0YhSs5EsBLX9.jpg" }
     ],
   },
   {
@@ -257,6 +257,26 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 101302, media_type: "anime", tmdb_type: "movie", anilist_id: 101302, title: "Dragon Ball Super: Broly (Movie)", episodes: 1, release_date: "2018-12-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101302-7L0lcwYeFQQM.jpg", tmdb_id: 503314 },
       { id: 133898, media_type: "anime", tmdb_type: "movie", anilist_id: 133898, title: "Dragon Ball Super: Super Hero (Movie)", episodes: 1, release_date: "2022-06-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx133898-KdQ7fWTG06n4.png", tmdb_id: 610150 },
       { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", episodes: 20, release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png", tmdb_id: 236994 },
+    ]
+  },
+  {
+    id: "pokemon",
+    name: "Pokemon Collection (Japanese dub)",
+    overview: "The complete chronological journey of Ash Ketchum and Pikachu across all regions from Kanto to the Pokémon World Coronation Series.",
+    backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/112153-01RDuvgGTXjp.jpg",
+    poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112153-LK1lpFz3vlvl.png",
+    items: [
+      { id: 527, media_type: "anime", anilist_id: 527, title: "Pokémon: Indigo League & Orange Islands (Kanto)", episodes: 118, release_date: "1997-04-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b527-t6dBVJ5OVcXK.png", tmdb_id: 60572, tmdb_season_number: 1, season_label: "Kanto & Orange Islands" },
+      { id: 527, media_type: "anime", anilist_id: 527, title: "Pokémon: The Johto Journeys & Master Quest", episodes: 158, release_date: "1999-10-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b527-t6dBVJ5OVcXK.png", tmdb_id: 60572, tmdb_season_number: 3, episode_offset: 118, season_label: "Johto" },
+      { id: 1564, media_type: "anime", anilist_id: 1564, title: "Pokémon: Advanced Generation (Hoenn & Battle Frontier)", episodes: 192, release_date: "2002-11-21", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1564-1KniCPyGiu0W.png", tmdb_id: 60572, tmdb_season_number: 6, season_label: "Advanced Generation" },
+      { id: 1565, media_type: "anime", anilist_id: 1565, title: "Pokémon the Series: Diamond and Pearl (Sinnoh)", episodes: 191, release_date: "2006-09-28", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1565-aJC0XivLqQXY.png", tmdb_id: 60572, tmdb_season_number: 10, season_label: "Diamond & Pearl" },
+      { id: 9107, media_type: "anime", anilist_id: 9107, title: "Pokémon the Series: Black & White (Unova)", episodes: 142, release_date: "2010-09-23", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/9107.jpg", tmdb_id: 60572, tmdb_season_number: 14, season_label: "Black & White" },
+      { id: 19291, media_type: "anime", anilist_id: 19291, title: "Pokémon the Series: XY (Kalos)", episodes: 93, release_date: "2013-10-17", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx19291-jwGqfWIXPtGA.png", tmdb_id: 60572, tmdb_season_number: 17, season_label: "XY" },
+      { id: 21356, media_type: "anime", anilist_id: 21356, title: "Pokémon the Series: XYZ", episodes: 47, release_date: "2015-10-29", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21356-bHTUPdtd8xy2.jpg", tmdb_id: 60572, tmdb_season_number: 19, season_label: "XYZ" },
+      { id: 97634, media_type: "anime", anilist_id: 97634, title: "Pokémon the Series: Sun & Moon (Alola)", episodes: 146, release_date: "2016-11-17", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97634-P3p6KJiZFajv.png", tmdb_id: 60572, tmdb_season_number: 20, season_label: "Sun & Moon" },
+      { id: 112153, media_type: "anime", anilist_id: 112153, title: "Pokémon Journeys: The Series (Master & Ultimate Journeys)", episodes: 136, release_date: "2019-11-17", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112153-LK1lpFz3vlvl.png", tmdb_id: 60572, tmdb_season_number: 23, season_label: "Journeys" },
+      { id: 158870, media_type: "anime", anilist_id: 158870, title: "Pokémon: Aim to Be a Pokémon Master", episodes: 11, release_date: "2023-01-13", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx158870-RJfWBtOFJ6tr.jpg", tmdb_id: 60572, tmdb_season_number: 25, episode_offset: 43, season_label: "Aim to Be a Master" },
+      { id: 158871, media_type: "anime", anilist_id: 158871, title: "Pokémon Horizons: The Series", episodes: 80, release_date: "2023-04-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx158871-GBM9AMDfDRSu.jpg", tmdb_id: 60572, tmdb_season_number: 26, season_label: "Horizons" }
     ]
   },
   {

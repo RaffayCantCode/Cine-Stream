@@ -8,17 +8,15 @@ export function cn(...inputs: ClassValue[]) {
 const requestCache = new Map<string, { expires: number; data: unknown }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
 
-const CACHE_MAX_ENTRIES = 50;
+const CACHE_MAX_ENTRIES = 200;
 
 function pruneCache(): void {
   if (requestCache.size <= CACHE_MAX_ENTRIES) return;
   const now = Date.now();
-  let deleted = 0;
   for (const [key, entry] of requestCache) {
     if (entry.expires <= now) {
       requestCache.delete(key);
-      deleted++;
-      if (requestCache.size <= CACHE_MAX_ENTRIES) break;
+      if (requestCache.size <= CACHE_MAX_ENTRIES) return;
     }
   }
   if (requestCache.size > CACHE_MAX_ENTRIES) {
@@ -45,35 +43,42 @@ function getCacheKey(input: RequestInfo | URL, init?: RequestInit) {
 
 function getSmartTtlMs(urlStr: string): number {
   const lower = urlStr.toLowerCase();
-  // Dynamic media details and admin endpoints must never be cached in persistent storage
+  // Admin and mutation endpoints are strictly real-time
   if (
     lower.includes("/api/admin/") ||
+    lower.includes("/api/watch-history") ||
+    lower.includes("/api/auth/")
+  ) {
+    return 0;
+  }
+  // Media details & episodes have 5-minute memory cache
+  if (
     lower.includes("/api/tmdb/movie/") ||
     lower.includes("/api/tmdb/tv/") ||
     lower.includes("/api/anime/") ||
-    lower.includes("/api/manga/chapter") ||
-    lower.includes("/api/manga/details") ||
     lower.includes("/meta") ||
-    lower.includes("/episodes")
+    lower.includes("/episodes") ||
+    lower.includes("/api/manga/details") ||
+    lower.includes("/api/manga/chapter")
   ) {
-    return 0; // Fresh real-time data
+    return 300_000; // 5 minutes
   }
   if (lower.includes("/genre") || lower.includes("/providers") || lower.includes("/configuration")) {
     return 86_400_000; // 24 hours
   }
   if (lower.includes("/collection") || lower.includes("/franchise")) {
-    return 43_200_000; // 12 hours
-  }
-  if (lower.includes("/popular") || lower.includes("/top-rated")) {
     return 3_600_000; // 1 hour
   }
-  if (lower.includes("/trending")) {
+  if (lower.includes("/popular") || lower.includes("/top-rated")) {
     return 1_800_000; // 30 minutes
   }
-  if (lower.includes("/search")) {
+  if (lower.includes("/trending") || lower.includes("/home")) {
     return 900_000; // 15 minutes
   }
-  return 900_000; // 15 minutes default
+  if (lower.includes("/search")) {
+    return 300_000; // 5 minutes
+  }
+  return 300_000; // 5 minutes default
 }
 
 export async function fetchJson<T = unknown>(
@@ -90,39 +95,6 @@ export async function fetchJson<T = unknown>(
     const cached = requestCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
       return cached.data as T;
-    }
-
-    // Try sessionStorage cache for fast cross-page hydration
-    if (typeof window !== "undefined" && cacheTtlMs >= 60_000) {
-      try {
-        const storedStr = sessionStorage.getItem(`cs_v16_cache_${cacheKey}`);
-        if (storedStr) {
-          const parsed = JSON.parse(storedStr);
-          if (parsed && parsed.expires > Date.now()) {
-            const isCachedDataEmpty =
-              parsed.data === null ||
-              parsed.data === undefined ||
-              (Array.isArray(parsed.data) && parsed.data.length === 0) ||
-              (typeof parsed.data === "object" &&
-                parsed.data &&
-                "items" in (parsed.data as any) &&
-                Array.isArray((parsed.data as any).items) &&
-                (parsed.data as any).items.length === 0) ||
-              (typeof parsed.data === "object" &&
-                parsed.data &&
-                "success" in (parsed.data as any) &&
-                (parsed.data as any).success === false);
-
-            if (!isCachedDataEmpty) {
-              requestCache.set(cacheKey, { data: parsed.data, expires: parsed.expires });
-              return parsed.data as T;
-            } else {
-              // Stale empty cache detected, purge it!
-              sessionStorage.removeItem(`cs_v16_cache_${cacheKey}`);
-            }
-          }
-        }
-      } catch {}
     }
 
     const pending = pendingRequests.get(cacheKey);
@@ -168,12 +140,6 @@ export async function fetchJson<T = unknown>(
       const expires = Date.now() + cacheTtlMs;
       requestCache.set(cacheKey, { data, expires });
       pruneCache();
-
-      if (typeof window !== "undefined" && cacheTtlMs >= 60_000) {
-        try {
-          sessionStorage.setItem(`cs_v16_cache_${cacheKey}`, JSON.stringify({ data, expires }));
-        } catch {}
-      }
     }
 
     return data as T;
@@ -191,20 +157,6 @@ export function clearFetchJsonCache(match?: string) {
   if (!match) {
     requestCache.clear();
     pendingRequests.clear();
-    if (typeof window !== "undefined") {
-      try {
-        const toRemove: string[] = [];
-        for (let i = 0; i < sessionStorage.length; i++) {
-          const k = sessionStorage.key(i);
-          if (k && (k.startsWith("cs_v") || k.includes("cache"))) {
-            toRemove.push(k);
-          }
-        }
-        for (const k of toRemove) {
-          sessionStorage.removeItem(k);
-        }
-      } catch {}
-    }
     return;
   }
 
@@ -217,20 +169,6 @@ export function clearFetchJsonCache(match?: string) {
     if (key.includes(match)) {
       pendingRequests.delete(key);
     }
-  }
-  if (typeof window !== "undefined") {
-    try {
-      const toRemove: string[] = [];
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const k = sessionStorage.key(i);
-        if (k && k.includes(match)) {
-          toRemove.push(k);
-        }
-      }
-      for (const k of toRemove) {
-        sessionStorage.removeItem(k);
-      }
-    } catch {}
   }
 }
 

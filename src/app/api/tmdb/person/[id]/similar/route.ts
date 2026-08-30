@@ -1,17 +1,8 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import { tmdbFetch } from "@/lib/tmdb";
-
-// This is a custom API route that builds a "Similar Creators/Actors" list.
-// TMDB does not have a native endpoint for this.
-// Approach:
-// 1. Fetch the person's combined credits.
-// 2. Pick their top 3 highest-rated or most popular movies/shows.
-// 3. Fetch similar movies/shows for those top 3.
-// 4. Fetch the credits of those similar movies/shows.
-// 5. Extract the directors (if the person is a director) or top billed actors (if an actor).
-// 6. Return a deduplicated list of similar people.
+import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
+import { getCachedSimilarPeople, setCachedSimilarPeople } from "@/lib/server-cache";
 
 export async function GET(
   request: NextRequest,
@@ -19,12 +10,17 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+
+    const cached = getCachedSimilarPeople(id);
+    if (cached) {
+      return NextResponse.json({ results: cached }, { headers: cacheHeaders(86400) });
+    }
     
     // 1. Fetch person details and credits
     const person: any = await tmdbFetch(`/person/${id}?append_to_response=combined_credits`);
     
     if (!person || !person.combined_credits) {
-      return NextResponse.json({ results: [] });
+      return NextResponse.json({ results: [] }, { headers: cacheHeaders(3600) });
     }
 
     const isDirector = person.known_for_department === "Directing" || (person.known_for_department !== "Acting" && person.known_for_department !== "Production");
@@ -108,13 +104,15 @@ export async function GET(
       .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
       .slice(0, 10);
 
-    return NextResponse.json({ results: similarPeople });
+    setCachedSimilarPeople(id, similarPeople);
+
+    return NextResponse.json({ results: similarPeople }, { headers: cacheHeaders(86400) });
 
   } catch (error) {
     console.error("Failed to fetch similar people:", error);
     return NextResponse.json(
       { error: "Failed to fetch similar people", results: [] },
-      { status: 500 }
+      { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } }
     );
   }
 }

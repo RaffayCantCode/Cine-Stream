@@ -11,16 +11,16 @@ const noStoreHeaders = {
   "Cloudflare-CDN-Cache-Control": "no-store",
 } as const;
 
-// Short CDN cache for ongoing/airing anime (2 min CDN, 5 min stale)
+// Short CDN cache for ongoing/airing anime (1 min browser, 2 min CDN, 5 min stale)
 const ongoingCacheHeaders = {
-  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, stale-if-error=3600",
+  "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=300, stale-if-error=3600",
   "CDN-Cache-Control": "public, max-age=120, stale-while-revalidate=300",
   "Cloudflare-CDN-Cache-Control": "public, max-age=120, stale-while-revalidate=300",
 } as const;
 
-// Longer CDN cache for completed anime (5 min CDN, 15 min stale)
+// Longer CDN cache for completed anime (1 min browser, 5 min CDN, 15 min stale)
 const finishedCacheHeaders = {
-  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900, stale-if-error=86400",
+  "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=900, stale-if-error=86400",
   "CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=900",
   "Cloudflare-CDN-Cache-Control": "public, max-age=300, stale-while-revalidate=900",
 } as const;

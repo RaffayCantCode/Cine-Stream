@@ -100,6 +100,8 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = await auth.db.select().from(streamingSourceConfig);
+    const { invalidateStreamingSourcesCache } = await import("@/lib/server-cache");
+    invalidateStreamingSourcesCache();
     return NextResponse.json({ success: true, config: effectiveConfig(rows) });
   } catch (error) {
     console.error("[Admin Streaming API] POST Error:", error);
@@ -115,6 +117,8 @@ export async function DELETE() {
 
   try {
     await auth.db.delete(streamingSourceConfig);
+    const { invalidateStreamingSourcesCache } = await import("@/lib/server-cache");
+    invalidateStreamingSourcesCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[Admin Streaming API] DELETE Error:", error);
