@@ -7,7 +7,7 @@ import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from
 
 interface ProviderSource {
   name: string;
-  provider: "animeplay" | "vidnest" | "embedmaster" | "vixsrc" | "smashystream" | "vidlink" | "123embed" | "vidsrc" | "2embed" | "animepahe" | "videasy" | "megaplay" | "autoembed";
+  provider: "animeplay" | "vidnest" | "embedmaster" | "vixsrc" | "smashystream" | "vidlink" | "123embed" | "vidsrc" | "2embed" | "animepahe" | "videasy" | "megaplay" | "autoembed" | "animesub";
   color: string;
   quality: "best" | "good" | "backup";
   tag?: SourceTag;
