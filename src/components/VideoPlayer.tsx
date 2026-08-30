@@ -23,11 +23,14 @@ interface VideoPlayerProps {
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
-  videasy:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
+  embedmaster: { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
   vixsrc:      { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
   vidsrc:      { bg: "bg-blue-600",  badge: "bg-blue-500/20 text-blue-300" },
   vidlink:     { bg: "bg-violet-600", badge: "bg-violet-500/20 text-violet-300" },
   autoembed:   { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
+  "123embed":  { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
+  vidnest:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
+  videasy:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -142,8 +145,8 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   useEffect(() => {
     const domains = [
       "https://vidsrc.me",
+      "https://embedmaster.link",
       "https://vixsrc.to",
-      "https://player.videasy.net",
       "https://vidlink.pro",
       "https://autoembed.co"
     ];

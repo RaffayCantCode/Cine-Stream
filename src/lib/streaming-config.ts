@@ -39,8 +39,7 @@ export interface SourceConfigEntry {
 
 // Default source order for anime (movies/TV order is derived from STREAMING_APIS
 // in streaming-fetch.ts via getDefaultMovieOrder). Keep in sync with the
-// PROVIDERS array in AnimePlayer.tsx.
-export const ANIME_SOURCE_KEYS: string[] = ["animeplay", "vidnest", "vidlink", "123embed", "autoembed"];
+export const ANIME_SOURCE_KEYS: string[] = ["animeplay", "vidnest", "embedmaster", "animepahe", "animesub"];
 
 export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 
@@ -49,17 +48,17 @@ export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
   movie: {
     vidsrc: "recommended",
+    embedmaster: "best",
     vixsrc: "best",
-    videasy: "best",
     vidlink: "good",
     autoembed: "backup",
   },
   anime: {
     animeplay: "recommended",
     vidnest: "best",
-    vidlink: "best",
-    "123embed": "good",
-    autoembed: "backup",
+    embedmaster: "best",
+    animepahe: "good",
+    animesub: "backup",
   },
 };
 

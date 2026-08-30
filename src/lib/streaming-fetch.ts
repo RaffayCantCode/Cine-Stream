@@ -18,19 +18,19 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
+    baseUrl: "https://embedmaster.link",
+    type: "embedmaster",
+    quality: "Best",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://embedmaster.link",
+  },
+  {
+    name: "Source 3",
     baseUrl: "https://vixsrc.to",
     type: "vixsrc",
     quality: "Best",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://vixsrc.to",
-  },
-  {
-    name: "Source 3",
-    baseUrl: "https://player.videasy.net",
-    type: "videasy",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://player.videasy.net",
   },
   {
     name: "Source 4",
@@ -52,7 +52,7 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
 
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): string {
   switch (api.type) {
-    case "videasy":
+    case "embedmaster":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
@@ -71,6 +71,10 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
     case "autoembed":
       if (type === "movie") return `${api.baseUrl}/movie/tmdb/${id}?color=8B5CF6&lang=en`;
       return `${api.baseUrl}/tv/tmdb/${id}-${season ?? 1}-${episode ?? 1}?color=8B5CF6&lang=en`;
+
+    case "videasy":
+      if (type === "movie") return `https://vidnest.fun/movie/${id}`;
+      return `https://vidnest.fun/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     default:
       return "";

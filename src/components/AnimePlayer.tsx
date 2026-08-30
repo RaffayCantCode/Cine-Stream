@@ -7,7 +7,7 @@ import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from
 
 interface ProviderSource {
   name: string;
-  provider: "animeplay" | "vidnest" | "vidlink" | "123embed" | "autoembed" | "megaplay" | "animepahe";
+  provider: "animeplay" | "vidnest" | "embedmaster" | "vixsrc" | "smashystream" | "vidlink" | "123embed" | "vidsrc" | "2embed" | "animepahe" | "videasy" | "megaplay" | "autoembed";
   color: string;
   quality: "best" | "good" | "backup";
   tag?: SourceTag;
@@ -34,11 +34,11 @@ interface AnimePlayerProps {
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Source 1", provider: "animeplay", color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
-  { name: "Source 2", provider: "vidnest",   color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
-  { name: "Source 3", provider: "vidlink",   color: "from-[#111844]/30 to-[#4B5694]/20", quality: "best" },
-  { name: "Source 4", provider: "123embed",  color: "from-[#2d6a4f]/30 to-[#40916c]/20", quality: "good" },
-  { name: "Source 5", provider: "autoembed", color: "from-[#f43f5e]/30 to-[#fb7185]/20", quality: "backup" },
+  { name: "Source 1", provider: "animeplay",   color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
+  { name: "Source 2", provider: "vidnest",     color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
+  { name: "Source 3", provider: "embedmaster", color: "from-[#10b981]/30 to-[#34d399]/20", quality: "best" },
+  { name: "Source 4", provider: "animepahe",   color: "from-[#6366f1]/30 to-[#818cf8]/20", quality: "good" },
+  { name: "Source 5", provider: "animesub",    color: "from-[#f59e0b]/30 to-[#fbbf24]/20", quality: "backup" },
 ];
 
 const QUALITY_STYLES: Record<string, string> = {
@@ -92,45 +92,59 @@ function buildProviderUrl(
       const mirrors = [
         `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub`,
         `https://megaplay.buzz/embed/anime/${primaryId}/${episode}/sub`,
+      ];
+      return mirrors[attempt % mirrors.length];
+    }
+    case "vidnest": {
+      if (!primaryId) return "";
+      const attempt = retryAttempt || 0;
+      const mirrors = [
+        `https://vidnest.fun/anime/${primaryId}/${episode}/sub`,
         `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`,
       ];
       return mirrors[attempt % mirrors.length];
     }
-    case "vidnest":
-    case "megaplay":
-      return primaryId
-        ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub`
-        : "";
-    case "animepahe":
-      return primaryId
-        ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`
-        : "";
-    case "123embed":
+    case "embedmaster": {
       if (tmdbId) {
         return isMovie
-          ? `https://play2.123embed.net/movie/${tmdbId}`
-          : `https://play2.123embed.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
-      }
-      return primaryId ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub` : "";
-    case "vidlink": {
-      const timeParam = startProgress && startProgress > 0 ? `&t=${startProgress}` : "";
-      if (tmdbId) {
-        return isMovie
-          ? `https://vidlink.pro/movie/${tmdbId}?primaryColor=4b5694&autoplay=true${timeParam}`
-          : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?primaryColor=4b5694&autoplay=true${timeParam}`;
+          ? `https://embedmaster.link/movie/${tmdbId}`
+          : `https://embedmaster.link/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
       }
       if (primaryId) {
-        return `https://vidlink.pro/anime/${primaryId}/${episode}/sub?primaryColor=4b5694&autoplay=true${timeParam}`;
+        return `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`;
       }
       return "";
     }
+    case "animepahe": {
+      if (!primaryId) return "";
+      const attempt = retryAttempt || 0;
+      const mirrors = [
+        `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub`,
+        `https://vidnest.fun/anime/${primaryId}/${episode}/sub`,
+      ];
+      return mirrors[attempt % mirrors.length];
+    }
+    case "animesub": {
+      const targetId = malId_ || primaryId;
+      if (!targetId) return "";
+      const attempt = retryAttempt || 0;
+      const mirrors = [
+        `https://megaplay.buzz/stream/mal/${targetId}/${episode}/sub`,
+        `https://vidnest.fun/anime/${primaryId}/${episode}/sub`,
+      ];
+      return mirrors[attempt % mirrors.length];
+    }
+    case "vidsrc":
+    case "aniwave":
+    case "vidlink":
     case "autoembed":
-      if (tmdbId) {
-        return isMovie
-          ? `https://player.autoembed.co/embed/movie/${tmdbId}`
-          : `https://player.autoembed.co/embed/tv/${tmdbId}/${tmdbSeason || 1}-${absEp}`;
-      }
-      return primaryId ? `https://vidnest.fun/anime/${primaryId}/${episode}/sub` : "";
+    case "2embed":
+    case "vixsrc":
+    case "smashystream":
+    case "123embed":
+    case "videasy":
+    case "megaplay":
+      return primaryId ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub` : "";
     default:
       return "";
   }
