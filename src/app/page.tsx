@@ -9,6 +9,7 @@ import { PROVIDERS } from "@/lib/providers";
 import type { AnimeItem } from "@/components/AnimeCard";
 import { fetchClientAnime } from "@/lib/anilist-client";
 import { HeroBanner } from "@/components/HeroBanner";
+import { HeroSkeleton } from "@/components/HeroSkeleton";
 import { HeroAnnouncement } from "@/components/HeroAnnouncement";
 import { MediaRow } from "@/components/MediaRow";
 import { AnimeRow } from "@/components/AnimeRow";
@@ -608,8 +609,8 @@ export default function Home() {
         }).catch(() => ({ items: [], trending: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        // Await all data together — home endpoint is fast (CDN-cached after first hit)
-        const [homeData, animeResponse, collectionsData] = await Promise.all([homePromise, animePromise, collectionsPromise]);
+        // Await homeData first — edge-cached TMDB endpoint returns in <100ms
+        const homeData = await homePromise;
         if (cancelled) return;
 
         if (homeData) {
@@ -658,36 +659,8 @@ export default function Home() {
             episodes: { sub: null, dub: null },
           }));
 
-          const finalAnimeList = ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
-            ? (animeResponse as any).trending.slice(0, 10)
-            : (animeResponse?.items && animeResponse.items.length > 0)
-              ? animeResponse.items.slice(0, 10)
-              : initialAnimeItems;
-
-          const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
-            ? collectionsData.collections
-            : INITIAL_COLLECTIONS;
-
-          // Build recommended pool excluding anime — Recommended For You is a
-          // Movies + TV row and should not surface anime titles.
           const recPool = filterExcludeAnime([...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe]);
           const daySalt = Math.floor(Date.now() / 86400000).toString();
-
-          setTrending(trendingSafe);
-          setPopular(sessionShuffle(popularSafe, "popular"));
-          setTopRated(sessionShuffle(heroTopSafe, "toprated"));
-          setTopRatedMovies(topRatedMovieSafe.slice(0, 10));
-          setTopRatedTv(heroTopSafe.slice(0, 10));
-          setRecent(heroRecentSafe);
-          setTrendingMoviesToday(trendingMoviesTodaySafe);
-          setTrendingTvToday(trendingTvTodaySafe);
-          setAnimeList(finalAnimeList);
-          setCollections(validCollections);
-          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
-          setGenres((homeData.genres?.genres || []).slice(0, 18));
-          setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
-          setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
-          setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
 
           const fullHeroFeed = [
             ...trendingSafe,
@@ -701,9 +674,24 @@ export default function Home() {
             ...animeTvSafe,
           ];
 
+          const fullHeroPool = buildHeroPool(fullHeroFeed, initialAnimeItems);
+
+          setTrending(trendingSafe);
+          setPopular(sessionShuffle(popularSafe, "popular"));
+          setTopRated(sessionShuffle(heroTopSafe, "toprated"));
+          setTopRatedMovies(topRatedMovieSafe.slice(0, 10));
+          setTopRatedTv(heroTopSafe.slice(0, 10));
+          setRecent(heroRecentSafe);
+          setTrendingMoviesToday(trendingMoviesTodaySafe);
+          setTrendingTvToday(trendingTvTodaySafe);
+          setAnimeList(initialAnimeItems);
+          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+          setGenres((homeData.genres?.genres || []).slice(0, 18));
+          setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
+          setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
+          setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
           setHeroFeed(fullHeroFeed);
 
-          const fullHeroPool = buildHeroPool(fullHeroFeed, finalAnimeList);
           if (fullHeroPool.length > 0) {
             setHeroPool((current) => (current && current.length >= 3 ? current : fullHeroPool));
             saveHeroPoolToSession(fullHeroPool);
@@ -719,6 +707,44 @@ export default function Home() {
               document.head.appendChild(link);
             }
           }
+
+          // Release hero and top rows immediately
+          setIsLoading(false);
+
+          // Background resolve anime and collections in parallel
+          animePromise.then((animeResponse) => {
+            if (cancelled) return;
+            const finalAnimeList = ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
+              ? (animeResponse as any).trending.slice(0, 10)
+              : (animeResponse?.items && animeResponse.items.length > 0)
+                ? animeResponse.items.slice(0, 10)
+                : initialAnimeItems;
+
+            setAnimeList(finalAnimeList);
+            setAnimeLoading(false);
+
+            const updatedHeroPool = buildHeroPool(fullHeroFeed, finalAnimeList);
+            if (updatedHeroPool.length > 0) {
+              setHeroPool(updatedHeroPool);
+              saveHeroPoolToSession(updatedHeroPool);
+            }
+
+            if (globalHomeCache) {
+              globalHomeCache.animeList = finalAnimeList;
+              if (updatedHeroPool.length > 0) globalHomeCache.heroPool = updatedHeroPool;
+            }
+          }).catch(() => {
+            if (!cancelled) setAnimeLoading(false);
+          });
+
+          collectionsPromise.then((collectionsData) => {
+            if (cancelled) return;
+            const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
+              ? collectionsData.collections
+              : INITIAL_COLLECTIONS;
+            setCollections(validCollections);
+            if (globalHomeCache) globalHomeCache.collections = validCollections;
+          }).catch(() => {});
 
           globalHomeCache = {
             trending: trendingSafe,
@@ -736,14 +762,15 @@ export default function Home() {
             heroPool: fullHeroPool,
             recommended: recPool,
             genres: (homeData.genres?.genres || []).slice(0, 18),
-            animeList: finalAnimeList,
-            collections: validCollections,
+            animeList: initialAnimeItems,
+            collections: INITIAL_COLLECTIONS,
             spotlightBanner: globalSpotlightCache?.spotlight ?? spotlightBanner ?? null,
             customSections: globalCustomSectionsCache ?? (customSections.length > 0 ? customSections : undefined),
           };
+        } else {
+          setIsLoading(false);
+          setAnimeLoading(false);
         }
-        setAnimeLoading(false);
-        setIsLoading(false);
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Failed to load content");
@@ -865,7 +892,7 @@ export default function Home() {
             {/* Top-Left Fixed Live Announcement */}
             <HeroAnnouncement />
 
-            <HeroBanner key={hero?.id || "empty"} item={hero} />
+            <HeroBanner item={hero} />
             {/* Hero dot indicators — ONLY show in normal auto-rotation mode (not when Spotlight Hero is active) */}
             {!spotlightBanner && heroPool.length > 1 && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
@@ -907,27 +934,7 @@ export default function Home() {
           </div>
         ) : (
           (!loadError && isLoading) && (
-            <div className="relative w-full h-[85svh] min-h-[500px] max-h-[750px] sm:h-[60vw] sm:max-h-[640px] md:h-[75vh] flex items-end overflow-hidden bg-background">
-              <div className="absolute inset-0 skeleton-pulse" />
-              <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-transparent" />
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
-              <div className="relative z-10 w-full px-5 md:px-16 lg:px-20 xl:px-24 pb-12 sm:pb-12 md:pb-14 max-w-screen-2xl mx-auto">
-                <div className="max-w-full sm:max-w-lg md:max-w-2xl">
-                  <div className="flex items-center gap-2 mb-3 sm:mb-4">
-                    <div className="h-5 w-20 rounded-md skeleton-pulse" />
-                    <div className="h-5 w-16 rounded-md skeleton-pulse" />
-                    <div className="h-5 w-14 rounded-md skeleton-pulse" />
-                  </div>
-                  <div className="h-10 sm:h-12 md:h-14 w-3/4 rounded-lg skeleton-pulse mb-3" />
-                  <div className="h-4 w-full rounded skeleton-pulse mb-1.5" />
-                  <div className="h-4 w-2/3 rounded skeleton-pulse mb-5 sm:mb-6" />
-                  <div className="flex gap-2.5 sm:gap-4">
-                    <div className="h-12 sm:h-14 w-32 sm:w-36 rounded-xl skeleton-pulse" />
-                    <div className="h-12 sm:h-14 w-32 sm:w-36 rounded-xl skeleton-pulse" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <HeroSkeleton />
           )
         )}
 

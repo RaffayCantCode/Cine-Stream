@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Play, Info, Star, Calendar } from "lucide-react";
@@ -28,13 +28,17 @@ interface HeroBannerProps {
   item: MediaItem;
 }
 
-const SECTION_STYLE: React.CSSProperties = {
-  animation: "fade-in-up 0.6s ease-out both",
-};
-
 export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const [usePoster, setUsePoster] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  // Reset load states on item change
+  useEffect(() => {
+    setUsePoster(false);
+    setImgFailed(false);
+    setImgLoaded(false);
+  }, [item?.id]);
 
   if (!item) return null;
 
@@ -131,23 +135,35 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
   return (
     <section className="relative w-full h-[82svh] min-h-[480px] max-h-[700px] sm:h-[58vw] sm:max-h-[610px] md:h-[72vh] flex items-end bg-background overflow-hidden">
+      {/* Ambient background glow while image decodes */}
+      <div
+        className="absolute inset-0 pointer-events-none transition-opacity duration-1000"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 65% at 28% 45%, rgba(99, 102, 241, 0.12) 0%, rgba(14, 18, 30, 0.6) 60%, transparent 100%)",
+        }}
+      />
+
       {showBackdrop ? (
         <>
           {/* Image clipped independently so gradients can bleed outside section */}
           <div className="absolute inset-0 overflow-hidden">
             <Image
+              key={backdropUrl}
               src={backdropUrl!}
               alt={title}
               fill
               sizes="100vw"
               unoptimized={!eventuallyOptimizable(backdropUrl)}
-              className="object-cover object-center md:object-top"
+              className={cn(
+                "object-cover object-center md:object-top transition-all duration-700 ease-out",
+                imgLoaded ? "opacity-100 scale-[1.02]" : "opacity-0 scale-100"
+              )}
               style={{
-                transform: "scale(1.02)",
-                animation: "fade-in-up 1s ease-out both",
                 filter: "brightness(0.82) saturate(1.05)",
               }}
               priority
+              onLoad={() => setImgLoaded(true)}
               onError={() => {
                 if (!usePoster && item.poster_path && item.poster_path !== item.backdrop_path) {
                   setUsePoster(true);
@@ -165,13 +181,18 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               never looks empty, even when the anime has no widescreen banner. */}
           {showPosterCard && (
             <Image
+              key={posterUrl}
               src={posterUrl!}
               alt=""
               fill
               sizes="100vw"
               unoptimized={!eventuallyOptimizable(posterUrl)}
-              className="object-cover object-center opacity-[0.16] blur-3xl scale-125"
+              className={cn(
+                "object-cover object-center blur-3xl scale-125 transition-opacity duration-700 ease-out",
+                imgLoaded ? "opacity-[0.16]" : "opacity-0"
+              )}
               aria-hidden
+              onLoad={() => setImgLoaded(true)}
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/35" />
@@ -182,13 +203,18 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           {showPosterCard && (
             <div className="hidden md:flex absolute right-6 lg:right-12 xl:right-16 top-1/2 -translate-y-1/2 w-[200px] lg:w-[240px] xl:w-[270px] aspect-[2/3] rounded-2xl overflow-hidden shadow-[0_25px_60px_rgba(0,0,0,0.6)] ring-1 ring-white/15 z-10">
               <Image
+                key={`poster-card-${posterUrl}`}
                 src={posterUrl!}
                 alt={title}
                 fill
                 sizes="(max-width: 1024px) 200px, 270px"
                 unoptimized={!eventuallyOptimizable(posterUrl)}
-                className="object-cover"
+                className={cn(
+                  "object-cover transition-opacity duration-500 ease-out",
+                  imgLoaded ? "opacity-100" : "opacity-0"
+                )}
                 priority
+                onLoad={() => setImgLoaded(true)}
                 onError={() => setImgFailed(true)}
               />
             </div>
@@ -199,8 +225,8 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
       <div className="relative z-10 w-full px-5 md:px-12 lg:px-16 xl:px-20 pb-8 sm:pb-9 md:pb-12 max-w-screen-2xl mx-auto">
         <div
-          className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/12 md:backdrop-blur-0 px-4 py-5 md:p-0"
-          style={SECTION_STYLE}
+          key={String(item.id)}
+          className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/12 md:backdrop-blur-0 px-4 py-5 md:p-0 animate-fade-in-up"
         >
           {/* Spotlight / Custom Badge Tagline */}
           {(item as any).badge && (
