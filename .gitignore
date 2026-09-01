@@ -48,4 +48,7 @@ yarn-error.log*
 .agents/
 .cache/
 dev-server.log
-dev-server.log
+
+# backups & migration dumps
+backup_data/
+export_neon_data.mjs

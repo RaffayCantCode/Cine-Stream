@@ -100,10 +100,9 @@ function getAuth() {
               try {
                 const dbUser = await database.query.users.findFirst({
                   where: eq(users.id, token.sub),
-                  columns: { role: true },
                 });
-                if (dbUser) {
-                  token.role = dbUser.role || "user";
+                if (dbUser?.role) {
+                  token.role = dbUser.role;
                 }
               } catch {
                 // Keep existing token.role if DB query fails

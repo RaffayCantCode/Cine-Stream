@@ -1,0 +1,8 @@
+﻿name = "cinestream"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cinestream-db"
+database_id = "0e5943db-bc2f-4e30-b02d-f420957b16e4"

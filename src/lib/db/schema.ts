@@ -1,56 +1,47 @@
-import { sql } from "drizzle-orm";
-import {
-  boolean,
+﻿import {
   integer,
-  jsonb,
-  pgTable,
   primaryKey,
-  serial,
+  sqliteTable,
   text,
-  timestamp,
-  unique,
-  varchar,
-} from "drizzle-orm/pg-core";
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import type { AdapterAccount } from "next-auth/adapters";
 
 // NextAuth tables
-export const users = pgTable("user", {
-  id: varchar("id", { length: 255 })
+export const users = sqliteTable("user", {
+  id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
-  name: varchar("name", { length: 255 }),
-  email: varchar("email", { length: 255 }).unique(),
-  emailVerified: timestamp("emailVerified", {
-    mode: "date",
-    withTimezone: true,
-  }),
-  image: varchar("image", { length: 255 }),
-  password: varchar("password", { length: 255 }),
-  theme: varchar("theme", { length: 32 }).default("global").notNull(),
-  role: varchar("role", { length: 32 }).default("user").notNull(),
-  status: varchar("status", { length: 32 }).default("active").notNull(),
-  lastActiveAt: timestamp("lastActiveAt", { withTimezone: true }).defaultNow(),
-  createdAt: timestamp("createdAt", { withTimezone: true })
-    .defaultNow()
+  name: text("name"),
+  email: text("email").unique(),
+  emailVerified: integer("emailVerified", { mode: "timestamp_ms" }),
+  image: text("image"),
+  password: text("password"),
+  theme: text("theme").default("global").notNull(),
+  role: text("role").default("user").notNull(),
+  status: text("status").default("active").notNull(),
+  lastActiveAt: integer("lastActiveAt", { mode: "timestamp_ms" }).$defaultFn(() => new Date()),
+  createdAt: integer("createdAt", { mode: "timestamp_ms" })
+    .$defaultFn(() => new Date())
     .notNull(),
 });
 
-export const accounts = pgTable(
+export const accounts = sqliteTable(
   "account",
   {
-    userId: varchar("userId", { length: 255 })
+    userId: text("userId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    type: varchar("type", { length: 255 }).$type<AdapterAccount["type"]>().notNull(),
-    provider: varchar("provider", { length: 255 }).notNull(),
-    providerAccountId: varchar("providerAccountId", { length: 255 }).notNull(),
+    type: text("type").$type<AdapterAccount["type"]>().notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
     refresh_token: text("refresh_token"),
     access_token: text("access_token"),
     expires_at: integer("expires_at"),
-    token_type: varchar("token_type", { length: 255 }),
-    scope: varchar("scope", { length: 255 }),
+    token_type: text("token_type"),
+    scope: text("scope"),
     id_token: text("id_token"),
-    session_state: varchar("session_state", { length: 255 }),
+    session_state: text("session_state"),
   },
   (account) => ({
     compoundKey: primaryKey({
@@ -59,26 +50,20 @@ export const accounts = pgTable(
   })
 );
 
-export const sessions = pgTable("session", {
-  sessionToken: varchar("sessionToken", { length: 255 }).primaryKey(),
-  userId: varchar("userId", { length: 255 })
+export const sessions = sqliteTable("session", {
+  sessionToken: text("sessionToken").primaryKey(),
+  userId: text("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  expires: timestamp("expires", {
-    mode: "date",
-    withTimezone: true,
-  }).notNull(),
+  expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
 });
 
-export const verificationTokens = pgTable(
+export const verificationTokens = sqliteTable(
   "verificationToken",
   {
-    identifier: varchar("identifier", { length: 255 }).notNull(),
-    token: varchar("token", { length: 255 }).notNull(),
-    expires: timestamp("expires", {
-      mode: "date",
-      withTimezone: true,
-    }).notNull(),
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
   },
   (vt) => ({
     compoundKey: primaryKey({ columns: [vt.identifier, vt.token] }),
@@ -86,29 +71,29 @@ export const verificationTokens = pgTable(
 );
 
 // Watch history table
-export const watchHistory = pgTable(
+export const watchHistory = sqliteTable(
   "watch_history",
   {
-    id: serial("id").primaryKey(),
-    userId: varchar("user_id", { length: 255 })
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     mediaId: integer("media_id").notNull(),
-    mediaType: varchar("media_type", { length: 10 }).notNull(),
-    title: varchar("title").notNull(),
-    posterPath: varchar("poster_path"),
-    backdropPath: varchar("backdrop_path"),
+    mediaType: text("media_type").notNull(),
+    title: text("title").notNull(),
+    posterPath: text("poster_path"),
+    backdropPath: text("backdrop_path"),
     season: integer("season").notNull().default(0),
     episode: integer("episode").notNull().default(0),
-    episodeName: varchar("episode_name"),
+    episodeName: text("episode_name"),
     progress: integer("progress").default(0),
     duration: integer("duration").default(0),
-    watchedAt: timestamp("watched_at", { withTimezone: true })
+    watchedAt: integer("watched_at", { mode: "timestamp_ms" })
       .notNull()
-      .defaultNow(),
+      .$defaultFn(() => new Date()),
   },
   (t) => [
-    unique("uq_watch_history").on(
+    uniqueIndex("uq_watch_history").on(
       t.userId,
       t.mediaId,
       t.mediaType,
@@ -119,52 +104,52 @@ export const watchHistory = pgTable(
 );
 
 // Watchlist table
-export const watchlists = pgTable(
+export const watchlists = sqliteTable(
   "watchlist",
   {
-    id: serial("id").primaryKey(),
-    userId: varchar("user_id", { length: 255 })
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     mediaId: integer("media_id").notNull(),
-    mediaType: varchar("media_type", { length: 10 }).notNull(),
-    title: varchar("title").notNull(),
-    posterPath: varchar("poster_path"),
-    backdropPath: varchar("backdrop_path"),
-    createdAt: timestamp("created_at", { withTimezone: true })
+    mediaType: text("media_type").notNull(),
+    title: text("title").notNull(),
+    posterPath: text("poster_path"),
+    backdropPath: text("backdrop_path"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
-      .defaultNow(),
+      .$defaultFn(() => new Date()),
   },
   (t) => [
-    unique("uq_watchlist_user_media").on(t.userId, t.mediaId, t.mediaType),
+    uniqueIndex("uq_watchlist_user_media").on(t.userId, t.mediaId, t.mediaType),
   ]
 );
 
 // Manga Reading History table
-export const mangaReadingHistory = pgTable(
+export const mangaReadingHistory = sqliteTable(
   "manga_reading_history",
   {
-    id: serial("id").primaryKey(),
-    userId: varchar("user_id", { length: 255 })
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    mangaId: varchar("manga_id", { length: 255 }).notNull(),
-    mangaTitle: varchar("manga_title", { length: 500 }).notNull(),
-    mangaCover: varchar("manga_cover", { length: 1000 }).notNull(),
-    mangaType: varchar("manga_type", { length: 32 }).notNull().default("manga"),
-    chapterId: varchar("chapter_id", { length: 255 }).notNull(),
-    chapterNumber: varchar("chapter_number", { length: 64 }).notNull(),
-    chapterTitle: varchar("chapter_title", { length: 500 }),
+    mangaId: text("manga_id").notNull(),
+    mangaTitle: text("manga_title").notNull(),
+    mangaCover: text("manga_cover").notNull(),
+    mangaType: text("manga_type").notNull().default("manga"),
+    chapterId: text("chapter_id").notNull(),
+    chapterNumber: text("chapter_number").notNull(),
+    chapterTitle: text("chapter_title"),
     pageNumber: integer("page_number").notNull().default(1),
     totalPages: integer("total_pages").notNull().default(1),
-    nextChapterId: varchar("next_chapter_id", { length: 255 }),
-    nextChapterNumber: varchar("next_chapter_number", { length: 64 }),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
+    nextChapterId: text("next_chapter_id"),
+    nextChapterNumber: text("next_chapter_number"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
       .notNull()
-      .defaultNow(),
+      .$defaultFn(() => new Date()),
   },
   (t) => [
-    unique("uq_manga_reading_user_manga").on(t.userId, t.mangaId),
+    uniqueIndex("uq_manga_reading_user_manga").on(t.userId, t.mangaId),
   ]
 );
 
@@ -172,24 +157,24 @@ export type MangaReadingHistoryItem = typeof mangaReadingHistory.$inferSelect;
 export type NewMangaReadingHistoryItem = typeof mangaReadingHistory.$inferInsert;
 
 // Manga Bookmarks / Watchlist table
-export const mangaBookmarks = pgTable(
+export const mangaBookmarks = sqliteTable(
   "manga_bookmarks",
   {
-    id: serial("id").primaryKey(),
-    userId: varchar("user_id", { length: 255 })
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    mangaId: varchar("manga_id", { length: 255 }).notNull(),
-    mediaType: varchar("media_type", { length: 32 }).notNull().default("manga"),
-    title: varchar("title", { length: 500 }).notNull(),
-    posterPath: varchar("poster_path", { length: 1000 }),
-    backdropPath: varchar("backdrop_path", { length: 1000 }),
-    createdAt: timestamp("created_at", { withTimezone: true })
+    mangaId: text("manga_id").notNull(),
+    mediaType: text("media_type").notNull().default("manga"),
+    title: text("title").notNull(),
+    posterPath: text("poster_path"),
+    backdropPath: text("backdrop_path"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
-      .defaultNow(),
+      .$defaultFn(() => new Date()),
   },
   (t) => [
-    unique("uq_manga_bookmarks_user_manga").on(t.userId, t.mangaId),
+    uniqueIndex("uq_manga_bookmarks_user_manga").on(t.userId, t.mangaId),
   ]
 );
 
@@ -197,129 +182,128 @@ export type MangaBookmarkItem = typeof mangaBookmarks.$inferSelect;
 export type NewMangaBookmarkItem = typeof mangaBookmarks.$inferInsert;
 
 // Site Announcements table
-export const siteAnnouncements = pgTable("site_announcements", {
-  id: varchar("id", { length: 32 }).primaryKey().default("current"),
+export const siteAnnouncements = sqliteTable("site_announcements", {
+  id: text("id").primaryKey().default("current"),
   message: text("message"),
-  updatedBy: varchar("updated_by", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 // Custom Curated Homepage Sections
-export const customHomeSections = pgTable("custom_home_sections", {
-  id: varchar("id", { length: 64 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  title: varchar("title", { length: 255 }).notNull(),
-  subtitle: varchar("subtitle", { length: 255 }),
-  icon: varchar("icon", { length: 64 }),
-  enabled: boolean("enabled").default(true).notNull(),
+export const customHomeSections = sqliteTable("custom_home_sections", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  subtitle: text("subtitle"),
+  icon: text("icon"),
+  enabled: integer("enabled", { mode: "boolean" }).default(true).notNull(),
   orderIndex: integer("order_index").default(0).notNull(),
-  items: jsonb("items").notNull().$type<any[]>().default([]),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  items: text("items", { mode: "json" }).notNull().$type<any[]>().default([]),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 // Custom Curated Franchises / Collections
-export const customFranchises = pgTable("custom_franchises", {
-  id: varchar("id", { length: 64 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  name: varchar("name", { length: 255 }).notNull(),
+export const customFranchises = sqliteTable("custom_franchises", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
   overview: text("overview"),
-  posterPath: varchar("poster_path", { length: 500 }),
-  backdropPath: varchar("backdrop_path", { length: 500 }),
-  enabled: boolean("enabled").default(true).notNull(),
-  parts: jsonb("parts").notNull().$type<any[]>().default([]),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  posterPath: text("poster_path"),
+  backdropPath: text("backdrop_path"),
+  enabled: integer("enabled", { mode: "boolean" }).default(true).notNull(),
+  parts: text("parts", { mode: "json" }).notNull().$type<any[]>().default([]),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 // Spotlight Featured Hero Banner
-export const siteSpotlight = pgTable("site_spotlight", {
-  id: varchar("id", { length: 32 }).primaryKey().default("current"),
-  enabled: boolean("enabled").default(false).notNull(),
-  title: varchar("title", { length: 255 }),
-  tagline: varchar("tagline", { length: 255 }),
+export const siteSpotlight = sqliteTable("site_spotlight", {
+  id: text("id").primaryKey().default("current"),
+  enabled: integer("enabled", { mode: "boolean" }).default(false).notNull(),
+  title: text("title"),
+  tagline: text("tagline"),
   description: text("description"),
-  backdropPath: varchar("backdrop_path", { length: 500 }),
-  posterPath: varchar("poster_path", { length: 500 }),
-  targetUrl: varchar("target_url", { length: 500 }),
-  mediaType: varchar("media_type", { length: 32 }).default("movie"),
-  badge: varchar("badge", { length: 64 }),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  backdropPath: text("backdrop_path"),
+  posterPath: text("poster_path"),
+  targetUrl: text("target_url"),
+  mediaType: text("media_type").default("movie"),
+  badge: text("badge"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 // Site Appearance Settings
-export const siteSettings = pgTable("site_settings", {
-  id: varchar("id", { length: 32 }).primaryKey().default("current"),
-  accentColor: varchar("accent_color", { length: 32 }).default("#7288AE").notNull(),
-  heroStyle: varchar("hero_style", { length: 32 }).default("cinematic").notNull(),
-  tagline: varchar("tagline", { length: 255 }).default("Movies. TV. Anime. All in one place.").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+export const siteSettings = sqliteTable("site_settings", {
+  id: text("id").primaryKey().default("current"),
+  accentColor: text("accent_color").default("#7288AE").notNull(),
+  heroStyle: text("hero_style").default("cinematic").notNull(),
+  tagline: text("tagline").default("Movies. TV. Anime. All in one place.").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 // Custom Dynamic Themes Created by Admins
-export const customThemes = pgTable("custom_themes", {
-  id: varchar("id", { length: 64 }).primaryKey().$defaultFn(() => `custom_${crypto.randomUUID().slice(0, 8)}`),
-  label: varchar("label", { length: 255 }).notNull(),
-  tagline: varchar("tagline", { length: 255 }).default("Custom").notNull(),
+export const customThemes = sqliteTable("custom_themes", {
+  id: text("id").primaryKey().$defaultFn(() => `custom_${crypto.randomUUID().slice(0, 8)}`),
+  label: text("label").notNull(),
+  tagline: text("tagline").default("Custom").notNull(),
   description: text("description"),
-  background: varchar("background", { length: 32 }).default("#080C14").notNull(),
-  card: varchar("card", { length: 32 }).default("#141C2B").notNull(),
-  primary: varchar("primary", { length: 32 }).default("#38BDF8").notNull(),
-  accent: varchar("accent", { length: 32 }).default("#F43F5E").notNull(),
-  foreground: varchar("foreground", { length: 32 }).default("#E2E8F0").notNull(),
+  background: text("background").default("#080C14").notNull(),
+  card: text("card").default("#141C2B").notNull(),
+  primary: text("primary").default("#38BDF8").notNull(),
+  accent: text("accent").default("#F43F5E").notNull(),
+  foreground: text("foreground").default("#E2E8F0").notNull(),
   preview: text("preview"),
-  enabled: boolean("enabled").default(true).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).default(true).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
-// Admin-controlled streaming source order + tags (overrides only).
-// Missing rows fall back to the hard-coded default order/tags in code.
-export const streamingSourceConfig = pgTable(
+// Admin-controlled streaming source order + tags
+export const streamingSourceConfig = sqliteTable(
   "streaming_source_config",
   {
-    id: serial("id").primaryKey(),
-    category: varchar("category", { length: 16 }).notNull(),
-    sourceKey: varchar("source_key", { length: 64 }).notNull(),
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    category: text("category").notNull(),
+    sourceKey: text("source_key").notNull(),
     position: integer("position").default(0).notNull(),
-    tag: varchar("tag", { length: 32 }).default("good").notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    tag: text("tag").default("good").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
   },
-  (t) => [unique("uq_streaming_source_category_key").on(t.category, t.sourceKey)]
+  (t) => [uniqueIndex("uq_streaming_source_category_key").on(t.category, t.sourceKey)]
 );
 
 // Issue Reports table
-export const issueReports = pgTable("issue_reports", {
-  id: varchar("id", { length: 64 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  topic: varchar("topic", { length: 255 }).notNull(),
+export const issueReports = sqliteTable("issue_reports", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  topic: text("topic").notNull(),
   message: text("message").notNull(),
-  userEmail: varchar("user_email", { length: 255 }),
-  status: varchar("status", { length: 32 }).default("open").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  userEmail: text("user_email"),
+  status: text("status").default("open").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
 });
 
 // Admin Entry Overrides (Upcoming, Unavailable, Hidden, Custom Metadata)
-export const mediaOverrides = pgTable(
+export const mediaOverrides = sqliteTable(
   "media_overrides",
   {
-    id: varchar("id", { length: 128 }).primaryKey(), // e.g. "movie-1858", "tv-1399", "anime-16498", "kitsu-7442"
-    mediaType: varchar("media_type", { length: 32 }).notNull(), // "movie" | "tv" | "anime"
-    mediaId: varchar("media_id", { length: 64 }).notNull(), // "1858", "1399", etc.
-    status: varchar("status", { length: 32 }).default("default").notNull(), // "default" | "upcoming" | "unavailable" | "hidden"
-    isHidden: boolean("is_hidden").default(false).notNull(),
-    isUpcoming: boolean("is_upcoming").default(false).notNull(),
-    isUnavailable: boolean("is_unavailable").default(false).notNull(),
-    customTitle: varchar("custom_title", { length: 500 }),
+    id: text("id").primaryKey(),
+    mediaType: text("media_type").notNull(),
+    mediaId: text("media_id").notNull(),
+    status: text("status").default("default").notNull(),
+    isHidden: integer("is_hidden", { mode: "boolean" }).default(false).notNull(),
+    isUpcoming: integer("is_upcoming", { mode: "boolean" }).default(false).notNull(),
+    isUnavailable: integer("is_unavailable", { mode: "boolean" }).default(false).notNull(),
+    customTitle: text("custom_title"),
     customDescription: text("custom_description"),
-    customGenres: jsonb("custom_genres").$type<string[]>().default([]),
-    customReleaseDate: varchar("custom_release_date", { length: 64 }),
-    customPoster: varchar("custom_poster", { length: 1000 }),
-    customBackdrop: varchar("custom_backdrop", { length: 1000 }),
-    customTags: jsonb("custom_tags").$type<string[]>().default([]),
+    customGenres: text("custom_genres", { mode: "json" }).$type<string[]>().default([]),
+    customReleaseDate: text("custom_release_date"),
+    customPoster: text("custom_poster"),
+    customBackdrop: text("custom_backdrop"),
+    customTags: text("custom_tags", { mode: "json" }).$type<string[]>().default([]),
     notes: text("notes"),
-    updatedBy: varchar("updated_by", { length: 255 }),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedBy: text("updated_by"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(() => new Date()).notNull(),
   },
-  (t) => [unique("uq_media_overrides_type_id").on(t.mediaType, t.mediaId)]
+  (t) => [uniqueIndex("uq_media_overrides_type_id").on(t.mediaType, t.mediaId)]
 );
 
 export type User = typeof users.$inferSelect;
@@ -346,5 +330,3 @@ export type StreamingSourceConfig = typeof streamingSourceConfig.$inferSelect;
 export type InsertStreamingSourceConfig = typeof streamingSourceConfig.$inferInsert;
 export type MediaOverride = typeof mediaOverrides.$inferSelect;
 export type InsertMediaOverride = typeof mediaOverrides.$inferInsert;
-
-

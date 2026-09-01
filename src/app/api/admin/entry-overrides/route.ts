@@ -6,7 +6,7 @@ import { verifyAdminSession } from "@/lib/auth/admin";
 import { mediaOverrides, type MediaOverride } from "@/lib/db/schema";
 import { normalizeOverrideId, extractCandidateMediaIds, invalidateMediaOverridesCache } from "@/lib/media-overrides";
 import { invalidateAnimeDetailsCache } from "@/lib/anime-fetch";
-import { desc, eq, and, or, ilike, inArray } from "drizzle-orm";
+import { desc, eq, and, or, inArray } from "drizzle-orm";
 import { tmdbFetch } from "@/lib/tmdb";
 
 async function resolveMediaTitleAndPoster(mediaType: string, mediaId: string): Promise<{ title?: string; poster?: string }> {

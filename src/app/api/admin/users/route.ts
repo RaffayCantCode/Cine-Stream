@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { users } from "@/lib/db/schema";
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { desc, eq, like, or } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminSession();
@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
     if (query) {
       userList = await db.query.users.findMany({
         where: or(
-          ilike(users.email, `%${query}%`),
-          ilike(users.name, `%${query}%`)
+          like(users.email, `%${query}%`),
+          like(users.name, `%${query}%`)
         ),
         orderBy: [desc(users.createdAt)],
         limit: 100,
