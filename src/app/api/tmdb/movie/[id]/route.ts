@@ -22,7 +22,8 @@ export async function GET(
     try {
       [data, extraRecs, extraSimilar] = await Promise.all([
         tmdbFetch(`/movie/${id}`, {
-          append_to_response: "credits,videos,similar,recommendations",
+          append_to_response: "credits,videos,similar,recommendations,images",
+          include_image_language: "en,null,ja,es,fr,de,it,pt,ru,ko,zh",
         }),
         tmdbFetch(`/movie/${id}/recommendations`, { page: "2" }).catch(() => null),
         tmdbFetch(`/movie/${id}/similar`, { page: "2" }).catch(() => null),

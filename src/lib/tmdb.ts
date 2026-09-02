@@ -1,9 +1,12 @@
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-export function cacheHeaders(ttlSeconds = 3600): HeadersInit {
+export function cacheHeaders(ttlSeconds = 86400): HeadersInit {
+  const browserMaxAge = Math.min(Math.max(Math.floor(ttlSeconds / 4), 1800), 86400);
   return {
-    "Cache-Control": `public, max-age=300, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+    "Cache-Control": `public, max-age=${browserMaxAge}, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
     "CDN-Cache-Control": `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+    "Cloudflare-CDN-Cache-Control": `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+    "Surrogate-Control": `public, max-age=${ttlSeconds}`,
   };
 }
 

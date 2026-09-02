@@ -11,7 +11,11 @@ export async function GET() {
   const cached = getCachedSpotlight();
   if (cached) {
     return NextResponse.json(cached, {
-      headers: { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600" },
+        headers: {
+          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+          "CDN-Cache-Control": "public, max-age=3600",
+          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
+        },
     });
   }
 
@@ -25,7 +29,11 @@ export async function GET() {
       const emptyPayload = { success: true, enabled: false, spotlight: null };
       setCachedSpotlight(emptyPayload);
       return NextResponse.json(emptyPayload, {
-        headers: { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600" },
+          headers: {
+          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+          "CDN-Cache-Control": "public, max-age=3600",
+          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
+        },
       });
     }
 
@@ -48,7 +56,11 @@ export async function GET() {
     setCachedSpotlight(payload);
 
     return NextResponse.json(payload, {
-      headers: { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600" },
+        headers: {
+          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+          "CDN-Cache-Control": "public, max-age=3600",
+          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
+        },
     });
   } catch (error) {
     console.error("[Spotlight API] GET Error:", error);

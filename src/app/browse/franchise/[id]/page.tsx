@@ -280,7 +280,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
   return (
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden flex-col md:flex-row">
       <Sidebar />
-      <main className="flex-1 md:pl-56 lg:pl-64 h-[100dvh] overflow-y-auto w-full custom-scrollbar relative">
+      <main className="flex-1 h-[100dvh] overflow-y-auto w-full custom-scrollbar relative">
         {/* Cinematic Header */}
         <CinematicHero
           backdropPath={collection.backdrop_path}

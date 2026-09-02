@@ -19,19 +19,43 @@ function notifyListeners(data: AnnouncementData) {
   listeners.forEach((listener) => listener(data));
 }
 
+const ANNOUNCEMENT_STORAGE_KEY = "cinestream_announcement_cache_v2";
+
+function loadStoredAnnouncement(): AnnouncementData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(ANNOUNCEMENT_STORAGE_KEY) || sessionStorage.getItem(ANNOUNCEMENT_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+function saveStoredAnnouncement(data: AnnouncementData): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ANNOUNCEMENT_STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
 export function useAnnouncement() {
-  const [data, setData] = useState<AnnouncementData>(() => globalAnnouncementCache || {
-    message: null,
-    updatedAt: null,
+  const [data, setData] = useState<AnnouncementData>(() => {
+    if (globalAnnouncementCache) return globalAnnouncementCache;
+    const stored = loadStoredAnnouncement();
+    if (stored) {
+      globalAnnouncementCache = stored;
+      return stored;
+    }
+    return { message: null, updatedAt: null };
   });
-  const [isLoading, setIsLoading] = useState(() => !globalAnnouncementCache);
+  const [isLoading, setIsLoading] = useState(() => !globalAnnouncementCache && !loadStoredAnnouncement());
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
   const fetchAnnouncement = useCallback(async () => {
     try {
-      const res = await fetch("/api/announcements", {
-        cache: "no-store",
-      });
+      const res = await fetch("/api/announcements");
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -39,6 +63,7 @@ export function useAnnouncement() {
             message: json.data.message || null,
             updatedAt: json.data.updatedAt || null,
           };
+          saveStoredAnnouncement(newData);
           notifyListeners(newData);
         }
       }
@@ -49,8 +74,8 @@ export function useAnnouncement() {
     }
   }, []);
 
-  // Throttled fetch — only fires if cache is older than 5 minutes
-  const ANNOUNCEMENT_REFETCH_TTL = 5 * 60_000;
+  // Throttled fetch — only fires if cache is older than 15 minutes
+  const ANNOUNCEMENT_REFETCH_TTL = 15 * 60_000;
   const fetchAnnouncementThrottled = useCallback(async () => {
     if (Date.now() - lastAnnouncementFetchAt < ANNOUNCEMENT_REFETCH_TTL) return;
     await fetchAnnouncement();

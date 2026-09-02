@@ -15,7 +15,7 @@ interface AnimeRowProps {
 function SkeletonCard({ index }: { index: number }) {
   return (
     <div
-      className="aspect-[2/3] w-[136px] sm:w-[164px] md:w-[190px] shrink-0 rounded-xl shimmer"
+      className="aspect-[2/3] w-[140px] sm:w-[168px] md:w-[195px] lg:w-[215px] shrink-0 rounded-xl shimmer"
       style={{ animationDelay: `${index * 80}ms` }}
     />
   );
@@ -116,14 +116,14 @@ export const AnimeRow = memo(function AnimeRow({ title, items, isLoading, seeAll
       </div>
 
       <div className="relative group/row">
-        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-hidden pb-5 pt-1 hide-scrollbar will-change-transform touch-pan-y touch-pan-x">
-          <div className={`flex px-3 md:px-8 lg:px-10 w-max ${isTop10 ? "gap-2 md:gap-3 pl-3 md:pl-6" : "gap-3 md:gap-4"}`}>
+        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-visible pt-6 pb-8 -mt-3 -mb-3 hide-scrollbar will-change-transform scroll-smooth">
+          <div className="flex px-3 md:px-8 lg:px-10 w-max gap-3.5 md:gap-5">
             {isLoading
               ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (
                   <SkeletonCard key={i} index={i} />
                 ))
               : (isTop10 ? items?.slice(0, 10) : items)?.map((item, i) => (
-                  <div key={item.id} className={isTop10 ? "shrink-0" : "w-[142px] sm:w-[172px] md:w-[195px] shrink-0"}>
+                  <div key={item.id} className={isTop10 ? "shrink-0" : "w-[140px] sm:w-[168px] md:w-[195px] lg:w-[215px] shrink-0"}>
                     <AnimeCard item={item} index={i} rank={isTop10 ? i + 1 : undefined} />
                   </div>
                 ))}

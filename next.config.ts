@@ -4,11 +4,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
+  devIndicators: false,
   images: {
-    minimumCacheTTL: 86400,
+    unoptimized: true,
+    minimumCacheTTL: 86400 * 30,
     formats: ["image/webp", "image/avif"],
-    deviceSizes: [320, 420, 640, 768, 1024, 1280, 1536],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [
       {
         protocol: "https",
@@ -71,7 +71,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Vercel specific optimizations
+  // Vercel / Cloudflare specific optimizations
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -80,10 +80,6 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     scrollRestoration: true,
-    staleTimes: {
-      dynamic: 0,
-      static: 60,
-    },
   },
   // Security & Cache control headers
   async headers() {
@@ -115,10 +111,6 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
           },
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, must-revalidate",
-          },
         ],
       },
       {
@@ -126,6 +118,40 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+          {
+            key: "CDN-Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+          {
+            key: "Cloudflare-CDN-Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/logo-icon.svg",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+          {
+            key: "CDN-Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/favicon.ico",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+          {
+            key: "CDN-Cache-Control",
             value: "public, max-age=31536000, immutable",
           },
         ],

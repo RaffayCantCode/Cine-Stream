@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film } from "lucide-react";
+import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film, Layers } from "lucide-react";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+import { useMediaLogo } from "@/components/MediaLogo";
 
 function TvHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -78,6 +79,7 @@ interface TvShow {
 }
 
 export default function TvClient() {
+  const router = useRouter();
   const params = useParams();
   const id = Number(params.id);
   const { data: session, status } = useSession();
@@ -100,6 +102,17 @@ export default function TvClient() {
     }
     return false;
   });
+  const { logoUrl } = useMediaLogo(id, "tv", show?.name);
+  const fallbackLogo = useMemo(() => {
+    const logos = (show as any)?.images?.logos;
+    if (!logos || !Array.isArray(logos) || logos.length === 0) return null;
+    const englishLogo = logos.find((l: any) => l.iso_639_1 === "en" && l.file_path);
+    const nullLangLogo = logos.find((l: any) => (!l.iso_639_1 || l.iso_639_1 === "null") && l.file_path);
+    const jaLogo = logos.find((l: any) => l.iso_639_1 === "ja" && l.file_path);
+    const chosen = englishLogo || nullLangLogo || jaLogo || logos[0];
+    return chosen?.file_path ? `https://image.tmdb.org/t/p/w500${chosen.file_path}` : null;
+  }, [show]);
+  const activeLogo = logoUrl || fallbackLogo;
   usePageContentReady(!isLoading);
 
   const handleToggleTheater = () => {
@@ -313,30 +326,12 @@ export default function TvClient() {
     setPlayingEpisode(episodeNumber);
     setHasActiveProgress(true);
 
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("season", season.toString());
-      url.searchParams.set("episode", episodeNumber.toString());
-      window.history.replaceState({}, "", url.toString());
-
-      if (show) {
-        try {
-          localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
-            id: String(show.id),
-            season,
-            episode: episodeNumber,
-          }));
-        } catch {}
-      }
-    }
-
     if (status === "authenticated" && show) {
-      // Use the specific season's poster if available, otherwise fallback to the show's main poster
       const actualPoster = season === selectedSeason && seasonData?.poster_path 
         ? seasonData.poster_path 
         : show.poster_path;
 
-      await fetch("/api/watch-history", {
+      fetch("/api/watch-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -349,10 +344,10 @@ export default function TvClient() {
           episode: episodeNumber,
           episodeName: episodeName ?? null,
         }),
-      });
+      }).catch(() => {});
     }
 
-    setIsPlaying(true);
+    router.push(`/watch/tv/${id}/${season}/${episodeNumber}`);
   };
 
   // ── Scroll to player on play ──
@@ -395,7 +390,7 @@ export default function TvClient() {
     return (
       <div className="min-h-screen bg-background text-foreground pb-24">
         <Sidebar />
-        <main className="md:pl-56 lg:pl-64">
+        <main className="w-full">
           <div className="pt-24 px-6 md:px-12 max-w-screen-2xl mx-auto">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-white/80 max-w-lg mx-auto text-center space-y-3">
               <div className="text-xl font-bold text-white">Title Unavailable</div>
@@ -484,7 +479,7 @@ export default function TvClient() {
     <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 bleed-header select-none">
+      <main className="w-full bleed-header select-none">
       <CinematicHero
         backdropPath={show.backdrop_path || show.poster_path}
         trailerId={seasonTrailerId || mainTrailerId}
@@ -492,12 +487,12 @@ export default function TvClient() {
         title={show.name}
         theme="tv"
       >
-        <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-5 md:gap-6 items-start md:items-center">
+        <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
           {posterUrl && (
             <img
               src={posterUrl}
               alt={show.name}
-              className="hidden md:block w-40 sm:w-44 md:w-44 lg:w-52 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
+              className="hidden md:block w-44 sm:w-48 md:w-52 lg:w-60 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
               fetchPriority="high"
               decoding="async"
               width={320}
@@ -505,44 +500,53 @@ export default function TvClient() {
             />
           )}
 
-          <div className="flex-1 space-y-2.5 sm:space-y-3 w-full">
+          <div className="flex-1 space-y-3 sm:space-y-3.5 w-full">
             <div>
-              <h1 className="font-bold text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1 select-text">
-                {show.name}
-              </h1>
+              {activeLogo ? (
+                <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
+                  <img
+                    src={activeLogo}
+                    alt={show.name}
+                    className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]"
+                  />
+                </div>
+              ) : (
+                <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1 select-text">
+                  {show.name}
+                </h1>
+              )}
               {show.tagline && (
-                <p className="text-primary/90 font-semibold italic text-xs sm:text-sm md:text-base select-text">
+                <p className="text-emerald-400/90 font-semibold italic text-xs sm:text-sm md:text-base select-text">
                   {show.tagline}
                 </p>
               )}
             </div>
 
-            <div
-              className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm"
-            >
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 text-sm sm:text-base font-extrabold">
               {score > 0 && show.vote_count && show.vote_count > 20 && (
-                <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
-                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
-                  <span className="text-sm sm:text-base">{score.toFixed(1)}</span>
-                  <span className="text-white/30 font-normal text-[10px] sm:text-xs">/ 10</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-400 font-black shadow-sm text-sm sm:text-base">
+                  <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-current text-emerald-400" />
+                  <span className="tracking-tight">{score.toFixed(1)}</span>
+                  <span className="text-white/40 font-bold text-xs">/10</span>
                 </div>
               )}
               {show.first_air_date && (
-                <span className="flex items-center gap-1.5 text-white/40 font-medium">
-                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  {format(new Date(show.first_air_date), "yyyy")}
-                </span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.08] border border-white/15 text-white font-extrabold text-xs sm:text-sm shadow-sm">
+                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
+                  <span>{format(new Date(show.first_air_date), "yyyy")}</span>
+                </div>
               )}
               {show.number_of_seasons && (
-                <span className="text-white/40 font-medium">
-                  {show.number_of_seasons} Season{show.number_of_seasons > 1 ? "s" : ""}
-                </span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.08] border border-white/15 text-white font-extrabold text-xs sm:text-sm shadow-sm">
+                  <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
+                  <span>{show.number_of_seasons} {show.number_of_seasons > 1 ? "Seasons" : "Season"}</span>
+                </div>
               )}
-              <div className="flex flex-wrap gap-1.5 ml-0.5">
+              <div className="flex flex-wrap gap-2 ml-0.5">
                 {show.genres?.map((g) => (
                   <span
                     key={g.id}
-                    className="px-2 sm:px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70"
+                    className="px-3.5 py-1 bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 rounded-full text-xs sm:text-sm font-extrabold text-white shadow-sm transition-colors"
                   >
                     {g.name}
                   </span>
@@ -550,7 +554,7 @@ export default function TvClient() {
                 {Array.isArray((show as any).customTags) && (show as any).customTags.map((tag: string, i: number) => (
                   <span
                     key={i}
-                    className="px-2 sm:px-2.5 py-0.5 bg-purple-500/20 border border-purple-500/40 rounded-full text-[11px] sm:text-xs font-bold text-purple-300"
+                    className="px-3 py-1 bg-purple-500/20 border border-purple-500/40 rounded-full text-xs sm:text-sm font-extrabold text-purple-300 shadow-sm"
                   >
                     🏷️ {tag}
                   </span>
@@ -747,11 +751,6 @@ export default function TvClient() {
               <div
                 key={`${tvViewMode}-${selectedSeason}`}
               >
-                {seasonData.overview && (
-                  <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-2xl italic select-text">
-                    {seasonData.overview}
-                  </p>
-                )}
 
                 {seasonData.episodes && seasonData.episodes.length > 0 ? (
                   tvViewMode === "grid" ? (

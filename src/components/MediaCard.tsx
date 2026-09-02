@@ -52,9 +52,9 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   const posterUrl = item.profile_path 
-    ? (item.profile_path.startsWith("http") ? item.profile_path : `https://image.tmdb.org/t/p/w500${item.profile_path}`)
+    ? (item.profile_path.startsWith("http") ? item.profile_path : `https://image.tmdb.org/t/p/w780${item.profile_path}`)
     : item.poster_path
-    ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w500${item.poster_path}`)
+    ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w780${item.poster_path}`)
     : null;
 
   const isPriority = priority ?? (rank !== undefined && index < 4);
@@ -66,19 +66,20 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
     >
       <Link
         href={link}
-        className={`group relative block shrink-0 transition-all duration-300 hover:scale-[1.035] hover:z-10 focus:outline-none touch-pan-y touch-pan-x ${
-          rank ? "w-[158px] sm:w-[194px] md:w-[220px]" : "w-full"
+        prefetch={false}
+        className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none will-change-transform ${
+          rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"
         }`}
-        style={{ transformOrigin: "center bottom" }}
+        style={{ transformOrigin: "center center" }}
       >
         {rank && (
           <div 
             className={`absolute bottom-[-10px] font-black leading-none z-0 select-none pointer-events-none tracking-tighter ${
               rank === 1
-                ? "-left-2 sm:-left-3 md:-left-4 text-[100px] sm:text-[126px] md:text-[152px]"
+                ? "-left-2 sm:-left-3 text-[100px] sm:text-[120px] md:text-[142px]"
                 : rank === 10
-                ? "-left-5 sm:-left-6 md:-left-7 text-[84px] sm:text-[108px] md:text-[130px]"
-                : "-left-4 sm:-left-5 md:-left-6 text-[102px] sm:text-[130px] md:text-[156px]"
+                ? "-left-4 sm:-left-5 text-[82px] sm:text-[100px] md:text-[118px]"
+                : "-left-3 sm:-left-4 text-[102px] sm:text-[122px] md:text-[144px]"
             }`}
             style={{ 
               background: rank === 1 
@@ -94,7 +95,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:shadow-[0_20px_40px_rgba(0,0,0,0.9)] group-hover:ring-white/35 sheen-wrapper ${
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:shadow-[0_22px_45px_rgba(0,0,0,0.88)] group-hover:ring-white/40 sheen-wrapper ${
             rank ? "ml-6 sm:ml-7 md:ml-8 w-[calc(100%-1.5rem)] sm:w-[calc(100%-1.75rem)] md:w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}
@@ -104,8 +105,8 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
             src={posterUrl}
             alt={title}
             fill
-            sizes={rank ? "(max-width: 640px) 110px, (max-width: 768px) 136px, 164px" : "(max-width: 640px) 132px, (max-width: 768px) 158px, 186px"}
-            className="object-cover transition-all duration-500 group-hover:scale-105"
+            sizes={rank ? "(max-width: 640px) 160px, (max-width: 768px) 200px, 250px" : "(max-width: 640px) 160px, (max-width: 768px) 200px, 250px"}
+            className="object-cover"
             priority={isPriority}
           />
         ) : (

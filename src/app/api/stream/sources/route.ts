@@ -17,7 +17,9 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+          "CDN-Cache-Control": "public, max-age=3600",
+          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
         },
       }
     );
@@ -50,7 +52,9 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+          "CDN-Cache-Control": "public, max-age=3600",
+          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
         },
       }
     );
@@ -67,7 +71,9 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+          "CDN-Cache-Control": "public, max-age=3600",
+          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
         },
       }
     );

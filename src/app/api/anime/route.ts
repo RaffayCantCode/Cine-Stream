@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: { items },
       hasMore: items.length > 0,
-    }, { headers: { "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate" } });
+    }, { headers: cacheHeaders(3600) });
   } catch (error) {
     console.error("[Anime API Route Error]:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);

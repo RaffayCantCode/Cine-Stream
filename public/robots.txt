@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /search
+Disallow: /watch/
+Disallow: /admin/
+Disallow: /manga/*/read/
+
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: facebookexternalhit
+Disallow: /
+
+User-agent: Silk
+Disallow: /api/
+Disallow: /search
+Disallow: /watch/
+Disallow: /admin/
+Disallow: /manga/
+Disallow: /browse/
+
+Sitemap: https://cine-stream.site/sitemap.xml

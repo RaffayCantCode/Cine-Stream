@@ -49,8 +49,8 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64">
-        <div className="max-w-lg mx-auto px-5 pt-24 md:pt-16 pb-20">
+      <main className="w-full">
+        <div className="max-w-lg mx-auto px-5 pt-24 md:pt-28 pb-20">
           <Link
             href="/"
             className="inline-flex items-center gap-2 px-4 py-2 bg-white/[0.05] hover:bg-white/[0.1] text-white/80 hover:text-white rounded-full text-sm font-medium transition-all border border-white/10 hover:border-white/20 mb-8 w-fit"

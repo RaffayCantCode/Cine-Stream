@@ -137,7 +137,7 @@ export default function ContinueReadingPage() {
         }
       >
         <Sidebar />
-        <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
+        <main className="w-full pt-8 md:pt-24 lg:pt-28">
           <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
             <div className="flex flex-col items-center justify-center text-center py-16 md:py-24">
               <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/10 border border-primary/20 text-primary mb-6 shadow-xl">
@@ -185,7 +185,7 @@ export default function ContinueReadingPage() {
       }
     >
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
+      <main className="w-full pt-8 md:pt-24 lg:pt-28">
         <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           <div className="mb-8">
             <Link

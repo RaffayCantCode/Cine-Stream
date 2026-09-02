@@ -193,7 +193,7 @@ function SearchContent() {
 
   const activeTab = mode;
 
-  // Sync URL search params
+  // Sync URL search params without triggering Next.js server network roundtrips
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams();
@@ -201,9 +201,12 @@ function SearchContent() {
       if (mode !== "all") params.set("mode", mode);
 
       const searchString = params.toString() ? `?${params.toString()}` : '';
-      router.replace(`/search${searchString}`, { scroll: false });
+      const newUrl = `/search${searchString}`;
+      if (window.location.pathname + window.location.search !== newUrl) {
+        window.history.replaceState(null, '', newUrl);
+      }
     }
-  }, [query, mode, router]);
+  }, [query, mode]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -494,7 +497,7 @@ function SearchContent() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-10 md:pt-10">
+      <main className="w-full pt-8 md:pt-24 lg:pt-28">
         <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           
           {/* Search Bar Input */}
@@ -698,7 +701,7 @@ export default function SearchPage() {
     <Suspense fallback={
       <div className="min-h-screen bg-background text-foreground pb-20">
         <Sidebar />
-        <main className="md:pl-56 lg:pl-64 pt-10 md:pt-10 flex justify-center items-center h-[50vh]">
+        <main className="w-full pt-8 md:pt-24 lg:pt-28 flex justify-center items-center h-[50vh]">
           <div className="w-10 h-10 border-3 border-white/10 border-t-[#7288AE] rounded-full animate-spin" />
         </main>
       </div>

@@ -5,7 +5,7 @@ export default function MangaLoading() {
     <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
+      <main className="w-full pt-8 md:pt-24 lg:pt-28">
         <div className="px-5 sm:px-8 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto space-y-12">
           
           {/* Header Skeleton */}

@@ -11,7 +11,7 @@ import { getCachedCollectionsList, setCachedCollectionsList } from "@/lib/server
 export async function GET() {
   const cached = getCachedCollectionsList();
   if (cached) {
-    return NextResponse.json({ collections: cached }, { headers: cacheHeaders(3600) });
+    return NextResponse.json({ collections: cached }, { headers: cacheHeaders(86400 * 7) });
   }
 
   try {
@@ -66,7 +66,7 @@ export async function GET() {
 
     setCachedCollectionsList(collections);
 
-    return NextResponse.json({ collections }, { headers: cacheHeaders(3600) });
+    return NextResponse.json({ collections }, { headers: cacheHeaders(86400 * 7) });
   } catch (error) {
     console.error("Collections error:", error);
     return NextResponse.json({ collections: [] }, { status: 500 });

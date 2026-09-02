@@ -399,9 +399,9 @@ function invalidateEpisodesCache(animeId?: string | number): void {
 }
 
 const animeCacheHeaders = {
-  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
-  "CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
-  "Cloudflare-CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
+  "Cache-Control": "public, max-age=1800, s-maxage=7200, stale-while-revalidate=86400",
+  "CDN-Cache-Control": "public, max-age=7200, stale-while-revalidate=86400",
+  "Cloudflare-CDN-Cache-Control": "public, max-age=7200, stale-while-revalidate=86400",
 } as const;
 
 export async function GET(

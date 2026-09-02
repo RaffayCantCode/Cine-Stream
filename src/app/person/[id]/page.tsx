@@ -226,7 +226,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64 bleed-header">
+      <main className="w-full bleed-header">
         
         {/* Profile Header */}
         <div className="w-full bg-gradient-to-b from-[#111844]/40 to-background border-b border-white/[0.05] pt-[calc(6rem+env(safe-area-inset-top))] sm:pt-[calc(7rem+env(safe-area-inset-top))] pb-12 px-5 md:px-10">

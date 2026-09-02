@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { AnimePlayer } from "@/components/AnimePlayer";
 import { AnimeRow } from "@/components/AnimeRow";
 import { AnimeCard } from "@/components/AnimeCard";
 import { CastRow } from "@/components/CastRow";
@@ -14,6 +13,7 @@ import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { useMediaLogo } from "@/components/MediaLogo";
 
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
@@ -1049,6 +1049,7 @@ interface Episode {
 }
 
 export default function AnimeClient({ initialData }: { initialData?: any | null } = {}) {
+  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
   const { data: session, status: authStatus } = useSession();
@@ -1061,6 +1062,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     return null;
   });
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const animeTitle = anime?.name || (anime as any)?.title || (anime as any)?.english_name || (typeof id === "string" ? id.replace(/-\d+$/, "").replace(/-/g, " ") : undefined);
+  const { logoUrl } = useMediaLogo(id, "anime", animeTitle);
   // If we already have initialData, skip the blank skeleton entirely.
   const [isLoading, setIsLoading] = useState(!initialData);
   const [episodesLoading, setEpisodesLoading] = useState(true);
@@ -1798,39 +1801,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
     if (target && !selectedEp) {
       setSelectedEp(target);
-      if (isFromActiveShow) {
-        setWatchStarted(true);
-      }
       if (autoPlay) {
-        if (authStatus === "authenticated" && anime) {
-          const numericId = parseInt(anime.id, 10);
-          if (!Number.isNaN(numericId)) {
-            fetch("/api/watch-history", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mediaId: numericId,
-                mediaType: "anime",
-                title: anime.name,
-                posterPath: anime.poster || null,
-                backdropPath: null,
-                season: target.seasonNum || 1,
-                episode: target.episodeNum,
-                episodeName: target.title || `Episode ${target.episodeNum}`,
-              }),
-            }).catch(() => {});
-          }
-        }
-        setWatchStarted(true);
-        setIsPlaying(true);
-        try {
-          localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
-            id: String(anime?.id || id),
-            seasonId: target.seasonId || currentSeasonId,
-            episodeNum: target.episodeNum,
-            episodeId: target.episodeId,
-          }));
-        } catch {}
+        const targetAnimeId = anime?.id || id;
+        router.push(`/watch/anime/${targetAnimeId}/${target.episodeNum}`);
+        return;
       }
     }
 
@@ -1903,48 +1877,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       return;
     }
     setEpisodeNotice(null);
-    setSelectedEp(ep);
-    setWatchStarted(true);
-    setIsPlaying(true);
 
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (ep.seasonId) {
-        url.searchParams.set("seasonId", ep.seasonId);
-      }
-      url.searchParams.set("episode", ep.episodeNum.toString());
-      window.history.replaceState({}, "", url.toString());
-
-      try {
-        localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
-          id: String(anime?.id || id),
-          seasonId: ep.seasonId || currentSeasonId,
-          episodeNum: ep.episodeNum,
-          episodeId: ep.episodeId,
-        }));
-      } catch {}
-    }
-
-    if (authStatus === "authenticated" && anime) {
-      const numericId = parseInt(anime.id, 10);
-      if (!Number.isNaN(numericId)) {
-        fetch("/api/watch-history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mediaId: numericId,
-            mediaType: "anime",
-            title: anime.name,
-            posterPath: anime.poster || null,
-            backdropPath: null,
-            season: ep.seasonNum || 1,
-            episode: ep.episodeNum,
-            episodeName: ep.title || `Episode ${ep.episodeNum}`,
-          }),
-        }).catch(() => {});
-      }
-    }
-  }, [authStatus, anime, id, currentSeasonId]);
+    const targetAnimeId = anime?.id || id;
+    router.push(`/watch/anime/${targetAnimeId}/${ep.episodeNum}`);
+  }, [anime?.id, id, router]);
 
   const [episodeView, setEpisodeView] = useState<EpisodeViewMode>("grid");
 
@@ -2261,7 +2197,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-0 bleed-header select-none">
+      <main className="w-full pt-0 bleed-header select-none">
         {isLoading ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
             <div className="w-full h-[62vh] md:h-[75vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
@@ -2310,38 +2246,48 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
                 <div className="flex-1 space-y-2 sm:space-y-3 min-w-0">
                   <div>
-                    <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
+                    {logoUrl ? (
+                      <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
+                        <img
+                          src={logoUrl}
+                          alt={displayTitle}
+                          className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]"
+                        />
+                      </div>
+                    ) : (
+                      <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
+                    )}
                     {anime.jname && (
                       <p className="text-primary/90 font-semibold italic text-xs sm:text-sm md:text-base mt-0.5 sm:mt-1 select-text">{anime.jname}</p>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 text-sm sm:text-base font-extrabold">
                     {animeScore > 0 && (
-                      <div className={`flex items-center gap-1.5 font-black ${animeScoreColor}`}>
-                        <Star className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
-                        <span className="text-lg sm:text-2xl leading-none">{animeScore.toFixed(1)}</span>
-                        <span className="text-white/40 font-bold text-[10px] sm:text-xs">/ 10</span>
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-400 font-black shadow-sm text-sm sm:text-base">
+                        <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-current text-emerald-400" />
+                        <span className="tracking-tight">{animeScore.toFixed(1)}</span>
+                        <span className="text-white/40 font-bold text-xs">/10</span>
                       </div>
                     )}
                     {displayStatus && (() => {
                       const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
                       return (
-                        <span className={`text-[9px] sm:text-[10px] font-bold tracking-widest px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full uppercase border ${
+                        <span className={`text-[10px] sm:text-xs font-black tracking-wider px-3 py-1 rounded-xl uppercase border shadow-sm ${
                           formatted.style === "airing"
                             ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30"
                             : formatted.style === "upcoming"
                             ? "text-sky-300 bg-sky-500/20 border-sky-500/30"
-                            : "text-white/60 bg-white/10 border-white/20"
+                            : "text-white bg-white/10 border-white/20"
                         }`}>{formatted.label}</span>
                       );
                     })()}
                     {anime.type && (
-                      <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70">{anime.type}</span>
+                      <span className="px-3 py-1 bg-white/[0.08] border border-white/15 rounded-xl text-xs sm:text-sm font-extrabold text-white shadow-sm">{anime.type}</span>
                     )}
-                    <div className="flex flex-wrap gap-1.5 ml-0.5">
+                    <div className="flex flex-wrap gap-2 ml-0.5">
                       {anime.genres?.slice(0, 5).map(g => (
-                        <span key={g} className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70">{g}</span>
+                        <span key={g} className="px-3.5 py-1 bg-fuchsia-500/15 border border-fuchsia-400/30 rounded-full text-xs sm:text-sm font-extrabold text-fuchsia-200 shadow-sm">{g}</span>
                       ))}
                     </div>
                   </div>
@@ -2513,142 +2459,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 {episodeNotice && (
                   <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">
                     {episodeNotice}
-                  </div>
-                )}
-                {/* ── Player + Queue ── */}
-                {isPlaying && selectedEp && (
-                  <div className={`select-none ${isTheaterMode ? "space-y-6" : "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start"}`}>
-                    <div ref={playerRef} className="w-full min-w-0">
-                      <AnimePlayer
-                        key={selectedEp.episodeId}
-                        animeId={streamingAnimeId}
-                        malId={streamingMalId}
-                        animeTitle={selectedEp.seasonName || anime.name}
-                        episode={selectedEp.episodeNum}
-                        rootAnimeId={(() => {
-                          // Never pass kitsu- IDs to AnimePlayer — they get mangled by clean()
-                          const rId = rootSeason?.id || anime?.id;
-                          if (!rId || rId.startsWith("kitsu-")) {
-                            // Use the resolved numeric AniList id if available
-                            if (anime?.id && /^\d+$/.test(anime.id)) return anime.id;
-                            if (anime?.idMal) return `mal-${anime.idMal}`;
-                            return anime?.id || rId || "";
-                          }
-                          return rId;
-                        })()}
-                        rootMalId={rootSeason?.idMal ? String(rootSeason.idMal) : (anime?.idMal || null)}
-                        episodeOffset={currentEpisodeOffset}
-                        tmdbId={currentSeason?.tmdbId || anime?.tmdbId || null}
-                        tmdbSeason={currentSeason?.tmdbSeasonNumber ?? null}
-                        isMovie={anime?.format === 'MOVIE' || anime?.format === 'SPECIAL'}
-                        startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
-                        onAutoNext={handleAutoNext}
-                        isTheaterMode={isTheaterMode}
-                        onToggleTheater={() => {
-                          setIsTheaterMode(prev => {
-                            const next = !prev;
-                            try {
-                              localStorage.setItem("cinestream_anime_theater_mode", String(next));
-                            } catch {}
-                            return next;
-                          });
-                        }}
-                      />
-
-                      <div className="mt-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          {isSingleItem ? (
-                            <span className="text-lg font-black text-white">{selectedEp.title || (currentSeasonInfo as any)?.name || anime?.name}</span>
-                          ) : (
-                            <>
-                              <span className="text-lg font-black text-white">Episode {selectedEp.episodeNum}</span>
-                              {selectedEp.title && <span className="text-sm text-white/50">— {selectedEp.title}</span>}
-                            </>
-                          )}
-                          {selectedEp.isFiller && (
-                            <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded font-bold uppercase">Filler</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={handlePrev}
-                            disabled={currentIdx <= 0 || (currentSeasonEps[currentIdx - 1]?.isReleased === false)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-30 text-white/60 hover:text-white text-xs font-bold transition-all cursor-pointer"
-                          >
-                            <ChevronLeft className="w-4 h-4" /> Prev
-                          </button>
-                          {currentSeasonEps.length > 0 && (
-                            <span className="text-sm text-white/40 px-2 font-medium">{Math.max(currentIdx + 1, 1)} / {currentSeasonEps.length}</span>
-                          )}
-                          <button
-                            onClick={handleNext}
-                            disabled={currentIdx >= currentSeasonEps.length - 1 || (currentSeasonEps[currentIdx + 1]?.isReleased === false)}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#4B5694] hover:bg-[#7288AE] disabled:opacity-30 text-white text-xs font-bold transition-all shadow-lg cursor-pointer"
-                          >
-                            Next <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      {nextEp && nextEp.isReleased !== false && (
-                        <button
-                          onClick={() => handleWatchEpisode(nextEp)}
-                          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition cursor-pointer"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Play Next: E{nextEp.episodeNum}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* ── Episode Queue Sidebar / Bottom Shelf ── */}
-                    <aside className={`w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col ${
-                      isTheaterMode ? "max-h-[380px]" : "max-h-[60vh] xl:max-h-[70vh]"
-                    }`}>
-                      <div className="p-4 border-b border-white/[0.06] bg-white/[0.01]">
-                        <div className="text-sm font-bold text-white flex items-center justify-between gap-2">
-                          <span className="truncate">
-                            {franchiseNodes.find(n => String(n.id) === currentSeasonId)?.title || (currentSeasonInfo as any)?.seasonLabel || "Episodes"}
-                          </span>
-                          <span className="text-xs font-normal text-white/40 whitespace-nowrap">{currentSeasonEps.length} eps</span>
-                        </div>
-                      </div>
-                      <div className={`flex-1 overflow-y-auto p-2 scrollbar-hide ${
-                        isTheaterMode ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2" : "space-y-1"
-                      }`}>
-                        {currentSeasonEps.map((ep) => {
-                          const isSelected = selectedEp?.episodeId === ep.episodeId && (isPlaying || watchStarted);
-                          const displayTitle = ep.title || `Episode ${ep.episodeNum}`;
-                          return (
-                            <button
-                              key={ep.episodeId}
-                              ref={isSelected ? selectedQueueEpRef : undefined}
-                              onClick={() => {
-                                handleWatchEpisode(ep);
-                              }}
-                              className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-3 cursor-pointer ${
-                                isSelected
-                                  ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
-                                  : ep.isReleased === false
-                                  ? "bg-white/[0.025] text-white/30 hover:bg-amber-400/10 hover:text-amber-200 border border-amber-400/10"
-                                  : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
-                              }`}
-                            >
-                              <span className="text-sm font-black w-10 shrink-0">E{ep.episodeNum}</span>
-                              <span className="text-xs truncate flex-1 line-clamp-1">{displayTitle}</span>
-                              {ep.runtime && ep.runtime > 0 && (
-                                <span className="text-[10px] text-white/40 font-medium shrink-0">{ep.runtime}m</span>
-                              )}
-                              {ep.isFiller && (
-                                <span className="text-[9px] text-amber-400 font-extrabold uppercase bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded shrink-0">Filler</span>
-                              )}
-                              {ep.isReleased === false && (
-                                <span className="text-[9px] text-sky-300 font-extrabold uppercase bg-sky-300/10 border border-sky-300/20 px-1.5 py-0.5 rounded shrink-0">Upcoming</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </aside>
                   </div>
                 )}
               </div>

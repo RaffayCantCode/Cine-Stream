@@ -56,7 +56,7 @@ export default function WatchlistPage() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
+      <main className="w-full pt-8 md:pt-24 lg:pt-28">
         <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           <div className="mb-8">
             <h1 className="flex items-center gap-3 text-4xl md:text-5xl font-black text-foreground tracking-tight">

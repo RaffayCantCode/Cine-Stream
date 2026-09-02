@@ -317,7 +317,7 @@ export default function ProviderPage() {
     return (
       <div className="min-h-screen bg-background text-foreground pb-20">
         <Sidebar />
-        <main className="md:pl-56 lg:pl-64 pt-10">
+        <main className="w-full pt-10">
           <div className="px-6 md:px-12 max-w-screen-2xl mx-auto">
             <Link href="/" className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white/80 mb-8 group">
               <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
@@ -363,7 +363,7 @@ export default function ProviderPage() {
       />
 
       <Sidebar />
-      <main className="md:pl-56 lg:pl-64">
+      <main className="w-full">
 
         {/* ══════════════════════════════════════════════════════════════════
             HERO SECTION — full-bleed cinematic banner

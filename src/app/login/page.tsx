@@ -42,8 +42,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background text-foreground">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64">
-      <div className="pt-12 md:pt-16 px-6 md:px-12 max-w-screen-xl mx-auto">
+      <main className="w-full">
+      <div className="pt-20 md:pt-28 px-6 md:px-12 max-w-screen-xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

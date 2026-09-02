@@ -31,10 +31,10 @@ export default function BrowseFranchisesPage() {
   return (
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden flex-col md:flex-row">
       <Sidebar />
-      <main className="flex-1 md:pl-56 lg:pl-64 h-[100dvh] overflow-y-auto w-full custom-scrollbar relative">
+      <main className="flex-1 h-[100dvh] overflow-y-auto w-full custom-scrollbar relative">
         
         {/* Premium Header Section */}
-        <div className="relative pt-24 md:pt-20 pb-12 px-5 md:px-10 lg:px-16 flex flex-col md:flex-row items-center md:items-end justify-between min-h-[240px]">
+        <div className="relative pt-24 md:pt-28 lg:pt-32 pb-12 px-5 md:px-10 lg:px-16 flex flex-col md:flex-row items-center md:items-end justify-between min-h-[240px]">
           <div className="absolute inset-0 z-0 pointer-events-none">
              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/15 via-accent/10 to-transparent" />
              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-transparent" />

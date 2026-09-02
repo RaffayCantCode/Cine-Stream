@@ -10,6 +10,12 @@ const animeNoStoreHeaders = {
   "Cloudflare-CDN-Cache-Control": "no-store",
 } as const;
 
+const animeCacheHeaders = {
+  "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+  "CDN-Cache-Control": "public, max-age=3600",
+  "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
+} as const;
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -33,7 +39,7 @@ export async function GET(
               seasons: [],
             },
           },
-        }, { headers: animeNoStoreHeaders });
+        }, { headers: animeCacheHeaders });
       }
 
       return Response.json(
@@ -59,7 +65,7 @@ export async function GET(
           seasons,
         },
       },
-    }, { headers: animeNoStoreHeaders });
+    }, { headers: animeCacheHeaders });
   } catch (error) {
     console.error("[Anime Details Error]:", error);
     const fallbackOverride = await getMediaOverride("anime", id).catch(() => null);

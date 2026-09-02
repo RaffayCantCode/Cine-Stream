@@ -105,7 +105,7 @@ export async function GET(_request: NextRequest) {
       trendingMoviesToday: { results: excludeAnime(extractResults(results[13]) as any[]) },
       trendingTvToday: { results: excludeAnime(extractResults(results[14]) as any[]) },
       genres: { genres },
-    }, { headers: cacheHeaders(3600) });
+    }, { headers: cacheHeaders(7200) });
   } catch (error) {
     console.error("[TMDB Home API Error]:", error);
     return Response.json({ error: "Failed to fetch home media" }, { status: 500 });

@@ -247,7 +247,7 @@ export default function MangaDetailsClient({
     >
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-4 md:pt-6">
+      <main className="w-full pt-8 md:pt-24 lg:pt-28">
         {/* Error State */}
         {error && !manga && (
           <div className="max-w-4xl mx-auto px-6 py-20 text-center">

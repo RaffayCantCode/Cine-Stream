@@ -122,7 +122,9 @@ function loadSpotlightFromSession(): { fetched: boolean; spotlight: any | null }
 const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v2";
 function saveHeroPoolToSession(pool: MediaItem[]): void {
   if (typeof window === "undefined" || pool.length === 0) return;
-  try { sessionStorage.setItem(SESSION_HERO_POOL_KEY, JSON.stringify(pool)); } catch {}
+  try {
+    sessionStorage.setItem(SESSION_HERO_POOL_KEY, JSON.stringify(pool));
+  } catch {}
 }
 function loadHeroPoolFromSession(): MediaItem[] {
   if (typeof window === "undefined") return [];
@@ -130,7 +132,9 @@ function loadHeroPoolFromSession(): MediaItem[] {
     const raw = sessionStorage.getItem(SESSION_HERO_POOL_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
     }
   } catch {}
   return [];
@@ -162,6 +166,24 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
   let animeCandidates: MediaItem[] = [];
 
   if (Array.isArray(animeList) && animeList.length > 0) {
+    const isRichAnimeDescription = (desc?: string | null) => {
+      if (!desc) return false;
+      const clean = desc.replace(/<[^>]*>/g, "").trim();
+      if (clean.length < 45) return false;
+      const lower = clean.toLowerCase();
+      if (
+        lower.startsWith("the second season") ||
+        lower.startsWith("the third season") ||
+        lower.startsWith("the 2nd season") ||
+        lower.startsWith("the 3rd season") ||
+        lower.startsWith("season 2 of") ||
+        lower.startsWith("season 3 of")
+      ) {
+        return false;
+      }
+      return true;
+    };
+
     const buildAnimeCard = (a: AnimeItem) => ({
       id: a.id as any,
       anilistId: a.id,
@@ -172,29 +194,40 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
       media_type: "anime",
       vote_average: a.rating ? parseFloat(a.rating) : 8.5,
       vote_count: 500,
-      overview: a.description || "",
+      overview: (a.description || "").replace(/<[^>]*>/g, "").trim(),
       release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
       original_language: "ja",
       genre_ids: [16],
       isTmdbAnime: false,
     });
 
-    const validAnime = animeList.filter(
-      (a) => a && a.id && a.name && a.description && a.description.trim().length >= 10 && (
-        (typeof a.poster === "string" && a.poster.startsWith("http")) ||
-        (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http"))
-      )
+    const richBannerAnime = animeList.filter(
+      (a) =>
+        a &&
+        a.id &&
+        a.name &&
+        isRichAnimeDescription(a.description) &&
+        typeof a.bannerImage === "string" &&
+        a.bannerImage.startsWith("http") &&
+        (a.name || "").length < 65
     );
 
-    const bannerAnime = validAnime.filter((a) => typeof a.bannerImage === "string" && a.bannerImage.startsWith("http"));
-    const heroQualityAnime = (bannerAnime.length > 0 ? bannerAnime : validAnime)
-      .filter((a) => (a.name || "").length < 65);
+    const validAnime = animeList.filter(
+      (a) =>
+        a &&
+        a.id &&
+        a.name &&
+        a.description &&
+        a.description.trim().length >= 10 &&
+        ((typeof a.poster === "string" && a.poster.startsWith("http")) ||
+          (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http")))
+    );
 
-    const aniListCards = (heroQualityAnime.length > 0 ? heroQualityAnime : validAnime).map(buildAnimeCard);
+    const aniListCards = (richBannerAnime.length > 0 ? richBannerAnime : validAnime).map(buildAnimeCard);
     animeCandidates.push(...aniListCards);
   }
 
-  // Fallback: If no AniList items are loaded yet, use high-quality TMDB anime items
+  // Fallback: If no AniList items are loaded yet or if AniList descriptions are weak, use high-quality TMDB anime items
   if (animeCandidates.length === 0) {
     const tmdbAnimeFeed = validFeed
       .filter((i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja"))
@@ -488,12 +521,11 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    const ADMIN_CACHE_TTL = 5 * 60_000; // 5 minutes
+    const ADMIN_CACHE_TTL = 30 * 60_000; // 30 minutes
 
     // Fetch admin-curated custom homepage sections — only if cache is stale
     if (globalCustomSectionsCache === null || Date.now() - globalCustomSectionsCachedAt > ADMIN_CACHE_TTL) {
-      fetch("/api/home-sections")
-        .then((res) => (res.ok ? res.json() : null))
+      fetchJson<{ sections?: any[] }>("/api/home-sections", { cacheTtlMs: ADMIN_CACHE_TTL })
         .then((data) => {
           if (data?.sections && Array.isArray(data.sections) && !cancelled) {
             globalCustomSectionsCache = data.sections;
@@ -508,8 +540,7 @@ export default function Home() {
 
     // Fetch spotlight banner — only if cache is stale
     if (!globalSpotlightCache || Date.now() - globalSpotlightCachedAt > ADMIN_CACHE_TTL) {
-      fetch("/api/spotlight")
-        .then((res) => (res.ok ? res.json() : null))
+      fetchJson<{ enabled?: boolean; spotlight?: any }>("/api/spotlight", { cacheTtlMs: ADMIN_CACHE_TTL })
         .then((data) => {
           if (cancelled) return;
           if (data?.enabled && data.spotlight) {
@@ -850,36 +881,56 @@ export default function Home() {
     return () => links.forEach(l => l.remove());
   }, [heroPool]);
 
-  // ── Auto-rotation timer (resets on manual nav) ─────────────────────────
+  // ── Auto-rotation timer (15 seconds, resets on manual nav) ─────────────
   useEffect(() => {
     if (heroPool.length <= 1) return;
     if (heroTimerRef.current) clearInterval(heroTimerRef.current);
     heroTimerRef.current = setInterval(() => {
       setHeroIndex((prev) => (prev + 1) % heroPoolLengthRef.current);
-    }, 9000);
+    }, 15000);
     return () => {
       if (heroTimerRef.current) clearInterval(heroTimerRef.current);
     };
   }, [heroPool, timerReset]);
 
+  const activeBackdropUrl = hero?.backdrop_path
+    ? hero.backdrop_path.startsWith("http")
+      ? hero.backdrop_path
+      : `https://image.tmdb.org/t/p/w1280${hero.backdrop_path}`
+    : hero?.poster_path
+    ? hero.poster_path.startsWith("http")
+      ? hero.poster_path
+      : `https://image.tmdb.org/t/p/w780${hero.poster_path}`
+    : null;
+
   return (
-    <div className="relative min-h-screen bg-background text-foreground pb-20 overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-[520px] bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_72%)] pointer-events-none" />
-      <div className="absolute inset-x-0 top-[42rem] h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+    <div className="relative min-h-screen bg-[#07080d] text-foreground pb-20 overflow-hidden">
+      {/* Ambient Hero Backdrop Glow spanning the entire home page */}
+      {activeBackdropUrl && (
+        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+          <img
+            key={activeBackdropUrl}
+            src={activeBackdropUrl}
+            alt=""
+            className="w-full h-full object-cover blur-[125px] opacity-[0.48] scale-140 saturate-[2.5] brightness-[0.72] transition-all duration-1000 ease-out"
+            aria-hidden
+          />
+          {/* Subtle uniform overlay allowing the hero colors to permeate the entire home page */}
+          <div className="absolute inset-0 bg-[#07080d]/55" />
+        </div>
+      )}
+
+
+
+      <style jsx global>{`
+        @keyframes heroProgress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+      `}</style>
 
       <Sidebar />
-      <main className="relative z-10 md:pl-56 lg:pl-64 bleed-header">
-
-        {/* ─── INFO LINK ─── */}
-        <Link
-          href="/landing"
-          className="fixed z-50 w-9 h-9 rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all md:top-4 md:right-4 max-md:top-1/2 max-md:right-3 max-md:-translate-y-1/2"
-          title="About this site"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
-          </svg>
-        </Link>
+      <main className="relative z-10 w-full bleed-header">
 
         {/* ─── HERO BANNER ─── */}
         {hero ? (
@@ -892,22 +943,36 @@ export default function Home() {
             {/* Top-Left Fixed Live Announcement */}
             <HeroAnnouncement />
 
-            <HeroBanner item={hero} />
-            {/* Hero dot indicators — ONLY show in normal auto-rotation mode (not when Spotlight Hero is active) */}
+            <HeroBanner key={`${hero.id}-${(hero as any).anilistId || ''}-${heroIndex}`} item={hero} />
+            {/* Hero dot / progress pill timer indicators */}
             {!spotlightBanner && heroPool.length > 1 && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-30">
-                {heroPool.map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => goToHero(i)}
-                    className={`transition-all duration-300 rounded-full ${i === heroIndex
-                      ? "w-6 h-1.5 bg-white shadow-md"
-                      : "w-1.5 h-1.5 bg-white/30 hover:bg-white/50"
+                {heroPool.map((_, i) => {
+                  const isActive = i === heroIndex;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => goToHero(i)}
+                      className={`transition-all duration-300 rounded-full cursor-pointer relative overflow-hidden flex items-center ${
+                        isActive
+                          ? "w-11 h-2.5 bg-white/20 shadow-lg ring-1 ring-white/30"
+                          : "w-2 h-2 bg-white/30 hover:bg-white/60"
                       }`}
-                    aria-label={`Go to slide ${i + 1}`}
-                  />
-                ))}
+                      aria-label={`Go to slide ${i + 1}`}
+                    >
+                      {isActive && (
+                        <span
+                          key={`timer-${heroIndex}-${timerReset}`}
+                          className="absolute inset-y-0 left-0 bg-white rounded-full"
+                          style={{
+                            animation: "heroProgress 15s linear forwards",
+                          }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
             {/* Hero Left/Right navigation buttons — ONLY show in normal auto-rotation mode */}
@@ -945,12 +1010,6 @@ export default function Home() {
             </div>
           </div>
         )}
-
-        {/* ─── Bottom-edge dissolve (sits right below hero, bleeds upward) ─── */}
-        <div
-          className="relative pointer-events-none z-20"
-          style={{ marginTop: "-8rem", height: "8rem", background: "linear-gradient(to bottom, transparent, var(--background))" }}
-        />
 
         {/* ─── CONTINUE WATCHING ─── */}
         <ContinueWatching />
@@ -1066,30 +1125,35 @@ export default function Home() {
                 subtitle="Binge your favorite universes in order"
                 href="/browse/franchises"
               />
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-6 gap-4 md:gap-5">
-                {collections.slice(0, 12).map((col, idx) => {
+              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-9 3xl:grid-cols-10 gap-2 sm:gap-2.5">
+                {collections.slice(0, 20).map((col, idx) => {
                   const posterUrl = col.poster_path
                     ? col.poster_path.startsWith("http")
                       ? col.poster_path
-                      : `https://image.tmdb.org/t/p/w342${col.poster_path}`
+                      : `https://image.tmdb.org/t/p/w780${col.poster_path}`
                     : null;
 
                   const visibilityClass =
-                    idx < 4
+                    idx < 8
                       ? "block"
-                      : idx < 6
-                      ? "hidden sm:block"
-                      : idx < 8
-                      ? "hidden md:block"
                       : idx < 10
+                      ? "hidden sm:block"
+                      : idx < 12
+                      ? "hidden md:block"
+                      : idx < 14
                       ? "hidden lg:block"
+                      : idx < 16
+                      ? "hidden xl:block"
+                      : idx < 18
+                      ? "hidden 2xl:block"
                       : "hidden 3xl:block";
 
                   return (
                     <Link
                       key={col.id}
                       href={`/browse/franchise/${col.id}`}
-                      className={`${visibilityClass} group relative overflow-hidden rounded-xl border border-white/[0.06] bg-[#4B5694]/5 aspect-[2/3] hover:border-[#7288AE]/45 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/25 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+                      prefetch={false}
+                      className={`${visibilityClass} group relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#4B5694]/5 aspect-[2/3] hover:border-white/40 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 focus:outline-none`}
                     >
                       {posterUrl ? (
                         <>
@@ -1099,20 +1163,20 @@ export default function Home() {
                             className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
                             loading="lazy"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
                         </>
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-muted">
-                          <span className="text-center font-bold text-white text-sm">{col.name}</span>
+                        <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-muted">
+                          <span className="text-center font-bold text-white text-xs">{col.name}</span>
                         </div>
                       )}
 
                       {posterUrl && (
-                        <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-2 group-hover:translate-y-0 transition-transform">
-                          <h4 className="text-white font-bold text-sm tracking-wide line-clamp-2 drop-shadow-md">
+                        <div className="absolute bottom-0 left-0 right-0 p-2.5 sm:p-3 translate-y-1 group-hover:translate-y-0 transition-transform">
+                          <h4 className="text-white font-bold text-xs sm:text-[13px] tracking-tight line-clamp-2 drop-shadow-md leading-tight mb-0.5">
                             {col.name}
                           </h4>
-                          <span className="text-[10px] uppercase tracking-wider text-white/60 font-semibold drop-shadow-md">
+                          <span className="text-[9px] uppercase tracking-wider text-white/50 font-black drop-shadow-md">
                             Collection
                           </span>
                         </div>

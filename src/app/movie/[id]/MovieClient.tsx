@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
@@ -13,6 +13,7 @@ import { GridMediaCard } from "@/components/GridMediaCard";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+import { useMediaLogo } from "@/components/MediaLogo";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 
@@ -52,6 +53,7 @@ interface Movie {
 }
 
 export default function MovieClient() {
+  const router = useRouter();
   const params = useParams();
   const id = Number(params.id);
   const { status } = useSession();
@@ -68,6 +70,17 @@ export default function MovieClient() {
   });
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<HTMLDivElement>(null);
+  const { logoUrl } = useMediaLogo(id, "movie", movie?.title);
+  const fallbackLogo = useMemo(() => {
+    const logos = (movie as any)?.images?.logos;
+    if (!logos || !Array.isArray(logos) || logos.length === 0) return null;
+    const englishLogo = logos.find((l: any) => l.iso_639_1 === "en" && l.file_path);
+    const nullLangLogo = logos.find((l: any) => (!l.iso_639_1 || l.iso_639_1 === "null") && l.file_path);
+    const jaLogo = logos.find((l: any) => l.iso_639_1 === "ja" && l.file_path);
+    const chosen = englishLogo || nullLangLogo || jaLogo || logos[0];
+    return chosen?.file_path ? `https://image.tmdb.org/t/p/w500${chosen.file_path}` : null;
+  }, [movie]);
+  const activeLogo = logoUrl || fallbackLogo;
   usePageContentReady(!isLoading);
 
   const handleToggleTheater = () => {
@@ -116,26 +129,13 @@ export default function MovieClient() {
     const autoPlay = searchParams.get("autoplay") === "1";
     
     if (autoPlay) {
-      if (status === "authenticated") {
-        fetch("/api/watch-history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mediaId: movie.id,
-            mediaType: "movie",
-            title: movie.title,
-            posterPath: movie.poster_path ?? null,
-            backdropPath: movie.backdrop_path ?? null,
-          }),
-        }).catch(() => {});
-      }
-      setIsPlaying(true);
+      router.push(`/watch/movie/${id}`);
     }
-  }, [movie]);
+  }, [movie, id, router, status]);
 
   const handleWatch = async () => {
     if (status === "authenticated" && movie) {
-      await fetch("/api/watch-history", {
+      fetch("/api/watch-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -145,10 +145,10 @@ export default function MovieClient() {
           posterPath: movie.poster_path ?? null,
           backdropPath: movie.backdrop_path ?? null,
         }),
-      });
+      }).catch(() => {});
     }
 
-    setIsPlaying(true);
+    router.push(`/watch/movie/${id}`);
   };
 
   // ── Scroll to player on play ──
@@ -180,7 +180,7 @@ export default function MovieClient() {
     return (
       <div className="min-h-screen bg-background text-foreground pb-24">
         <Sidebar />
-        <main className="md:pl-56 lg:pl-64">
+        <main className="w-full">
           <div className="pt-24 px-6 md:px-12 max-w-screen-2xl mx-auto">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-white/80 max-w-lg mx-auto text-center space-y-3">
               <div className="text-xl font-bold text-white">Title Unavailable</div>
@@ -216,14 +216,14 @@ export default function MovieClient() {
     <div className="min-h-screen bg-background text-foreground pb-24">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 bleed-header">
+      <main className="w-full bleed-header">
         <CinematicHero
           backdropPath={movie.backdrop_path || movie.poster_path}
           trailerId={trailerId}
           title={movie.title}
           theme="movie"
         >
-          <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-5 md:gap-6 items-start md:items-center">
+          <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
           {posterUrl && (
             <div
               className="hidden md:block shrink-0"
@@ -231,7 +231,7 @@ export default function MovieClient() {
               <img
                 src={posterUrl}
                 alt={movie.title}
-                className="w-40 sm:w-44 md:w-44 lg:w-52 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
+                className="w-44 sm:w-48 md:w-52 lg:w-60 rounded-2xl shadow-2xl ring-1 ring-white/10 aspect-[2/3] object-cover"
                 fetchPriority="high"
                 decoding="async"
                 width={320}
@@ -240,45 +240,53 @@ export default function MovieClient() {
             </div>
           )}
 
-          <div className="flex-1 space-y-2.5 sm:space-y-3 w-full">
+          <div className="flex-1 space-y-3 sm:space-y-3.5 w-full">
             <div>
-              <h1 className="font-bold text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1">
-                {movie.title}
-              </h1>
+              {activeLogo ? (
+                <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
+                  <img
+                    src={activeLogo}
+                    alt={movie.title}
+                    className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]"
+                  />
+                </div>
+              ) : (
+                <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight mb-1">
+                  {movie.title}
+                </h1>
+              )}
               {movie.tagline && (
-                <p className="text-red-500 font-bold italic text-xs sm:text-sm md:text-base tracking-wide drop-shadow-[0_2px_12px_rgba(239,68,68,0.4)]">
+                <p className="text-red-400 font-bold italic text-xs sm:text-sm md:text-base tracking-wide drop-shadow-[0_2px_12px_rgba(239,68,68,0.4)]">
                   {movie.tagline}
                 </p>
               )}
             </div>
 
-            <div
-              className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm"
-            >
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 text-sm sm:text-base font-extrabold">
               {score > 0 && movie.vote_count && movie.vote_count > 20 && (
-                <div className={`flex items-center gap-1.5 font-bold ${scoreColor}`}>
-                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
-                  <span className="text-sm sm:text-base">{score.toFixed(1)}</span>
-                  <span className="text-white/30 font-normal text-[10px] sm:text-xs">/ 10</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-400 font-black shadow-sm text-sm sm:text-base">
+                  <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-current text-emerald-400" />
+                  <span className="tracking-tight">{score.toFixed(1)}</span>
+                  <span className="text-white/40 font-bold text-xs">/10</span>
                 </div>
               )}
               {movie.release_date && (
-                <span className="flex items-center gap-1.5 text-white/40 font-medium">
-                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  {format(new Date(movie.release_date), "yyyy")}
-                </span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.08] border border-white/15 text-white font-extrabold text-xs sm:text-sm shadow-sm">
+                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
+                  <span>{format(new Date(movie.release_date), "yyyy")}</span>
+                </div>
               )}
               {movie.runtime ? (
-                <span className="flex items-center gap-1.5 text-white/40 font-medium">
-                  <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
-                </span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.08] border border-white/15 text-white font-extrabold text-xs sm:text-sm shadow-sm">
+                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
+                  <span>{Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m</span>
+                </div>
               ) : null}
-              <div className="flex flex-wrap gap-1.5 ml-0.5">
+              <div className="flex flex-wrap gap-2 ml-0.5">
                 {movie.genres?.map((g) => (
                   <span
                     key={g.id}
-                    className="px-2 sm:px-2.5 py-0.5 bg-white/[0.07] border border-white/[0.08] rounded-full text-[11px] sm:text-xs font-semibold text-white/70"
+                    className="px-3.5 py-1 bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 rounded-full text-xs sm:text-sm font-extrabold text-white shadow-sm transition-colors"
                   >
                     {g.name}
                   </span>
@@ -286,7 +294,7 @@ export default function MovieClient() {
                 {Array.isArray((movie as any).customTags) && (movie as any).customTags.map((tag: string, i: number) => (
                   <span
                     key={i}
-                    className="px-2 sm:px-2.5 py-0.5 bg-purple-500/20 border border-purple-500/40 rounded-full text-[11px] sm:text-xs font-bold text-purple-300"
+                    className="px-3 py-1 bg-purple-500/20 border border-purple-500/40 rounded-full text-xs sm:text-sm font-extrabold text-purple-300 shadow-sm"
                   >
                     🏷️ {tag}
                   </span>

@@ -42,7 +42,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
   const posterUrl = item.poster_path
     ? item.poster_path.startsWith("http")
       ? item.poster_path
-      : `https://image.tmdb.org/t/p/w342${item.poster_path}`
+      : `https://image.tmdb.org/t/p/w780${item.poster_path}`
     : null;
 
   return (
@@ -52,7 +52,8 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
     >
       <Link
         href={link}
-        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.5)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_22px_45px_rgba(0,0,0,0.85)] hover:ring-white/35 focus:outline-none sheen-wrapper"
+        prefetch={false}
+        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out hover:scale-[1.01] hover:-translate-y-2 hover:shadow-[0_24px_48px_rgba(0,0,0,0.85)] hover:ring-white/40 focus:outline-none sheen-wrapper will-change-transform"
       >
         {posterUrl ? (
           <img

@@ -204,7 +204,7 @@ export default function BrowseTvPage() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Sidebar />
 
-      <main className="md:pl-56 lg:pl-64 pt-6 md:pt-10">
+      <main className="w-full pt-8 md:pt-24 lg:pt-28">
         <ContinueWatching filterType="tv" />
         <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">

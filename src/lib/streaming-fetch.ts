@@ -105,50 +105,31 @@ export function getStreamingSources(type: "movie" | "tv", id: number, season?: n
   }));
 }
 
-export function getPrimarySource(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource {
-  const sources = getStreamingSources(type, id, season, episode, progress);
-  return sources[0];
+export function getFallbackEmbedUrl(type: "movie" | "tv", id: number, season?: number, episode?: number): string {
+  return `https://vidsrc.me/embed/${type === "movie" ? "movie?tmdb=" : "tv?tmdb="}${id}${type === "tv" ? `&season=${season ?? 1}&episode=${episode ?? 1}` : ""}`;
 }
 
-const healthCache = {
-  data: null as Record<string, boolean> | null,
-  expires: 0
-};
-
-// Server-side health check: returns map of source type -> alive status
-// Only marks source as dead if it fails to respond at all (network error / timeout).
-// Non-2xx responses are still OK - embed root paths often return 403/404 but
-// the actual embed URLs work fine.
-export async function checkSourceHealth(): Promise<Record<string, boolean>> {
-  if (healthCache.data && healthCache.expires > Date.now()) {
-    return healthCache.data;
-  }
-
-  const results: Record<string, boolean> = {};
-  const checks = STREAMING_APIS.map(async (api) => {
-    try {
-      const res = await fetch(api.healthCheckUrl || api.baseUrl, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(5000),
-      });
-      results[api.type] = true;
-    } catch {
-      results[api.type] = false;
-    }
-  });
-  await Promise.allSettled(checks);
-  STREAMING_APIS.forEach((api) => {
-    if (results[api.type] === undefined) results[api.type] = true;
-  });
-
-  healthCache.data = results;
-  healthCache.expires = Date.now() + 600000; // Cache for 10 minutes
-
+export async function checkSourceHealth(): Promise<Record<string, { status: "online" | "offline"; latency?: number }>> {
+  const results: Record<string, { status: "online" | "offline"; latency?: number }> = {};
+  await Promise.allSettled(
+    STREAMING_APIS.map(async (api) => {
+      const start = Date.now();
+      try {
+        const res = await fetch(api.healthCheckUrl || api.baseUrl, {
+          method: "HEAD",
+          signal: AbortSignal.timeout(3000),
+        });
+        results[api.type] = {
+          status: res.ok || res.status < 500 ? "online" : "offline",
+          latency: Date.now() - start,
+        };
+      } catch {
+        results[api.type] = {
+          status: "offline",
+          latency: Date.now() - start,
+        };
+      }
+    })
+  );
   return results;
-}
-
-// Get sources excluding known unhealthy ones
-export async function getHealthySources(type: "movie" | "tv", id: number, season?: number, episode?: number): Promise<StreamingSource[]> {
-  const health = await checkSourceHealth();
-  return getStreamingSources(type, id, season, episode).filter((s) => health[s.type] !== false);
 }

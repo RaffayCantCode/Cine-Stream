@@ -4,361 +4,477 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   Home, 
-  TrendingUp, 
   Film, 
   Tv, 
   Sparkles, 
-  BookOpen,
-  Search,
-  User,
-  LogIn,
-  LogOut,
-  Menu,
-  X,
-  Library,
-  Compass,
-  Bug,
-  ShieldCheck
+  BookOpen, 
+  Search, 
+  User, 
+  LogIn, 
+  LogOut, 
+  Compass, 
+  Bug, 
+  ShieldCheck, 
+  Bookmark, 
+  Info,
 } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ThemeButton } from "@/components/ThemeButton";
-import { WatchlistLink } from "@/components/WatchlistLink";
+import { useWatchlist } from "@/context/WatchlistContext";
 import { AdminPanelModal } from "@/components/admin/AdminPanelModal";
-import { InstallAppButton } from "@/components/pwa/InstallAppButton";
 
-const navItems: { href: string; icon: any; label: string; subtitle?: string }[] = [
-  { href: "/", icon: Home, label: "Home" },
-  { href: "/browse/trending", icon: TrendingUp, label: "Trending" },
-  { href: "/browse/movies", icon: Film, label: "Movies" },
-  { href: "/browse/tv", icon: Tv, label: "TV Shows" },
-  { href: "/anime", icon: Sparkles, label: "Anime", subtitle: "JP Dub + Eng Subtitles" },
-  { href: "/manga", icon: BookOpen, label: "Manga", subtitle: "Manga & Manhwa" },
-  { href: "/browse/franchises", icon: Library, label: "Franchises", subtitle: "Collections & Sagas" },
+const navLinks = [
+  { href: "/", label: "Home", icon: Home },
+  { href: "/browse/movies", label: "Movies", icon: Film },
+  { href: "/browse/tv", label: "Shows", icon: Tv },
+  { href: "/anime", label: "Anime", icon: Sparkles },
+  { href: "/manga", label: "Manga", icon: BookOpen },
 ];
 
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const watchlist = useWatchlist();
+  const watchlistCount = watchlist?.items?.length || 0;
+
   const isAuthenticated = status === "authenticated";
   const user = session?.user;
   const isAdmin = isAuthenticated && (user?.role === "admin" || user?.role === "owner");
-  const [profileOpen, setProfileOpen] = useState(false);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
 
-  useEffect(() => setProfileOpen(false), [pathname]);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close menus on route change
+  useEffect(() => {
+    setMenuOpen(false);
+    setAccountOpen(false);
+  }, [pathname]);
+
+  // Click outside to close capsules
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setAccountOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setAccountOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  const isWatchPage = pathname?.startsWith("/watch/") || pathname === "/watch";
+  if (isWatchPage) return null;
 
   return (
     <>
-      {/* Mobile Top Header */}
-      <header className="md:hidden fixed top-0 inset-x-0 h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] premium-glass z-40 flex items-center justify-between px-3 transform-gpu will-change-transform">
-        <Link href="/" className="flex items-center gap-1.5 shrink-0 min-w-0">
-          <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-7 h-7 sm:w-8 sm:h-8 drop-shadow-md shrink-0" />
-          <span className="font-extrabold text-sm sm:text-base tracking-wider hidden min-[420px]:inline-block truncate">
+      {/* ── Desktop Top-Left Brand Logo Button (navigates to Home) ── */}
+      <Link
+        href="/"
+        className="hidden md:flex fixed top-4 left-6 z-[60] items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-black/40 hover:bg-black/70 border border-white/10 backdrop-blur-xl transition-all duration-200 hover:scale-[1.03] active:scale-95 group shadow-lg"
+        aria-label="CineStream Home"
+        title="Go to Home"
+      >
+        <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-7 h-7 shrink-0 drop-shadow group-hover:scale-105 transition-transform" />
+        <span className="font-black text-base tracking-wider">
+          <span className="text-white">CINE</span>
+          <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
+        </span>
+      </Link>
+
+      {/* ── Top-Right Dual Slide-Out Navigation Capsules (Desktop) ── */}
+      <div 
+        ref={containerRef}
+        className="hidden md:flex fixed top-4 right-5 z-[60] flex-col items-end gap-2 select-none"
+      >
+        {/* 1. TOP CAPSULE: Explore / Main Navigation */}
+        <div className="flex items-center justify-end">
+          <AnimatePresence>
+            {menuOpen && (
+              <motion.nav
+                initial={{ opacity: 0, x: 25, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 25, scale: 0.95 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="flex items-center gap-1.5 p-1.5 mr-2 rounded-full bg-[#0d1017]/90 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+              >
+                {navLinks.map(({ href, label, icon: Icon }) => {
+                  const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200",
+                        isActive
+                          ? "bg-white text-black shadow-md font-black"
+                          : "text-white/70 hover:text-white hover:bg-white/[0.08]"
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{label}</span>
+                    </Link>
+                  );
+                })}
+
+                <div className="w-px h-4 bg-white/15 mx-0.5" />
+
+                <Link
+                  href="/search"
+                  className={cn(
+                    "p-2 rounded-full transition-all text-xs font-bold flex items-center justify-center",
+                    pathname === "/search"
+                      ? "bg-white text-black shadow-md"
+                      : "text-white/70 hover:text-white hover:bg-white/[0.08]"
+                  )}
+                  title="Search"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                </Link>
+              </motion.nav>
+            )}
+          </AnimatePresence>
+
+          {/* Menu Trigger Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen((prev) => !prev);
+              setAccountOpen(false);
+            }}
+            className={cn(
+              "h-10 px-4 rounded-full border backdrop-blur-2xl text-white shadow-[0_8px_30px_rgba(0,0,0,0.6)] flex items-center gap-2 transition-all duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer",
+              menuOpen
+                ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)] font-black"
+                : "bg-[#11141d]/85 hover:bg-[#181c28] border-white/15 ring-1 ring-white/10"
+            )}
+            aria-label="Toggle Navigation Menu"
+          >
+            <Compass className={cn("w-4 h-4 transition-transform duration-300", menuOpen && "rotate-45 text-black")} />
+            <span className="text-xs font-extrabold tracking-wide uppercase">Menu</span>
+          </button>
+        </div>
+
+        {/* 2. BOTTOM CAPSULE: Account & Preferences (Directly Below Menu Button) */}
+        <div className="flex items-center justify-end">
+          <AnimatePresence>
+            {accountOpen && (
+              <motion.div
+                initial={{ opacity: 0, x: 25, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 25, scale: 0.95 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="flex items-center gap-1.5 p-1.5 mr-2 rounded-full bg-[#0d1017]/90 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+              >
+                {/* Wishlist Link */}
+                <Link
+                  href="/watchlist"
+                  className={cn(
+                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all",
+                    pathname === "/watchlist"
+                      ? "bg-amber-400 text-black font-black"
+                      : "text-white/70 hover:text-white hover:bg-white/[0.08]"
+                  )}
+                >
+                  <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Wishlist</span>
+                  {watchlistCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black">
+                      {watchlistCount}
+                    </span>
+                  )}
+                </Link>
+
+                {/* Themes Trigger */}
+                <div className="flex items-center px-1">
+                  <ThemeButton compact className="w-7 h-7 border-white/15 bg-white/5 hover:bg-white/15 rounded-full" />
+                </div>
+
+                {/* Info / Landing Page */}
+                <Link
+                  href="/landing"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
+                  title="Landing Info Page"
+                >
+                  <Info className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Info</span>
+                </Link>
+
+                {/* Report Issue */}
+                <Link
+                  href="/contact"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
+                  title="Report Issue"
+                >
+                  <Bug className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Report</span>
+                </Link>
+
+                {/* Admin Panel Button if Admin or Owner */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      setAdminPanelOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Admin</span>
+                  </button>
+                )}
+
+                <div className="w-px h-4 bg-white/15 mx-0.5" />
+
+                {/* Log In / Log Out */}
+                {isAuthenticated && user ? (
+                  <button
+                    type="button"
+                    onClick={() => signOut({ callbackUrl: window.location.origin })}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold text-red-400 hover:bg-red-500/20 transition-all cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Log Out</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => signIn()}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-black bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer shadow-sm"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Log In</span>
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Account Trigger Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setAccountOpen((prev) => !prev);
+              setMenuOpen(false);
+            }}
+            className={cn(
+              "h-10 px-3.5 rounded-full border backdrop-blur-2xl text-white shadow-[0_8px_30px_rgba(0,0,0,0.6)] flex items-center gap-2 transition-all duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer",
+              accountOpen
+                ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)] font-black"
+                : "bg-[#11141d]/85 hover:bg-[#181c28] border-white/15 ring-1 ring-white/10"
+            )}
+            aria-label="Toggle Account Menu"
+          >
+            {isAuthenticated && user ? (
+              user.image ? (
+                <img
+                  src={user.image}
+                  alt={user.name || "User"}
+                  className="w-5 h-5 rounded-full object-cover ring-1 ring-white/30"
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black">
+                  {user.name?.[0]?.toUpperCase() || "U"}
+                </div>
+              )
+            ) : (
+              <User className={cn("w-4 h-4", accountOpen ? "text-black" : "text-white")} />
+            )}
+            <span className="text-xs font-extrabold tracking-wide uppercase">
+              {isAuthenticated && user?.name ? user.name.split(" ")[0] : "Account"}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Mobile Top Header Bar ── */}
+      <header className="md:hidden fixed top-0 inset-x-0 h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-[#090b10]/85 backdrop-blur-2xl border-b border-white/10 z-[60] flex items-center justify-between px-4">
+        <Link href="/" className="flex items-center gap-2.5 shrink-0">
+          <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-7 h-7 shrink-0 drop-shadow-md" />
+          <span className="font-black text-sm tracking-wider">
             <span className="text-white">CINE</span>
             <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
           </span>
         </Link>
 
-        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-          <ThemeButton compact className="md:hidden" />
-          <WatchlistLink compact className="md:hidden" />
-          <InstallAppButton compact className="md:hidden" />
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setAdminPanelOpen(true)}
-              className="p-1.5 sm:p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-xl transition-all touch-manipulation cursor-pointer"
-              aria-label="Admin Panel"
-              title="Admin Panel"
-            >
-              <ShieldCheck className="w-4 h-4" />
-            </button>
-          )}
-          <Link
-            href="/contact"
-            className="p-1.5 sm:p-2 text-white/30 hover:text-[#f59e0b] rounded-xl transition-all touch-manipulation"
-            aria-label="Report Issue"
-          >
-            <Bug className="w-4 h-4" />
-          </Link>
+        <div className="flex items-center gap-1.5">
           <Link
             href="/search"
             className={cn(
-              "p-1.5 sm:p-2 text-white/50 hover:text-white rounded-xl transition-all touch-manipulation",
-              pathname === "/search" && "text-[#7288AE] bg-white/[0.06]"
+              "p-2 text-white/70 hover:text-white rounded-xl transition-all",
+              pathname === "/search" && "text-white bg-white/10"
             )}
             aria-label="Search"
           >
-            <Search className="w-4 h-4 sm:w-5 sm:h-5" />
+            <Search className="w-4 h-4" />
           </Link>
 
-          {status !== "loading" && (
-            isAuthenticated && user ? (
-              <div className="relative">
-                <button
-                  onClick={() => setProfileOpen(v => !v)}
-                  className="flex items-center p-1.5 hover:bg-white/[0.06] rounded-full transition-all touch-manipulation"
-                >
-                  {user.image ? (
-                    <img
-                      src={user.image}
-                      alt={user.name ?? "User"}
-                      className="w-8 h-8 rounded-full object-cover ring-1 ring-white/20"
-                    />
-                  ) : (
-                    <div className="p-2 rounded-xl bg-white/[0.06] text-white/60">
-                      <User className="w-5 h-5" />
-                    </div>
-                  )}
-                </button>
-                {profileOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                    <div className="absolute top-full right-0 mt-2 z-50 w-52 py-2 rounded-2xl bg-zinc-900 border border-white/15 shadow-2xl shadow-black/80 overflow-hidden">
-                      <div className="px-4 py-2.5 border-b border-white/10">
-                        <p className="text-sm font-extrabold text-white truncate">{user.name}</p>
-                        {isAdmin && (
-                          <span className="inline-block mt-1 text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            Admin
-                          </span>
-                        )}
-                      </div>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => { setAdminPanelOpen(true); setProfileOpen(false); }}
-                          className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/10 transition-colors border-b border-white/10"
-                        >
-                          <ShieldCheck className="w-4 h-4 text-amber-400" />
-                          Admin Panel
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
-                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Log out
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+          <Link
+            href="/watchlist"
+            className={cn(
+              "p-2 text-white/70 hover:text-white rounded-xl transition-all relative",
+              pathname === "/watchlist" && "text-white bg-white/10"
+            )}
+            aria-label="Wishlist"
+          >
+            <Bookmark className="w-4 h-4 text-amber-400" />
+            {watchlistCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-2 ring-black" />
+            )}
+          </Link>
+
+          <ThemeButton compact className="w-8 h-8 rounded-xl border-white/10 bg-white/5" />
+
+          {/* Mobile Account Button */}
+          <button
+            type="button"
+            onClick={() => setAccountOpen((prev) => !prev)}
+            className="p-1.5 ml-0.5 text-white/80 hover:text-white rounded-xl transition-all active:scale-95 cursor-pointer"
+            aria-label="Account"
+          >
+            {isAuthenticated && user ? (
+              user.image ? (
+                <img
+                  src={user.image}
+                  alt={user.name || "User"}
+                  className="w-6 h-6 rounded-full object-cover ring-1 ring-white/30"
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black">
+                  {user.name?.[0]?.toUpperCase() || "U"}
+                </div>
+              )
             ) : (
-              <button
-                onClick={() => signIn()}
-                className="p-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center touch-manipulation shadow-md"
-                aria-label="Log in"
-              >
-                <LogIn className="w-4 h-4" />
-              </button>
-            )
-          )}
+              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+                <User className="w-3.5 h-3.5" />
+              </div>
+            )}
+          </button>
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-[calc(4rem+env(safe-area-inset-bottom))] premium-glass z-40 flex items-center justify-around pb-[env(safe-area-inset-bottom)] px-2 transform-gpu will-change-transform">
-        {navItems.map(({ href, icon: Icon, label }) => {
+      {/* ── Mobile Account Dropdown Sheet ── */}
+      <AnimatePresence>
+        {accountOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="md:hidden fixed top-[calc(3.75rem+env(safe-area-inset-top))] right-3 z-[65] w-56 rounded-2xl bg-[#0e111a]/95 backdrop-blur-2xl border border-white/15 p-3 shadow-2xl space-y-1.5"
+          >
+            {isAuthenticated && user && (
+              <div className="px-2.5 py-1.5 mb-1.5 border-b border-white/10">
+                <p className="text-xs font-bold text-white truncate">{user.name || "User"}</p>
+                <p className="text-[10px] text-white/50 truncate">{user.email}</p>
+              </div>
+            )}
+            <Link
+              href="/watchlist"
+              onClick={() => setAccountOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Bookmark className="w-4 h-4 text-amber-400" />
+              <span>Wishlist ({watchlistCount})</span>
+            </Link>
+            <Link
+              href="/landing"
+              onClick={() => setAccountOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Info className="w-4 h-4 text-cyan-400" />
+              <span>Info</span>
+            </Link>
+            <Link
+              href="/contact"
+              onClick={() => setAccountOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Bug className="w-4 h-4 text-rose-400" />
+              <span>Report Issue</span>
+            </Link>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountOpen(false);
+                  setAdminPanelOpen(true);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-colors cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>Admin Panel</span>
+              </button>
+            )}
+            <div className="pt-1 border-t border-white/10">
+              {isAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: window.location.origin })}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Log Out</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => signIn()}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-black bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Log In</span>
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Mobile Floating Bottom Dock ── */}
+      <nav className="md:hidden fixed bottom-3 inset-x-4 sm:inset-x-8 h-14 rounded-2xl bg-[#090b10]/90 backdrop-blur-2xl border border-white/15 z-40 flex items-center justify-around px-2 shadow-[0_12px_36px_rgba(0,0,0,0.85)]">
+        {[
+          { href: "/", icon: Home, label: "Home" },
+          { href: "/browse/movies", icon: Film, label: "Movies" },
+          { href: "/browse/tv", icon: Tv, label: "TV" },
+          { href: "/anime", icon: Sparkles, label: "Anime" },
+          { href: "/manga", icon: BookOpen, label: "Manga" },
+        ].map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
-          
+
           return (
             <Link
               key={href}
               href={href}
               className={cn(
-                "relative flex-1 h-full flex flex-col items-center justify-center transition-all duration-300 select-none touch-manipulation cursor-pointer",
-                isActive 
-                  ? "text-white" 
-                  : "text-white/40 hover:text-white"
+                "relative flex-1 h-full flex flex-col items-center justify-center transition-all duration-200 select-none touch-manipulation cursor-pointer",
+                isActive ? "text-white" : "text-white/45 hover:text-white/80"
               )}
             >
               {isActive && (
-                <div
-                  className="absolute top-0 w-8 h-1 rounded-full bg-white transition-all duration-300"
-                />
+                <span className="absolute top-1 w-6 h-0.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
               )}
-              <Icon className="w-5 h-5 mb-0.5" />
-              <span className="text-[9px] font-semibold tracking-tight truncate max-w-full">
-                {label}
-              </span>
+              <Icon className="w-4 h-4 mb-0.5" />
+              <span className="text-[10px] font-bold tracking-tight">{label}</span>
             </Link>
           );
         })}
       </nav>
-
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-56 lg:w-64 z-50 flex-col bg-background/95 backdrop-blur-sm border-r border-white/[0.08] shadow-[8px_0_32px_rgba(0,0,0,0.6)]">
-        {/* Logo */}
-        <div className="pt-4 pb-2 px-4">
-          <Link href="/" className="flex items-center gap-3 group">
-            <img src="/logo-icon.svg?v=22" alt="CineStream" className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" />
-            <span className="font-extrabold text-xl tracking-wider">
-              <span className="text-white">CINE</span>
-              <span className="bg-gradient-to-r from-[#7B8EA9] via-[#A3B3CC] to-[#D3D1CE] bg-clip-text text-transparent">STREAM</span>
-            </span>
-          </Link>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-1 flex flex-col gap-0.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-            
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 select-none",
-                  isActive 
-                    ? "text-white font-extrabold" 
-                    : "text-white/85 font-bold hover:text-white hover:bg-white/[0.08]"
-                )}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="nav-pill"
-                    className="absolute inset-0 rounded-xl -z-10 bg-white/15 border border-white/30 shadow-[0_4px_20px_rgba(255,255,255,0.15)] backdrop-blur-md"
-                    transition={{ type: "spring", stiffness: 380, damping: 35 }}
-                  />
-                )}
-                
-                <item.icon className={cn("w-4.5 h-4.5 shrink-0 transition-colors", isActive ? "text-foreground" : "text-white/80 group-hover:text-white")} />
-                
-                <div className="flex flex-col">
-                  <span className="text-xs lg:text-sm font-bold truncate tracking-tight">
-                    {item.label}
-                  </span>
-                  {item.subtitle && (
-                    <span className="text-[9px] text-white/60 truncate leading-tight font-semibold">
-                      {item.subtitle}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Admin Panel Button (Visible only to database role === admin) */}
-        {isAdmin && (
-          <div className="px-3 py-1">
-            <button
-              type="button"
-              onClick={() => setAdminPanelOpen(true)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 hover:text-amber-200 font-extrabold text-xs transition-all shadow-sm cursor-pointer group"
-            >
-              <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
-              <span className="truncate">Admin Panel</span>
-            </button>
-          </div>
-        )}
-
-        {/* Install / Download App */}
-        <InstallAppButton />
-
-        {/* Report Issue */}
-        <div className="px-3 py-1">
-          <Link
-            href="/contact"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-white/60 hover:text-[#f59e0b] hover:bg-[#f59e0b]/[0.06] transition-all text-xs font-semibold"
-          >
-            <Bug className="w-4 h-4" />
-            <span>Report Issue</span>
-          </Link>
-        </div>
-
-        {/* Search */}
-        <div className="px-3 py-1">
-          <Link
-            href="/search"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-white/80 hover:text-white hover:bg-white/[0.06] transition-all"
-          >
-            <Search className="w-4 h-4" />
-            <span className="text-xs font-bold">
-              Search
-            </span>
-          </Link>
-        </div>
-
-        {/* User section */}
-        <div className="relative pt-2 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
-          {status !== "loading" && (
-            isAuthenticated && user ? (
-              <>
-                <button
-                  onClick={() => setProfileOpen(v => !v)}
-                  className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08] transition-all"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {user.image ? (
-                      <img
-                        src={user.image}
-                        alt={user.name ?? "User"}
-                        className="w-7 h-7 rounded-full object-cover ring-1 ring-white/20 shrink-0"
-                      />
-                    ) : (
-                      <div className="p-1 rounded-lg bg-white/10 text-white shrink-0">
-                        <User className="w-4 h-4" />
-                      </div>
-                    )}
-                    <span className="text-xs font-extrabold text-white truncate">
-                      {user.name}
-                    </span>
-                  </div>
-                </button>
-                {profileOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                    <div className="absolute bottom-full left-0 mb-3 z-50 w-full py-2 rounded-2xl bg-zinc-900 border border-white/15 shadow-2xl shadow-black/90 overflow-hidden">
-                      <div className="px-4 py-2.5 border-b border-white/10">
-                        <p className="text-sm font-extrabold text-white truncate">{user.name}</p>
-                        {user.email && (
-                          <p className="text-xs text-white/60 truncate mt-0.5">{user.email}</p>
-                        )}
-                        {isAdmin && (
-                          <span className="inline-block mt-1 text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            Admin
-                          </span>
-                        )}
-                      </div>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => { setAdminPanelOpen(true); setProfileOpen(false); }}
-                          className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/10 transition-colors border-b border-white/10"
-                        >
-                          <ShieldCheck className="w-4 h-4 text-amber-400" />
-                          Admin Panel
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { signOut({ callbackUrl: window.location.origin }); setProfileOpen(false); }}
-                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Log out
-                      </button>
-                    </div>
-                  </>
-                )}
-              </>
-            ) : (
-              <button
-                onClick={() => signIn()}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-extrabold transition-all shadow-lg shadow-black/30 active:scale-95 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Log in</span>
-              </button>
-            )
-          )}
-        </div>
-      </aside>
 
       {/* Admin Panel Modal */}
       {isAdmin && (

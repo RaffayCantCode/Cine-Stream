@@ -131,10 +131,11 @@ export const CastRow = memo(function CastRow({ cast, crew }: CastRowProps) {
       </div>
       
       <div className="relative group/row">
-        <div ref={scrollerRef} className="flex overflow-x-auto overflow-y-hidden gap-4 pb-4 pt-2 hide-scrollbar w-full">
+        <div ref={scrollerRef} className="flex overflow-x-auto overflow-y-visible gap-4 pt-3 pb-5 -mt-1 -mb-1 hide-scrollbar w-full">
           {combined.map((person) => (
             <Link
               href={`/person/${person.id}`}
+              prefetch={false}
               key={person.id}
               className="w-[100px] shrink-0 text-center group cursor-pointer"
             >

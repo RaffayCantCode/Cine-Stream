@@ -87,7 +87,7 @@ export function ScrollableGridRow({ title, items }: ScrollableGridRowProps) {
         </div>
       </div>
       <div className="relative group/row">
-        <div ref={scrollerRef} className="flex overflow-x-auto gap-4 md:gap-6 pb-6 pt-2 hide-scrollbar w-full">
+        <div ref={scrollerRef} className="flex overflow-x-auto overflow-y-visible gap-4 md:gap-6 pt-3 pb-6 -mt-1 -mb-1 hide-scrollbar w-full">
           {items.map((item, index) => (
             <div key={`${title}-${item.id}-${item.media_type}`} className="w-[140px] sm:w-[160px] md:w-[200px] shrink-0">
               <GridMediaCard item={item} index={index} />

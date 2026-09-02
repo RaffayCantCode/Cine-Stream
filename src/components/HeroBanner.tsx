@@ -3,8 +3,9 @@
 import { memo, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Play, Info, Star, Calendar } from "lucide-react";
+import { Play, Info, Star, Calendar, Sparkles } from "lucide-react";
 import { isTmdbAnime, cn } from "@/lib/utils";
+import { WatchlistButton } from "@/components/WatchlistButton";
 
 interface MediaItem {
   id: number | string;
@@ -28,36 +29,102 @@ interface HeroBannerProps {
   item: MediaItem;
 }
 
+const logoCache = new Map<string, string | null>();
+
+function getCachedLogo(key: string): string | null | undefined {
+  if (logoCache.has(key)) return logoCache.get(key);
+  if (typeof window !== "undefined") {
+    try {
+      const saved = sessionStorage.getItem(`logo_v5_${key}`);
+      if (saved) {
+        logoCache.set(key, saved);
+        return saved;
+      }
+    } catch {}
+  }
+  return undefined;
+}
+
+function saveLogoToCache(key: string, url: string | null) {
+  logoCache.set(key, url);
+  if (typeof window !== "undefined" && url) {
+    try { sessionStorage.setItem(`logo_v5_${key}`, url); } catch {}
+  }
+}
+
 export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const [usePoster, setUsePoster] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
 
-  // Reset load states on item change
+  const title = item?.title || item?.name || "";
+  const anilistId = (item as any)?.anilistId;
+  const isAnime = item?.media_type === "anime" || !!anilistId || isTmdbAnime(item);
+  const isTv = item?.media_type === "tv" || (!isAnime && !!item?.first_air_date && !item?.release_date);
+  const isMovie = item?.media_type === "movie" || (!isAnime && !isTv);
+  const effectiveId = (item as any)?.tmdbId || item?.id;
+  const cacheKey = `${effectiveId || item?.id}-${title}`;
+
+  const [logoState, setLogoState] = useState<{ url: string | null; status: "cached" | "fetching" | "done" }>(() => {
+    const cached = getCachedLogo(cacheKey);
+    if (cached !== undefined) {
+      return { url: cached, status: "cached" };
+    }
+    return { url: null, status: "fetching" };
+  });
+
+  const logoUrl = logoState.url;
+
+  // Reset load states and load logo on item change
   useEffect(() => {
     setUsePoster(false);
     setImgFailed(false);
     setImgLoaded(false);
-  }, [item?.id]);
+
+    if (!item?.id) {
+      setLogoState({ url: null, status: "done" });
+      return;
+    }
+
+    const cached = getCachedLogo(cacheKey);
+    if (cached !== undefined) {
+      setLogoState({ url: cached, status: "cached" });
+      return;
+    }
+
+    let isMounted = true;
+    const mediaType = isAnime ? "anime" : isMovie ? "movie" : "tv";
+
+    fetch(`/api/tmdb/logo?id=${effectiveId}&type=${mediaType}&title=${encodeURIComponent(title)}`, {
+      cache: "force-cache",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted) return;
+        const url = data?.logoUrl || null;
+        saveLogoToCache(cacheKey, url);
+        setLogoState({ url, status: "done" });
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        saveLogoToCache(cacheKey, null);
+        setLogoState({ url: null, status: "done" });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item?.id, effectiveId, title, isMovie, isAnime, cacheKey]);
 
   if (!item) return null;
-
-  const title = item.title || item.name || "";
-  const anilistId = (item as any).anilistId;
-  const isAnime = item.media_type === "anime" || !!anilistId || isTmdbAnime(item);
-  const isTv = item.media_type === "tv" || (!isAnime && !!item.first_air_date && !item.release_date);
-  const isMovie = item.media_type === "movie" || (!isAnime && !isTv);
 
   let link = (item as any).targetUrl || (item as any).target_url;
   if (!link) {
     if (anilistId) {
-      // Exact AniList entry ID
       link = `/anime/${anilistId}`;
     } else if (item.media_type === "anime" && typeof item.id === "string" && !isNaN(Number(item.id)) && !(item as any).isTmdbAnime) {
-      // Direct string ID from AniList
       link = `/anime/${item.id}`;
     } else if (isAnime) {
-      // TMDB anime item: safely redirect via AniZip / title resolver so it opens the exact corresponding anime
       link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
     } else if (isTv) {
       link = `/tv/${item.id}`;
@@ -65,6 +132,19 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
       link = `/movie/${item.id}`;
     }
   }
+
+  // Direct watch link
+  let watchLink = link;
+  if (anilistId) {
+    watchLink = `/watch/anime/${anilistId}/1`;
+  } else if (isAnime) {
+    watchLink = `/watch/anime/${item.id}/1`;
+  } else if (isTv) {
+    watchLink = `/watch/tv/${item.id}/1/1`;
+  } else {
+    watchLink = `/watch/movie/${item.id}`;
+  }
+
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const rating = item.vote_average ?? 0;
 
@@ -72,23 +152,16 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
     path
       ? path.startsWith("http")
         ? path
-        : `https://image.tmdb.org/t/p/w1280${path}`
+        : `https://image.tmdb.org/t/p/original${path}`
       : null;
 
-  // Skip the next/image optimizer for AniList / MAL CDNs: on the deployed
-  // Cloudflare site the optimizer returns 403 for these hosts, which nuked the
-  // whole anime slide (onError -> imgFailed -> black). AnimeCard already uses a
-  // plain <img> for the same reason — here we emit the src directly instead.
   const eventuallyOptimizable = (url?: string | null) =>
     !!url && !/(anilist\.co|myanimelist\.net|kitsu\.app|media\.kitsu\.io|media\.kitsu\.app)/i.test(url);
 
   const backdropPath = usePoster ? item.poster_path : item.backdrop_path;
   const backdropUrl = resolveImageUrl(backdropPath);
-  const posterUrl = resolveImageUrl(item.poster_path);
+  const posterUrl = item.poster_path ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w780${item.poster_path}`) : null;
 
-  // A portrait poster is a poor hero backdrop — detect it so we never stretch a
-  // 2:3 poster into a 16:9 banner. AniList covers live under /cover/; any slide
-  // whose only image IS the poster is poster-only.
   const isPortraitPoster = (url?: string | null) =>
     !!url && (url.includes("/cover/") || url.includes("/media/anime/cover/"));
   const isPosterOnly =
@@ -101,214 +174,181 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const showBackdrop = !imgFailed && !!backdropUrl && !isPosterOnly;
   const showPosterCard = !!posterUrl && !imgFailed;
 
-  // Scrim stack shared by both image modes (keeps text readable).
-  const scrims = (
-    <>
-      {/* Bottom -> top scrim */}
-      <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
-
-      {/* Left -> right scrim */}
-      <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-background/82 via-background/35 to-transparent" />
-
-      {/* Mobile scrim */}
-      <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
-
-      {/* Soft top edge */}
-      <div className="absolute top-0 inset-x-0 h-20 bg-gradient-to-b from-background/35 to-transparent" />
-
-      {/* Radial spotlight scrim */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse 65% 75% at 22% 78%, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 70%)",
-        }}
-      />
-
-      {/* Bottom blend */}
-      <div
-        className="absolute inset-x-0 bg-gradient-to-t from-background via-background/70 to-transparent"
-        style={{ bottom: "0rem", height: "5rem" }}
-      />
-    </>
-  );
-
   return (
-    <section className="relative w-full h-[82svh] min-h-[480px] max-h-[700px] sm:h-[58vw] sm:max-h-[610px] md:h-[72vh] flex items-end bg-background overflow-hidden">
-      {/* Ambient background glow while image decodes */}
-      <div
-        className="absolute inset-0 pointer-events-none transition-opacity duration-1000"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 65% at 28% 45%, rgba(99, 102, 241, 0.12) 0%, rgba(14, 18, 30, 0.6) 60%, transparent 100%)",
-        }}
-      />
-
+    <section className="relative w-full h-[85svh] min-h-[500px] max-h-[720px] sm:h-[60vw] sm:max-h-[630px] md:h-[75vh] flex items-end bg-transparent overflow-hidden">
       {showBackdrop ? (
-        <>
-          {/* Image clipped independently so gradients can bleed outside section */}
-          <div className="absolute inset-0 overflow-hidden">
-            <Image
-              key={backdropUrl}
-              src={backdropUrl!}
-              alt={title}
-              fill
-              sizes="100vw"
-              unoptimized={!eventuallyOptimizable(backdropUrl)}
-              className={cn(
-                "object-cover object-center md:object-top transition-all duration-700 ease-out",
-                imgLoaded ? "opacity-100 scale-[1.02]" : "opacity-0 scale-100"
-              )}
-              style={{
-                filter: "brightness(0.82) saturate(1.05)",
-              }}
-              priority
-              onLoad={() => setImgLoaded(true)}
-              onError={() => {
-                if (!usePoster && item.poster_path && item.poster_path !== item.backdrop_path) {
-                  setUsePoster(true);
-                } else {
-                  setImgFailed(true);
-                }
-              }}
-            />
-          </div>
-          {scrims}
-        </>
+        <div 
+          className="absolute inset-0 overflow-hidden pointer-events-none"
+          style={{
+            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.15) 85%, rgba(0,0,0,0) 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.15) 85%, rgba(0,0,0,0) 100%)",
+          }}
+        >
+          <img
+            key={backdropUrl}
+            src={backdropUrl!}
+            alt={title}
+            className="w-full h-full object-cover object-center md:object-top"
+            style={{
+              filter: "brightness(0.92) saturate(1.1)",
+            }}
+            loading="eager"
+            fetchPriority="high"
+            onError={() => {
+              if (!usePoster && item.poster_path && item.poster_path !== item.backdrop_path) {
+                setUsePoster(true);
+              } else {
+                setImgFailed(true);
+              }
+            }}
+          />
+          {/* Subtle text legibility shadows only — NO solid color bottom block */}
+          <div className="hidden md:block absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-black/80 via-black/25 to-transparent" />
+          <div className="md:hidden absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-black/50 to-transparent" />
+        </div>
       ) : (
-        <div className="absolute inset-0 overflow-hidden">
-          {/* Ambience: soft blurred poster as a muted background so the hero
-              never looks empty, even when the anime has no widescreen banner. */}
-          {showPosterCard && (
-            <Image
+        <div 
+          className="absolute inset-0 overflow-hidden"
+          style={{
+            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%)",
+          }}
+        >
+          {showPosterCard && posterUrl && (
+            <img
               key={posterUrl}
-              src={posterUrl!}
+              src={posterUrl}
               alt=""
-              fill
-              sizes="100vw"
-              unoptimized={!eventuallyOptimizable(posterUrl)}
-              className={cn(
-                "object-cover object-center blur-3xl scale-125 transition-opacity duration-700 ease-out",
-                imgLoaded ? "opacity-[0.16]" : "opacity-0"
-              )}
+              className="w-full h-full object-cover object-center blur-3xl scale-125 opacity-[0.25]"
               aria-hidden
-              onLoad={() => setImgLoaded(true)}
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/35" />
-          <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-background/85 via-background/40 to-transparent" />
-          <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-background/90 via-background/45 to-transparent" />
+          <div className="hidden md:block absolute inset-y-0 left-0 w-full bg-gradient-to-r from-black/85 via-black/40 to-transparent" />
+          <div className="md:hidden absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-black/90 via-black/45 to-transparent" />
 
-          {/* Real poster card, right-aligned on desktop, hidden on mobile */}
-          {showPosterCard && (
+          {showPosterCard && posterUrl && (
             <div className="hidden md:flex absolute right-6 lg:right-12 xl:right-16 top-1/2 -translate-y-1/2 w-[200px] lg:w-[240px] xl:w-[270px] aspect-[2/3] rounded-2xl overflow-hidden shadow-[0_25px_60px_rgba(0,0,0,0.6)] ring-1 ring-white/15 z-10">
-              <Image
+              <img
                 key={`poster-card-${posterUrl}`}
-                src={posterUrl!}
+                src={posterUrl}
                 alt={title}
-                fill
-                sizes="(max-width: 1024px) 200px, 270px"
-                unoptimized={!eventuallyOptimizable(posterUrl)}
-                className={cn(
-                  "object-cover transition-opacity duration-500 ease-out",
-                  imgLoaded ? "opacity-100" : "opacity-0"
-                )}
-                priority
-                onLoad={() => setImgLoaded(true)}
+                className="w-full h-full object-cover"
+                loading="eager"
                 onError={() => setImgFailed(true)}
               />
             </div>
           )}
-          {scrims}
         </div>
       )}
 
-      <div className="relative z-10 w-full px-5 md:px-12 lg:px-16 xl:px-20 pb-8 sm:pb-9 md:pb-12 max-w-screen-2xl mx-auto">
+      <div className="relative z-10 w-full px-5 md:pl-20 md:pr-12 lg:pl-24 lg:pr-16 xl:pl-28 xl:pr-20 pb-8 sm:pb-10 md:pb-14 max-w-screen-2xl mx-auto">
         <div
           key={String(item.id)}
-          className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/12 md:backdrop-blur-0 px-4 py-5 md:p-0 animate-fade-in-up"
+          className="max-w-full sm:max-w-xl md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/15 md:backdrop-blur-0 px-4 py-5 md:p-0 animate-fade-in-up"
         >
           {/* Spotlight / Custom Badge Tagline */}
           {(item as any).badge && (
-            <div className="mb-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-md backdrop-blur-sm">
+            <div className="mb-2.5">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-md backdrop-blur-sm">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 {(item as any).badge}
               </span>
             </div>
           )}
 
-          {/* Tags row */}
-          <div className="flex flex-wrap justify-center md:justify-start items-center gap-2.5 mb-2.5">
-            {rating > 0 && item.vote_count && item.vote_count > 20 && (
-              <span className="flex items-center gap-1 bg-black/55 backdrop-blur-sm text-amber-400 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-white/10 shadow-sm">
-                <Star className="w-3.5 h-3.5 fill-current" />
-                {rating.toFixed(1)}
+          {/* Official ClearArt Logo OR Stylized Cinema Typography */}
+          {logoUrl ? (
+            <div className="mb-3.5 max-h-24 sm:max-h-28 md:max-h-36 max-w-[85%] sm:max-w-[380px] md:max-w-[460px] flex items-center justify-center md:justify-start">
+              <img
+                src={logoUrl}
+                alt={title}
+                className="max-h-24 sm:max-h-28 md:max-h-36 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.95)] animate-fade-in"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+          ) : (
+            <h1
+              className="text-white font-black mb-3 line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text"
+              style={{
+                fontSize:
+                  title.length > 40
+                    ? "clamp(1.8rem, 3.6vw, 2.8rem)"
+                    : title.length > 25
+                    ? "clamp(2.2rem, 4.6vw, 3.5rem)"
+                    : "clamp(2.5rem, 5.4vw, 4.2rem)",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.05,
+              }}
+            >
+              {title}
+            </h1>
+          )}
+
+          {/* High-Impact Details Row (Rating, Year, Media Type, Quality) BELOW artwork */}
+          <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 sm:gap-2.5 mb-3.5">
+            {rating > 0 && (
+              <span className="flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 text-xs font-black px-2.5 py-1 rounded-xl border border-emerald-500/35 shadow-sm backdrop-blur-sm">
+                <Star className="w-3.5 h-3.5 fill-emerald-400 text-emerald-400" />
+                <span>{rating.toFixed(1)}</span>
               </span>
             )}
             {year && (
-              <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white/90 text-xs font-semibold px-2.5 py-1 rounded-lg border border-white/10">
-                <Calendar className="w-3.5 h-3.5" />
-                {year}
+              <span className="flex items-center gap-1.5 bg-white/[0.08] text-white/90 font-bold text-xs px-2.5 py-1 rounded-xl border border-white/15 shadow-sm backdrop-blur-sm">
+                <Calendar className="w-3.5 h-3.5 text-white/60" />
+                <span>{year}</span>
               </span>
             )}
             <span
               className={cn(
-                "flex items-center gap-1 text-xs font-black px-3 py-1 rounded-lg uppercase tracking-wider backdrop-blur-md border transition-all shadow-md",
+                "flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-xl uppercase tracking-wider backdrop-blur-md border transition-all shadow-sm",
                 isAnime
-                  ? "bg-purple-500/30 text-purple-300 border-purple-400/40 shadow-purple-500/25"
+                  ? "bg-purple-500/20 text-purple-200 border-purple-400/35 shadow-purple-500/10"
                   : isMovie
-                  ? "bg-red-500/25 text-red-400 border-red-500/40 shadow-red-500/25"
-                  : "bg-emerald-500/25 text-emerald-300 border-emerald-400/40 shadow-emerald-500/25"
+                  ? "bg-rose-500/20 text-rose-200 border-rose-500/35 shadow-rose-500/10"
+                  : "bg-emerald-500/20 text-emerald-200 border-emerald-400/35 shadow-emerald-500/10"
               )}
             >
-              {isAnime ? "Anime" : isMovie ? "Movie" : "TV Show"}
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+              {isAnime ? "Anime" : isMovie ? "Movie" : "TV Series"}
             </span>
           </div>
-
-          {/* Title */}
-          <h1
-            className="text-white font-black mb-2.5 line-clamp-2"
-            style={{
-              fontSize:
-                title.length > 50
-                  ? "clamp(1.5rem, 3vw, 2.4rem)"
-                  : title.length > 30
-                  ? "clamp(1.75rem, 3.8vw, 3rem)"
-                  : "clamp(2rem, 4.8vw, 3.75rem)",
-              textShadow:
-                "0 2px 6px rgba(0,0,0,0.7), 0 8px 26px rgba(0,0,0,0.5)",
-              lineHeight: 1.1,
-            }}
-          >
-            {title}
-          </h1>
 
           {/* Overview */}
           {item.overview && (
             <p
-              className="text-white/90 text-sm sm:text-[15px] leading-relaxed mb-4 max-w-xl line-clamp-3"
-              style={{ textShadow: "0 2px 6px rgba(0,0,0,0.8)" }}
+              className="text-white/90 text-xs sm:text-sm md:text-[15px] leading-relaxed mb-5 max-w-xl line-clamp-3 select-text"
+              style={{ textShadow: "0 2px 6px rgba(0,0,0,0.85)" }}
             >
               {item.overview}
             </p>
           )}
 
-          {/* Action buttons */}
+          {/* Action buttons matching Whisper Man reference */}
           <div className="flex flex-wrap justify-center md:justify-start items-center gap-3">
             <Link
-              href={`${link}${link.includes("?") ? "&autoplay=1" : "?autoplay=1"}`}
-              className="inline-flex items-center gap-2.5 bg-[#D3D1CE] hover:bg-white text-[#090F15] font-extrabold px-6 py-3.5 rounded-xl text-sm transition-all duration-300 shadow-xl shadow-black/50 hover:scale-[1.03] active:scale-95 cursor-pointer"
+              href={watchLink}
+              className="inline-flex items-center gap-2 bg-white hover:bg-white/90 active:scale-95 text-black font-extrabold px-6 sm:px-7 py-3.5 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-[0_10px_28px_rgba(255,255,255,0.25)] hover:scale-[1.03] cursor-pointer"
             >
-              <Play className="w-5 h-5 fill-current ml-0.5" />
-              Watch Now
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" />
+              <span>Watch Now</span>
             </Link>
+
+            <WatchlistButton
+              mediaId={parseInt(String(item.id).replace(/\D/g, ""), 10) || 0}
+              mediaType={isAnime ? "anime" : isTv ? "tv" : "movie"}
+              title={title}
+              posterPath={item.poster_path ?? null}
+              backdropPath={item.backdrop_path ?? null}
+            />
+
             <Link
               href={link}
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-semibold px-5 py-3 rounded-xl text-sm transition-all duration-200 border border-white/20 backdrop-blur-sm"
+              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold px-5 py-3.5 rounded-2xl text-xs sm:text-sm transition-all duration-200 border border-white/20 backdrop-blur-md shadow-md"
             >
               <Info className="w-4 h-4" />
-              More Info
+              <span>More Info</span>
             </Link>
           </div>
         </div>

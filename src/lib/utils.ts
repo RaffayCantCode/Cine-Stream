@@ -51,7 +51,7 @@ function getSmartTtlMs(urlStr: string): number {
   ) {
     return 0;
   }
-  // Media details & episodes have 5-minute memory cache
+  // Media details & episodes have 30-minute memory/session cache
   if (
     lower.includes("/api/tmdb/movie/") ||
     lower.includes("/api/tmdb/tv/") ||
@@ -61,24 +61,27 @@ function getSmartTtlMs(urlStr: string): number {
     lower.includes("/api/manga/details") ||
     lower.includes("/api/manga/chapter")
   ) {
-    return 300_000; // 5 minutes
+    return 1_800_000; // 30 minutes
   }
   if (lower.includes("/genre") || lower.includes("/providers") || lower.includes("/configuration")) {
     return 86_400_000; // 24 hours
   }
   if (lower.includes("/collection") || lower.includes("/franchise")) {
-    return 3_600_000; // 1 hour
+    return 14_400_000; // 4 hours
   }
   if (lower.includes("/popular") || lower.includes("/top-rated")) {
-    return 1_800_000; // 30 minutes
+    return 3_600_000; // 1 hour
   }
   if (lower.includes("/trending") || lower.includes("/home")) {
-    return 900_000; // 15 minutes
+    return 1_800_000; // 30 minutes
+  }
+  if (lower.includes("/logo")) {
+    return 86_400_000 * 7; // 7 days
   }
   if (lower.includes("/search")) {
-    return 300_000; // 5 minutes
+    return 900_000; // 15 minutes
   }
-  return 300_000; // 5 minutes default
+  return 1_800_000; // 30 minutes default
 }
 
 export async function fetchJson<T = unknown>(
@@ -95,6 +98,20 @@ export async function fetchJson<T = unknown>(
     const cached = requestCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
       return cached.data as T;
+    }
+
+    // Check sessionStorage to survive page reloads and tab navigations with 0 requests
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem(`fj_${cacheKey}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.expires > Date.now()) {
+            requestCache.set(cacheKey, parsed);
+            return parsed.data as T;
+          }
+        }
+      } catch {}
     }
 
     const pending = pendingRequests.get(cacheKey);
@@ -138,8 +155,15 @@ export async function fetchJson<T = unknown>(
 
     if (shouldUseCache && cacheTtlMs > 0 && !isEmptyPayload) {
       const expires = Date.now() + cacheTtlMs;
-      requestCache.set(cacheKey, { data, expires });
+      const entry = { data, expires };
+      requestCache.set(cacheKey, entry);
       pruneCache();
+
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(`fj_${cacheKey}`, JSON.stringify(entry));
+        } catch {}
+      }
     }
 
     return data as T;
