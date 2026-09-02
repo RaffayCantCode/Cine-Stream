@@ -65,6 +65,11 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const effectiveId = (item as any)?.tmdbId || item?.id;
   const cacheKey = `${effectiveId || item?.id}-${title}`;
 
+  const [logoImgLoaded, setLogoImgLoaded] = useState(() => {
+    const cached = getCachedLogo(cacheKey);
+    return !!cached;
+  });
+
   const [logoState, setLogoState] = useState<{ url: string | null; status: "cached" | "fetching" | "done" }>(() => {
     const cached = getCachedLogo(cacheKey);
     if (cached !== undefined) {
@@ -83,15 +88,18 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
     if (!item?.id) {
       setLogoState({ url: null, status: "done" });
+      setLogoImgLoaded(false);
       return;
     }
 
     const cached = getCachedLogo(cacheKey);
     if (cached !== undefined) {
       setLogoState({ url: cached, status: "cached" });
+      setLogoImgLoaded(!!cached);
       return;
     }
 
+    setLogoImgLoaded(false);
     let isMounted = true;
     const mediaType = isAnime ? "anime" : isMovie ? "movie" : "tv";
 
@@ -257,34 +265,44 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
             </div>
           )}
 
-          {/* Official ClearArt Logo OR Stylized Cinema Typography */}
-          {logoUrl ? (
-            <div className="mb-3.5 max-h-24 sm:max-h-28 md:max-h-36 max-w-[85%] sm:max-w-[380px] md:max-w-[460px] flex items-center justify-center md:justify-start">
+          {/* Official ClearArt Logo OR Smoothly Crossfading Cinema Typography */}
+          <div className="relative mb-3.5 flex items-center justify-center md:justify-start min-h-[52px] sm:min-h-[64px] md:min-h-[84px] max-w-[85%] sm:max-w-[380px] md:max-w-[460px]">
+            {/* Logo Image */}
+            {logoUrl && (
               <img
+                key={`logo-${logoUrl}`}
                 src={logoUrl}
                 alt={title}
-                className="max-h-24 sm:max-h-28 md:max-h-36 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.95)] animate-fade-in"
+                className={`max-h-24 sm:max-h-28 md:max-h-36 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.95)] transition-all duration-500 ease-out ${
+                  logoImgLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+                }`}
                 loading="eager"
                 decoding="async"
+                onLoad={() => setLogoImgLoaded(true)}
               />
-            </div>
-          ) : (
-            <h1
-              className="text-white font-black mb-3 line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text"
-              style={{
-                fontSize:
-                  title.length > 40
-                    ? "clamp(1.8rem, 3.6vw, 2.8rem)"
-                    : title.length > 25
-                    ? "clamp(2.2rem, 4.6vw, 3.5rem)"
-                    : "clamp(2.5rem, 5.4vw, 4.2rem)",
-                letterSpacing: "-0.02em",
-                lineHeight: 1.05,
-              }}
-            >
-              {title}
-            </h1>
-          )}
+            )}
+
+            {/* Stylized Typography — only visible when no logo is available or gently crossfading out */}
+            {(!logoUrl || !logoImgLoaded) && (
+              <h1
+                className={`text-white font-black line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text transition-opacity duration-500 ease-out ${
+                  logoUrl && logoImgLoaded ? "opacity-0 pointer-events-none absolute" : "opacity-100 relative"
+                }`}
+                style={{
+                  fontSize:
+                    title.length > 40
+                      ? "clamp(1.8rem, 3.6vw, 2.8rem)"
+                      : title.length > 25
+                      ? "clamp(2.2rem, 4.6vw, 3.5rem)"
+                      : "clamp(2.5rem, 5.4vw, 4.2rem)",
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1.05,
+                }}
+              >
+                {title}
+              </h1>
+            )}
+          </div>
 
           {/* High-Impact Details Row (Rating, Year, Media Type, Quality) BELOW artwork */}
           <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 sm:gap-2.5 mb-3.5">

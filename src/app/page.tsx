@@ -737,6 +737,30 @@ export default function Home() {
               link.fetchPriority = "high";
               document.head.appendChild(link);
             }
+
+            // Pre-warm logos for hero items so artwork displays first with 0 delay
+            fullHeroPool.slice(0, 3).forEach((hItem) => {
+              const hTitle = hItem.title || hItem.name || "";
+              const anilistId = (hItem as any)?.anilistId;
+              const isAnime = hItem.media_type === "anime" || !!anilistId || isTmdbAnime(hItem);
+              const isTv = hItem.media_type === "tv" || (!isAnime && !!hItem.first_air_date && !hItem.release_date);
+              const isMovie = hItem.media_type === "movie" || (!isAnime && !isTv);
+              const effectiveId = (hItem as any)?.tmdbId || hItem.id;
+              const cacheKey = `${effectiveId || hItem.id}-${hTitle}`;
+
+              if (typeof window !== "undefined" && !sessionStorage.getItem(`logo_v5_${cacheKey}`)) {
+                fetch(`/api/tmdb/logo?id=${effectiveId}&type=${isAnime ? "anime" : isMovie ? "movie" : "tv"}&title=${encodeURIComponent(hTitle)}`)
+                  .then((r) => (r.ok ? r.json() : null))
+                  .then((d) => {
+                    if (d?.logoUrl) {
+                      try { sessionStorage.setItem(`logo_v5_${cacheKey}`, d.logoUrl); } catch {}
+                      const img = new Image();
+                      img.src = d.logoUrl;
+                    }
+                  })
+                  .catch(() => {});
+              }
+            });
           }
 
           // Release hero and top rows immediately
