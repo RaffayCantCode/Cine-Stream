@@ -46,7 +46,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     sourceConfig.forEach((entry, index) => {
       const src = byType.get(entry.key);
       if (src) {
-        ordered.push({ ...src, name: `Server ${index + 1}`, tag: entry.tag });
+        ordered.push({ ...src, name: `Source ${index + 1}`, tag: entry.tag });
       }
     });
     base.forEach((s) => {
@@ -57,7 +57,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
 
   const [activeSource, setActiveSource] = useState<StreamingSource>(sources[0] || {
     url: `https://vidsrc.me/embed/movie?tmdb=${movieId}`,
-    name: "Server 1",
+    name: "Source 1",
     type: "vidsrc",
     quality: "Stable",
   });

@@ -23,8 +23,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Globe,
+  Server,
 } from "lucide-react";
 import { ServerOption } from "./ServerSelectorModal";
+import { SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 import { DrawerSeason, DrawerEpisode } from "./EpisodeDrawer";
 import { PlayerSettingsModal } from "./PlayerSettingsModal";
 import { SubtitleSettingsModal, type SubtitleConfig } from "./SubtitleSettingsModal";
@@ -481,7 +483,7 @@ export function CinemaPlayer({
 
             <div
               ref={episodesScrollRef}
-              className="flex items-start gap-4 overflow-x-auto py-1 px-4 hide-scrollbar w-full scroll-smooth"
+              className="flex items-start gap-4 overflow-x-auto py-1 px-4 hide-scrollbar w-full"
             >
               {displayedEpisodes.map((ep) => {
                 const isCurrentPlaying =
@@ -562,25 +564,45 @@ export function CinemaPlayer({
         </div>
       )}
 
-      {/* ── Floating Server Selection Popup (Screenshot 3) ── */}
+      {/* ── Floating Server Selection Popup ── */}
       {showServerMenu && (
-        <div className="absolute right-6 sm:right-12 bottom-24 z-40 w-64 bg-[#18181b]/95 border border-white/15 rounded-2xl p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-fade-in space-y-3">
+        <div className="absolute right-4 sm:right-12 bottom-24 z-40 w-72 sm:w-80 bg-[#18181b]/95 border border-white/15 rounded-2xl p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-fade-in space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-white/10">
-            <h4 className="text-xs font-extrabold text-white">Servers</h4>
+            <div className="flex items-center gap-2">
+              <Server className="w-3.5 h-3.5 text-primary" />
+              <h4 className="text-xs font-extrabold text-white">Stream Servers</h4>
+            </div>
             <button
               onClick={() => setShowServerMenu(false)}
-              className="text-white/50 hover:text-white transition-colors cursor-pointer"
+              className="text-white/50 hover:text-white transition-colors cursor-pointer p-0.5"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
             {servers.map((server, idx) => {
               const isActive =
                 activeServer.key === server.type ||
                 activeServer.type === server.type ||
+                activeServer.key === server.key ||
                 activeServer.name === server.name;
+
+              const tagKey = (server.tag || (server.quality ? server.quality.toLowerCase() : "")) as SourceTag;
+              const tagLabel =
+                tagKey && SOURCE_TAG_LABELS[tagKey]
+                  ? SOURCE_TAG_LABELS[tagKey]
+                  : server.quality || (idx === 0 ? "Recommended" : idx <= 2 ? "Best" : idx <= 3 ? "Good" : "Backup");
+
+              const tagStyle =
+                (tagKey && TAG_STYLES[tagKey]) ||
+                (server.quality === "Best"
+                  ? "bg-emerald-400/15 text-emerald-300 border-emerald-300/25"
+                  : server.quality === "Good"
+                  ? "bg-cyan-400/15 text-cyan-300 border-cyan-300/25"
+                  : server.quality === "Stable"
+                  ? "bg-violet-400/15 text-violet-300 border-violet-300/25"
+                  : "bg-amber-400/15 text-amber-300 border-amber-300/25");
 
               return (
                 <button
@@ -591,15 +613,28 @@ export function CinemaPlayer({
                   }}
                   className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs font-bold transition-all cursor-pointer ${
                     isActive
-                      ? "bg-white/15 text-white ring-1 ring-white/30"
+                      ? "bg-white/15 text-white ring-1 ring-white/30 shadow-md"
                       : "text-white/70 hover:bg-white/10 hover:text-white"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <span className="text-[11px]">{idx % 2 === 0 ? "🇺🇸" : "⚡"}</span>
-                    <span className="truncate">{server.name}</span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        isActive
+                          ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+                          : "bg-white/30"
+                      }`}
+                    />
+                    <span className="truncate">{`Source ${idx + 1}`}</span>
                   </div>
-                  {isActive && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md border tracking-wide uppercase ${tagStyle}`}
+                    >
+                      {tagLabel}
+                    </span>
+                    {isActive && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                  </div>
                 </button>
               );
             })}

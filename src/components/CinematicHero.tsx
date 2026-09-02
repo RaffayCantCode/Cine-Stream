@@ -92,7 +92,7 @@ export function CinematicHero({
   const themeColorClass = theme === "anime" ? "bg-fuchsia-500" : theme === "tv" ? "bg-emerald-500" : "bg-blue-500";
 
   const backdropUrl = backdropPath
-    ? (backdropPath.startsWith('http') ? backdropPath : `https://image.tmdb.org/t/p/w1280${backdropPath}`)
+    ? (backdropPath.startsWith('http') ? backdropPath : `https://image.tmdb.org/t/p/original${backdropPath}`)
     : null;
 
   // Detect mobile viewport (width < 768px)

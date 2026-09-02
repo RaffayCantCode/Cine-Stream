@@ -104,10 +104,10 @@ export const ServerSelectorModal = memo(function ServerSelectorModal({
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-white truncate">{server.name}</span>
+                      <span className="font-bold text-sm text-white truncate">{`Source ${idx + 1}`}</span>
                     </div>
-                    <span className="text-[11px] text-white/40 block mt-0.5 capitalize">
-                      {server.type ? `${server.type} engine` : "Native Stream"}
+                    <span className="text-[11px] text-white/40 block mt-0.5">
+                      Fast Stream Server
                     </span>
                   </div>
                 </div>

@@ -20,7 +20,7 @@ import type { SeasonInfo } from "@/lib/anime-fetch";
 import { cleanAnimeDescription } from "@/lib/anime-fetch";
 import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
 import { isEpisodeAvailable, isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv, Compass, LayoutGrid, StretchHorizontal, Clock } from "lucide-react";
 
 function AnimeHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -468,7 +468,7 @@ async function fetchEpisodesClientSide(
             if (canTrustTmdbSource) {
               const result: Episode[] = [];
               const remainingTmdbEps = Math.max(epsList.length - mappedOffset, 0);
-              const maxEpCount = seasonOwnCount > 0 ? seasonOwnCount : remainingTmdbEps;
+              const maxEpCount = isMovie ? 1 : Math.max(seasonOwnCount, remainingTmdbEps);
               const count = Math.min(maxEpCount || remainingTmdbEps, 1500);
               for (let i = 1; i <= count; i++) {
                 const azMatch = aniZipEps.find(e => e.episodeNum === i);
@@ -1075,6 +1075,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [watchStarted, setWatchStarted] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [tmdbBackdropUrl, setTmdbBackdropUrl] = useState<string | null>(null);
 
   // Franchise node data for Season Guide
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>(() => {
@@ -1084,6 +1085,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     return [];
   });
   const [showSeasonGuide, setShowSeasonGuide] = useState(false);
+  const [watchOrderView, setWatchOrderView] = useState<"timeline" | "grid">("timeline");
+  const watchOrderScrollRef = useRef<HTMLDivElement>(null);
   const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
   const [hasRestoredState, setHasRestoredState] = useState(false);
 
@@ -1235,7 +1238,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         const withRelease: Episode[] = sorted.map((ep) => {
           let released = ep.isReleased !== false;
 
-          if (isUnreleasedAnime) {
+          const isAiredByDate = ep.releasedDate ? isEpisodeAvailable(ep.releasedDate, nowMs) : false;
+          if (isAiredByDate) {
+            released = true;
+          } else if (isUnreleasedAnime) {
             released = false;
           } else if (nextEpNum && typeof ep.episodeNum === "number" && ep.episodeNum > nextEpNum) {
             released = false;
@@ -1888,6 +1894,50 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setEpisodeView(view);
   }, []);
 
+  // Resolve high-quality TMDB widescreen backdrop (ignoring low-res AniList banners)
+  useEffect(() => {
+    // If anime.backdrop is already a genuine TMDB path, use it directly
+    if (anime?.backdrop && (anime.backdrop.startsWith("/") || anime.backdrop.includes("tmdb.org"))) {
+      const url = anime.backdrop.startsWith("http")
+        ? anime.backdrop
+        : `https://image.tmdb.org/t/p/original${anime.backdrop}`;
+      setTmdbBackdropUrl(url);
+      return;
+    }
+
+    const titleToSearch = (anime as any)?.name || (anime as any)?.title || (typeof id === "string" ? id.replace(/-\d+$/, "").replace(/-/g, " ") : "");
+    if (!titleToSearch) return;
+
+    let isMounted = true;
+    const clean = titleToSearch.replace(/\b(season|part|2nd|3rd|4th|5th|final)\b.*$/i, "").trim() || titleToSearch;
+
+    // Search TMDB TV first with include_anime=true, then fallback to movie if needed
+    fetch(`/api/tmdb/search?query=${encodeURIComponent(clean)}&type=tv&include_anime=true`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!isMounted) return;
+        const match = data?.results?.find((r: any) => r.genre_ids?.includes(16) && r.backdrop_path)
+          || data?.results?.find((r: any) => r.backdrop_path);
+        if (match?.backdrop_path) {
+          setTmdbBackdropUrl(`https://image.tmdb.org/t/p/original${match.backdrop_path}`);
+        } else {
+          fetch(`/api/tmdb/search?query=${encodeURIComponent(clean)}&type=movie&include_anime=true`)
+            .then(mRes => mRes.ok ? mRes.json() : null)
+            .then(mData => {
+              if (!isMounted) return;
+              const mMatch = mData?.results?.find((r: any) => r.backdrop_path);
+              if (mMatch?.backdrop_path) {
+                setTmdbBackdropUrl(`https://image.tmdb.org/t/p/original${mMatch.backdrop_path}`);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+
+    return () => { isMounted = false; };
+  }, [anime?.backdrop, anime?.name, id]);
+
   // ── Derived state ───────────────────────────────────────────────────────
   const INITIAL_EPISODES_PER_PAGE = 50;
 
@@ -1988,21 +2038,27 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     [currentSeasonEps]
   );
 
-  const EPISODES_PER_PAGE = 12;
   const [episodePage, setEpisodePage] = useState(1);
+  const [listChunkIndex, setListChunkIndex] = useState(0);
 
-  // Reset page when season changes
+  // Reset page and chunk when season changes
   useEffect(() => {
     setEpisodePage(1);
+    setListChunkIndex(0);
   }, [currentSeasonId]);
 
-  // Automatically sync page so the selected episode is on the active page
+  // Automatically sync page and chunk so the selected episode is on the active view
   useEffect(() => {
     if (!selectedEp) return;
     const epNum = selectedEp.episodeNum;
-    const targetPage = Math.floor((epNum - 1) / EPISODES_PER_PAGE) + 1;
+    const gridPageSize = currentSeasonEps.length > 500 ? 50 : 25;
+    const targetPage = Math.floor((epNum - 1) / gridPageSize) + 1;
     setEpisodePage(targetPage);
-  }, [selectedEp?.episodeId, selectedEp?.episodeNum]);
+
+    const LIST_CHUNK_SIZE = 10;
+    const targetChunk = Math.floor((epNum - 1) / LIST_CHUNK_SIZE);
+    setListChunkIndex(targetChunk);
+  }, [selectedEp?.episodeId, selectedEp?.episodeNum, currentSeasonEps.length]);
 
   const currentIdx = useMemo(
     () => currentSeasonEps.findIndex(e => e.episodeId === selectedEp?.episodeId),
@@ -2059,13 +2115,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   const displayPoster = (currentSeasonInfo as any)?.coverImage || (currentSeason as any)?.coverImage || anime?.poster || "";
   const tmdbBackdropPath = anime?.backdrop || null;
-  const displayBanner = tmdbBackdropPath
-    ? tmdbBackdropPath
-    : (currentSeasonInfo as any)?.bannerImage
-      || (currentSeasonInfo as any)?.coverImage
-      || (currentSeason as any)?.coverImage
-      || anime?.poster
-      || "";
+  const displayBanner = tmdbBackdropUrl
+    || (tmdbBackdropPath ? (tmdbBackdropPath.startsWith("http") ? tmdbBackdropPath : `https://image.tmdb.org/t/p/original${tmdbBackdropPath}`) : null)
+    || (currentSeasonInfo as any)?.bannerImage
+    || (anime as any)?.bannerImage
+    || (initialData as any)?.bannerImage
+    || (currentSeasonInfo as any)?.coverImage
+    || anime?.poster
+    || "";
   const displayTitle = (currentSeasonInfo as any)?.name || (currentSeasonInfo as any)?.title || currentSeason?.name || anime?.name || "";
   const displayStatus = currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "";
 
@@ -2152,8 +2209,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   useEffect(() => {
     const loading = thumbnailFetchingRef.current;
-    const startIndex = (Math.max(1, episodePage) - 1) * EPISODES_PER_PAGE;
-    const currentEps = currentSeasonEps.slice(startIndex, startIndex + EPISODES_PER_PAGE);
+    const gridPageSize = currentSeasonEps.length > 500 ? 50 : 25;
+    const pageSize = episodeView === "grid" ? gridPageSize : 10;
+    const activeIdx = episodeView === "grid" ? Math.max(1, episodePage) - 1 : Math.max(0, listChunkIndex);
+    const startIndex = activeIdx * pageSize;
+    const currentEps = currentSeasonEps.slice(startIndex, startIndex + pageSize);
     const needThumb = currentEps.filter(ep => !ep.thumbnail && ep.malUrl && !loading.has(ep.episodeId));
     if (needThumb.length === 0) return;
 
@@ -2237,7 +2297,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               title={displayTitle}
               theme="anime"
             >
-              <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 w-full">
+              <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 flex flex-col lg:flex-row lg:items-end justify-between gap-6 w-full">
+                <div className="flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 min-w-0 flex-1">
                 <div
                   className="shrink-0 w-24 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
@@ -2377,6 +2438,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                {/* ── Right Side Detail Box (Episodes Count & Status) ── */}
+                <div className="hidden lg:flex items-center gap-3 px-4 py-2.5 bg-black/50 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl shrink-0 self-end mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-black text-white">
+                      {isMovieFormat ? 1 : (currentSeasonEps.length || anime.totalEpisodes || 1)}
+                    </span>
+                    <span className="text-xs text-white/50 font-semibold">
+                      {isMovieFormat ? (currentSeasonEps.length > 1 ? "Parts" : "Movie") : (currentSeasonEps.length === 1 ? "Episode" : "Episodes")}
+                    </span>
+                  </div>
+                  <div className="w-px h-5 bg-white/15" />
+                  {(() => {
+                    const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
+                    const statusLabel = formatted.style === "airing" ? "Ongoing" : formatted.style === "upcoming" ? "Upcoming" : "Completed";
+                    const dotColor = formatted.style === "airing" ? "bg-emerald-400" : formatted.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${dotColor} ${formatted.style === "airing" ? "animate-pulse" : ""}`} />
+                        <span className="text-sm font-bold text-white">{statusLabel}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </CinematicHero>
@@ -2428,31 +2514,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   </div>
                 </div>
 
-                {/* Season & Episode Count Badges */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-white">
-                        {isMovieFormat ? 1 : (currentSeasonEps.length || anime.totalEpisodes || 1)}
-                      </span>
-                      <span className="text-xs text-white/50">
-                        {isMovieFormat ? (currentSeasonEps.length > 1 ? "Parts" : "Movie") : (currentSeasonEps.length === 1 ? "Episode" : "Episodes")}
-                      </span>
-                    </div>
-                    <div className="w-px h-5 bg-white/10 hidden sm:block" />
-                    {(() => {
-                      const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
-                      const statusLabel = formatted.style === "airing" ? "Ongoing" : formatted.style === "upcoming" ? "Upcoming" : "Completed";
-                      const dotColor = formatted.style === "airing" ? "bg-emerald-400" : formatted.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
-                      return (
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${dotColor} ${formatted.style === "airing" ? "animate-pulse" : ""}`} />
-                          <span className="text-sm font-bold text-white">{statusLabel}</span>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
               </div>
 
               <div className="flex flex-col gap-6">
@@ -2509,155 +2570,188 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   const totalParts = visibleFranchiseNodes.length;
                   const activeIdx = visibleFranchiseNodes.findIndex(node => String(node.id) === currentSeasonId || String(node.id) === anime?.id);
                   const hasActive = activeIdx >= 0;
-                  const progressPct = hasActive ? Math.round(((activeIdx + 1) / totalParts) * 100) : 0;
 
                   const formatMeta = (fmt: string | null) => {
                     switch (fmt) {
                       case "MOVIE":
-                        return { label: "Movie", icon: Film, chip: "text-violet-300 bg-violet-400/10 border-violet-400/20" };
+                        return { label: "Movie", icon: Film, style: "bg-purple-500/20 text-purple-200 border-purple-400/30" };
                       case "OVA":
-                        return { label: "OVA", icon: Sparkles, chip: "text-amber-300 bg-amber-400/10 border-amber-400/20" };
+                        return { label: "OVA", icon: Sparkles, style: "bg-amber-500/20 text-amber-200 border-amber-400/30" };
                       case "SPECIAL":
-                        return { label: "Special", icon: Sparkles, chip: "text-fuchsia-300 bg-fuchsia-400/10 border-fuchsia-400/20" };
+                        return { label: "Special", icon: Sparkles, style: "bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-400/30" };
                       case "ONA":
-                        return { label: "ONA", icon: Tv, chip: "text-teal-300 bg-teal-400/10 border-teal-400/20" };
+                        return { label: "ONA", icon: Tv, style: "bg-teal-500/20 text-teal-200 border-teal-400/30" };
                       case "TV_SHORT":
-                        return { label: "TV", icon: Tv, chip: "text-sky-300 bg-sky-400/10 border-sky-400/20" };
                       default:
-                        return { label: fmt || "TV", icon: Tv, chip: "text-sky-300 bg-sky-400/10 border-sky-400/20" };
+                        return { label: fmt || "TV", icon: Tv, style: "bg-sky-500/20 text-sky-200 border-sky-400/30" };
                     }
                   };
 
-                  return (
-                  <div className="relative rounded-2xl p-px bg-gradient-to-br from-primary/25 via-white/[0.06] to-primary/25 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-                    <div className="relative rounded-[15px] bg-gradient-to-br from-white/[0.05] to-white/[0.015] overflow-hidden">
-                      {/* ambient glow */}
-                      <div className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 bg-primary/[0.05] rounded-full blur-3xl" />
-                      <div className="pointer-events-none absolute -bottom-24 -left-16 w-64 h-64 bg-primary/[0.04] rounded-full blur-3xl" />
+                  const scrollTimeline = (direction: "left" | "right") => {
+                    if (!watchOrderScrollRef.current) return;
+                    const amount = direction === "left" ? -320 : 320;
+                    watchOrderScrollRef.current.scrollBy({ left: amount, behavior: "smooth" });
+                  };
 
-                      {/* ── Header ── */}
+                  return (
+                    <div className="relative mb-6 rounded-2xl border border-white/15 bg-white/[0.04] backdrop-blur-xl transition-all duration-300 overflow-hidden shadow-lg">
+                      {/* ── Compact Header / Accordion Toggle ── */}
                       <button
                         onClick={() => setShowSeasonGuide(!showSeasonGuide)}
-                        className="relative flex items-center justify-between w-full text-left px-4 pt-4 pb-3 hover:bg-white/[0.03] transition-colors group"
+                        className="w-full flex items-center justify-between gap-4 p-3.5 sm:p-4 text-left transition-colors hover:bg-white/[0.04] group"
+                        aria-expanded={showSeasonGuide}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0 shadow-[0_4px_12px_hsl(var(--primary)/0.2)]">
+                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center shrink-0 shadow-md shadow-primary/30">
                             <Route className="w-4 h-4 text-white" />
-                            <span className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/20" />
                           </div>
+
                           <div className="min-w-0">
-                            <p className="text-[9px] uppercase tracking-[0.18em] font-black text-primary">Franchise Guide</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <h3 className="text-base font-black text-white tracking-tight">Watch Order</h3>
-                              <span className="text-[9px] text-white/60 font-black uppercase tracking-wide bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded-full">
-                                {totalParts} parts
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
+                                Watch Order Guide
+                              </h3>
+                              <span className="text-[10px] font-black uppercase tracking-wider bg-white/10 border border-white/15 text-white/80 px-2 py-0.5 rounded-full">
+                                {totalParts} Parts
                               </span>
+                              {hasActive && (
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-full">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  Part {activeIdx + 1} of {totalParts} (Current)
+                                </span>
+                              )}
                             </div>
-                            <p className="text-[11px] text-white/40 mt-0.5 truncate">Recommended order to enjoy the whole story</p>
+                            <p className="text-xs text-white/50 truncate mt-0.5">
+                              Recommended chronological story order for the complete franchise
+                            </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2.5 shrink-0">
-                          <span className="hidden sm:flex items-baseline gap-1 text-[10px] font-bold text-white/40">
-                            {hasActive ? (
-                              <>Part <span className="text-primary font-black">{activeIdx + 1}</span> of {totalParts}</>
-                            ) : (
-                              `${totalParts} parts`
-                            )}
-                          </span>
-                          <ChevronRight className={`w-4 h-4 text-white/40 transition-transform group-hover:text-white/70 ${showSeasonGuide ? "rotate-90" : ""}`} />
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 group-hover:bg-white/15 border border-white/15 text-xs font-extrabold text-white transition-all">
+                            <span>{showSeasonGuide ? "Hide Guide" : "View Guide"}</span>
+                            <ChevronRight className={cn("w-3.5 h-3.5 transition-transform duration-300", showSeasonGuide && "rotate-90")} />
+                          </div>
                         </div>
                       </button>
 
-                      {/* progress bar */}
-                      <div className="relative h-0.5 bg-white/[0.06]">
-                        <div className="h-full bg-gradient-to-r from-primary to-primary/60 shadow-[0_0_6px_hsl(var(--primary)/0.4)] transition-all duration-500" style={{ width: `${hasActive ? progressPct : 0}%` }} />
-                      </div>
-
-                      {/* ── Expanded body ── */}
+                      {/* ── Expandable Compact Horizontal Content ── */}
                       {showSeasonGuide && (
-                        <div className="relative px-4 sm:px-5 pt-4 pb-4">
-                          <div className="relative">
-                            {/* timeline spine — passes through poster centers (36px from left, 40px from top/bottom) */}
-                            <div className="absolute left-[36px] top-10 bottom-10 w-0.5 -translate-x-1/2 bg-gradient-to-b from-primary/60 via-white/[0.08] to-transparent rounded-full" />
-                            <div className="relative space-y-2">
-                              {visibleFranchiseNodes.map((node, orderIndex) => {
-                                const nodeId = String(node.id);
-                                const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
-                                const meta = formatMeta(node.format);
-                                const FormatIcon = meta.icon;
-                                const nodeEpCount = (isActive && currentSeasonEps.length > 0) ? currentSeasonEps.length : (node.totalEpisodes || node.episodes || "?");
-                                const poster = node.coverImage || (nodeId === anime?.id ? anime?.poster : null) || null;
-                                return (
-                                  <Link
-                                    key={node.id}
-                                    href={`/anime/${node.id}`}
-                                    className={`relative flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200 ${
-                                      isActive
-                                        ? "bg-gradient-to-r from-primary/15 to-primary/[0.04] border-primary/35 shadow-[0_8px_20px_hsl(var(--primary)/0.12)]"
-                                        : "bg-white/[0.035] hover:bg-white/[0.07] border-white/[0.07] hover:border-white/[0.16] hover:-translate-y-px"
-                                    }`}
-                                  >
-                                    {/* poster / node tile */}
-                                    <div className={`relative w-16 h-22 sm:w-20 sm:h-28 rounded-lg overflow-hidden shrink-0 aspect-[2/3] ${isActive ? "shadow-[0_0_12px_hsl(var(--primary)/0.3)]" : ""}`}>
-                                      {poster ? (
-                                        <img src={poster} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
-                                      ) : (
-                                        <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${
-                                          isActive ? "from-primary to-primary/60" : "from-white/[0.08] to-white/[0.03]"
-                                        }`}>
-                                          <span className={`text-xs font-black ${isActive ? "text-white" : "text-white/35"}`}>{orderIndex + 1}</span>
-                                        </div>
-                                      )}
-                                      <div className="absolute inset-0 rounded-md ring-1 ring-inset ring-white/10" />
-                                      {isActive && (
-                                        <div className="absolute inset-0 rounded-md ring-2 ring-primary/70" />
-                                      )}
-                                      {/* number badge */}
-                                      <div className={`absolute bottom-1 left-1 w-4 h-4 rounded flex items-center justify-center ${
-                                        isActive
-                                          ? "bg-gradient-to-br from-primary to-primary/60 text-white shadow-[0_0_8px_hsl(var(--primary)/0.7)]"
-                                          : "bg-black/70 text-white/80 backdrop-blur-sm"
-                                      }`}>
-                                        <span className="text-[8px] font-black leading-none">{orderIndex + 1}</span>
-                                      </div>
-                                    </div>
+                        <div className="border-t border-white/10 p-3.5 sm:p-4 bg-white/[0.02]">
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <span className="text-[11px] font-bold text-white/50 flex items-center gap-1.5">
+                              <Compass className="w-3.5 h-3.5 text-primary" />
+                              Select any entry to switch directly:
+                            </span>
 
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className={`truncate text-sm ${isActive ? "text-white font-black" : "text-white/80 font-bold"}`}>
-                                          {node.title}
-                                        </span>
-                                        {isActive && (
-                                          <span className="shrink-0 flex items-center gap-1.5 text-[9px] uppercase tracking-wide text-white font-black bg-primary/25 border border-primary/50 px-2 py-0.5 rounded-full">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                                            Watching
-                                          </span>
-                                        )}
+                            {totalParts > 3 && (
+                              <div className="hidden sm:flex items-center gap-1">
+                                <button
+                                  onClick={() => scrollTimeline("left")}
+                                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-white transition-colors"
+                                  aria-label="Scroll left"
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => scrollTimeline("right")}
+                                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-white transition-colors"
+                                  aria-label="Scroll right"
+                                >
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Horizontal Compact Scroll Row */}
+                          <div
+                            ref={watchOrderScrollRef}
+                            className="flex gap-3 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1 -mx-1 px-1"
+                            style={{ scrollBehavior: "smooth" }}
+                          >
+                            {visibleFranchiseNodes.map((node, orderIndex) => {
+                              const nodeId = String(node.id);
+                              const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
+                              const meta = formatMeta(node.format);
+                              const FormatIcon = meta.icon;
+                              const poster = node.coverImage || (nodeId === anime?.id ? anime?.poster : null) || null;
+                              const nodeEpCount = (isActive && currentSeasonEps.length > 0)
+                                ? currentSeasonEps.length
+                                : (node.totalEpisodes || node.episodes || null);
+
+                              return (
+                                <Link
+                                  key={`watch-node-${node.id}-${orderIndex}`}
+                                  href={`/anime/${node.id}`}
+                                  className={cn(
+                                    "group relative flex items-center gap-3 p-2.5 rounded-xl border transition-all duration-200 shrink-0 w-64 sm:w-72 snap-start",
+                                    isActive
+                                      ? "bg-primary/20 border-primary/50 ring-1 ring-primary/40 shadow-md shadow-primary/20"
+                                      : "bg-white/[0.06] hover:bg-white/[0.12] border-white/10 hover:border-white/20"
+                                  )}
+                                >
+                                  {/* Poster Thumbnail */}
+                                  <div className="relative w-12 sm:w-14 aspect-[2/3] rounded-lg overflow-hidden shrink-0 shadow-md bg-white/10">
+                                    {poster ? (
+                                      <img
+                                        src={poster}
+                                        alt={node.title}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-white/40 font-bold text-xs">
+                                        {orderIndex + 1}
                                       </div>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded border ${meta.chip}`}>
+                                    )}
+                                    <div className="absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-black/80 backdrop-blur-sm text-[9px] font-black text-white">
+                                      #{orderIndex + 1}
+                                    </div>
+                                  </div>
+
+                                  {/* Details */}
+                                  <div className="min-w-0 flex-1 flex flex-col justify-between py-0.5 self-stretch">
+                                    <div>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className={cn("inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md border", meta.style)}>
                                           <FormatIcon className="w-2.5 h-2.5" />
                                           {meta.label}
                                         </span>
-                                        {node.seasonYear && <span className="text-[10px] text-white/35 font-semibold">{node.seasonYear}</span>}
-                                        <span className="text-[10px] text-white/35 font-semibold">· {nodeEpCount} eps</span>
+                                        {node.seasonYear && <span className="text-[10px] text-white/60 font-semibold">{node.seasonYear}</span>}
                                       </div>
-                                    </div>
-                                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-primary" : "text-white/20"}`} />
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          </div>
 
-                          <p className="mt-3 flex items-center gap-1.5 text-[10px] text-white/30">
-                            <Sparkles className="w-3 h-3 text-primary shrink-0" />
-                            Fan-curated viewing order · open any part to jump straight to it
-                          </p>
+                                      <h4 className={cn(
+                                        "text-xs font-bold mt-1 line-clamp-1 leading-tight",
+                                        isActive ? "text-white" : "text-white/90 group-hover:text-primary transition-colors"
+                                      )}>
+                                        {node.title}
+                                      </h4>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-2 mt-1.5 pt-1 border-t border-white/10">
+                                      <span className="text-[10px] text-white/50 font-medium">
+                                        {nodeEpCount ? `${nodeEpCount} eps` : ""}
+                                      </span>
+
+                                      {isActive ? (
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                          Watching
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-white/40 group-hover:text-white flex items-center gap-0.5 transition-colors">
+                                          View <ChevronRight className="w-3 h-3" />
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </Link>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
-                  </div>
                   );
                 })()}
 
@@ -2675,13 +2769,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   </div>
                 </div>
 
-                {/* ── Source disclaimer ── */}
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300/90 text-xs leading-relaxed mb-4">
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
-                  </svg>
-                  <span>If an episode doesn&apos;t load, try switching to a different source &mdash; some sources may not have every title.</span>
-                </div>
 
                 {/* ── Episode Display (TMDB-enriched data from server) ── */}
                 {(() => {
@@ -2762,13 +2849,61 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     );
                   }
 
-                  const totalPages = Math.ceil(items.length / EPISODES_PER_PAGE);
-                  const activePage = Math.min(Math.max(1, episodePage), Math.max(1, totalPages));
-                  const startIndex = (activePage - 1) * EPISODES_PER_PAGE;
-                  const sliceItems = items.slice(startIndex, startIndex + EPISODES_PER_PAGE);
+                  if (episodeView === "grid") {
+                    const gridPageSize = items.length > 500 ? 50 : 25;
+                    const totalPages = Math.ceil(items.length / gridPageSize);
+                    const activePage = Math.min(Math.max(1, episodePage), Math.max(1, totalPages));
+                    const startIndex = (activePage - 1) * gridPageSize;
+                    const sliceItems = items.slice(startIndex, startIndex + gridPageSize);
 
-                  const handlePageChange = (newPage: number) => {
-                    setEpisodePage(newPage);
+                    const handlePageChange = (newPage: number) => {
+                      setEpisodePage(newPage);
+                      const el = document.getElementById("anime-episodes-section");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }
+                    };
+
+                    return (
+                      <div key={`grid-${currentSeasonId}-${activePage}`}>
+                        {totalPages > 1 && (
+                          <div className="mb-6">
+                            <EpisodePagination
+                              currentPage={activePage}
+                              totalPages={totalPages}
+                              totalItems={items.length}
+                              itemsPerPage={gridPageSize}
+                              onPageChange={handlePageChange}
+                            />
+                          </div>
+                        )}
+
+                        <EpisodeGridView items={sliceItems} />
+
+                        {totalPages > 1 && (
+                          <div className="mt-8">
+                            <EpisodePagination
+                              currentPage={activePage}
+                              totalPages={totalPages}
+                              totalItems={items.length}
+                              itemsPerPage={gridPageSize}
+                              onPageChange={handlePageChange}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // ── List View: Keep Chunks Logic ──
+                  const LIST_CHUNK_SIZE = 10;
+                  const totalChunks = Math.ceil(items.length / LIST_CHUNK_SIZE);
+                  const activeChunk = Math.min(Math.max(0, listChunkIndex), Math.max(0, totalChunks - 1));
+                  const startChunkIndex = activeChunk * LIST_CHUNK_SIZE;
+                  const sliceChunkItems = items.slice(startChunkIndex, startChunkIndex + LIST_CHUNK_SIZE);
+
+                  const handleChunkChange = (newChunk: number) => {
+                    setListChunkIndex(newChunk);
                     const el = document.getElementById("anime-episodes-section");
                     if (el) {
                       el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2776,32 +2911,28 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   };
 
                   return (
-                    <div key={`${episodeView}-${currentSeasonId}`}>
-                      {totalPages > 1 && (
+                    <div key={`list-${currentSeasonId}-${activeChunk}`}>
+                      {items.length > LIST_CHUNK_SIZE && (
                         <div className="flex justify-end mt-2 mb-6">
                           <EpisodeChunkBar
                             totalEpisodes={items.length}
-                            chunkSize={EPISODES_PER_PAGE}
-                            activeChunkIndex={activePage - 1}
-                            onChunkChange={(idx) => handlePageChange(idx + 1)}
+                            chunkSize={LIST_CHUNK_SIZE}
+                            activeChunkIndex={activeChunk}
+                            onChunkChange={handleChunkChange}
                             activeEpisodeNumber={selectedEp?.episodeNum}
                           />
                         </div>
                       )}
 
-                      {episodeView === "grid" ? (
-                        <EpisodeGridView items={sliceItems} />
-                      ) : (
-                        <EpisodeListView items={sliceItems} />
-                      )}
+                      <EpisodeListView items={sliceChunkItems} />
 
-                      {totalPages > 1 && (
+                      {items.length > LIST_CHUNK_SIZE && (
                         <div className="flex justify-end mt-8 pt-4 border-t border-white/[0.06]">
                           <EpisodeChunkBar
                             totalEpisodes={items.length}
-                            chunkSize={EPISODES_PER_PAGE}
-                            activeChunkIndex={activePage - 1}
-                            onChunkChange={(idx) => handlePageChange(idx + 1)}
+                            chunkSize={LIST_CHUNK_SIZE}
+                            activeChunkIndex={activeChunk}
+                            onChunkChange={handleChunkChange}
                             activeEpisodeNumber={selectedEp?.episodeNum}
                           />
                         </div>

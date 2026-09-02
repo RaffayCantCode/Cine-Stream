@@ -194,10 +194,13 @@ function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): an
 
   let result = [...episodes];
 
-  // RULE A: If we have a definitive episode count, always cap to it.
-  // This is the PRIMARY defense against season bleeding.
+  // RULE A: If we have a definitive episode count, cap to it,
+  // BUT never truncate real episodes with actual metadata (e.g. from TMDB when AniList is stale)
   if (knownEpisodeCount && knownEpisodeCount > 0) {
-    result = result.filter((ep: any) => ep.episodeNum <= knownEpisodeCount);
+    const hasRealBeyondCap = result.some((ep: any) => ep.episodeNum > knownEpisodeCount && episodeHasRealMetadata(ep));
+    if (!hasRealBeyondCap) {
+      result = result.filter((ep: any) => ep.episodeNum <= knownEpisodeCount);
+    }
   } else if (isSpecial) {
     // Specials: default to 1 unless an explicit count was specified
     result = result.filter((ep: any) => ep.episodeNum <= 1);
@@ -567,6 +570,19 @@ export async function GET(
         } catch { /* keep whatever we have */ }
       }
 
+      // If TMDB ID is still null, search TMDB by title!
+      if (!tmdbId && (season.name || meta?.anime?.name)) {
+        try {
+          const titleSearch = season.name || meta?.anime?.name || "";
+          const searchedId = await searchTmdbShow(titleSearch, meta?.anime?.seasonYear || undefined);
+          if (searchedId) {
+            tmdbId = searchedId;
+            tmdbSeasonNum = tmdbSeasonNum || 1;
+            console.log(`[Episodes API] Discovered TMDB ID=${searchedId} via title search for "${titleSearch}"`);
+          }
+        } catch { /* keep whatever we have */ }
+      }
+
       // Smart season & offset title parsing override — fixes season mismatching
       if ((!tmdbSeasonNum || tmdbSeasonNum === 1) && (season.name || meta?.anime?.name)) {
         const titleToParse = season.name || meta?.anime?.name || "";
@@ -630,18 +646,17 @@ export async function GET(
             s.totalEpisodes > 2 // Ignore OVAs and specials when clamping
           );
 
-          // CRITICAL FIX: Only count episodes in the CURRENT TMDB season, minus our offset.
+          // CRITICAL: Only count episodes in the CURRENT TMDB season, minus our offset.
           const currentTmdbSeasonEpCount = currentTmdbSeason ? Math.max((currentTmdbSeason.episode_count || 0) - episodeOffset, 0) : 0;
 
-          if (knownEpisodeCount) {
-            // AniList has a definitive count — this is always the ceiling, PERIOD.
+          if (currentTmdbSeasonEpCount > 0) {
+            // When TMDB has episodes for this season, respect TMDB's count
+            dynamicTotalEpisodes = Math.max(knownEpisodeCount || 0, currentTmdbSeasonEpCount);
+          } else if (knownEpisodeCount) {
             dynamicTotalEpisodes = knownEpisodeCount;
           } else if (nextSeasonInTMDB) {
             // The next AniList season also maps to the same TMDB season — clamp to that boundary
             dynamicTotalEpisodes = (nextSeasonInTMDB.episodeOffset || 0) - episodeOffset;
-          } else if (currentTmdbSeasonEpCount > 0) {
-            // Use only the current TMDB season's episode count
-            dynamicTotalEpisodes = Math.max(currentTmdbSeasonEpCount, safeTotalEpisodes);
           }
           // Absolute safety cap: never return more than 1500 episodes at once
           dynamicTotalEpisodes = Math.min(Math.max(dynamicTotalEpisodes, 1), 1500);
@@ -835,11 +850,9 @@ export async function GET(
         let enrichedEps = await getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, season.idMal || null);
         const lacksRealEpisodes = !enrichedEps || enrichedEps.length === 0 || enrichedEps.every((e: any) => !episodeHasRealMetadata(e));
 
-        // Fallback: If primary sources failed/placeholders on edge, search TMDB by title!
-        // NOTE: This only runs for anime where every primary source returned bare
-        // placeholder cards (no title/thumbnail/description). Real TMDB episode data
-        // becomes the source so such titles at least display properly.
-        if (lacksRealEpisodes && season.name) {
+        // Fallback: If primary sources failed, returned placeholders, or have fewer episodes than TMDB
+        const needsTmdbEnrichment = lacksRealEpisodes || (enrichedEps.length < (safeTotalEpisodes > 2 ? safeTotalEpisodes : 12) && !isMovieOrSpecial);
+        if (needsTmdbEnrichment && season.name) {
           try {
             const parsed = parseSeasonAndOffsetFromTitle(season.name);
             const targetTmdbSeason = parsed.tmdbSeason || 1;
@@ -852,20 +865,25 @@ export async function GET(
               if (tmdbSeasonData?.episodes && tmdbSeasonData.episodes.length > 0) {
                 const rawEps = tmdbSeasonData.episodes.slice(targetOffset);
                 if (rawEps.length > 0) {
-                  enrichedEps = rawEps.map((ep: any, idx: number) => ({
-                    episodeId: `${season.id}-${idx + 1}`,
-                    episodeNum: idx + 1,
-                    title: ep.name || `Episode ${idx + 1}`,
-                    thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : null,
-                    description: ep.overview || null,
-                    releasedDate: ep.air_date || null,
-                    isFiller: false,
-                    isReleased: true,
-                    seasonNum: seasonNumFromList,
-                    seasonId: season.id,
-                    seasonName: season.name,
-                    seasonMalId: season.idMal || null,
-                  }));
+                  const tmdbFormatted = rawEps.map((ep: any, idx: number) => {
+                    const epNum = idx + 1;
+                    const existing = enrichedEps.find(e => e.episodeNum === epNum);
+                    return {
+                      episodeId: existing?.episodeId || `${season.id}-${epNum}`,
+                      episodeNum: epNum,
+                      title: ep.name || existing?.title || `Episode ${epNum}`,
+                      thumbnail: ep.still_path ? `https://image.tmdb.org/t/p/w780${ep.still_path}` : (existing?.thumbnail || null),
+                      description: ep.overview || existing?.description || null,
+                      releasedDate: ep.air_date || existing?.releasedDate || null,
+                      isFiller: existing?.isFiller || false,
+                      isReleased: true,
+                      seasonNum: seasonNumFromList,
+                      seasonId: season.id,
+                      seasonName: season.name,
+                      seasonMalId: season.idMal || null,
+                    };
+                  });
+                  enrichedEps = tmdbFormatted;
                   seasonOverview = tmdbSeasonData.overview || null;
                 }
               }
@@ -966,7 +984,10 @@ export async function GET(
       if (isExplicitMovieFinal) {
         seasonEps = seasonEps.slice(0, 1);
       } else if (finalKnownCount && finalKnownCount > 0) {
-        seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalKnownCount);
+        const hasRealBeyondFinal = seasonEps.some((ep: any) => ep.episodeNum > finalKnownCount && episodeHasRealMetadata(ep));
+        if (!hasRealBeyondFinal) {
+          seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalKnownCount);
+        }
       }
 
       console.log(`[Episodes API] Built ${seasonEps.length} episodes for seasonId=${seasonId} (knownCount=${finalKnownCount})`);

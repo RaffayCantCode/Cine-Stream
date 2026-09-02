@@ -77,7 +77,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     sourceConfig.forEach((entry, index) => {
       const src = byType.get(entry.key);
       if (src) {
-        ordered.push({ ...src, name: `Server ${index + 1}`, tag: entry.tag });
+        ordered.push({ ...src, name: `Source ${index + 1}`, tag: entry.tag });
       }
     });
     base.forEach((s) => {
@@ -88,7 +88,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
 
   const [activeSource, setActiveSource] = useState<StreamingSource>(sources[0] || {
     url: `https://vidsrc.me/embed/tv?tmdb=${showId}&season=${seasonNumber}&episode=${episodeNumber}`,
-    name: "Server 1",
+    name: "Source 1",
     type: "vidsrc",
     quality: "Stable",
   });

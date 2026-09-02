@@ -27,7 +27,7 @@ function TvHeroTrailerButton() {
   );
 }
 import { GridMediaCard } from "@/components/GridMediaCard";
-import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeChunkBar, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
+import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeChunkBar, EpisodePagination, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { format } from "date-fns";
@@ -128,12 +128,15 @@ export default function TvClient() {
     });
   };
 
+  const [gridEpisodePage, setGridEpisodePage] = useState(1);
+
   const handleTvViewChange = (view: EpisodeViewMode) => {
     setTvViewMode(view);
   };
 
   useEffect(() => {
     setEpisodeChunk(0);
+    setGridEpisodePage(1);
   }, [selectedSeason]);
 
   useEffect(() => {
@@ -186,6 +189,16 @@ export default function TvClient() {
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (playingSeason === selectedSeason && playingEpisode) {
+      const totalEps = seasonData?.episodes?.length || 0;
+      const gridPageSize = totalEps > 500 ? 50 : 25;
+      const targetPage = Math.floor((playingEpisode - 1) / gridPageSize) + 1;
+      setGridEpisodePage(targetPage);
+    }
+  }, [playingSeason, selectedSeason, playingEpisode, seasonData?.episodes?.length]);
+
   const playerRef = useRef<HTMLDivElement>(null);
   const queueRef = useRef<HTMLDivElement>(null);
   const selectedEpRef = useRef<HTMLButtonElement>(null);
@@ -725,7 +738,7 @@ export default function TvClient() {
           </aside>
         </div>
       )}
-        <section>
+        <section id="tv-episodes-section">
           <div className="flex items-center justify-between gap-4 mb-8 flex-wrap">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-5 bg-primary rounded-full shrink-0" />
@@ -764,13 +777,67 @@ export default function TvClient() {
             {!seasonLoading && seasonData && (() => {
               const allEpisodes = seasonData.episodes || [];
               const totalEpisodes = allEpisodes.length;
+
+              if (tvViewMode === "grid") {
+                const gridPageSize = totalEpisodes > 500 ? 50 : 25;
+                const totalPages = Math.ceil(totalEpisodes / gridPageSize);
+                const activePage = Math.min(Math.max(1, gridEpisodePage), Math.max(1, totalPages));
+                const startIdx = (activePage - 1) * gridPageSize;
+                const pagedEpisodes = allEpisodes.slice(startIdx, startIdx + gridPageSize);
+
+                const handlePageChange = (newPage: number) => {
+                  setGridEpisodePage(newPage);
+                  const el = document.getElementById("tv-episodes-section");
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                };
+
+                return (
+                  <div key={`grid-${selectedSeason}-${activePage}`}>
+                    {totalPages > 1 && (
+                      <div className="mb-6">
+                        <EpisodePagination
+                          currentPage={activePage}
+                          totalPages={totalPages}
+                          totalItems={totalEpisodes}
+                          itemsPerPage={gridPageSize}
+                          onPageChange={handlePageChange}
+                        />
+                      </div>
+                    )}
+
+                    {pagedEpisodes.length > 0 ? (
+                      <EpisodeGridView items={pagedEpisodes.map(episodeToItem)} />
+                    ) : (
+                      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-white/40">
+                        No episodes available for this season.
+                      </div>
+                    )}
+
+                    {totalPages > 1 && (
+                      <div className="mt-8">
+                        <EpisodePagination
+                          currentPage={activePage}
+                          totalPages={totalPages}
+                          totalItems={totalEpisodes}
+                          itemsPerPage={gridPageSize}
+                          onPageChange={handlePageChange}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // ── List View: Keep Chunks Logic ──
               const startIdx = episodeChunk * TV_CHUNK_SIZE;
               const chunkEpisodes = totalEpisodes > TV_CHUNK_SIZE
                 ? allEpisodes.slice(startIdx, startIdx + TV_CHUNK_SIZE)
                 : allEpisodes;
 
               return (
-                <div key={`${tvViewMode}-${selectedSeason}-${episodeChunk}`}>
+                <div key={`list-${selectedSeason}-${episodeChunk}`}>
                   {totalEpisodes > TV_CHUNK_SIZE && (
                     <div className="flex justify-end mt-2 mb-6">
                       <EpisodeChunkBar
@@ -784,11 +851,7 @@ export default function TvClient() {
                   )}
 
                   {chunkEpisodes.length > 0 ? (
-                    tvViewMode === "grid" ? (
-                      <EpisodeGridView items={chunkEpisodes.map(episodeToItem)} />
-                    ) : (
-                      <EpisodeListView items={chunkEpisodes.map(episodeToItem)} />
-                    )
+                    <EpisodeListView items={chunkEpisodes.map(episodeToItem)} />
                   ) : (
                     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-white/40">
                       No episodes available for this season.

@@ -95,10 +95,10 @@ export async function GET(request: NextRequest) {
 
     results.sort((a, b) => scoreResult(b, query) - scoreResult(a, query));
 
-    // Exclude anime (Japanese animated content) from movie/tv search results.
-    // Anime content belongs exclusively to the Anime section (AniList/Jikan based).
-    // Person results and non-anime movies/TV shows are unaffected.
-    const filteredResults = results.filter((item) => !isAnimeItem(item));
+    // Exclude anime (Japanese animated content) from general movie/tv search results unless include_anime=true.
+    // Anime content belongs exclusively to the Anime section, but anime resolvers pass include_anime=true.
+    const includeAnime = searchParams.get("include_anime") === "true";
+    const filteredResults = includeAnime ? results : results.filter((item) => !isAnimeItem(item));
 
     return Response.json({
       page: Number(page) || 1,

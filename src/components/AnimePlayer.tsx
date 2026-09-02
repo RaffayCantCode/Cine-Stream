@@ -39,6 +39,7 @@ const PROVIDERS: ProviderSource[] = [
   { name: "Source 3", provider: "embedmaster", color: "from-[#10b981]/30 to-[#34d399]/20", quality: "best" },
   { name: "Source 4", provider: "animepahe",   color: "from-[#6366f1]/30 to-[#818cf8]/20", quality: "good" },
   { name: "Source 5", provider: "animesub",    color: "from-[#f59e0b]/30 to-[#fbbf24]/20", quality: "backup" },
+  { name: "Source 6", provider: "vidsrc",      color: "from-[#8b5cf6]/30 to-[#a78bfa]/20", quality: "backup" },
 ];
 
 const QUALITY_STYLES: Record<string, string> = {
@@ -134,7 +135,24 @@ function buildProviderUrl(
       ];
       return mirrors[attempt % mirrors.length];
     }
-    case "vidsrc":
+    case "vidsrc": {
+      if (tmdbId) {
+        const attempt = retryAttempt || 0;
+        const mirrors = [
+          isMovie
+            ? `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`
+            : `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${tmdbSeason || 1}&episode=${absEp}`,
+          isMovie
+            ? `https://vidsrc.cc/v2/embed/movie/${tmdbId}`
+            : `https://vidsrc.cc/v2/embed/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`,
+          isMovie
+            ? `https://vidlink.pro/movie/${tmdbId}`
+            : `https://vidlink.pro/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`,
+        ];
+        return mirrors[attempt % mirrors.length];
+      }
+      return primaryId ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub` : "";
+    }
     case "aniwave":
     case "vidlink":
     case "autoembed":

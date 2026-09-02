@@ -96,11 +96,19 @@ export function getDefaultMovieOrder(): string[] {
 }
 
 export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource[] {
+  const defaultMovieTags: Record<string, string> = {
+    vidsrc: "recommended",
+    embedmaster: "best",
+    vixsrc: "best",
+    vidlink: "good",
+    autoembed: "backup",
+  };
   return STREAMING_APIS.map((api) => ({
     url: buildEmbedUrl(api, type, id, season, episode, progress),
     name: api.name,
     type: api.type,
     quality: api.quality,
+    tag: defaultMovieTags[api.type] || api.quality.toLowerCase(),
     supportsNativeFullscreen: api.supportsNativeFullscreen,
   }));
 }

@@ -72,6 +72,7 @@ interface AnimeInfo {
   totalEpisodes?: number | null;
   tmdbId?: number | null;
   tmdbSeason?: number | null;
+  countryOfOrigin?: string | null;
 }
 
 interface WatchAnimeClientProps {
@@ -80,11 +81,12 @@ interface WatchAnimeClientProps {
 }
 
 const ANIME_SERVERS: ServerOption[] = [
-  { key: "animeplay", name: "Source 1", type: "animeplay", quality: "Best", tag: "best" },
+  { key: "animeplay", name: "Source 1", type: "animeplay", quality: "Recommended", tag: "recommended" },
   { key: "vidnest", name: "Source 2", type: "vidnest", quality: "Best", tag: "best" },
   { key: "embedmaster", name: "Source 3", type: "embedmaster", quality: "Best", tag: "best" },
   { key: "animepahe", name: "Source 4", type: "animepahe", quality: "Good", tag: "good" },
   { key: "animesub", name: "Source 5", type: "animesub", quality: "Backup", tag: "backup" },
+  { key: "vidsrc", name: "Source 6", type: "vidsrc", quality: "Backup", tag: "backup" },
 ];
 
 export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeClientProps) {
@@ -100,11 +102,25 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
     const loadAnime = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/anime/info?id=${encodeURIComponent(animeId)}`);
+        const res = await fetch(`/api/anime/${encodeURIComponent(animeId)}`);
         if (res.ok) {
           const json = await res.json();
-          if (json?.data) {
-            setAnime(json.data);
+          const a = json?.data?.anime || json?.data;
+          if (a) {
+            const isChinese = a.countryOfOrigin === "CN" || /[\u4e00-\u9fa5]/.test(a.jname || "") || /[\u4e00-\u9fa5]/.test(a.name || "");
+            setAnime({
+              ...a,
+              name: a.name || a.title?.english || a.title?.romaji || a.title,
+              poster: a.poster || a.coverImage?.extraLarge || a.coverImage?.large,
+              bannerImage: a.bannerImage || a.backdrop,
+              totalEpisodes: a.totalEpisodes || a.episodes?.length,
+              tmdbId: a.tmdbId || null,
+              tmdbSeason: a.tmdbSeason || 1,
+              countryOfOrigin: a.countryOfOrigin || (isChinese ? "CN" : null),
+            });
+            if (isChinese) {
+              setForcedSource("embedmaster");
+            }
             return;
           }
         }
@@ -128,6 +144,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
                   genres
                   description
                   episodes
+                  countryOfOrigin
                 }
               }
             `,
@@ -139,6 +156,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
           const alJson = await alRes.json();
           const media = alJson?.data?.Media;
           if (media) {
+            const isChinese = media.countryOfOrigin === "CN" || /[\u4e00-\u9fa5]/.test(media.title?.native || "");
             setAnime({
               id: String(media.id),
               idMal: media.idMal ? String(media.idMal) : null,
@@ -154,7 +172,11 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
               description: media.description?.replace(/<[^>]*>/g, ""),
               totalEpisodes: media.episodes,
               episodes: { sub: media.episodes, dub: null },
+              countryOfOrigin: media.countryOfOrigin || (isChinese ? "CN" : null),
             });
+            if (isChinese) {
+              setForcedSource("embedmaster");
+            }
             return;
           }
         }
@@ -169,6 +191,29 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
 
     loadAnime();
   }, [animeId]);
+
+  // ── TMDB ID Resolver for Donghua and Universal sources (Source 3 & Source 6) ──
+  useEffect(() => {
+    if (!anime || anime.tmdbId) return;
+    const titleToSearch = anime.name || anime.jname;
+    if (!titleToSearch) return;
+
+    let isMounted = true;
+    const clean = titleToSearch.replace(/\b(season|part|2nd|3rd|4th|5th|final)\b.*$/i, "").trim() || titleToSearch;
+
+    fetch(`/api/tmdb/search?query=${encodeURIComponent(clean)}&type=tv&include_anime=true`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted || !data?.results?.length) return;
+        const match = data.results.find((r: any) => r.genre_ids?.includes(16)) || data.results[0];
+        if (match?.id) {
+          setAnime((prev) => (prev ? { ...prev, tmdbId: match.id, tmdbSeason: 1 } : null));
+        }
+      })
+      .catch(() => {});
+
+    return () => { isMounted = false; };
+  }, [anime?.name, anime?.jname, anime?.tmdbId]);
 
   // Load detailed anime episodes list with thumbnails, titles, and filler tags
   const [animeEpisodes, setAnimeEpisodes] = useState<any[]>([]);
