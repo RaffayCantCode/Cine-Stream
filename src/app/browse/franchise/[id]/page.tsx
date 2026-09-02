@@ -287,7 +287,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
           title={collection.name}
           theme="movie"
         >
-          <div className="pb-6 sm:pb-12 px-4 sm:px-6 md:px-10 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="pb-6 sm:pb-12 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 w-full flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="max-w-2xl">
               <Link 
                 href="/browse/franchises"
@@ -315,12 +315,12 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
         </CinematicHero>
 
         {id === "marvel" && (
-          <div className="md:hidden max-w-screen-2xl mx-auto px-5 pt-6 pb-2">
+          <div className="md:hidden w-full px-4 sm:px-6 pt-6 pb-2">
             <DoomsdayCountdown />
           </div>
         )}
 
-        <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto pb-10 pt-8">
+        <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 pb-14 pt-8">
           {collection.groups && collection.groups.length > 0 ? (
             <div className="flex flex-col gap-12">
               {collection.groups.map((group, gIdx) => (
@@ -329,7 +329,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
                     <div className="w-1.5 h-5 rounded-full bg-primary" />
                     <h2 className="text-xl font-extrabold tracking-tight text-foreground">{group.name}</h2>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-x-5 gap-y-8">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 sm:gap-x-5 sm:gap-y-8">
                     {group.parts.map((item, index) => (
                       <GridMediaCard key={item.id} item={item} index={index} />
                     ))}
@@ -344,7 +344,7 @@ export default function FranchisePage({ params }: { params: Promise<{ id: string
                 <h2 className="text-xl font-extrabold tracking-tight text-foreground">Chronological Order</h2>
               </div>
               
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-x-5 gap-y-8">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 sm:gap-x-5 sm:gap-y-8">
                 {collection.parts.map((item, index) => (
                   <GridMediaCard key={item.id} item={item} index={index} />
                 ))}

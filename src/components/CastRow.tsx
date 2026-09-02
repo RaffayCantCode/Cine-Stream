@@ -97,12 +97,7 @@ export const CastRow = memo(function CastRow({ cast, crew }: CastRowProps) {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="w-1 h-5 bg-primary rounded-full" />
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-bold text-white tracking-wide">Cast & Crew</h2>
-            <span className="text-[9px] uppercase font-bold tracking-wider text-white/50 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
-              Clickable Cards
-            </span>
-          </div>
+          <h2 className="text-base font-bold text-white tracking-wide">Cast & Crew</h2>
         </div>
         <div className="hidden md:flex items-center gap-2">
           <button

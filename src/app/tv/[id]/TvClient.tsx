@@ -27,13 +27,15 @@ function TvHeroTrailerButton() {
   );
 }
 import { GridMediaCard } from "@/components/GridMediaCard";
-import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
+import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeChunkBar, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { format } from "date-fns";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { usePageContentReady } from "@/lib/pageLoad";
+
+const TV_CHUNK_SIZE = 10;
 
 interface Episode {
   id: number;
@@ -90,6 +92,7 @@ export default function TvClient() {
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [playingSeason, setPlayingSeason] = useState<number>(1);
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
+  const [episodeChunk, setEpisodeChunk] = useState<number>(0);
   const [hasActiveProgress, setHasActiveProgress] = useState(false);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
@@ -128,6 +131,17 @@ export default function TvClient() {
   const handleTvViewChange = (view: EpisodeViewMode) => {
     setTvViewMode(view);
   };
+
+  useEffect(() => {
+    setEpisodeChunk(0);
+  }, [selectedSeason]);
+
+  useEffect(() => {
+    if (playingSeason === selectedSeason && playingEpisode) {
+      const targetChunk = Math.floor((playingEpisode - 1) / TV_CHUNK_SIZE);
+      setEpisodeChunk(targetChunk);
+    }
+  }, [playingSeason, selectedSeason, playingEpisode]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -391,7 +405,7 @@ export default function TvClient() {
       <div className="min-h-screen bg-background text-foreground pb-24">
         <Sidebar />
         <main className="w-full">
-          <div className="pt-24 px-6 md:px-12 max-w-screen-2xl mx-auto">
+          <div className="pt-24 px-6 md:px-12 w-full">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-white/80 max-w-lg mx-auto text-center space-y-3">
               <div className="text-xl font-bold text-white">Title Unavailable</div>
               <p className="text-sm text-zinc-400">
@@ -461,7 +475,7 @@ export default function TvClient() {
       number: episode.episode_number,
       title: episode.name,
       description: episode.overview || null,
-      thumbnail: episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : null,
+      thumbnail: episode.still_path ? `https://image.tmdb.org/t/p/w780${episode.still_path}` : null,
       airDate: episode.air_date || null,
       runtime: episode.runtime || null,
       rating: episode.vote_average || null,
@@ -487,7 +501,7 @@ export default function TvClient() {
         title={show.name}
         theme="tv"
       >
-        <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
+        <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 w-full flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
           {posterUrl && (
             <img
               src={posterUrl}
@@ -503,7 +517,7 @@ export default function TvClient() {
           <div className="flex-1 space-y-3 sm:space-y-3.5 w-full">
             <div>
               {activeLogo ? (
-                <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
+                <div className="mb-4 sm:mb-5 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
                   <img
                     src={activeLogo}
                     alt={show.name}
@@ -608,7 +622,7 @@ export default function TvClient() {
         </div>
       </CinematicHero>
 
-      <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-10 space-y-14">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 mt-10 space-y-14">
       {episodeNotice && (
         <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">
           {episodeNotice}
@@ -747,24 +761,54 @@ export default function TvClient() {
             </div>
           </div>
 
-            {!seasonLoading && seasonData && (
-              <div
-                key={`${tvViewMode}-${selectedSeason}`}
-              >
+            {!seasonLoading && seasonData && (() => {
+              const allEpisodes = seasonData.episodes || [];
+              const totalEpisodes = allEpisodes.length;
+              const startIdx = episodeChunk * TV_CHUNK_SIZE;
+              const chunkEpisodes = totalEpisodes > TV_CHUNK_SIZE
+                ? allEpisodes.slice(startIdx, startIdx + TV_CHUNK_SIZE)
+                : allEpisodes;
 
-                {seasonData.episodes && seasonData.episodes.length > 0 ? (
-                  tvViewMode === "grid" ? (
-                    <EpisodeGridView items={seasonData.episodes.map(episodeToItem)} />
+              return (
+                <div key={`${tvViewMode}-${selectedSeason}-${episodeChunk}`}>
+                  {totalEpisodes > TV_CHUNK_SIZE && (
+                    <div className="flex justify-end mt-2 mb-6">
+                      <EpisodeChunkBar
+                        totalEpisodes={totalEpisodes}
+                        chunkSize={TV_CHUNK_SIZE}
+                        activeChunkIndex={episodeChunk}
+                        onChunkChange={setEpisodeChunk}
+                        activeEpisodeNumber={playingSeason === selectedSeason ? playingEpisode : undefined}
+                      />
+                    </div>
+                  )}
+
+                  {chunkEpisodes.length > 0 ? (
+                    tvViewMode === "grid" ? (
+                      <EpisodeGridView items={chunkEpisodes.map(episodeToItem)} />
+                    ) : (
+                      <EpisodeListView items={chunkEpisodes.map(episodeToItem)} />
+                    )
                   ) : (
-                    <EpisodeListView items={seasonData.episodes.map(episodeToItem)} />
-                  )
-                ) : (
-                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-white/40">
-                    No episodes available for this season.
-                  </div>
-                )}
-              </div>
-            )}
+                    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-white/40">
+                      No episodes available for this season.
+                    </div>
+                  )}
+
+                  {totalEpisodes > TV_CHUNK_SIZE && (
+                    <div className="flex justify-end mt-8 pt-4 border-t border-white/[0.06]">
+                      <EpisodeChunkBar
+                        totalEpisodes={totalEpisodes}
+                        chunkSize={TV_CHUNK_SIZE}
+                        activeChunkIndex={episodeChunk}
+                        onChunkChange={setEpisodeChunk}
+                        activeEpisodeNumber={playingSeason === selectedSeason ? playingEpisode : undefined}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
         </section>
 
         {(((show.credits as any)?.cast && (show.credits as any).cast.length > 0) || ((show.credits as any)?.crew && (show.credits as any).crew.length > 0)) && (
@@ -812,10 +856,30 @@ export default function TvClient() {
                     <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6">
-                  {filtered.slice(0, 12).map((item: any, i: number) => (
-                    <GridMediaCard key={item.id} item={item} index={i} />
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6">
+                  {filtered.slice(0, 20).map((item: any, i: number) => {
+                    const visibilityClass =
+                      i < 4
+                        ? "block"
+                        : i < 6
+                        ? "hidden sm:block"
+                        : i < 8
+                        ? "hidden md:block"
+                        : i < 10
+                        ? "hidden lg:block"
+                        : i < 12
+                        ? "hidden xl:block"
+                        : i < 14
+                        ? "hidden 2xl:block"
+                        : i < 16
+                        ? "hidden 3xl:block"
+                        : "hidden 4xl:block";
+                    return (
+                      <div key={item.id} className={visibilityClass}>
+                        <GridMediaCard item={item} index={i} />
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             );

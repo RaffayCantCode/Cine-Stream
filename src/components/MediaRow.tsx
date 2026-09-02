@@ -22,6 +22,7 @@ interface MediaRowProps {
   seeAllHref?: string;
   accentIcon?: React.ReactNode;
   isTop10?: boolean;
+  largeTitle?: boolean;
 }
 
 function SkeletonCard({ index }: { index: number }) {
@@ -33,10 +34,11 @@ function SkeletonCard({ index }: { index: number }) {
   );
 }
 
-export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAllHref, accentIcon, isTop10 }: MediaRowProps) {
+export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAllHref, accentIcon, isTop10, largeTitle }: MediaRowProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const isLarge = isTop10 || largeTitle;
 
   useEffect(() => {
     if (!isLoading && (!items || items.length === 0)) return;
@@ -86,14 +88,14 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
   return (
     <div
       className="py-3 md:py-4 space-y-3 animate-fade-in-up"
-      style={{ animationDuration: "0.45s", contentVisibility: "auto", containIntrinsicSize: "auto 240px" }}
+      style={{ animationDuration: "0.45s" }}
     >
-      <div className="flex items-center justify-between px-3 md:px-8 lg:px-10">
+      <div className="flex items-center justify-between px-3 md:px-6 lg:px-8 xl:px-10 2xl:px-12 3xl:px-16">
         <div className="flex items-center gap-3">
-          <div className={`w-1 bg-gradient-to-b from-[#D3D1CE] to-[#6C6D74] rounded-full ${isTop10 ? "h-6 md:h-8" : "h-5"}`} />
+          <div className={`w-1 bg-gradient-to-b from-[#D3D1CE] to-[#6C6D74] rounded-full ${isLarge ? "h-6 md:h-8" : "h-5"}`} />
           <div className="flex items-center gap-2">
             {accentIcon}
-            <h2 className={isTop10 ? "text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-md" : "text-base md:text-xl font-black text-white tracking-tight"}>{title}</h2>
+            <h2 className={isLarge ? "text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-md" : "text-base md:text-xl font-black text-white tracking-tight"}>{title}</h2>
           </div>
         </div>
         <div className="flex items-center gap-3 md:gap-6">
@@ -135,7 +137,7 @@ export const MediaRow = memo(function MediaRow({ title, items, isLoading, seeAll
 
       <div className="relative group/row">
         <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-visible pt-6 pb-8 -mt-3 -mb-3 hide-scrollbar will-change-transform scroll-smooth">
-          <div className="flex px-3 md:px-8 lg:px-10 w-max gap-3.5 md:gap-5">
+          <div className="flex px-3 md:px-6 lg:px-8 xl:px-10 2xl:px-12 3xl:px-16 w-max gap-3.5 md:gap-5">
             {isLoading
               ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (
                   <SkeletonCard key={i} index={i} />

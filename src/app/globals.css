@@ -649,7 +649,7 @@
     @apply border-border;
   }
   html {
-    scroll-behavior: auto;
+    scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     scroll-padding-top: 32px;
     font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif;

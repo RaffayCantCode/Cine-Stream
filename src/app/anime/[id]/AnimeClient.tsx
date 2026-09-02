@@ -11,7 +11,7 @@ import { AnimeCard } from "@/components/AnimeCard";
 import { CastRow } from "@/components/CastRow";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { WatchlistButton } from "@/components/WatchlistButton";
-import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
+import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, EpisodeChunkBar, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { useMediaLogo } from "@/components/MediaLogo";
 
@@ -482,7 +482,7 @@ async function fetchEpisodesClientSide(
                   episodeNum: i,
                   title: tmdbEp?.name || azMatch?.title || `Episode ${i}`,
                   description: tmdbEp?.overview || azMatch?.description || null,
-                  thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
+                  thumbnail: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w780${tmdbEp.still_path}` : (azMatch?.thumbnail || null),
                   releasedDate: tmdbEp?.air_date || azMatch?.releasedDate || null,
                   isFiller: false,
                   seasonId,
@@ -1988,7 +1988,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     [currentSeasonEps]
   );
 
-  const EPISODES_PER_PAGE = 50;
+  const EPISODES_PER_PAGE = 12;
   const [episodePage, setEpisodePage] = useState(1);
 
   // Reset page when season changes
@@ -2237,7 +2237,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               title={displayTitle}
               theme="anime"
             >
-              <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-12 flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 max-w-screen-2xl mx-auto w-full">
+              <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 w-full">
                 <div
                   className="shrink-0 w-24 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10"
                 >
@@ -2247,7 +2247,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 <div className="flex-1 space-y-2 sm:space-y-3 min-w-0">
                   <div>
                     {logoUrl ? (
-                      <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
+                      <div className="mb-4 sm:mb-5 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
                         <img
                           src={logoUrl}
                           alt={displayTitle}
@@ -2382,7 +2382,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             </CinematicHero>
 
             {/* ── Main Content ── */}
-            <div className="px-5 md:px-12 max-w-screen-2xl mx-auto mt-6 space-y-6">
+            <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 mt-6 space-y-6">
               <Link href="/anime" className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
                 <ArrowLeft className="w-4 h-4" /> Back to Anime
               </Link>
@@ -2777,14 +2777,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
                   return (
                     <div key={`${episodeView}-${currentSeasonId}`}>
-                      <EpisodePagination
-                        currentPage={activePage}
-                        totalPages={totalPages}
-                        totalItems={items.length}
-                        itemsPerPage={EPISODES_PER_PAGE}
-                        onPageChange={handlePageChange}
-                        className="pt-0 pb-4 border-t-0 border-b border-white/[0.06] mb-5 mt-0"
-                      />
+                      {totalPages > 1 && (
+                        <div className="flex justify-end mt-2 mb-6">
+                          <EpisodeChunkBar
+                            totalEpisodes={items.length}
+                            chunkSize={EPISODES_PER_PAGE}
+                            activeChunkIndex={activePage - 1}
+                            onChunkChange={(idx) => handlePageChange(idx + 1)}
+                            activeEpisodeNumber={selectedEp?.episodeNum}
+                          />
+                        </div>
+                      )}
 
                       {episodeView === "grid" ? (
                         <EpisodeGridView items={sliceItems} />
@@ -2792,13 +2795,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                         <EpisodeListView items={sliceItems} />
                       )}
 
-                      <EpisodePagination
-                        currentPage={activePage}
-                        totalPages={totalPages}
-                        totalItems={items.length}
-                        itemsPerPage={EPISODES_PER_PAGE}
-                        onPageChange={handlePageChange}
-                      />
+                      {totalPages > 1 && (
+                        <div className="flex justify-end mt-8 pt-4 border-t border-white/[0.06]">
+                          <EpisodeChunkBar
+                            totalEpisodes={items.length}
+                            chunkSize={EPISODES_PER_PAGE}
+                            activeChunkIndex={activePage - 1}
+                            onChunkChange={(idx) => handlePageChange(idx + 1)}
+                            activeEpisodeNumber={selectedEp?.episodeNum}
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -2812,10 +2819,30 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6 px-5 md:px-0">
-                  {recommendations.slice(0, 12).map((item: any, i: number) => (
-                    <AnimeCard key={item.id} item={item} index={i} />
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 px-5 md:px-0">
+                  {recommendations.slice(0, 20).map((item: any, i: number) => {
+                    const visibilityClass =
+                      i < 4
+                        ? "block"
+                        : i < 6
+                        ? "hidden sm:block"
+                        : i < 8
+                        ? "hidden md:block"
+                        : i < 10
+                        ? "hidden lg:block"
+                        : i < 12
+                        ? "hidden xl:block"
+                        : i < 14
+                        ? "hidden 2xl:block"
+                        : i < 16
+                        ? "hidden 3xl:block"
+                        : "hidden 4xl:block";
+                    return (
+                      <div key={item.id} className={visibilityClass}>
+                        <AnimeCard item={item} index={i} />
+                      </div>
+                    );
+                  })}
                 </div>
                 </>
               )}
@@ -2828,10 +2855,32 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6 px-5 md:px-0">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <div key={i} className="aspect-[2/3] w-full shrink-0 rounded-2xl shimmer" style={{ animationDelay: `${i * 80}ms` }} />
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 px-5 md:px-0">
+                  {Array.from({ length: 20 }).map((_, i) => {
+                    const visibilityClass =
+                      i < 4
+                        ? "block"
+                        : i < 6
+                        ? "hidden sm:block"
+                        : i < 8
+                        ? "hidden md:block"
+                        : i < 10
+                        ? "hidden lg:block"
+                        : i < 12
+                        ? "hidden xl:block"
+                        : i < 14
+                        ? "hidden 2xl:block"
+                        : i < 16
+                        ? "hidden 3xl:block"
+                        : "hidden 4xl:block";
+                    return (
+                      <div
+                        key={i}
+                        className={cn("aspect-[2/3] w-full shrink-0 rounded-2xl shimmer", visibilityClass)}
+                        style={{ animationDelay: `${i * 80}ms` }}
+                      />
+                    );
+                  })}
                 </div>
                 </>
               )}

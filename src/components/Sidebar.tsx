@@ -18,13 +18,15 @@ import {
   Bookmark, 
   Info,
 } from "lucide-react";
-import { memo, useEffect, useState, useRef } from "react";
+import { memo, useEffect, useState, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ThemeButton } from "@/components/ThemeButton";
 import { useWatchlist } from "@/context/WatchlistContext";
 import { AdminPanelModal } from "@/components/admin/AdminPanelModal";
+import { useTheme } from "@/context/ThemeContext";
+import { getTheme } from "@/lib/themes";
 
 const navLinks = [
   { href: "/", label: "Home", icon: Home },
@@ -47,6 +49,86 @@ export const Sidebar = memo(function Sidebar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+
+  const { theme, customThemes } = useTheme();
+  const currentTheme = useMemo(() => getTheme(theme, customThemes), [theme, customThemes]);
+
+  const themeNavStyles = useMemo(() => {
+    switch (theme) {
+      case "cinema":
+        return {
+          triggerIdle: "bg-[#450A14] hover:bg-[#5C0E1C] border-[#F2C14E] text-[#FDE68A] ring-1 ring-[#F2C14E]/50 shadow-[0_4px_22px_rgba(242,193,78,0.25)]",
+          triggerActive: "bg-[#F2C14E] text-[#1A0408] border-[#F2C14E] shadow-[0_0_25px_rgba(242,193,78,0.7)] font-black",
+          iconOpen: "text-[#1A0408]",
+          iconClosed: "text-[#F2C14E]",
+          capsuleBg: "bg-[#2A060E]/98 border-[#F2C14E]/70 shadow-[0_16px_45px_rgba(69,10,20,0.9)]",
+          activeLink: "bg-[#F2C14E] text-[#1A0408] font-black shadow-md",
+        };
+      case "wisteria":
+        return {
+          triggerIdle: "bg-[#3B1466] hover:bg-[#4E1985] border-[#ED80E9] text-[#F5D0FE] ring-1 ring-[#ED80E9]/50 shadow-[0_4px_22px_rgba(237,128,233,0.3)]",
+          triggerActive: "bg-[#ED80E9] text-[#120624] border-[#ED80E9] shadow-[0_0_25px_rgba(237,128,233,0.7)] font-black",
+          iconOpen: "text-[#120624]",
+          iconClosed: "text-[#ED80E9]",
+          capsuleBg: "bg-[#1E0A36]/98 border-[#ED80E9]/70 shadow-[0_16px_45px_rgba(59,20,102,0.9)]",
+          activeLink: "bg-[#ED80E9] text-[#120624] font-black shadow-md",
+        };
+      case "solaris":
+        return {
+          triggerIdle: "bg-[#333810] hover:bg-[#454B16] border-[#FFFF66] text-[#FEF9C3] ring-1 ring-[#FFFF66]/50 shadow-[0_4px_22px_rgba(255,255,102,0.3)]",
+          triggerActive: "bg-[#FFFF66] text-[#141608] border-[#FFFF66] shadow-[0_0_25px_rgba(255,255,102,0.7)] font-black",
+          iconOpen: "text-[#141608]",
+          iconClosed: "text-[#FFFF66]",
+          capsuleBg: "bg-[#1B1E08]/98 border-[#FFFF66]/70 shadow-[0_16px_45px_rgba(51,56,16,0.9)]",
+          activeLink: "bg-[#FFFF66] text-[#141608] font-black shadow-md",
+        };
+      case "glass":
+        return {
+          triggerIdle: "bg-[#1B2B50]/90 hover:bg-[#253B6D] border-[#8FA8F2] text-[#DBEAFE] ring-1 ring-[#8FA8F2]/50 shadow-[0_4px_22px_rgba(143,168,242,0.35)]",
+          triggerActive: "bg-[#8FA8F2] text-[#0A0E1A] border-[#8FA8F2] shadow-[0_0_25px_rgba(143,168,242,0.7)] font-black",
+          iconOpen: "text-[#0A0E1A]",
+          iconClosed: "text-[#8FA8F2]",
+          capsuleBg: "bg-[#0F1A33]/95 border-[#8FA8F2]/70 shadow-[0_16px_45px_rgba(27,43,80,0.9)] backdrop-blur-2xl",
+          activeLink: "bg-[#8FA8F2] text-[#0A0E1A] font-black shadow-md",
+        };
+      case "oled":
+        return {
+          triggerIdle: "bg-black hover:bg-neutral-950 border-[#E63946] text-white ring-1 ring-[#E63946]/50 shadow-[0_4px_22px_rgba(230,57,70,0.35)]",
+          triggerActive: "bg-[#E63946] text-white border-[#E63946] shadow-[0_0_25px_rgba(230,57,70,0.7)] font-black",
+          iconOpen: "text-white",
+          iconClosed: "text-[#E63946]",
+          capsuleBg: "bg-black/98 border-[#E63946]/60 shadow-[0_16px_45px_rgba(0,0,0,1)]",
+          activeLink: "bg-[#E63946] text-white font-black shadow-md",
+        };
+      case "global":
+      default:
+        if (theme?.startsWith("custom_") && currentTheme) {
+          const primaryColor = currentTheme.primary || "#6366F1";
+          const cardBg = currentTheme.card || currentTheme.background || "#0B0F19";
+          return {
+            triggerIdle: "ring-1 shadow-[0_8px_30px_rgba(0,0,0,0.85)]",
+            triggerIdleStyle: { backgroundColor: cardBg, borderColor: primaryColor, color: "#ffffff" },
+            triggerActive: "font-black",
+            triggerActiveStyle: { backgroundColor: primaryColor, color: "#000000", borderColor: primaryColor, boxShadow: `0 0 25px ${primaryColor}90` },
+            iconOpen: "text-black",
+            iconClosed: "text-white",
+            capsuleBg: "shadow-[0_16px_45px_rgba(0,0,0,0.85)]",
+            capsuleStyle: { backgroundColor: `${cardBg}F8`, borderColor: primaryColor },
+            activeLink: "font-black shadow-md",
+            activeLinkStyle: { backgroundColor: primaryColor, color: "#000000" },
+          };
+        }
+        // Midnight Black (Global)
+        return {
+          triggerIdle: "bg-[#0B0F19] hover:bg-[#151D2E] border-[#3B4861] text-[#F8FAFC] ring-1 ring-[#3B4861]/50 shadow-[0_8px_30px_rgba(0,0,0,0.85)]",
+          triggerActive: "bg-white text-black border-white shadow-[0_0_22px_rgba(255,255,255,0.45)] font-black",
+          iconOpen: "text-black",
+          iconClosed: "text-[#94A3B8]",
+          capsuleBg: "bg-[#0B0F19]/98 border-[#3B4861]/60 shadow-[0_16px_45px_rgba(0,0,0,0.85)]",
+          activeLink: "bg-white text-black font-black shadow-md",
+        };
+    }
+  }, [theme, currentTheme]);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -111,7 +193,11 @@ export const Sidebar = memo(function Sidebar() {
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: 25, scale: 0.95 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="flex items-center gap-1.5 p-1.5 mr-2 rounded-full bg-[#0d1017]/90 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+                style={themeNavStyles.capsuleStyle}
+                className={cn(
+                  "flex items-center gap-1.5 p-1.5 mr-2 rounded-full backdrop-blur-2xl border",
+                  themeNavStyles.capsuleBg
+                )}
               >
                 {navLinks.map(({ href, label, icon: Icon }) => {
                   const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
@@ -119,10 +205,11 @@ export const Sidebar = memo(function Sidebar() {
                     <Link
                       key={href}
                       href={href}
+                      style={isActive ? themeNavStyles.activeLinkStyle : undefined}
                       className={cn(
                         "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200",
                         isActive
-                          ? "bg-white text-black shadow-md font-black"
+                          ? themeNavStyles.activeLink
                           : "text-white/70 hover:text-white hover:bg-white/[0.08]"
                       )}
                     >
@@ -136,10 +223,11 @@ export const Sidebar = memo(function Sidebar() {
 
                 <Link
                   href="/search"
+                  style={pathname === "/search" ? themeNavStyles.activeLinkStyle : undefined}
                   className={cn(
                     "p-2 rounded-full transition-all text-xs font-bold flex items-center justify-center",
                     pathname === "/search"
-                      ? "bg-white text-black shadow-md"
+                      ? themeNavStyles.activeLink
                       : "text-white/70 hover:text-white hover:bg-white/[0.08]"
                   )}
                   title="Search"
@@ -157,15 +245,14 @@ export const Sidebar = memo(function Sidebar() {
               setMenuOpen((prev) => !prev);
               setAccountOpen(false);
             }}
+            style={menuOpen ? themeNavStyles.triggerActiveStyle : themeNavStyles.triggerIdleStyle}
             className={cn(
-              "h-10 px-4 rounded-full border backdrop-blur-2xl text-white shadow-[0_8px_30px_rgba(0,0,0,0.6)] flex items-center gap-2 transition-all duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer",
-              menuOpen
-                ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)] font-black"
-                : "bg-[#11141d]/85 hover:bg-[#181c28] border-white/15 ring-1 ring-white/10"
+              "h-10 px-4 rounded-full border backdrop-blur-2xl flex items-center gap-2 transition-all duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer",
+              menuOpen ? themeNavStyles.triggerActive : themeNavStyles.triggerIdle
             )}
             aria-label="Toggle Navigation Menu"
           >
-            <Compass className={cn("w-4 h-4 transition-transform duration-300", menuOpen && "rotate-45 text-black")} />
+            <Compass className={cn("w-4 h-4 transition-transform duration-300", menuOpen ? `rotate-45 ${themeNavStyles.iconOpen}` : themeNavStyles.iconClosed)} />
             <span className="text-xs font-extrabold tracking-wide uppercase">Menu</span>
           </button>
         </div>
@@ -179,7 +266,11 @@ export const Sidebar = memo(function Sidebar() {
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: 25, scale: 0.95 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="flex items-center gap-1.5 p-1.5 mr-2 rounded-full bg-[#0d1017]/90 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+                style={themeNavStyles.capsuleStyle}
+                className={cn(
+                  "flex items-center gap-1.5 p-1.5 mr-2 rounded-full backdrop-blur-2xl border",
+                  themeNavStyles.capsuleBg
+                )}
               >
                 {/* Wishlist Link */}
                 <Link
@@ -273,11 +364,10 @@ export const Sidebar = memo(function Sidebar() {
               setAccountOpen((prev) => !prev);
               setMenuOpen(false);
             }}
+            style={accountOpen ? themeNavStyles.triggerActiveStyle : themeNavStyles.triggerIdleStyle}
             className={cn(
-              "h-10 px-3.5 rounded-full border backdrop-blur-2xl text-white shadow-[0_8px_30px_rgba(0,0,0,0.6)] flex items-center gap-2 transition-all duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer",
-              accountOpen
-                ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)] font-black"
-                : "bg-[#11141d]/85 hover:bg-[#181c28] border-white/15 ring-1 ring-white/10"
+              "h-10 px-3.5 rounded-full border backdrop-blur-2xl flex items-center gap-2 transition-all duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer",
+              accountOpen ? themeNavStyles.triggerActive : themeNavStyles.triggerIdle
             )}
             aria-label="Toggle Account Menu"
           >
@@ -294,7 +384,7 @@ export const Sidebar = memo(function Sidebar() {
                 </div>
               )
             ) : (
-              <User className={cn("w-4 h-4", accountOpen ? "text-black" : "text-white")} />
+              <User className={cn("w-4 h-4", accountOpen ? themeNavStyles.iconOpen : themeNavStyles.iconClosed)} />
             )}
             <span className="text-xs font-extrabold tracking-wide uppercase">
               {isAuthenticated && user?.name ? user.name.split(" ")[0] : "Account"}
@@ -345,7 +435,11 @@ export const Sidebar = memo(function Sidebar() {
           <button
             type="button"
             onClick={() => setAccountOpen((prev) => !prev)}
-            className="p-1.5 ml-0.5 text-white/80 hover:text-white rounded-xl transition-all active:scale-95 cursor-pointer"
+            style={accountOpen ? themeNavStyles.triggerActiveStyle : themeNavStyles.triggerIdleStyle}
+            className={cn(
+              "p-1.5 ml-0.5 rounded-xl border backdrop-blur-md transition-all active:scale-95 cursor-pointer",
+              accountOpen ? themeNavStyles.triggerActive : themeNavStyles.triggerIdle
+            )}
             aria-label="Account"
           >
             {isAuthenticated && user ? (
@@ -362,7 +456,7 @@ export const Sidebar = memo(function Sidebar() {
               )
             ) : (
               <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
-                <User className="w-3.5 h-3.5" />
+                <User className={cn("w-3.5 h-3.5", accountOpen ? themeNavStyles.iconOpen : themeNavStyles.iconClosed)} />
               </div>
             )}
           </button>
@@ -376,7 +470,11 @@ export const Sidebar = memo(function Sidebar() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="md:hidden fixed top-[calc(3.75rem+env(safe-area-inset-top))] right-3 z-[65] w-56 rounded-2xl bg-[#0e111a]/95 backdrop-blur-2xl border border-white/15 p-3 shadow-2xl space-y-1.5"
+            style={themeNavStyles.capsuleStyle}
+            className={cn(
+              "md:hidden fixed top-[calc(3.75rem+env(safe-area-inset-top))] right-3 z-[65] w-56 rounded-2xl backdrop-blur-2xl border p-3 shadow-2xl space-y-1.5",
+              themeNavStyles.capsuleBg
+            )}
           >
             {isAuthenticated && user && (
               <div className="px-2.5 py-1.5 mb-1.5 border-b border-white/10">

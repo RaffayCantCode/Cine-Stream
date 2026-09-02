@@ -138,8 +138,8 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
   };
 
   return (
-    <section className="px-3 md:px-8 lg:px-10 pt-4 pb-2 animate-fade-in">
-      <div className="max-w-screen-2xl mx-auto">
+    <section className="w-full px-3 md:px-6 lg:px-8 xl:px-10 pt-4 pb-2 animate-fade-in">
+      <div className="w-full">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-1.5 h-5 rounded-full bg-primary shadow-sm" />
           <h2 className="text-base md:text-xl font-extrabold text-white tracking-tight">

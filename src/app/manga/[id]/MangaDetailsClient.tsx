@@ -266,7 +266,7 @@ export default function MangaDetailsClient({
 
         {/* DETAILS HERO SECTION (Modular / Fast Render) */}
         {isDetailsLoading ? (
-          <div className="max-w-screen-2xl mx-auto px-5 sm:px-8 md:px-12 py-8 animate-pulse">
+          <div className="w-full px-5 sm:px-8 md:px-12 py-8 animate-pulse">
             <div className="flex flex-col md:flex-row gap-8 lg:gap-12">
               <div className="w-48 sm:w-60 md:w-72 aspect-[2/3] rounded-3xl bg-white/[0.04]" />
               <div className="flex-1 space-y-4 pt-4">
@@ -284,7 +284,7 @@ export default function MangaDetailsClient({
               style={{ backgroundImage: `url(${manga.coverImage})` }}
             />
 
-            <div className="relative max-w-screen-2xl mx-auto px-5 sm:px-8 md:px-12">
+            <div className="relative w-full px-5 sm:px-8 md:px-12">
               <div className="flex flex-col md:flex-row gap-8 lg:gap-12 items-start">
                 
                 {/* Poster Cover */}
@@ -429,7 +429,7 @@ export default function MangaDetailsClient({
         )}
 
         {/* CHAPTERS SECTION (Streams in modularly) */}
-        <div className="max-w-screen-2xl mx-auto px-5 sm:px-8 md:px-12 pt-10 space-y-6">
+        <div className="w-full px-5 sm:px-8 md:px-12 pt-10 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-primary rounded-full shadow-[0_0_10px_hsl(var(--primary))]" />
@@ -466,13 +466,13 @@ export default function MangaDetailsClient({
 
           {/* Chapter Items List or Skeletons */}
           {isChaptersLoading ? (
-            <div className="flex flex-col gap-2.5 max-w-4xl">
+            <div className="flex flex-col gap-2.5 w-full">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="h-16 rounded-2xl bg-white/[0.03] animate-pulse border border-white/[0.04]" />
               ))}
             </div>
           ) : filteredChapters.length > 0 ? (
-            <div className="flex flex-col gap-2.5 max-w-4xl">
+            <div className="flex flex-col gap-2.5 w-full">
               {filteredChapters.map((ch) => {
                 const isCurrentRead = progress?.chapterId === ch.id;
                 const isRead = isCurrentRead || isChapterRead(manga?.id || id, ch.id, ch.chapterNumber, progress?.chapterNumber);

@@ -35,10 +35,11 @@ function getCachedLogo(key: string): string | null | undefined {
   if (logoCache.has(key)) return logoCache.get(key);
   if (typeof window !== "undefined") {
     try {
-      const saved = sessionStorage.getItem(`logo_v5_${key}`);
+      const saved = sessionStorage.getItem(`logo_v7_${key}`);
       if (saved) {
-        logoCache.set(key, saved);
-        return saved;
+        const val = saved === "null" ? null : saved;
+        logoCache.set(key, val);
+        return val;
       }
     } catch {}
   }
@@ -47,8 +48,14 @@ function getCachedLogo(key: string): string | null | undefined {
 
 function saveLogoToCache(key: string, url: string | null) {
   logoCache.set(key, url);
-  if (typeof window !== "undefined" && url) {
-    try { sessionStorage.setItem(`logo_v5_${key}`, url); } catch {}
+  if (typeof window !== "undefined") {
+    try {
+      if (url) {
+        sessionStorage.setItem(`logo_v7_${key}`, url);
+      } else {
+        sessionStorage.setItem(`logo_v7_${key}`, "null");
+      }
+    } catch {}
   }
 }
 
@@ -212,7 +219,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           />
           {/* Subtle text legibility shadows only — NO solid color bottom block */}
           <div className="hidden md:block absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-black/80 via-black/25 to-transparent" />
-          <div className="md:hidden absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          <div className="md:hidden absolute inset-0 bg-gradient-to-t from-[#07080d]/90 via-black/35 to-transparent pointer-events-none" />
           <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-black/50 to-transparent" />
         </div>
       ) : (
@@ -250,10 +257,10 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
         </div>
       )}
 
-      <div className="relative z-10 w-full px-5 md:pl-20 md:pr-12 lg:pl-24 lg:pr-16 xl:pl-28 xl:pr-20 pb-8 sm:pb-10 md:pb-14 max-w-screen-2xl mx-auto">
+      <div className="relative z-10 w-full px-5 md:pl-20 md:pr-12 lg:pl-24 lg:pr-16 xl:pl-28 xl:pr-20 pb-8 sm:pb-10 md:pb-14">
         <div
           key={String(item.id)}
-          className="max-w-full sm:max-w-xl md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/15 md:backdrop-blur-0 px-4 py-5 md:p-0 animate-fade-in-up"
+          className="w-full max-w-full sm:max-w-xl md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 bg-transparent p-0 animate-fade-in-up"
         >
           {/* Spotlight / Custom Badge Tagline */}
           {(item as any).badge && (
@@ -266,17 +273,18 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           )}
 
           {/* Official ClearArt Logo OR Smoothly Crossfading Cinema Typography */}
-          <div className="relative mb-3.5 flex items-center justify-center md:justify-start min-h-[52px] sm:min-h-[64px] md:min-h-[84px] max-w-[85%] sm:max-w-[380px] md:max-w-[460px]">
+          <div className="relative mb-6 sm:mb-7 md:mb-8 flex items-center justify-center md:justify-start min-h-[52px] sm:min-h-[64px] md:min-h-[84px] max-w-[85%] sm:max-w-[380px] md:max-w-[460px]">
             {/* Logo Image */}
             {logoUrl && (
               <img
                 key={`logo-${logoUrl}`}
                 src={logoUrl}
                 alt={title}
-                className={`max-h-24 sm:max-h-28 md:max-h-36 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.95)] transition-all duration-500 ease-out ${
+                className={`max-h-24 sm:max-h-28 md:max-h-36 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.95)] transition-all duration-200 ease-out ${
                   logoImgLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
                 }`}
                 loading="eager"
+                fetchPriority="high"
                 decoding="async"
                 onLoad={() => setLogoImgLoaded(true)}
               />
@@ -285,7 +293,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
             {/* Stylized Typography — only visible when no logo is available or gently crossfading out */}
             {(!logoUrl || !logoImgLoaded) && (
               <h1
-                className={`text-white font-black line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text transition-opacity duration-500 ease-out ${
+                className={`text-white font-black line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text transition-opacity duration-300 ease-out ${
                   logoUrl && logoImgLoaded ? "opacity-0 pointer-events-none absolute" : "opacity-100 relative"
                 }`}
                 style={{

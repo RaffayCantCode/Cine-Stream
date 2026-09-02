@@ -34,7 +34,7 @@ export default function BrowseFranchisesPage() {
       <main className="flex-1 h-[100dvh] overflow-y-auto w-full custom-scrollbar relative">
         
         {/* Premium Header Section */}
-        <div className="relative pt-24 md:pt-28 lg:pt-32 pb-12 px-5 md:px-10 lg:px-16 flex flex-col md:flex-row items-center md:items-end justify-between min-h-[240px]">
+        <div className="relative pt-24 md:pt-28 lg:pt-32 pb-12 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 flex flex-col md:flex-row items-center md:items-end justify-between min-h-[240px]">
           <div className="absolute inset-0 z-0 pointer-events-none">
              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/15 via-accent/10 to-transparent" />
              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
@@ -53,9 +53,9 @@ export default function BrowseFranchisesPage() {
           </div>
         </div>
 
-        <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto relative z-10">
+        <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 relative z-10">
 
-          <div className="mt-4 md:mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-5 md:gap-6 pb-24">
+          <div className="mt-4 md:mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-4 sm:gap-5 md:gap-6 pb-24">
             {filteredFranchises.map((col) => {
               const posterUrl = col.poster_path
                 ? col.poster_path.startsWith("http")

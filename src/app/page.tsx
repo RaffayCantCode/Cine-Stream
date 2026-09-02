@@ -645,39 +645,57 @@ export default function Home() {
         if (cancelled) return;
 
         if (homeData) {
-          const trendingSafe = filterReleasedSafeContent(homeData.trending?.results || [])
-            .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const popularSafe = filterReleasedSafeContent(homeData.popularMovies?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const heroTopSafe = filterReleasedSafeContent(homeData.topRatedTv?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const heroRecentSafe = filterReleasedSafeContent(homeData.nowPlaying?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const trendingSafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.trending?.results || [])
+              .filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
+          const popularSafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.popularMovies?.results || []).map(
+              (i) => ({ ...i, media_type: "movie" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
+          const heroTopSafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.topRatedTv?.results || []).map(
+              (i) => ({ ...i, media_type: "tv" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
+          const heroRecentSafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.nowPlaying?.results || []).map(
+              (i) => ({ ...i, media_type: "movie" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
 
-          const topRatedMovieSafe = filterReleasedSafeContent(homeData.topRatedMovies?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const popularTvSafe = filterReleasedSafeContent(homeData.popularTv?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const onTheAirSafe = filterReleasedSafeContent(homeData.onTheAir?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
+          const topRatedMovieSafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.topRatedMovies?.results || []).map(
+              (i) => ({ ...i, media_type: "movie" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
+          const popularTvSafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.popularTv?.results || []).map(
+              (i) => ({ ...i, media_type: "tv" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
+          const onTheAirSafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.onTheAir?.results || []).map(
+              (i) => ({ ...i, media_type: "tv" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
           const animeMovieSafe = filterReleasedSafeContent(homeData.animeMovies?.results || []).map(
             (i) => ({ ...i, media_type: "movie" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
           ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
           const animeTvSafe = filterReleasedSafeContent(homeData.animeTv?.results || []).map(
             (i) => ({ ...i, media_type: "tv" as const, genre_ids: i.genre_ids || [16], original_language: "ja" })
           ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const trendingMoviesTodaySafe = filterReleasedSafeContent(homeData.trendingMoviesToday?.results || []).map(
-            (i) => ({ ...i, media_type: "movie" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""));
-          const trendingTvTodaySafe = filterReleasedSafeContent(homeData.trendingTvToday?.results || []).map(
-            (i) => ({ ...i, media_type: "tv" as const })
-          ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja");
+          const trendingMoviesTodaySafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.trendingMoviesToday?.results || []).map(
+              (i) => ({ ...i, media_type: "movie" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || ""))
+          );
+          const trendingTvTodaySafe = filterExcludeAnime(
+            filterReleasedSafeContent(homeData.trendingTvToday?.results || []).map(
+              (i) => ({ ...i, media_type: "tv" as const })
+            ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja")
+          );
 
           const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].slice(0, 10).map((item) => ({
             id: String(item.id),
@@ -748,12 +766,12 @@ export default function Home() {
               const effectiveId = (hItem as any)?.tmdbId || hItem.id;
               const cacheKey = `${effectiveId || hItem.id}-${hTitle}`;
 
-              if (typeof window !== "undefined" && !sessionStorage.getItem(`logo_v5_${cacheKey}`)) {
+              if (typeof window !== "undefined" && !sessionStorage.getItem(`logo_v7_${cacheKey}`)) {
                 fetch(`/api/tmdb/logo?id=${effectiveId}&type=${isAnime ? "anime" : isMovie ? "movie" : "tv"}&title=${encodeURIComponent(hTitle)}`)
                   .then((r) => (r.ok ? r.json() : null))
                   .then((d) => {
                     if (d?.logoUrl) {
-                      try { sessionStorage.setItem(`logo_v5_${cacheKey}`, d.logoUrl); } catch {}
+                      try { sessionStorage.setItem(`logo_v7_${cacheKey}`, d.logoUrl); } catch {}
                       const img = new Image();
                       img.src = d.logoUrl;
                     }
@@ -888,30 +906,69 @@ export default function Home() {
     }
   }, [heroPool.length, heroIndex]);
 
-  // ── Preload all hero backdrop images for instant transitions ────────────
+  // ── Preload all hero backdrop and logo artwork for instant transitions ────
   useEffect(() => {
     const links: HTMLLinkElement[] = [];
     heroPool.forEach((item) => {
       const path = item.backdrop_path || item.poster_path;
-      if (!path) return;
-      const link = document.createElement("link");
-      link.rel = "preload";
-      link.as = "image";
-      link.href = path.startsWith("http") ? path : `https://image.tmdb.org/t/p/w1280${path}`;
-      link.fetchPriority = "high";
-      document.head.appendChild(link);
-      links.push(link);
+      if (path) {
+        const link = document.createElement("link");
+        link.rel = "preload";
+        link.as = "image";
+        link.href = path.startsWith("http") ? path : `https://image.tmdb.org/t/p/w1280${path}`;
+        link.fetchPriority = "high";
+        document.head.appendChild(link);
+        links.push(link);
+      }
+
+      // Preload logo artwork immediately so it displays instantly
+      const title = item.title || item.name || "";
+      const anilistId = (item as any)?.anilistId;
+      const isAnime = item.media_type === "anime" || !!anilistId || isTmdbAnime(item);
+      const isMovie = item.media_type === "movie" || (!isAnime && item.media_type !== "tv");
+      const effectiveId = (item as any)?.tmdbId || item.id;
+      const mediaType = isAnime ? "anime" : isMovie ? "movie" : "tv";
+      const cacheKey = `${effectiveId || item.id}-${title}`;
+
+      const cached = typeof window !== "undefined" ? sessionStorage.getItem(`logo_v7_${cacheKey}`) : null;
+      if (cached) {
+        const logoLink = document.createElement("link");
+        logoLink.rel = "preload";
+        logoLink.as = "image";
+        logoLink.href = cached;
+        logoLink.fetchPriority = "high";
+        document.head.appendChild(logoLink);
+        links.push(logoLink);
+      } else if (title) {
+        fetch(`/api/tmdb/logo?id=${effectiveId}&type=${mediaType}&title=${encodeURIComponent(title)}`, {
+          cache: "force-cache",
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.logoUrl) {
+              try { sessionStorage.setItem(`logo_v7_${cacheKey}`, data.logoUrl); } catch {}
+              const logoLink = document.createElement("link");
+              logoLink.rel = "preload";
+              logoLink.as = "image";
+              logoLink.href = data.logoUrl;
+              logoLink.fetchPriority = "high";
+              document.head.appendChild(logoLink);
+              links.push(logoLink);
+            }
+          })
+          .catch(() => {});
+      }
     });
     return () => links.forEach(l => l.remove());
   }, [heroPool]);
 
-  // ── Auto-rotation timer (15 seconds, resets on manual nav) ─────────────
+  // ── Auto-rotation timer (10 seconds, resets on manual nav) ─────────────
   useEffect(() => {
     if (heroPool.length <= 1) return;
     if (heroTimerRef.current) clearInterval(heroTimerRef.current);
     heroTimerRef.current = setInterval(() => {
       setHeroIndex((prev) => (prev + 1) % heroPoolLengthRef.current);
-    }, 15000);
+    }, 10000);
     return () => {
       if (heroTimerRef.current) clearInterval(heroTimerRef.current);
     };
@@ -927,20 +984,49 @@ export default function Home() {
       : `https://image.tmdb.org/t/p/w780${hero.poster_path}`
     : null;
 
+  // Smooth ambient backdrop & color crossfading
+  const [ambientBackdrop, setAmbientBackdrop] = useState<{ current: string | null; previous: string | null }>({
+    current: activeBackdropUrl,
+    previous: null,
+  });
+
+  useEffect(() => {
+    if (activeBackdropUrl && activeBackdropUrl !== ambientBackdrop.current) {
+      setAmbientBackdrop((prev) => ({
+        current: activeBackdropUrl,
+        previous: prev.current,
+      }));
+      const t = setTimeout(() => {
+        setAmbientBackdrop((prev) => ({ ...prev, previous: null }));
+      }, 1100);
+      return () => clearTimeout(t);
+    }
+  }, [activeBackdropUrl, ambientBackdrop.current]);
+
   return (
-    <div className="relative min-h-screen bg-[#07080d] text-foreground pb-20 overflow-hidden">
-      {/* Ambient Hero Backdrop Glow spanning the entire home page */}
-      {activeBackdropUrl && (
+    <div className="relative min-h-screen bg-[#07080d] text-foreground pb-20 overflow-x-clip">
+      {/* Ambient Hero Backdrop Glow with smooth, seamless crossfading */}
+      {(ambientBackdrop.current || ambientBackdrop.previous) && (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-          <img
-            key={activeBackdropUrl}
-            src={activeBackdropUrl}
-            alt=""
-            className="w-full h-full object-cover blur-[125px] opacity-[0.48] scale-140 saturate-[2.5] brightness-[0.72] transition-all duration-1000 ease-out"
-            aria-hidden
-          />
+          {ambientBackdrop.previous && (
+            <img
+              src={ambientBackdrop.previous}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover blur-[130px] opacity-0 scale-140 saturate-[2.5] brightness-[0.72] transition-opacity duration-1000 ease-in-out pointer-events-none"
+              aria-hidden
+            />
+          )}
+          {ambientBackdrop.current && (
+            <img
+              key={ambientBackdrop.current}
+              src={ambientBackdrop.current}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover blur-[130px] opacity-[0.48] scale-140 saturate-[2.5] brightness-[0.72] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
+              aria-hidden
+            />
+          )}
           {/* Subtle uniform overlay allowing the hero colors to permeate the entire home page */}
-          <div className="absolute inset-0 bg-[#07080d]/55" />
+          <div className="absolute inset-0 bg-[#07080d]/55 transition-colors duration-1000" />
         </div>
       )}
 
@@ -990,7 +1076,7 @@ export default function Home() {
                           key={`timer-${heroIndex}-${timerReset}`}
                           className="absolute inset-y-0 left-0 bg-white rounded-full"
                           style={{
-                            animation: "heroProgress 15s linear forwards",
+                            animation: "heroProgress 10s linear forwards",
                           }}
                         />
                       )}
@@ -1028,7 +1114,7 @@ export default function Home() {
         )}
 
         {loadError && (
-          <div className="px-5 md:px-10 lg:px-12 max-w-screen-2xl mx-auto pt-6">
+          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-12 pt-6">
             <div className="rounded-2xl border border-[#7288AE]/20 bg-[#4B5694]/10 p-4 text-sm text-[#7288AE]">
               {loadError}
             </div>
@@ -1038,7 +1124,7 @@ export default function Home() {
         {/* ─── CONTINUE WATCHING ─── */}
         <ContinueWatching />
 
-        <div className="px-3 md:px-8 lg:px-10 max-w-screen-2xl mx-auto py-6 space-y-7">
+        <div className="w-full px-3 md:px-6 lg:px-8 xl:px-10 py-6 space-y-7">
 
           {/* ─── TOP 10 MOVIES TODAY ─── */}
           <LazySection show={revealedSections >= 1} placeholderHeight={380}>
@@ -1081,8 +1167,9 @@ export default function Home() {
               title="Top Rated Movies"
               items={topRatedMovies}
               isLoading={isLoading}
+              largeTitle={true}
               seeAllHref="/browse/movies/top-rated"
-              accentIcon={<Star className="w-4 h-4 text-amber-400" />}
+              accentIcon={<Star className="w-5 h-5 text-amber-400 fill-amber-400" />}
             />
           </LazySection>
 
@@ -1092,8 +1179,9 @@ export default function Home() {
               title="Top Rated TV"
               items={topRatedTv}
               isLoading={isLoading}
+              largeTitle={true}
               seeAllHref="/browse/tv/top-rated"
-              accentIcon={<Star className="w-4 h-4 text-amber-400" />}
+              accentIcon={<Star className="w-5 h-5 text-amber-400 fill-amber-400" />}
             />
           </LazySection>
 
@@ -1105,7 +1193,7 @@ export default function Home() {
           {/* ─── THEMATIC UNIVERSE ─── */}
           <LazySection show={revealedSections >= 5} placeholderHeight={220}>
             <SectionHeading title="Browse by Mood" subtitle="Pick your vibe" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-10 gap-2.5 md:gap-3">
               {[
                 { id: 'k-dramas',        name: 'K-Dramas',       color: '#C4006E', icon: '🌸', iconBg: '#E91E8C' },
                 { id: 'superhero',       name: 'Superheroes',    color: '#1565C0', icon: '⚡', iconBg: '#2979FF' },

@@ -181,7 +181,7 @@ export default function MovieClient() {
       <div className="min-h-screen bg-background text-foreground pb-24">
         <Sidebar />
         <main className="w-full">
-          <div className="pt-24 px-6 md:px-12 max-w-screen-2xl mx-auto">
+          <div className="pt-24 px-6 md:px-12 w-full">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-white/80 max-w-lg mx-auto text-center space-y-3">
               <div className="text-xl font-bold text-white">Title Unavailable</div>
               <p className="text-sm text-zinc-400">
@@ -223,7 +223,7 @@ export default function MovieClient() {
           title={movie.title}
           theme="movie"
         >
-          <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 w-full max-w-screen-2xl mx-auto flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
+          <div className="pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 w-full flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
           {posterUrl && (
             <div
               className="hidden md:block shrink-0"
@@ -243,7 +243,7 @@ export default function MovieClient() {
           <div className="flex-1 space-y-3 sm:space-y-3.5 w-full">
             <div>
               {activeLogo ? (
-                <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
+                <div className="mb-4 sm:mb-5 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
                   <img
                     src={activeLogo}
                     alt={movie.title}
@@ -344,7 +344,7 @@ export default function MovieClient() {
         </CinematicHero>
 
       {isPlaying && (
-        <div ref={playerRef} className={`mx-auto mt-8 mb-4 transition-all duration-300 ${isTheaterMode ? "w-full max-w-none px-2 sm:px-4 md:px-6" : "max-w-screen-2xl px-5 md:px-10"}`}>
+        <div ref={playerRef} className={`mx-auto mt-8 mb-4 transition-all duration-300 ${isTheaterMode ? "w-full max-w-none px-2 sm:px-4 md:px-6" : "w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14"}`}>
           <VideoPlayer
             type="movie"
             id={id}
@@ -356,7 +356,7 @@ export default function MovieClient() {
         </div>
       )}
 
-      <div className="max-w-screen-2xl mx-auto px-5 md:px-10 mt-8 space-y-14">
+      <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 mt-8 space-y-14">
         {(((movie.credits as any)?.cast && (movie.credits as any).cast.length > 0) || ((movie.credits as any)?.crew && (movie.credits as any).crew.length > 0)) && (
           <CastRow cast={(movie.credits as any).cast || []} crew={(movie.credits as any).crew || []} />
         )}
@@ -402,10 +402,30 @@ export default function MovieClient() {
                     <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-6">
-                  {filtered.slice(0, 12).map((item: any, i: number) => (
-                    <GridMediaCard key={item.id} item={item} index={i} />
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6">
+                  {filtered.slice(0, 20).map((item: any, i: number) => {
+                    const visibilityClass =
+                      i < 4
+                        ? "block"
+                        : i < 6
+                        ? "hidden sm:block"
+                        : i < 8
+                        ? "hidden md:block"
+                        : i < 10
+                        ? "hidden lg:block"
+                        : i < 12
+                        ? "hidden xl:block"
+                        : i < 14
+                        ? "hidden 2xl:block"
+                        : i < 16
+                        ? "hidden 3xl:block"
+                        : "hidden 4xl:block";
+                    return (
+                      <div key={item.id} className={visibilityClass}>
+                        <GridMediaCard item={item} index={i} />
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             );

@@ -12,7 +12,7 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
     if (logoCache.has(cacheKey)) return logoCache.get(cacheKey) || null;
     if (typeof window !== "undefined") {
       try {
-        const saved = sessionStorage.getItem(`logo_v5_${cacheKey}`);
+        const saved = sessionStorage.getItem(`logo_v7_${cacheKey}`);
         if (saved) {
           logoCache.set(cacheKey, saved);
           return saved;
@@ -41,14 +41,14 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
       ? `/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(title || "")}&type=anime`
       : `/api/tmdb/logo?id=${id}&type=${type}${title ? `&title=${encodeURIComponent(title)}` : ""}`;
 
-    fetch(url)
+    fetch(url, { cache: "force-cache" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return;
         const resolvedLogo = data?.logoUrl || null;
         logoCache.set(cacheKey, resolvedLogo);
         if (typeof window !== "undefined" && resolvedLogo) {
-          try { sessionStorage.setItem(`logo_v5_${cacheKey}`, resolvedLogo); } catch {}
+          try { sessionStorage.setItem(`logo_v7_${cacheKey}`, resolvedLogo); } catch {}
         }
         setLogoUrl(resolvedLogo);
         setLoading(false);

@@ -85,11 +85,10 @@ function handleKeyClick(e: KeyboardEvent, onClick: () => void) {
   }
 }
 
-// ── List Card ───────────────────────────────────────────────────────────────
+// ── List Card (Netflix-Style Cinematic Row) ───────────────────────────────────
 export function EpisodeListCard({ item }: { item: EpisodeItem }) {
   const isUpcoming = item.isReleased === false;
   const dateLabel = formatAirDate(item.airDate);
-  const hasMeta = dateLabel !== null || (item.runtime && item.runtime > 0);
 
   return (
     <div
@@ -99,21 +98,31 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
       onKeyDown={(e) => handleKeyClick(e, item.onClick)}
       title={`Episode ${item.number}${item.isFiller ? " (Filler)" : ""}`}
       className={cn(
-        "group relative flex gap-3 sm:gap-5 p-3 sm:p-4 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation",
+        "group relative flex flex-col md:flex-row items-start md:items-center gap-4 sm:gap-6 p-3.5 sm:p-5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation overflow-hidden w-full",
         item.isSelected
-          ? "border-primary/35 bg-gradient-to-br from-primary/15 via-white/[0.03] to-white/[0.02] shadow-lg shadow-primary/10"
+          ? "border-primary/50 bg-gradient-to-r from-primary/15 via-white/[0.03] to-white/[0.01] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6)] ring-1 ring-primary/30"
           : isUpcoming
-          ? "bg-white/[0.015] border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1]"
-          : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.14] hover:shadow-[0_18px_44px_-18px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
+          ? "bg-white/[0.015] border-white/[0.05] hover:bg-white/[0.035] hover:border-white/[0.1]"
+          : "bg-white/[0.03] hover:bg-white/[0.065] border-white/[0.07] hover:border-white/[0.18] hover:shadow-[0_16px_36px_-12px_rgba(0,0,0,0.7)]"
       )}
     >
-      {/* Thumbnail */}
+      {/* Top subtle highlight */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+      {/* Large Netflix-style episode number index (desktop only) */}
+      <div className="hidden md:flex shrink-0 w-10 items-center justify-center">
+        <span className="text-2xl lg:text-3xl font-black text-white/30 group-hover:text-white transition-colors duration-200">
+          {item.number}
+        </span>
+      </div>
+
+      {/* 16:9 Thumbnail */}
       <div
         className={cn(
-          "relative shrink-0 self-start overflow-hidden rounded-xl ring-1 ring-white/10 bg-muted transition-shadow duration-300",
+          "relative shrink-0 overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/10 transition-all duration-300 group-hover:ring-white/25 group-hover:shadow-lg",
           item.portrait
             ? "w-28 sm:w-36 md:w-40 aspect-[2/3]"
-            : "w-36 sm:w-48 md:w-56 lg:w-64 xl:w-72 aspect-video"
+            : "w-full md:w-56 lg:w-64 xl:w-72 aspect-video"
         )}
       >
         {item.thumbnail ? (
@@ -122,92 +131,106 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
             alt={item.title}
             loading="lazy"
             decoding="async"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.06] to-transparent">
-            <Play className="w-6 h-6 text-white/25" />
+            <Play className="w-8 h-8 text-white/20" />
           </div>
         )}
 
-        {/* Hover play overlay */}
+        {/* Hover vignette */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+        {/* Episode badge on mobile (where left index is hidden) */}
+        <div className="md:hidden absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-white/20 text-[10px] font-black text-white">
+          E{item.number}
+        </div>
+
+        {/* Runtime badge */}
+        {item.runtime && item.runtime > 0 && (
+          <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-white/90 text-[10px] font-bold tracking-tight border border-white/15 shadow-sm">
+            {item.runtime}m
+          </div>
+        )}
+
+        {/* Hover play button */}
         {!isUpcoming && (
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-xl transform scale-75 group-hover:scale-100 transition-transform duration-300">
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="w-12 h-12 rounded-full bg-white/95 text-black flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.8)] transform scale-80 group-hover:scale-100 transition-all duration-300">
               <Play className="w-5 h-5 fill-black text-black ml-0.5" />
             </div>
           </div>
         )}
 
-        {/* Episode number badge */}
-        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/65 backdrop-blur-md border border-white/15">
-          <span className="text-white text-[10px] font-extrabold tracking-wider">E{item.number}</span>
-        </div>
-
-        {/* Selected / playing badge */}
-        {item.isSelected && (
-          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-black tracking-wider uppercase shadow-xl shadow-black/50 border border-white/25">
-            {item.isPlaying && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-            {item.isPlaying ? "Playing" : "Current"}
-          </div>
-        )}
-
-        {/* Upcoming overlay */}
+        {/* Upcoming lock badge */}
         {isUpcoming && (
-          <div className="absolute inset-0 z-10 bg-black/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1.5">
-            <Lock className="w-5 h-5 text-white/50" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-white/60">Upcoming</span>
+          <div className="absolute inset-0 z-10 bg-black/75 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1.5">
+            <Lock className="w-5 h-5 text-white/60" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/70">Upcoming</span>
           </div>
         )}
       </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0 flex flex-col py-0.5">
-        <div className="flex items-center gap-2 flex-wrap text-[10px] font-bold uppercase tracking-widest text-white/45">
-          <span>Episode {item.number}</span>
-          {item.isFiller && (
-            <span className="px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">
-              Filler
-            </span>
+      {/* Row Information Column */}
+      <div className="flex-1 min-w-0 flex flex-col justify-center space-y-1.5 w-full">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h4 className="text-white font-black text-base sm:text-lg tracking-tight group-hover:text-primary transition-colors">
+              {item.title}
+            </h4>
+            {item.isFiller && (
+              <span className="px-2 py-0.5 rounded-md bg-amber-400/15 text-amber-300 border border-amber-400/25 text-[10px] font-black uppercase tracking-wider">
+                Filler
+              </span>
+            )}
+          </div>
+
+          {/* Selected / Playing pill */}
+          {item.isSelected && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black tracking-wider uppercase shadow-md border border-white/20">
+              {item.isPlaying && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+              {item.isPlaying ? "Playing" : "Current"}
+            </div>
           )}
         </div>
 
-        <h4 className="text-white font-black text-base sm:text-lg leading-snug mt-1.5 line-clamp-2">
-          {item.title}
-        </h4>
-
+        {/* Full Plot Description across the row */}
         {item.description && (
-          <p className="text-white/70 text-xs sm:text-sm leading-relaxed mt-1.5 line-clamp-2 sm:line-clamp-3">
+          <p className="text-white/65 text-xs sm:text-sm leading-relaxed line-clamp-2 md:line-clamp-3 font-normal max-w-5xl">
             {item.description}
           </p>
         )}
 
-        <div className="flex items-center gap-3 mt-auto pt-2.5 flex-wrap text-[11px] font-semibold text-white/45">
-          {hasMeta && (
-            <span className="flex items-center gap-1.5">
-              {item.runtime && item.runtime > 0 && (
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {item.runtime} min
-                </span>
-              )}
-              {item.runtime && item.runtime > 0 && dateLabel && <span className="opacity-40">•</span>}
-              {dateLabel && <span>{dateLabel}</span>}
+        {/* Metadata row */}
+        <div className="flex items-center gap-3 pt-1 text-xs text-white/45 flex-wrap">
+          {item.runtime && item.runtime > 0 && (
+            <span className="flex items-center gap-1 font-semibold text-white/60">
+              <Clock className="w-3.5 h-3.5" /> {item.runtime} min
             </span>
           )}
+          {dateLabel && <span>• {dateLabel}</span>}
           {item.hasRating && item.rating != null && (
-            <span className="flex items-center gap-1 text-amber-400">
+            <span className="flex items-center gap-1 text-amber-300 font-bold bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-md text-[11px] ml-1">
               <Star className="w-3 h-3 fill-current" /> {item.rating.toFixed(1)}
             </span>
           )}
+        </div>
+      </div>
+
+      {/* Far Right Action Icon */}
+      <div className="hidden lg:flex shrink-0 items-center justify-center pl-4 pr-2">
+        <div className="w-11 h-11 rounded-full bg-white/[0.04] border border-white/10 group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary/50 text-white/40 flex items-center justify-center transition-all duration-300 shadow-sm">
+          <Play className="w-4 h-4 fill-current ml-0.5" />
         </div>
       </div>
     </div>
   );
 }
 
-export function EpisodeListView({ items }: { items: EpisodeItem[] }) {
+export function EpisodeListView({ items, className }: { items: EpisodeItem[]; className?: string }) {
   return (
-    <div className="space-y-2.5 sm:space-y-3">
+    <div className={cn("w-full space-y-3 sm:space-y-3.5", className)}>
       {items.map((item) => (
         <EpisodeListCard key={item.key} item={item} />
       ))}
@@ -218,6 +241,7 @@ export function EpisodeListView({ items }: { items: EpisodeItem[] }) {
 // ── Grid Card ───────────────────────────────────────────────────────────────
 export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
   const isUpcoming = item.isReleased === false;
+
   return (
     <div
       onClick={item.onClick}
@@ -227,13 +251,14 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
       title={`Episode ${item.number}${item.isFiller ? " (Filler)" : ""}`}
       className={cn(
         "group relative flex flex-col cursor-pointer select-none touch-manipulation transition-all duration-300",
-        isUpcoming ? "opacity-70 hover:opacity-95" : "hover:-translate-y-1"
+        isUpcoming ? "opacity-70 hover:opacity-95" : "hover:-translate-y-1.5"
       )}
     >
+      {/* Thumbnail */}
       <div
         className={cn(
-          "relative w-full aspect-video overflow-hidden rounded-xl bg-muted ring-1 ring-white/10 transition-all duration-300",
-          !isUpcoming && "group-hover:ring-white/25 group-hover:shadow-[0_16px_34px_-12px_rgba(0,0,0,0.65)]"
+          "relative w-full aspect-video overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/10 transition-all duration-300",
+          item.isSelected ? "ring-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.35)]" : "group-hover:ring-white/30 group-hover:shadow-[0_12px_28px_-8px_rgba(0,0,0,0.8)]"
         )}
       >
         {item.thumbnail ? (
@@ -242,7 +267,7 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
             alt={item.title}
             loading="lazy"
             decoding="async"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.07] to-transparent">
@@ -250,26 +275,33 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
           </div>
         )}
 
-        {/* Bottom shade for badge legibility */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        {/* Gradient shade */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-60 group-hover:opacity-100 transition-opacity duration-300" />
 
-        {/* Episode number badge — bottom-left */}
-        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md border border-white/15">
-          <span className="text-white text-[10px] font-black tracking-wider">
-            {formatEpisodeNumber(item.number)}
+        {/* Episode number badge — top-left floating glass pill */}
+        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-white/20 shadow-md">
+          <span className="text-white text-[10px] sm:text-xs font-black tracking-wider">
+            E{formatEpisodeNumber(item.number)}
           </span>
         </div>
 
-        {/* Filler tag — top-left */}
+        {/* Runtime badge — bottom-right */}
+        {item.runtime && item.runtime > 0 && (
+          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md text-white/90 text-[10px] font-bold tracking-tight border border-white/15 shadow-sm">
+            {item.runtime}m
+          </div>
+        )}
+
+        {/* Filler tag */}
         {item.isFiller && (
-          <span className="absolute top-2 left-2 px-2 py-1 rounded-md bg-amber-400/90 text-black text-[10px] font-black uppercase tracking-wider shadow-lg shadow-black/40">
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-amber-400/90 text-black text-[10px] font-black uppercase tracking-wider shadow-lg shadow-black/40">
             Filler
           </span>
         )}
 
         {/* Selected / playing badge */}
         {item.isSelected && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-black tracking-wider uppercase shadow-xl shadow-black/50 border border-white/25">
+          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-black tracking-wider uppercase shadow-xl border border-white/25">
             {item.isPlaying && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
             {item.isPlaying ? "Playing" : "Current"}
           </div>
@@ -278,7 +310,7 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
         {/* Play overlay */}
         {!isUpcoming && (
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <div className="w-11 h-11 rounded-full bg-white/90 flex items-center justify-center shadow-xl transform scale-75 group-hover:scale-100 transition-transform duration-300">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 text-black flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.8)] transform scale-80 group-hover:scale-100 transition-all duration-300">
               <Play className="w-4 h-4 fill-black text-black ml-0.5" />
             </div>
           </div>
@@ -286,28 +318,31 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
 
         {/* Upcoming overlay */}
         {isUpcoming && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center gap-1">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1">
             <Lock className="w-4 h-4 text-white/60" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-white/70">Upcoming</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/70">Upcoming</span>
           </div>
         )}
       </div>
 
-      <h3
-        className={cn(
-          "mt-2.5 text-sm font-bold leading-snug line-clamp-2 transition-colors duration-200",
-          item.isSelected ? "text-primary" : "text-white/90 group-hover:text-white"
-        )}
-      >
-        {item.title}
-      </h3>
+      {/* Episode title ONLY (clean, visual, distinct from list view) */}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <h3
+          className={cn(
+            "text-xs sm:text-sm font-bold leading-snug line-clamp-1 truncate transition-colors duration-200 tracking-tight",
+            item.isSelected ? "text-primary" : "text-white/90 group-hover:text-white"
+          )}
+        >
+          {item.title}
+        </h3>
+      </div>
     </div>
   );
 }
 
 export function EpisodeGridView({ items }: { items: EpisodeItem[] }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-6 4xl:grid-cols-7 gap-3.5 sm:gap-4 md:gap-5 w-full">
       {items.map((item) => (
         <EpisodeGridCard key={item.key} item={item} />
       ))}
@@ -597,4 +632,61 @@ export function EpisodePagination({
     </div>
   );
 }
+
+// ── Episode Chunk Selector ([1–10] [11–20] ... batch pills) ─────────────────
+export interface EpisodeChunkBarProps {
+  totalEpisodes: number;
+  chunkSize?: number;
+  activeChunkIndex: number;
+  onChunkChange: (index: number) => void;
+  activeEpisodeNumber?: number;
+  className?: string;
+}
+
+export function EpisodeChunkBar({
+  totalEpisodes,
+  chunkSize = 10,
+  activeChunkIndex,
+  onChunkChange,
+  activeEpisodeNumber,
+  className,
+}: EpisodeChunkBarProps) {
+  const totalChunks = Math.ceil(totalEpisodes / chunkSize);
+  if (totalChunks <= 1) return null;
+
+  return (
+    <div className={cn("flex items-center justify-end gap-2.5 overflow-x-auto pb-1 scrollbar-none select-none flex-wrap", className)}>
+      <span className="text-xs font-black uppercase tracking-wider text-white/50 shrink-0 mr-1">
+        Episodes:
+      </span>
+      {Array.from({ length: totalChunks }, (_, idx) => {
+        const start = idx * chunkSize + 1;
+        const end = Math.min((idx + 1) * chunkSize, totalEpisodes);
+        const isActive = idx === activeChunkIndex;
+        const containsPlaying =
+          activeEpisodeNumber != null && activeEpisodeNumber >= start && activeEpisodeNumber <= end;
+
+        return (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => onChunkChange(idx)}
+            className={cn(
+              "h-10 px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all duration-200 flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0 shadow-sm",
+              isActive
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 ring-2 ring-primary/40 scale-[1.03]"
+                : "bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] hover:border-white/20 text-white/75 hover:text-white"
+            )}
+          >
+            {containsPlaying && !isActive && (
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            )}
+            <span>{start}–{end}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 

@@ -18,6 +18,40 @@ function cleanSearchTitle(raw: string): string {
     .trim();
 }
 
+function normalizeTitle(str: string): string {
+  return (str || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+function isTitleMatch(target: string, candidate: string): boolean {
+  if (!target || !candidate) return false;
+  const normTarget = normalizeTitle(target);
+  const normCandidate = normalizeTitle(candidate);
+  if (!normTarget || !normCandidate) return false;
+
+  // Exact normalized match
+  if (normTarget === normCandidate) return true;
+
+  // Prefix match with high length ratio
+  if (normTarget.startsWith(normCandidate) || normCandidate.startsWith(normTarget)) {
+    const minLen = Math.min(normTarget.length, normCandidate.length);
+    const maxLen = Math.max(normTarget.length, normCandidate.length);
+    if (minLen / maxLen >= 0.75) return true;
+  }
+
+  // Token overlap check
+  const targetWords = target.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
+  const candidateWords = candidate.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
+  if (targetWords.length === 0 || candidateWords.length === 0) return false;
+
+  const targetSet = new Set(targetWords);
+  const matches = candidateWords.filter(w => targetSet.has(w)).length;
+  const overlapRatio = (2 * matches) / (targetWords.length + candidateWords.length);
+  return overlapRatio >= 0.75;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
@@ -63,86 +97,108 @@ export async function GET(request: NextRequest) {
       return null;
     };
 
-    // 1. For non-anime, try direct TMDB ID lookup first
+    // 1. Direct TMDB ID lookup first (fastest and most accurate)
+    // CRITICAL: NEVER treat an anime ID as a TMDB ID because anime uses AniList IDs (e.g. Bleach is 269 on AniList, but TMDB TV 269 is One Tree Hill!)
     if (tmdbId && !isAnime) {
       const directLogo = await fetchLogosForId(type as "movie" | "tv", tmdbId);
       if (directLogo) {
         return Response.json(directLogo, { headers: cacheHeaders(86400 * 30) });
       }
+      // If direct TMDB ID failed and media is non-anime, do not guess unrelated titles
+      if (!title) {
+        return Response.json({ logoUrl: null }, { headers: cacheHeaders(86400 * 7) });
+      }
     }
 
-    // 2. Build search queries (title, cleaned title, slug-extracted title)
+    // 2. Build search queries (only target title and clean title — NEVER partial words that cause false matches)
     const searchQueries: string[] = [];
     if (title) {
-      searchQueries.push(title);
+      searchQueries.push(title.trim());
       const cleaned = cleanSearchTitle(title);
-      if (cleaned && cleaned !== title) searchQueries.push(cleaned);
-      // If title has multiple words, add first 2-3 words (root title)
-      const words = cleaned.split(" ");
-      if (words.length > 2) {
-        searchQueries.push(words.slice(0, 2).join(" "));
-        searchQueries.push(words.slice(0, 3).join(" "));
+      if (cleaned && cleaned !== title.trim() && cleaned.length >= 3) {
+        searchQueries.push(cleaned);
       }
     }
 
     if (id && isNaN(Number(id))) {
       const slugTitle = cleanSearchTitle(id.replace(/-\d+$/, "").replace(/-/g, " "));
-      if (slugTitle && !searchQueries.includes(slugTitle)) {
+      if (slugTitle && slugTitle.length >= 3 && !searchQueries.includes(slugTitle)) {
         searchQueries.push(slugTitle);
       }
     }
 
-    const uniqueQueries = Array.from(new Set(searchQueries.filter(Boolean)));
+    const uniqueQueries = Array.from(new Set(searchQueries.filter(q => q && q.length >= 2)));
 
     for (const query of uniqueQueries) {
-      // For anime: search TV shows first and check top results
       if (isAnime) {
-        const tvSearch = (await tmdbFetch(`/search/tv`, { query, include_adult: "false" })) as any;
-        const tvResults: any[] = tvSearch?.results || [];
+        // Search TV and Movie in parallel for speed
+        const [tvSearch, movieSearch] = await Promise.all([
+          tmdbFetch(`/search/tv`, { query, include_adult: "false" }).catch(() => null) as Promise<any>,
+          tmdbFetch(`/search/movie`, { query, include_adult: "false" }).catch(() => null) as Promise<any>,
+        ]);
 
-        // Check top TV matches for a logo
-        for (const item of tvResults.slice(0, 4)) {
-          if (item?.id) {
-            const foundLogo = await fetchLogosForId("tv", String(item.id));
-            if (foundLogo) {
-              return Response.json(foundLogo, { headers: cacheHeaders(86400 * 30) });
-            }
+        const candidateList: { type: "tv" | "movie"; id: string; name: string }[] = [];
+
+        for (const item of (tvSearch?.results || []).slice(0, 6)) {
+          const candName = item.name || item.original_name || "";
+          // Must be actual Japanese origin OR animation genre to prevent matching live-action TV shows with the same name
+          const isAnimeCandidate = item.original_language === "ja" || item.genre_ids?.includes(16);
+          if (item?.id && isAnimeCandidate && isTitleMatch(query, candName)) {
+            candidateList.push({ type: "tv", id: String(item.id), name: candName });
           }
         }
 
-        // Also check anime movie search
-        const movieSearch = (await tmdbFetch(`/search/movie`, { query, include_adult: "false" })) as any;
-        const movieResults: any[] = movieSearch?.results || [];
-        for (const item of movieResults.slice(0, 3)) {
-          if (item?.id) {
-            const foundLogo = await fetchLogosForId("movie", String(item.id));
-            if (foundLogo) {
-              return Response.json(foundLogo, { headers: cacheHeaders(86400 * 30) });
-            }
+        for (const item of (movieSearch?.results || []).slice(0, 4)) {
+          const candName = item.title || item.original_title || "";
+          const isAnimeCandidate = item.original_language === "ja" || item.genre_ids?.includes(16);
+          if (item?.id && isAnimeCandidate && isTitleMatch(query, candName)) {
+            candidateList.push({ type: "movie", id: String(item.id), name: candName });
+          }
+        }
+
+        if (candidateList.length > 0) {
+          // Fetch logos in parallel
+          const logoResults = await Promise.all(
+            candidateList.map(cand => fetchLogosForId(cand.type, cand.id))
+          );
+          const found = logoResults.find(Boolean);
+          if (found) {
+            return Response.json(found, { headers: cacheHeaders(86400 * 30) });
           }
         }
       } else {
-        // Standard Movie / TV search
+        // Standard Movie / TV search with strict title match verification
         const primaryType = type === "movie" ? "movie" : "tv";
         const secondaryType = type === "movie" ? "tv" : "movie";
 
-        const primarySearch = (await tmdbFetch(`/search/${primaryType}`, { query, include_adult: "false" })) as any;
-        for (const item of (primarySearch?.results || []).slice(0, 3)) {
-          if (item?.id) {
-            const foundLogo = await fetchLogosForId(primaryType, String(item.id));
-            if (foundLogo) {
-              return Response.json(foundLogo, { headers: cacheHeaders(86400 * 30) });
-            }
+        const [primarySearch, secondarySearch] = await Promise.all([
+          tmdbFetch(`/search/${primaryType}`, { query, include_adult: "false" }).catch(() => null) as Promise<any>,
+          tmdbFetch(`/search/${secondaryType}`, { query, include_adult: "false" }).catch(() => null) as Promise<any>,
+        ]);
+
+        const candidateList: { type: "movie" | "tv"; id: string; name: string }[] = [];
+
+        for (const item of (primarySearch?.results || []).slice(0, 4)) {
+          const candName = item.title || item.name || item.original_title || item.original_name || "";
+          if (item?.id && isTitleMatch(query, candName)) {
+            candidateList.push({ type: primaryType, id: String(item.id), name: candName });
           }
         }
 
-        const secondarySearch = (await tmdbFetch(`/search/${secondaryType}`, { query, include_adult: "false" })) as any;
-        for (const item of (secondarySearch?.results || []).slice(0, 3)) {
-          if (item?.id) {
-            const foundLogo = await fetchLogosForId(secondaryType, String(item.id));
-            if (foundLogo) {
-              return Response.json(foundLogo, { headers: cacheHeaders(86400 * 30) });
-            }
+        for (const item of (secondarySearch?.results || []).slice(0, 2)) {
+          const candName = item.title || item.name || item.original_title || item.original_name || "";
+          if (item?.id && isTitleMatch(query, candName)) {
+            candidateList.push({ type: secondaryType, id: String(item.id), name: candName });
+          }
+        }
+
+        if (candidateList.length > 0) {
+          const logoResults = await Promise.all(
+            candidateList.map(cand => fetchLogosForId(cand.type, cand.id))
+          );
+          const found = logoResults.find(Boolean);
+          if (found) {
+            return Response.json(found, { headers: cacheHeaders(86400 * 30) });
           }
         }
       }

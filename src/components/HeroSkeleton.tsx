@@ -30,7 +30,7 @@ export const HeroSkeleton = memo(function HeroSkeleton() {
       <div className="hidden md:flex absolute right-6 lg:right-12 xl:right-16 top-1/2 -translate-y-1/2 w-[200px] lg:w-[240px] xl:w-[270px] aspect-[2/3] rounded-2xl overflow-hidden skeleton-pulse border border-white/[0.06] opacity-30 shadow-2xl" />
 
       {/* Content skeleton matching HeroBanner layout */}
-      <div className="relative z-10 w-full px-5 md:px-12 lg:px-16 xl:px-20 pb-8 sm:pb-9 md:pb-12 max-w-screen-2xl mx-auto">
+      <div className="relative z-10 w-full px-5 md:px-12 lg:px-16 xl:px-20 pb-8 sm:pb-9 md:pb-12">
         <div className="max-w-full sm:max-w-lg md:max-w-2xl flex flex-col items-center text-center md:items-start md:text-left mx-auto md:mx-0 rounded-2xl md:bg-transparent bg-black/10 px-4 py-5 md:p-0">
           
           {/* Badge & Tags placeholder */}
