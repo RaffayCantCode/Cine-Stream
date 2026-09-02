@@ -14,7 +14,7 @@ export const HeroAnnouncement = memo(function HeroAnnouncement() {
 
   return (
     <div
-      className="absolute top-[calc(4.25rem+env(safe-area-inset-top,0px))] sm:top-[calc(4.5rem+env(safe-area-inset-top,0px))] md:top-6 left-3 sm:left-6 md:left-8 lg:left-10 z-30 max-w-[calc(100%-1.5rem)] sm:max-w-md md:max-w-lg lg:max-w-xl pointer-events-auto transition-all duration-300 animate-fade-in-up"
+      className="absolute top-[calc(4.25rem+env(safe-area-inset-top,0px))] sm:top-[calc(4.5rem+env(safe-area-inset-top,0px))] md:top-4 left-3 sm:left-6 md:left-56 lg:left-60 z-30 max-w-[calc(100%-1.5rem)] sm:max-w-md md:max-w-lg lg:max-w-xl pointer-events-auto transition-all duration-300 animate-fade-in-up"
       role="region"
       aria-label="Site Announcement"
     >
