@@ -278,6 +278,69 @@ export async function searchTmdbShow(name: string, year?: number): Promise<numbe
   }
 }
 
+export async function searchTmdbMovie(name: string, year?: number): Promise<number | null> {
+  try {
+    const baseTitle = getCleanBaseTitle(name);
+    const queries = [baseTitle, name];
+    let results: any[] = [];
+    let queryUsed = "";
+
+    for (const query of queries) {
+      if (!query) continue;
+      const cleanQuery = query.replace(/[^\p{L}\p{N}\s]/gu, "").trim();
+      if (!cleanQuery) continue;
+      
+      const params: Record<string, string> = { query: cleanQuery, language: "en-US" };
+      const data = await tmdbFetch("/search/movie", params) as { results?: any[] };
+      if (data?.results?.length) {
+        results = data.results;
+        queryUsed = query;
+        break;
+      }
+    }
+
+    if (results.length === 0) return null;
+
+    // Prioritize animation results (genre ID 16)
+    const animationResults = results.filter(r => r.genre_ids?.includes(16));
+    const animPool = animationResults.length > 0 ? animationResults : results;
+
+    // Prefer Japanese-language results within the animation pool
+    const japaneseResults = animPool.filter(r => r.original_language === "ja");
+    const candidatePool = japaneseResults.length > 0 ? japaneseResults : animPool;
+
+    // First pass: title match + year match
+    for (const movie of candidatePool) {
+      const movieTitle = movie.title || movie.original_title || "";
+      if (!nameMatches(queryUsed, movieTitle)) continue;
+      if (year) {
+        const movieYear = movie.release_date ? parseInt(movie.release_date.slice(0, 4), 10) : 0;
+        if (movieYear && Math.abs(movieYear - year) <= 1) {
+          return movie.id;
+        }
+      } else {
+        return movie.id;
+      }
+    }
+
+    // Second pass: title match only
+    for (const movie of candidatePool) {
+      const movieTitle = movie.title || movie.original_title || "";
+      if (nameMatches(queryUsed, movieTitle)) {
+        return movie.id;
+      }
+    }
+
+    if (candidatePool.length > 0 && candidatePool[0]?.id) {
+      return candidatePool[0].id;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch TMDB episode data for a given show and list of season numbers.
  * Returns a map keyed by "seasonNum-episodeNum".

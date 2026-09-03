@@ -3,7 +3,7 @@
 // Streaming: iframe embed sources only (no HLS)
 
 import { isAdultContent } from "./content-filter";
-import { tmdbFetch, searchTmdbShow, fetchTmdbEpisodeData, getCleanBaseTitle } from "./tmdb";
+import { tmdbFetch, searchTmdbShow, searchTmdbMovie, fetchTmdbEpisodeData, getCleanBaseTitle } from "./tmdb";
 import { getCuratedAnimeFranchiseNodes } from "./franchises";
 import { recordPrimarySuccess, recordPrimaryFailure, shouldAttemptPrimary, isPrimaryAvailable } from "./anime-health";
 
@@ -1570,15 +1570,25 @@ export async function getAnimeDetails(
         tId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
         if (isNaN(tId)) tId = null;
       }
-      // Never search TMDB TV catalog for Movie formats to avoid false TV series cross-mapping
-      if (!tId && !isTargetMovie) {
-        try {
-          tId = await searchTmdbShow(anime.name, anime.seasonYear || undefined);
-          if (!tId && anime.jname) {
-            tId = await searchTmdbShow(anime.jname, anime.seasonYear || undefined);
+      if (!tId) {
+        if (isTargetMovie) {
+          try {
+            tId = await searchTmdbMovie(anime.name, anime.seasonYear || undefined);
+            if (!tId && anime.jname) {
+              tId = await searchTmdbMovie(anime.jname, anime.seasonYear || undefined);
+            }
+          } catch {
+            tId = null;
           }
-        } catch {
-          tId = null;
+        } else {
+          try {
+            tId = await searchTmdbShow(anime.name, anime.seasonYear || undefined);
+            if (!tId && anime.jname) {
+              tId = await searchTmdbShow(anime.jname, anime.seasonYear || undefined);
+            }
+          } catch {
+            tId = null;
+          }
         }
       }
       return tId;

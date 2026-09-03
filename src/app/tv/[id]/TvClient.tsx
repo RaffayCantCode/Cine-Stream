@@ -264,14 +264,18 @@ export default function TvClient() {
       setError(null);
       try {
         const data = await fetchJson<TvShow>(`/api/tmdb/tv/${id}`);
-        // Preload backdrop immediately
-        if (data.backdrop_path) {
+        const backdropSrc = data.backdrop_path
+          ? `https://image.tmdb.org/t/p/original${data.backdrop_path}`
+          : null;
+        // Preload backdrop immediately via <link rel=preload> for fastest paint
+        if (backdropSrc) {
           const link = document.createElement("link");
           link.rel = "preload"; link.as = "image";
-          link.href = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
+          link.href = backdropSrc;
           link.fetchPriority = "high";
           document.head.appendChild(link);
         }
+        // Set show data first so React can start rendering
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(prev => {
@@ -281,6 +285,18 @@ export default function TvClient() {
           }
           return prev;
         });
+        // Decode backdrop before revealing the page so it's already painted
+        if (backdropSrc) {
+          const img = new Image();
+          img.src = backdropSrc;
+          await new Promise<void>(resolve => {
+            const done = () => resolve();
+            const t = setTimeout(done, 1000);
+            if (img.complete && img.naturalWidth > 0) { clearTimeout(t); done(); return; }
+            img.onload = () => { clearTimeout(t); if ("decode" in img) img.decode().then(done).catch(done); else done(); };
+            img.onerror = () => { clearTimeout(t); done(); };
+          });
+        }
       } catch (error) {
         setShow(null);
         setError(error instanceof Error ? error.message : "Failed to fetch show");
@@ -468,7 +484,7 @@ export default function TvClient() {
 
   // ── Normalize TV episodes into the shared EpisodeItem shape ──────────────
   const episodeToItem = (episode: Episode): EpisodeItem => {
-    const isWatching = (hasActiveProgress || Boolean(playingEpisode)) && Number(playingSeason) === Number(selectedSeason) && Number(playingEpisode) === Number(episode.episode_number);
+    const isWatching = hasActiveProgress && Number(playingSeason) === Number(selectedSeason) && Number(playingEpisode) === Number(episode.episode_number);
     const isUpcoming = isUpcomingEpisode(episode);
     return {
       key: String(episode.id),

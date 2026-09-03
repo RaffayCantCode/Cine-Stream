@@ -1061,7 +1061,7 @@ function preloadAndDecodeImage(src: string | null | undefined): Promise<boolean>
       resolve(true);
     };
 
-    const timer = setTimeout(finish, 2800); // 2.8s safety fallback
+    const timer = setTimeout(finish, 1200); // 1.2s safety fallback
 
     img.src = src;
     if (img.complete && img.naturalWidth > 0) {
@@ -1105,7 +1105,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   });
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const animeTitle = anime?.name || (anime as any)?.title || (anime as any)?.english_name || (typeof id === "string" ? id.replace(/-\d+$/, "").replace(/-/g, " ") : undefined);
-  const { logoUrl } = useMediaLogo(id, "anime", animeTitle);
+  const { logoUrl, backdropUrl: mediaBackdropUrl } = useMediaLogo(id, "anime", animeTitle);
   // If we already have initialData, skip the blank skeleton entirely.
   const [isLoading, setIsLoading] = useState(!initialData);
   const [episodesLoading, setEpisodesLoading] = useState(true);
@@ -1117,7 +1117,28 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [watchStarted, setWatchStarted] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
-  const [tmdbBackdropUrl, setTmdbBackdropUrl] = useState<string | null>(null);
+  const [tmdbBackdropUrl, setTmdbBackdropUrl] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && (key.startsWith(`artwork_v1_${id}-`) || (animeTitle && key.includes(`-${animeTitle}`)))) {
+          const val = sessionStorage.getItem(key);
+          if (val) {
+            const parsed = JSON.parse(val);
+            if (parsed?.backdropUrl) return parsed.backdropUrl;
+          }
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  useEffect(() => {
+    if (mediaBackdropUrl && !tmdbBackdropUrl) {
+      setTmdbBackdropUrl(mediaBackdropUrl);
+    }
+  }, [mediaBackdropUrl, tmdbBackdropUrl]);
 
   // Franchise node data for Season Guide
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>(() => {
@@ -1157,7 +1178,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }, [id]);
 
   const isPageReady = Boolean(
-    (!isLoading && (!episodesLoading || episodesTimedOut) && imagesReady) ||
+    (!isLoading && imagesReady) ||
     error ||
     (anime as any)?.isHidden
   );
@@ -1613,12 +1634,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
 
-          const initialBanner = a.backdrop
-            ? (a.backdrop.startsWith("http") ? a.backdrop : `https://image.tmdb.org/t/p/original${a.backdrop}`)
-            : (a.bannerImage || a.poster || "");
+          // Fire TMDB artwork lookup in parallel with image preloading — don't await it serially
+          let resolvedBanner = mediaBackdropUrl || tmdbBackdropUrl;
+          if (!resolvedBanner && a.backdrop) {
+            resolvedBanner = a.backdrop.startsWith("http") ? a.backdrop : `https://image.tmdb.org/t/p/original${a.backdrop}`;
+          }
 
-          if (a.backdrop && !tmdbBackdropUrl) {
-            setTmdbBackdropUrl(initialBanner);
+          // If still no high-quality widescreen, look up TMDB artwork NOW (already may be cached as force-cache)
+          const artworkPromise: Promise<string | null> = (!resolvedBanner)
+            ? fetch(`/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(a.name || animeTitle || "")}&type=anime`, { cache: "force-cache" })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                  if (d?.backdropUrl) {
+                    setTmdbBackdropUrl(d.backdropUrl);
+                    return d.backdropUrl as string;
+                  }
+                  return null;
+                })
+                .catch(() => null)
+            : Promise.resolve(null);
+
+          // Determine the best banner available right now (may be enriched by artworkPromise)
+          const initialBanner = resolvedBanner || a.bannerImage || a.poster || "";
+
+          if (resolvedBanner && !tmdbBackdropUrl) {
+            setTmdbBackdropUrl(resolvedBanner);
           }
 
           // Preload hero banner and poster image immediately
@@ -1634,10 +1674,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             }
           }
 
-          // Preload and decode both critical images before revealing page
+          // Decode banner + poster. Also race against artwork fetch so if TMDB returns
+          // a better backdrop before the banner decodes, we use that URL.
           if (typeof window !== "undefined") {
+            const bannerToPreload = resolvedBanner
+              ? preloadAndDecodeImage(resolvedBanner)
+              : artworkPromise.then(artUrl => preloadAndDecodeImage(artUrl || a.bannerImage || a.poster));
             await Promise.allSettled([
-              preloadAndDecodeImage(initialBanner),
+              bannerToPreload,
               preloadAndDecodeImage(a.poster),
             ]);
           }
@@ -2241,7 +2285,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   const displayPoster = (currentSeasonInfo as any)?.coverImage || (currentSeason as any)?.coverImage || anime?.poster || "";
   const tmdbBackdropPath = anime?.backdrop || null;
-  const displayBanner = tmdbBackdropUrl
+  const displayBanner = mediaBackdropUrl
+    || tmdbBackdropUrl
     || (tmdbBackdropPath ? (tmdbBackdropPath.startsWith("http") ? tmdbBackdropPath : `https://image.tmdb.org/t/p/original${tmdbBackdropPath}`) : null)
     || (currentSeasonInfo as any)?.bannerImage
     || (anime as any)?.bannerImage

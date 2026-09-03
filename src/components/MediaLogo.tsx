@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 
 const logoCache = new Map<string, string | null>();
+const artworkCache = new Map<string, { backdropUrl: string | null; posterUrl: string | null }>();
 
 export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime", title?: string) {
   const isAnime = type === "anime";
@@ -22,6 +23,21 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
     return null;
   });
 
+  const [artwork, setArtwork] = useState<{ backdropUrl: string | null; posterUrl: string | null }>(() => {
+    if (artworkCache.has(cacheKey)) return artworkCache.get(cacheKey)!;
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem(`artwork_v1_${cacheKey}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          artworkCache.set(cacheKey, parsed);
+          return parsed;
+        }
+      } catch {}
+    }
+    return { backdropUrl: null, posterUrl: null };
+  });
+
   const [loading, setLoading] = useState(!logoUrl);
 
   useEffect(() => {
@@ -30,8 +46,9 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
       return;
     }
 
-    if (logoCache.has(cacheKey)) {
+    if (logoCache.has(cacheKey) && artworkCache.has(cacheKey)) {
       setLogoUrl(logoCache.get(cacheKey) || null);
+      setArtwork(artworkCache.get(cacheKey)!);
       setLoading(false);
       return;
     }
@@ -51,6 +68,16 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
           try { sessionStorage.setItem(`logo_v7_${cacheKey}`, resolvedLogo); } catch {}
         }
         setLogoUrl(resolvedLogo);
+
+        const art = {
+          backdropUrl: data?.backdropUrl || null,
+          posterUrl: data?.posterUrl || null,
+        };
+        artworkCache.set(cacheKey, art);
+        if (typeof window !== "undefined" && (art.backdropUrl || art.posterUrl)) {
+          try { sessionStorage.setItem(`artwork_v1_${cacheKey}`, JSON.stringify(art)); } catch {}
+        }
+        setArtwork(art);
         setLoading(false);
       })
       .catch(() => {
@@ -65,5 +92,5 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
     };
   }, [id, type, title, cacheKey, isAnime]);
 
-  return { logoUrl, loading };
+  return { logoUrl, backdropUrl: artwork.backdropUrl, posterUrl: artwork.posterUrl, loading };
 }
