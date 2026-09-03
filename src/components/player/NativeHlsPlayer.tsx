@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, memo } from "react";
 import Hls from "hls.js";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Play } from "lucide-react";
 
 export interface SubtitleTrack {
   id: number;
@@ -95,6 +95,33 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  // Source 1 (AnimePlay/Megaplay) Click-to-Play protection
+  const isAnimePlaySource =
+    mediaType === "anime" &&
+    (server === "animeplay" ||
+      server === "animesub" ||
+      (fallbackIframeUrl?.includes("megaplay.buzz") ?? false));
+
+  const [isClickUnlocked, setIsClickUnlocked] = useState(!isAnimePlaySource);
+  const [liveIframeUrl, setLiveIframeUrl] = useState(isAnimePlaySource ? "" : (fallbackIframeUrl || ""));
+
+  useEffect(() => {
+    if (isAnimePlaySource) {
+      setIsClickUnlocked(false);
+      setLiveIframeUrl("");
+    } else {
+      setIsClickUnlocked(true);
+      setLiveIframeUrl(fallbackIframeUrl || "");
+    }
+  }, [fallbackIframeUrl, server, isAnimePlaySource]);
+
+  const handleClickUnlock = useCallback(() => {
+    setIsClickUnlocked(true);
+    setTimeout(() => {
+      setLiveIframeUrl(fallbackIframeUrl || "");
+    }, 50);
+  }, [fallbackIframeUrl]);
 
   // ── Step 1: Resolve Direct HLS Stream ──
   useEffect(() => {
@@ -302,17 +329,60 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
 
   // ── Fallback Iframe Mode ──
   if (useIframeFallback && fallbackIframeUrl) {
+    if (isAnimePlaySource && !isClickUnlocked) {
+      return (
+        <div
+          onClick={handleClickUnlock}
+          className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden select-none cursor-pointer group"
+        >
+          {/* Poster backdrop with blur and dark gradient */}
+          {poster && (
+            <div
+              className="absolute inset-0 bg-cover bg-center blur-md opacity-30 scale-105 transition-transform duration-700 pointer-events-none"
+              style={{ backgroundImage: `url(${poster})` }}
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/90 pointer-events-none" />
+
+          {/* Ambient glow */}
+          <div className="absolute w-72 h-72 rounded-full bg-primary/25 blur-3xl pointer-events-none animate-pulse" />
+
+          {/* Center Play Button & Title */}
+          <div className="relative z-10 flex flex-col items-center justify-center gap-5 p-8 rounded-3xl bg-zinc-950/70 border border-white/10 hover:border-primary/50 backdrop-blur-xl shadow-[0_25px_60px_rgba(0,0,0,0.9)] group-hover:scale-105 active:scale-95 transition-all duration-300">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center shadow-2xl shadow-primary/50 group-hover:shadow-primary/70 group-hover:scale-110 transition-all duration-300 ring-4 ring-white/10">
+              <Play className="w-10 h-10 sm:w-12 sm:h-12 text-white fill-white ml-1.5 transition-transform duration-200" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-lg sm:text-xl font-black text-white tracking-wide group-hover:text-primary transition-colors">
+                Click to Play
+              </h3>
+              <p className="text-xs text-white/50 font-medium">
+                Source 1 • Tap anywhere to start stream
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="w-full h-full relative bg-black">
-        <iframe
-          key={fallbackIframeUrl}
-          src={fallbackIframeUrl}
-          className="w-full h-full border-0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          referrerPolicy="no-referrer-when-downgrade"
-          title={title || "Video Stream"}
-        />
+        {liveIframeUrl ? (
+          <iframe
+            key={liveIframeUrl}
+            src={liveIframeUrl}
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            referrerPolicy="no-referrer-when-downgrade"
+            title={title || "Video Stream"}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-black">
+            <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        )}
       </div>
     );
   }

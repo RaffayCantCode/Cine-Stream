@@ -98,6 +98,26 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   const [error, setError] = useState<string | null>(null);
   const [forcedSource, setForcedSource] = useState<string>("animeplay");
 
+  // Restore current/preferred source from URL query param or sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sourceParam = urlParams.get("source");
+      const savedSource = sessionStorage.getItem("cinestream_anime_source");
+      const targetSource = sourceParam || savedSource;
+      if (targetSource && ANIME_SERVERS.some((s) => s.key === targetSource)) {
+        setForcedSource(targetSource);
+      }
+    }
+  }, []);
+
+  const handleSelectServer = useCallback((srvKey: string) => {
+    setForcedSource(srvKey);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("cinestream_anime_source", srvKey);
+    }
+  }, []);
+
   useEffect(() => {
     const loadAnime = async () => {
       setIsLoading(true);
@@ -120,9 +140,6 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
               tmdbSeason: a.tmdbSeason || 1,
               countryOfOrigin: a.countryOfOrigin || (isChinese ? "CN" : null),
             });
-            if (isChinese) {
-              setForcedSource("embedmaster");
-            }
             return;
           }
         }
@@ -176,9 +193,6 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
               episodes: { sub: media.episodes, dub: null },
               countryOfOrigin: media.countryOfOrigin || (isChinese ? "CN" : null),
             });
-            if (isChinese) {
-              setForcedSource("embedmaster");
-            }
             return;
           }
         }
@@ -242,9 +256,9 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
 
   const handleSelectEpisode = useCallback(
     (newEp: number) => {
-      router.push(`/watch/anime/${animeId}/${newEp}`);
+      router.push(`/watch/anime/${animeId}/${newEp}?source=${forcedSource}`);
     },
-    [router, animeId]
+    [router, animeId, forcedSource]
   );
 
   const handleAutoNext = useCallback(() => {
@@ -346,7 +360,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         metadata={metadata}
         servers={ANIME_SERVERS}
         activeServer={ANIME_SERVERS.find((s) => s.key === forcedSource) || ANIME_SERVERS[0]}
-        onSelectServer={(srv) => setForcedSource(srv.key)}
+        onSelectServer={(srv) => handleSelectServer(srv.key)}
         seasons={drawerSeason}
         onSelectEpisode={(_, ep) => handleSelectEpisode(ep)}
         isAnime={true}

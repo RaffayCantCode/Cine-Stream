@@ -14,7 +14,6 @@ import {
   Minimize2,
   Cloud,
   Layers,
-  Subtitles,
   Settings,
   Cast,
   Tv,
@@ -24,13 +23,12 @@ import {
   ChevronRight,
   Globe,
   Server,
+  SkipForward,
 } from "lucide-react";
 import { ServerOption } from "./ServerSelectorModal";
 import { SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 import { DrawerSeason, DrawerEpisode } from "./EpisodeDrawer";
 import { PlayerSettingsModal } from "./PlayerSettingsModal";
-import { SubtitleSettingsModal, type SubtitleConfig } from "./SubtitleSettingsModal";
-import { OpenSubtitlesPicker, type SubtitleCueItem } from "./OpenSubtitlesPicker";
 import { useAmbientColor } from "@/hooks/useAmbientColor";
 
 export interface CinemaPlayerMetadata {
@@ -56,6 +54,7 @@ interface CinemaPlayerProps {
   seasons?: DrawerSeason[];
   onSelectEpisode?: (season: number, episode: number) => void;
   isAnime?: boolean;
+  onReloadSource?: () => void;
   children: ReactNode;
 }
 
@@ -67,6 +66,7 @@ export function CinemaPlayer({
   seasons,
   onSelectEpisode,
   isAnime = false,
+  onReloadSource,
   children,
 }: CinemaPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,16 +83,36 @@ export function CinemaPlayer({
   const [showEpisodeCarousel, setShowEpisodeCarousel] = useState(false);
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showSubtitleModal, setShowSubtitleModal] = useState(false);
-  const [showOpenSubtitlesPicker, setShowOpenSubtitlesPicker] = useState(false);
   const [playerMode, setPlayerMode] = useState<"native" | "iframe">("native");
 
-  // Active OpenSubtitles track & parsed cues
-  const [activeOsSub, setActiveOsSub] = useState<{
-    url: string;
-    label: string;
-    cues?: SubtitleCueItem[];
-  } | null>(null);
+  // Reload Source state
+  const [reloadKey, setReloadKey] = useState(0);
+  const [isReloading, setIsReloading] = useState(false);
+
+  const handleReloadSource = useCallback(() => {
+    setIsReloading(true);
+    setReloadKey((prev) => prev + 1);
+    if (onReloadSource) {
+      try {
+        onReloadSource();
+      } catch {}
+    }
+    setTimeout(() => {
+      setIsReloading(false);
+    }, 750);
+  }, [onReloadSource]);
+
+  const handleNextSource = useCallback(() => {
+    if (!servers || servers.length === 0) return;
+    const currentIdx = servers.findIndex(
+      (s) => s.key === activeServer.key || s.name === activeServer.name
+    );
+    const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % servers.length : 0;
+    const nextServer = servers[nextIdx];
+    if (nextServer) {
+      onSelectServer(nextServer);
+    }
+  }, [servers, activeServer, onSelectServer]);
 
   const [selectedSeasonNum, setSelectedSeasonNum] = useState<number>(metadata.season || 1);
   const [activeEpisodeRange, setActiveEpisodeRange] = useState<string | null>(null);
@@ -105,25 +125,10 @@ export function CinemaPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Active Subtitle Cue Text synced with currentTime
-  const activeSubtitleText = useMemo(() => {
-    if (!activeOsSub?.cues || activeOsSub.cues.length === 0) return null;
-    const match = activeOsSub.cues.find(
-      (c) => currentTime >= c.start && currentTime <= c.end
-    );
-    return match?.text || null;
-  }, [activeOsSub, currentTime]);
-
   // Settings
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [autoPlayNext, setAutoPlayNext] = useState(true);
   const [autoSkipIntro, setAutoSkipIntro] = useState(false);
-  const [subtitleConfig, setSubtitleConfig] = useState<SubtitleConfig>({
-    fontSize: "medium",
-    fontColor: "#FFFFFF",
-    bgColor: "#000000",
-    bgOpacity: 50,
-  });
 
   // Auto-hide controls timer
   const resetControlsTimer = useCallback(() => {
@@ -132,11 +137,11 @@ export function CinemaPlayer({
       clearTimeout(controlsTimeoutRef.current);
     }
     controlsTimeoutRef.current = setTimeout(() => {
-      if (!showEpisodeCarousel && !showServerMenu && !showSettingsModal && !showSubtitleModal) {
+      if (!showEpisodeCarousel && !showServerMenu && !showSettingsModal) {
         setShowControls(false);
       }
     }, 3500);
-  }, [showEpisodeCarousel, showServerMenu, showSettingsModal, showSubtitleModal]);
+  }, [showEpisodeCarousel, showServerMenu, showSettingsModal]);
 
   useEffect(() => {
     resetControlsTimer();
@@ -284,11 +289,9 @@ export function CinemaPlayer({
           }}
         />
 
-        <div className={`w-full h-full relative transition-all duration-300 ${isTheaterMode ? "max-w-none" : "w-full"}`}>
+        <div key={reloadKey} className={`w-full h-full relative transition-all duration-300 ${isTheaterMode ? "max-w-none" : "w-full"}`}>
           {React.isValidElement(children)
             ? React.cloneElement(children as React.ReactElement<any>, {
-                customSubtitle: activeOsSub,
-                subtitleSettings: subtitleConfig,
                 onModeChange: setPlayerMode,
                 onProgress: (cur: number, dur: number) => {
                   setCurrentTime(cur);
@@ -298,31 +301,11 @@ export function CinemaPlayer({
             : children}
         </div>
 
-        {/* ── Dynamic OpenSubtitles Live Text Overlay (Centered Bottom with Smart Offset) ── */}
-        {activeSubtitleText && (
-          <div
-            className={`absolute left-1/2 -translate-x-1/2 z-20 pointer-events-none px-4 max-w-[90%] sm:max-w-[80%] text-center transition-all duration-300 ${
-              showControls ? "bottom-24 sm:bottom-28 md:bottom-32" : "bottom-6 sm:bottom-8 md:bottom-10"
-            }`}
-          >
-            <span
-              className="inline-block px-3.5 py-1.5 rounded-xl font-bold leading-relaxed shadow-2xl backdrop-blur-xs select-none"
-              style={{
-                color: subtitleConfig.fontColor || "#FFFFFF",
-                backgroundColor: `rgba(0, 0, 0, ${(subtitleConfig.bgOpacity ?? 60) / 100})`,
-                fontSize:
-                  subtitleConfig.fontSize === "small"
-                    ? "13px"
-                    : subtitleConfig.fontSize === "medium"
-                    ? "17px"
-                    : subtitleConfig.fontSize === "large"
-                    ? "22px"
-                    : "28px",
-                textShadow: "0 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7)",
-              }}
-            >
-              {activeSubtitleText}
-            </span>
+        {/* ── Reloading Source Floating Feedback ── */}
+        {isReloading && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-black/90 border border-white/20 backdrop-blur-md text-xs font-bold text-white flex items-center gap-2 shadow-2xl animate-fade-in pointer-events-none">
+            <RotateCcw className="w-4 h-4 animate-spin text-primary" />
+            <span>Reloading current source...</span>
           </div>
         )}
       </div>
@@ -350,11 +333,16 @@ export function CinemaPlayer({
           <span className="hidden sm:inline">Back</span>
         </Link>
 
-        {/* Center: Title & Episode Subtitle */}
-        <div className="flex flex-col items-center text-center max-w-[40%] sm:max-w-[50%] truncate px-2">
-          <h2 className="text-xs sm:text-sm md:text-base font-black text-white tracking-tight drop-shadow-md truncate">
-            {metadata.title}
-          </h2>
+        {/* Center: Title & Episode Subtitle & Source Badge */}
+        <div className="flex flex-col items-center text-center max-w-[40%] sm:max-w-[48%] truncate px-2">
+          <div className="flex items-center justify-center gap-2 max-w-full">
+            <h2 className="text-xs sm:text-sm md:text-base font-black text-white tracking-tight drop-shadow-md truncate">
+              {metadata.title}
+            </h2>
+            <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 text-[10px] sm:text-[11px] font-black uppercase tracking-wider shrink-0 shadow-sm">
+              {activeServer.name || "Source 1"}
+            </span>
+          </div>
           <span className="text-[10px] sm:text-xs text-white/60 font-semibold drop-shadow-sm truncate">
             {isAnime && metadata.episode
               ? `Episode ${metadata.episode}${metadata.episodeTitle ? ` • ${metadata.episodeTitle}` : ""}`
@@ -364,7 +352,7 @@ export function CinemaPlayer({
           </span>
         </div>
 
-        {/* Right: Quick Action Buttons (Episodes, Servers, OpenSubtitles, Fullscreen) */}
+        {/* Right: Quick Action Buttons (Episodes, Servers, Next Source, Reload) */}
         <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Episodes Drawer Button (if TV/Anime) */}
           {seasons && seasons.length > 0 && (
@@ -372,8 +360,6 @@ export function CinemaPlayer({
               onClick={() => {
                 setShowEpisodeCarousel(!showEpisodeCarousel);
                 setShowServerMenu(false);
-                setShowOpenSubtitlesPicker(false);
-                setShowSubtitleModal(false);
               }}
               className={`px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
                 showEpisodeCarousel
@@ -387,42 +373,44 @@ export function CinemaPlayer({
             </button>
           )}
 
-          {/* Servers Button */}
+          {/* Sources Button */}
           <button
             onClick={() => {
               setShowServerMenu(!showServerMenu);
               setShowEpisodeCarousel(false);
-              setShowOpenSubtitlesPicker(false);
-              setShowSubtitleModal(false);
             }}
             className={`px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
               showServerMenu
                 ? "bg-white text-black shadow-lg"
                 : "bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md"
             }`}
-            title="Switch Server"
+            title="Switch Source"
           >
             <Cloud className="w-4 h-4" />
-            <span className="hidden md:inline">Servers</span>
+            <span className="hidden md:inline">Sources</span>
           </button>
 
-          {/* OpenSubtitles Button */}
+          {/* Next Source Button */}
+          {servers && servers.length > 1 && (
+            <button
+              onClick={handleNextSource}
+              className="px-2.5 sm:px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md active:scale-95"
+              title="Next Source"
+            >
+              <SkipForward className="w-4 h-4 text-primary" />
+              <span className="hidden sm:inline">Next Source</span>
+            </button>
+          )}
+
+          {/* Reload Source Button */}
           <button
-            onClick={() => {
-              setShowOpenSubtitlesPicker(true);
-              setShowServerMenu(false);
-              setShowEpisodeCarousel(false);
-              setShowSubtitleModal(false);
-            }}
-            className={`px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
-              showOpenSubtitlesPicker || activeOsSub
-                ? "bg-emerald-500 text-black shadow-lg"
-                : "bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md"
-            }`}
-            title="Community Subtitles"
+            onClick={handleReloadSource}
+            disabled={isReloading}
+            className="px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md active:scale-95 disabled:opacity-60"
+            title="Reload Current Source"
           >
-            <Globe className="w-4 h-4" />
-            <span className="hidden md:inline">Subtitles</span>
+            <RotateCcw className={`w-4 h-4 ${isReloading ? "animate-spin text-primary" : ""}`} />
+            <span className="hidden md:inline">{isReloading ? "Reloading..." : "Reload"}</span>
           </button>
         </div>
       </div>
@@ -591,7 +579,7 @@ export function CinemaPlayer({
           <div className="flex items-center justify-between pb-2 border-b border-white/10">
             <div className="flex items-center gap-2">
               <Server className="w-3.5 h-3.5 text-primary" />
-              <h4 className="text-xs font-extrabold text-white">Stream Servers</h4>
+              <h4 className="text-xs font-extrabold text-white">Stream Sources</h4>
             </div>
             <button
               onClick={() => setShowServerMenu(false)}
@@ -748,7 +736,7 @@ export function CinemaPlayer({
                 <Tv className="w-5 h-5" />
               </button>
 
-              {/* Servers Cloud Icon (Screenshot 3) */}
+              {/* Sources Cloud Icon */}
               <button
                 onClick={() => {
                   setShowServerMenu(!showServerMenu);
@@ -757,39 +745,30 @@ export function CinemaPlayer({
                 className={`p-1 text-white transition-colors cursor-pointer ${
                   showServerMenu ? "text-primary" : "text-white/80 hover:text-white"
                 }`}
-                title="Servers"
+                title="Sources"
               >
                 <Cloud className="w-5 h-5" />
               </button>
 
-              {/* OpenSubtitles Icon */}
-              <button
-                onClick={() => {
-                  setShowOpenSubtitlesPicker(true);
-                  setShowSubtitleModal(false);
-                  setShowServerMenu(false);
-                  setShowEpisodeCarousel(false);
-                }}
-                className={`p-1 text-white transition-colors cursor-pointer ${
-                  showOpenSubtitlesPicker || activeOsSub ? "text-emerald-400" : "text-white/80 hover:text-white"
-                }`}
-                title="OpenSubtitles (Community Subs)"
-              >
-                <Globe className="w-5 h-5" />
-              </button>
+              {/* Next Source Icon */}
+              {servers && servers.length > 1 && (
+                <button
+                  onClick={handleNextSource}
+                  className="p-1 text-white/80 hover:text-white transition-colors cursor-pointer active:scale-95"
+                  title="Next Source"
+                >
+                  <SkipForward className="w-5 h-5 text-primary" />
+                </button>
+              )}
 
-              {/* Subtitles Style Icon */}
+              {/* Reload Source Icon */}
               <button
-                onClick={() => {
-                  setShowSubtitleModal(true);
-                  setShowOpenSubtitlesPicker(false);
-                  setShowServerMenu(false);
-                  setShowEpisodeCarousel(false);
-                }}
-                className="p-1 text-white/80 hover:text-white transition-colors cursor-pointer"
-                title="Subtitles Style"
+                onClick={handleReloadSource}
+                disabled={isReloading}
+                className="p-1 text-white/80 hover:text-white transition-colors cursor-pointer active:scale-95 disabled:opacity-60"
+                title="Reload Current Source"
               >
-                <Subtitles className="w-5 h-5" />
+                <RotateCcw className={`w-5 h-5 ${isReloading ? "animate-spin text-primary" : ""}`} />
               </button>
 
               {/* Settings Icon */}
@@ -805,18 +784,6 @@ export function CinemaPlayer({
         </div>
       )}
 
-      {/* OpenSubtitles Community Subtitle Picker */}
-      <OpenSubtitlesPicker
-        isOpen={showOpenSubtitlesPicker}
-        onClose={() => setShowOpenSubtitlesPicker(false)}
-        tmdbId={metadata.tmdbId}
-        season={metadata.season}
-        episode={metadata.episode}
-        onSelectSubtitle={(url, label) => {
-          setActiveOsSub({ url, label });
-        }}
-      />
-
       {/* Settings Modal */}
       <PlayerSettingsModal
         isOpen={showSettingsModal}
@@ -827,15 +794,6 @@ export function CinemaPlayer({
         onToggleAutoPlayNext={() => setAutoPlayNext(!autoPlayNext)}
         autoSkipIntro={autoSkipIntro}
         onToggleAutoSkipIntro={() => setAutoSkipIntro(!autoSkipIntro)}
-      />
-
-      {/* Subtitles Modal */}
-      <SubtitleSettingsModal
-        isOpen={showSubtitleModal}
-        onClose={() => setShowSubtitleModal(false)}
-        config={subtitleConfig}
-        onChange={setSubtitleConfig}
-        onOpenSubtitlesSearch={() => setShowOpenSubtitlesPicker(true)}
       />
     </div>
   );

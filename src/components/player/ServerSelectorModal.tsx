@@ -53,7 +53,7 @@ export const ServerSelectorModal = memo(function ServerSelectorModal({
               <Server className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-white tracking-tight">Stream Servers</h3>
+              <h3 className="text-lg font-black text-white tracking-tight">Stream Sources</h3>
               <p className="text-xs text-white/50">{title ? `Choose source for "${title}"` : "Instant stream switching"}</p>
             </div>
           </div>
