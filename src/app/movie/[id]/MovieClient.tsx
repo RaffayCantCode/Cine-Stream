@@ -19,8 +19,6 @@ import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 import { useTheme } from "@/context/ThemeContext";
 
-const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
-
 function MovieHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
   if (!hasTrailer) return null;
@@ -61,17 +59,7 @@ export default function MovieClient() {
   const { status } = useSession();
   const [movie, setMovie] = useState<Movie | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isTheaterMode, setIsTheaterMode] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        return localStorage.getItem("cinestream_movie_theater_mode") === "true";
-      } catch {}
-    }
-    return false;
-  });
   const [error, setError] = useState<string | null>(null);
-  const playerRef = useRef<HTMLDivElement>(null);
   const { logoUrl } = useMediaLogo(id, "movie", movie?.title);
   const fallbackLogo = useMemo(() => {
     const logos = (movie as any)?.images?.logos;
@@ -106,16 +94,6 @@ export default function MovieClient() {
         return "bg-[#07080d]";
     }
   }, [theme]);
-
-  const handleToggleTheater = () => {
-    setIsTheaterMode(prev => {
-      const next = !prev;
-      try {
-        localStorage.setItem("cinestream_movie_theater_mode", String(next));
-      } catch {}
-      return next;
-    });
-  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -175,14 +153,6 @@ export default function MovieClient() {
     router.push(`/watch/movie/${id}`);
   };
 
-  // ── Scroll to player on play ──
-  useEffect(() => {
-    if (!isPlaying) return;
-    const timer = setTimeout(() => {
-      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isPlaying]);
 
   if (isLoading) {
     return (
@@ -370,19 +340,6 @@ export default function MovieClient() {
           </div>
           </div>
         </CinematicHero>
-
-      {isPlaying && (
-        <div ref={playerRef} className={`mx-auto mt-8 mb-4 transition-all duration-300 ${isTheaterMode ? "w-full max-w-none px-2 sm:px-4 md:px-6" : "w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14"}`}>
-          <VideoPlayer
-            type="movie"
-            id={id}
-            title={movie.title}
-            startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
-            isTheaterMode={isTheaterMode}
-            onToggleTheater={handleToggleTheater}
-          />
-        </div>
-      )}
 
       <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 mt-8 space-y-14">
         {(((movie.credits as any)?.cast && (movie.credits as any).cast.length > 0) || ((movie.credits as any)?.crew && (movie.credits as any).crew.length > 0)) && (

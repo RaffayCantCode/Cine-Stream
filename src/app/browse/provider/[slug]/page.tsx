@@ -348,6 +348,7 @@ export default function ProviderPage() {
   const heroTitle = heroItem?.title || heroItem?.name || "";
   const heroIsMovie = heroItem?.media_type === "movie";
   const heroLink = heroItem ? (heroIsMovie ? `/movie/${heroItem.id}` : `/tv/${heroItem.id}`) : null;
+  const heroWatchLink = heroItem ? (heroIsMovie ? `/watch/movie/${heroItem.id}` : `/watch/tv/${heroItem.id}/1/1`) : null;
   const gradientClass = PROVIDER_GRADIENTS[slug] || "from-[#111844]/60 via-[#111844]/20";
 
   return (
@@ -454,9 +455,9 @@ export default function ProviderPage() {
                   </p>
                 )}
                 <div className="flex items-center gap-3">
-                  {heroLink && (
+                  {heroWatchLink && (
                     <Link
-                      href={`${heroLink}?autoplay=1`}
+                      href={heroWatchLink}
                       className="flex items-center gap-2 text-sm font-bold text-white px-5 py-3 rounded-xl transition-all duration-300 hover:scale-[1.03] active:scale-95"
                       style={{
                         background: `linear-gradient(135deg, ${provider.color}, ${provider.color}cc)`,

@@ -125,15 +125,14 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
 
   const handlePlay = (item: WatchHistoryItem) => {
     if (item.mediaType === "movie") {
-      router.push(`/movie/${item.mediaId}?autoplay=1`);
+      router.push(`/watch/movie/${item.mediaId}`);
     } else if (item.mediaType === "anime") {
-      const season = item.season ?? 1;
       const episode = item.episode ?? 1;
-      router.push(`/anime/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
+      router.push(`/watch/anime/${item.mediaId}/${episode}`);
     } else {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
-      router.push(`/tv/${item.mediaId}?autoplay=1&season=${season}&episode=${episode}`);
+      router.push(`/watch/tv/${item.mediaId}/${season}/${episode}`);
     }
   };
 

@@ -8,8 +8,6 @@ import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film, Layers } from "lucide-react";
-
-const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { useMediaLogo } from "@/components/MediaLogo";
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
@@ -89,8 +87,6 @@ export default function TvClient() {
   const { data: session, status } = useSession();
   const [show, setShow] = useState<TvShow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [playingSeason, setPlayingSeason] = useState<number>(1);
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
@@ -99,14 +95,6 @@ export default function TvClient() {
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>("list");
-  const [isTheaterMode, setIsTheaterMode] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        return localStorage.getItem("cinestream_tv_theater_mode") === "true";
-      } catch {}
-    }
-    return false;
-  });
   const { logoUrl } = useMediaLogo(id, "tv", show?.name);
   const fallbackLogo = useMemo(() => {
     const logos = (show as any)?.images?.logos;
@@ -141,16 +129,6 @@ export default function TvClient() {
         return "bg-[#07080d]";
     }
   }, [theme]);
-
-  const handleToggleTheater = () => {
-    setIsTheaterMode(prev => {
-      const next = !prev;
-      try {
-        localStorage.setItem("cinestream_tv_theater_mode", String(next));
-      } catch {}
-      return next;
-    });
-  };
 
   const [gridEpisodePage, setGridEpisodePage] = useState(1);
 
@@ -222,10 +200,6 @@ export default function TvClient() {
       setGridEpisodePage(targetPage);
     }
   }, [playingSeason, selectedSeason, playingEpisode, seasonData?.episodes?.length]);
-
-  const playerRef = useRef<HTMLDivElement>(null);
-  const queueRef = useRef<HTMLDivElement>(null);
-  const selectedEpRef = useRef<HTMLButtonElement>(null);
 
   const isOngoingShow = (statusValue?: string | null) => {
     const normalized = (statusValue || "").toLowerCase();
@@ -320,9 +294,9 @@ export default function TvClient() {
           }),
         }).catch(() => {});
       }
-      setIsPlaying(true);
+      router.push(`/watch/tv/${id}/${targetSeason}/${targetEpisode}`);
     }
-  }, [show]);
+  }, [show, id, router, status]);
 
   // Persist state
   useEffect(() => {
@@ -401,32 +375,6 @@ export default function TvClient() {
     router.push(`/watch/tv/${id}/${season}/${episodeNumber}`);
   };
 
-  // ── Scroll to player on play ──
-  useEffect(() => {
-    if (!isPlaying) return;
-    const timer = setTimeout(() => {
-      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isPlaying]);
-
-  // ── Scroll queue to selected episode ──
-  useEffect(() => {
-    if (!isPlaying || seasonLoading || !selectedEpRef.current || playingSeason !== selectedSeason) return;
-    const timer = setTimeout(() => {
-      selectedEpRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [playingEpisode, playingSeason, selectedSeason, isPlaying, seasonLoading, seasonData?.episodes?.length]);
-
-  useEffect(() => {
-    if (!isPlaying || seasonLoading || playingSeason !== selectedSeason) return;
-    const activeEpisode = seasonData?.episodes?.find((episode) => episode.episode_number === playingEpisode);
-    if (!isUpcomingEpisode(activeEpisode)) return;
-
-    setIsPlaying(false);
-    setEpisodeNotice(`Episode ${playingEpisode} hasn't been released yet.`);
-  }, [isPlaying, seasonLoading, playingSeason, playingEpisode, selectedSeason, seasonData?.episodes, show?.status]);
 
   if (isLoading) {
     return (
@@ -471,9 +419,6 @@ export default function TvClient() {
   const score = show.vote_average ?? 0;
   const scoreColor =
     score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
-  const isPlayingSeasonLoaded = playingSeason === selectedSeason;
-  const currentEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode) : null;
-  const nextEpisode = isPlayingSeasonLoaded ? seasonData?.episodes?.find((ep) => ep.episode_number === playingEpisode + 1) : null;
   const upcomingThisWeek = seasonData?.episodes
     ?.filter((episode) => isUpcomingEpisode(episode) && isWithinUpcomingDays(episode.air_date, 7))
     ?.sort((a, b) => new Date(a.air_date || "").getTime() - new Date(b.air_date || "").getTime())?.[0] || null;
@@ -482,30 +427,9 @@ export default function TvClient() {
   const mainTrailerId = show.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
   const trailerId = seasonTrailerId || mainTrailerId;
 
-  const handleAutoPlayNext = () => {
-    if (playingSeason === selectedSeason && seasonData?.episodes) {
-      const next = seasonData.episodes.find(ep => ep.episode_number === playingEpisode + 1);
-      if (next) {
-        handleWatchEpisode(playingSeason, next.episode_number, next.name);
-        return;
-      }
-    } else if (playingSeason !== selectedSeason) {
-      // If they navigated to another season tab while watching, we just boldly increment
-      handleWatchEpisode(playingSeason, playingEpisode + 1);
-      return;
-    }
-    
-    // If we reached the end of the season, try next season
-    const currentSeasonIndex = seasons.findIndex(s => s.season_number === playingSeason);
-    if (currentSeasonIndex !== -1 && currentSeasonIndex < seasons.length - 1) {
-      const nextSeasonNum = seasons[currentSeasonIndex + 1].season_number;
-      handleWatchEpisode(nextSeasonNum, 1);
-    }
-  };
-
   // ── Normalize TV episodes into the shared EpisodeItem shape ──────────────
   const episodeToItem = (episode: Episode): EpisodeItem => {
-    const isWatching = (hasActiveProgress || isPlaying) && playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+    const isWatching = hasActiveProgress && playingSeason === selectedSeason && playingEpisode === episode.episode_number;
     const isUpcoming = isUpcomingEpisode(episode);
     return {
       key: String(episode.id),
@@ -520,7 +444,7 @@ export default function TvClient() {
       isFiller: false,
       isReleased: !isUpcoming,
       isSelected: isWatching,
-      isPlaying: isPlaying && isWatching,
+      isPlaying: false,
       portrait: false,
       onClick: () => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name),
     };
@@ -686,89 +610,6 @@ export default function TvClient() {
           <span className="w-fit rounded-full border border-sky-300/25 bg-sky-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-sky-200">
             Weekly release
           </span>
-        </div>
-      )}
-      {isPlaying && (
-        <div ref={playerRef} className={`select-none ${isTheaterMode ? "space-y-6" : "grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start"}`}>
-          <div className="w-full">
-            <VideoPlayer
-              type="tv"
-              id={id}
-              season={playingSeason}
-              episode={playingEpisode}
-              title={`${show.name} - S${playingSeason}E${playingEpisode}`}
-              startProgress={typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get("t") || 0) : 0}
-              onEpisodeChange={(s, e) => handleWatchEpisode(s, e)}
-              onVideoEnd={handleAutoPlayNext}
-              isTheaterMode={isTheaterMode}
-              onToggleTheater={handleToggleTheater}
-            />
-            <div className="mt-3 flex items-center justify-between gap-4 flex-wrap">
-              <div className="text-sm text-white/60">
-                <span className="font-bold text-white">Now Playing: </span>
-                S{playingSeason}E{playingEpisode}
-                {currentEpisode?.name ? ` - ${currentEpisode.name}` : ""}
-              </div>
-              {nextEpisode && (
-                <button
-                  onClick={() => handleWatchEpisode(playingSeason, nextEpisode.episode_number, nextEpisode.name)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/85 transition"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Play Next: E{nextEpisode.episode_number}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <aside className={`w-full shrink-0 rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden flex flex-col ${
-            isTheaterMode ? "max-h-[380px]" : "xl:w-80 max-h-[60vh] xl:max-h-[70vh]"
-          }`}>
-            <div className="p-4 border-b border-white/[0.06] bg-white/[0.01] flex items-center justify-between">
-              <div className="text-sm font-bold text-white flex items-center gap-2">
-                <span>Episode Queue</span>
-                {isTheaterMode && <span className="text-xs font-normal text-white/30">(Theater View)</span>}
-              </div>
-              <span className="text-xs font-normal text-white/40">Season {selectedSeason}</span>
-            </div>
-            <div ref={queueRef} className={`flex-1 overflow-y-auto p-2 scrollbar-hide ${
-              isTheaterMode ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2" : "space-y-1"
-            }`}>
-              {seasonLoading ? (
-                <div className="col-span-full flex items-center justify-center py-8 text-white/30 text-xs">Loading episodes...</div>
-              ) : !seasonData?.episodes?.length ? (
-                <div className="col-span-full flex items-center justify-center py-8 text-white/30 text-xs">No episodes found</div>
-              ) : (
-                seasonData.episodes.map((episode) => {
-                  const isWatching = playingSeason === selectedSeason && playingEpisode === episode.episode_number;
-                  const isUpcoming = isUpcomingEpisode(episode);
-                  return (
-                    <button
-                      key={`queue-${episode.id}`}
-                      ref={isWatching ? selectedEpRef : undefined}
-                      onClick={() => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name)}
-                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 cursor-pointer ${
-                        isWatching
-                          ? "bg-gradient-to-r from-[#111844] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/20"
-                          : isUpcoming
-                          ? "bg-white/[0.025] text-white/30 hover:bg-amber-400/10 hover:text-amber-200 border border-amber-400/10"
-                          : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white"
-                      }
-                    `}
-                    >
-                      <span className={`text-sm font-black w-10 shrink-0 ${isWatching ? "text-white" : ""}`}>
-                        E{episode.episode_number}
-                      </span>
-                      <span className="text-xs truncate flex-1 line-clamp-1">{episode.name}</span>
-                      {isUpcoming && (
-                        <span className="text-[9px] text-sky-300 font-extrabold uppercase bg-sky-300/10 border border-sky-300/20 px-1.5 py-0.5 rounded shrink-0">Upcoming</span>
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </aside>
         </div>
       )}
         <section id="tv-episodes-section">
