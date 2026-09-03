@@ -108,12 +108,14 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
           const a = json?.data?.anime || json?.data;
           if (a) {
             const isChinese = a.countryOfOrigin === "CN" || /[\u4e00-\u9fa5]/.test(a.jname || "") || /[\u4e00-\u9fa5]/.test(a.name || "");
+            const matchingSeason = a.seasons?.find((s: any) => String(s.id) === String(animeId)) || a.seasons?.[0];
+            const trueEpCount = matchingSeason?.totalEpisodes || a.anime?.totalEpisodes || a.totalEpisodes || a.episodes?.sub || (Array.isArray(a.episodes) ? a.episodes.length : null);
             setAnime({
               ...a,
               name: a.name || a.title?.english || a.title?.romaji || a.title,
               poster: a.poster || a.coverImage?.extraLarge || a.coverImage?.large,
               bannerImage: a.bannerImage || a.backdrop,
-              totalEpisodes: a.totalEpisodes || a.episodes?.length,
+              totalEpisodes: trueEpCount,
               tmdbId: a.tmdbId || null,
               tmdbSeason: a.tmdbSeason || 1,
               countryOfOrigin: a.countryOfOrigin || (isChinese ? "CN" : null),
@@ -219,7 +221,8 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   const [animeEpisodes, setAnimeEpisodes] = useState<any[]>([]);
   useEffect(() => {
     if (!animeId) return;
-    fetch(`/api/anime/${animeId}/episodes`)
+    const tmdbQuery = anime?.tmdbId ? `&tmdbId=${anime.tmdbId}&tmdbSeason=${anime.tmdbSeason || 1}` : "";
+    fetch(`/api/anime/${animeId}/episodes?seasonId=${encodeURIComponent(animeId)}${tmdbQuery}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         if (json?.success && Array.isArray(json?.data?.episodes)) {
@@ -227,9 +230,15 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         }
       })
       .catch(() => {});
-  }, [animeId]);
+  }, [animeId, anime?.tmdbId, anime?.tmdbSeason]);
 
-  const totalEps = anime?.totalEpisodes || anime?.episodes?.sub || (animeEpisodes.length > 0 ? animeEpisodes.length : 12);
+  const cappedEpisodes = useMemo(() => {
+    const maxEp = anime?.totalEpisodes && anime.totalEpisodes > 0 ? anime.totalEpisodes : null;
+    if (!maxEp) return animeEpisodes;
+    return animeEpisodes.filter((ep) => ep.episodeNum <= maxEp);
+  }, [animeEpisodes, anime?.totalEpisodes]);
+
+  const totalEps = anime?.totalEpisodes || anime?.episodes?.sub || (cappedEpisodes.length > 0 ? cappedEpisodes.length : 12);
 
   const handleSelectEpisode = useCallback(
     (newEp: number) => {
@@ -245,12 +254,13 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   }, [episodeNumber, totalEps, handleSelectEpisode]);
 
   const ratingNum = anime?.rating ? parseFloat(anime.rating) : 0;
-  const currentEpDetail = animeEpisodes.find((e) => e.episodeNum === episodeNumber);
+  const currentEpDetail = cappedEpisodes.find((e) => e.episodeNum === episodeNumber);
 
   const metadata: CinemaPlayerMetadata = useMemo(() => {
     if (!anime) {
       return {
         title: "",
+        season: 1,
         episode: episodeNumber,
         backUrl: `/anime/${animeId}`,
       };
@@ -258,6 +268,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
     return {
       title: anime.name,
       episodeTitle: currentEpDetail?.title || `Episode ${episodeNumber}`,
+      season: 1,
       episode: episodeNumber,
       year: anime.seasonYear || "",
       rating: ratingNum > 0 ? ratingNum : undefined,
@@ -275,14 +286,14 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         id: 1,
         season_number: 1,
         name: "Episodes",
-        episodes: animeEpisodes.length > 0
-          ? animeEpisodes.map((ep) => ({
+        episodes: cappedEpisodes.length > 0
+          ? cappedEpisodes.map((ep) => ({
               id: ep.episodeId || ep.episodeNum,
               episode_number: ep.episodeNum,
               name: ep.title || `Episode ${ep.episodeNum}`,
               overview: ep.description || undefined,
               still_path: ep.thumbnail || undefined,
-              isFiller: ep.isFiller || false,
+              isFiller: Boolean(ep.isFiller),
               runtime: ep.runtime || undefined,
               vote_average: ep.vote_average || undefined,
             }))
@@ -293,7 +304,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
             })),
       },
     ];
-  }, [animeEpisodes, totalEps]);
+  }, [cappedEpisodes, totalEps]);
 
   const activeIframeUrl = useMemo(() => {
     return buildAnimeIframeUrl(

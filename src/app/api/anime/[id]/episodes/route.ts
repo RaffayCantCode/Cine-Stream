@@ -343,12 +343,10 @@ async function getEnrichedEpisodesList(
     }
     // Apply filler lookup as a final pass so it can set filler on episodes that
     // no API source flagged (e.g., AniZip doesn't provide filler data at all).
-    const fillerLookupValid = fillerLookup != null &&
-      (fillerLookup.filler.size + fillerLookup.mixed.size) >= Math.max(totalEpisodes * 0.1, 3);
-    if (fillerLookupValid) {
+    if (fillerLookup && (fillerLookup.filler.size > 0 || fillerLookup.mixed.size > 0)) {
       seasonEps = seasonEps.map((ep) => ({
         ...ep,
-        isFiller: ep.isFiller || fillerLookup.filler.has(ep.episodeNum),
+        isFiller: ep.isFiller || fillerLookup.filler.has(ep.episodeNum) || fillerLookup.mixed.has(ep.episodeNum),
       }));
     }
   }

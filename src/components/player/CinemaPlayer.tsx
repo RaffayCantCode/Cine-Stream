@@ -186,18 +186,26 @@ export function CinemaPlayer({
   // Auto-scroll episode carousel to the current episode card
   useEffect(() => {
     if (showEpisodeCarousel && episodesScrollRef.current) {
+      if (episodeRanges.length > 0) {
+        const currentEp = metadata.episode || 1;
+        const matched = episodeRanges.find((r) => currentEp >= r.start && currentEp <= r.end);
+        if (matched && activeEpisodeRange !== matched.label) {
+          setActiveEpisodeRange(matched.label);
+        }
+      }
+
       const timer = setTimeout(() => {
         const container = episodesScrollRef.current;
         if (!container) return;
-        const currentCard = container.querySelector('[data-current="true"]') as HTMLElement;
+        const currentCard = (container.querySelector('[data-current="true"]') ||
+          container.querySelector(`[data-episode="${metadata.episode}"]`)) as HTMLElement;
         if (currentCard) {
-          const scrollTarget = currentCard.offsetLeft - container.offsetWidth / 2 + currentCard.offsetWidth / 2;
-          container.scrollTo({ left: Math.max(0, scrollTarget), behavior: "smooth" });
+          currentCard.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
         }
-      }, 80);
+      }, 100);
       return () => clearTimeout(timer);
     }
-  }, [showEpisodeCarousel, selectedSeasonNum, activeEpisodeRange, metadata.episode]);
+  }, [showEpisodeCarousel, selectedSeasonNum, activeEpisodeRange, metadata.episode, episodeRanges]);
 
   const scrollEpisodes = (direction: "left" | "right") => {
     const el = episodesScrollRef.current;
@@ -348,7 +356,9 @@ export function CinemaPlayer({
             {metadata.title}
           </h2>
           <span className="text-[10px] sm:text-xs text-white/60 font-semibold drop-shadow-sm truncate">
-            {metadata.season && metadata.episode
+            {isAnime && metadata.episode
+              ? `Episode ${metadata.episode}${metadata.episodeTitle ? ` • ${metadata.episodeTitle}` : ""}`
+              : metadata.season && metadata.episode
               ? `S${metadata.season} E${metadata.episode}${metadata.episodeTitle ? ` • ${metadata.episodeTitle}` : ""}`
               : metadata.year || ""}
           </span>
@@ -440,7 +450,7 @@ export function CinemaPlayer({
                 </div>
               ) : (
                 <h3 className="text-sm font-extrabold text-white">
-                  {activeSeasonData?.name || `Season ${selectedSeasonNum}`}
+                  {activeSeasonData?.name || (isAnime ? "Episodes" : `Season ${selectedSeasonNum}`)}
                 </h3>
               )}
 
@@ -486,8 +496,9 @@ export function CinemaPlayer({
               className="flex items-start gap-4 overflow-x-auto py-1 px-4 hide-scrollbar w-full"
             >
               {displayedEpisodes.map((ep) => {
-                const isCurrentPlaying =
-                  metadata.season === selectedSeasonNum && metadata.episode === ep.episode_number;
+                const isCurrentPlaying = isAnime
+                  ? metadata.episode === ep.episode_number
+                  : (metadata.season || 1) === selectedSeasonNum && metadata.episode === ep.episode_number;
                 const thumbUrl = ep.still_path
                   ? ep.still_path.startsWith("http")
                     ? ep.still_path
@@ -507,11 +518,11 @@ export function CinemaPlayer({
                     }}
                     className={`w-[240px] sm:w-[260px] shrink-0 text-left rounded-2xl overflow-hidden border transition-all group/card cursor-pointer ${
                       isCurrentPlaying
-                        ? "bg-white/10 border-white/40 ring-1 ring-white/30 shadow-lg"
+                        ? "bg-emerald-950/40 border-emerald-500/80 ring-2 ring-emerald-500/60 shadow-xl shadow-emerald-500/20"
                         : "bg-[#27272a]/70 border-white/10 hover:bg-[#27272a] hover:border-white/20"
                     }`}
                   >
-                    {/* Thumbnail with S1E1 Badge */}
+                    {/* Thumbnail with S1E1 or EP Badge */}
                     <div className="relative w-full aspect-video bg-black/60 overflow-hidden">
                       {thumbUrl ? (
                         <img
@@ -525,14 +536,22 @@ export function CinemaPlayer({
                         </div>
                       )}
 
-                      {/* Pill Badge on Thumbnail */}
-                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[10px] font-extrabold text-white uppercase tracking-wider border border-white/10">
-                        {isCurrentPlaying ? `S${selectedSeasonNum}E${ep.episode_number} • Now Playing` : `S${selectedSeasonNum}E${ep.episode_number}`}
+                      {/* Pill Badge on Thumbnail (Current + Season/Ep) */}
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap max-w-[calc(100%-1rem)]">
+                        <span className="px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md text-[10px] font-extrabold text-white uppercase tracking-wider border border-white/15 shadow">
+                          {isAnime ? `EP ${ep.episode_number}` : `S${selectedSeasonNum}E${ep.episode_number}`}
+                        </span>
+                        {isCurrentPlaying && (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-black text-[9px] font-black uppercase tracking-wider shadow-md flex items-center gap-1 border border-emerald-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+                            Current
+                          </span>
+                        )}
                       </div>
 
                       {/* Filler Tag Badge */}
                       {ep.isFiller && (
-                        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-amber-400 text-black text-[9px] font-black uppercase tracking-wider shadow-md">
+                        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-amber-400 text-black text-[9px] font-black uppercase tracking-wider shadow-md border border-amber-300">
                           Filler
                         </div>
                       )}
@@ -540,7 +559,9 @@ export function CinemaPlayer({
 
                     {/* Episode Info */}
                     <div className="p-3.5 space-y-1">
-                      <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-1 group-hover/card:text-primary transition-colors">
+                      <h4 className={`text-xs sm:text-sm font-bold line-clamp-1 transition-colors ${
+                        isCurrentPlaying ? "text-emerald-400 font-extrabold" : "text-white group-hover/card:text-primary"
+                      }`}>
                         {ep.name || `Episode ${ep.episode_number}`}
                       </h4>
                       {ep.overview && (

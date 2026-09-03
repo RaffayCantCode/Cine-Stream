@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useMemo } from "react";
+import { memo, useState, useMemo, useRef, useEffect } from "react";
 import { X, Play, Clock, Star, Calendar, Search, Layers } from "lucide-react";
 import Image from "next/image";
 
@@ -32,6 +32,7 @@ interface EpisodeDrawerProps {
   currentEpisode: number;
   onSelectEpisode: (season: number, episode: number) => void;
   showTitle?: string;
+  isAnime?: boolean;
 }
 
 export const EpisodeDrawer = memo(function EpisodeDrawer({
@@ -42,9 +43,24 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
   currentEpisode,
   onSelectEpisode,
   showTitle,
+  isAnime = false,
 }: EpisodeDrawerProps) {
   const [selectedSeason, setSelectedSeason] = useState<number>(currentSeason || 1);
   const [searchQuery, setSearchQuery] = useState("");
+  const episodeListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && episodeListRef.current) {
+      const timer = setTimeout(() => {
+        const el = (episodeListRef.current?.querySelector('[data-current="true"]') ||
+          episodeListRef.current?.querySelector(`[data-episode="${currentEpisode}"]`)) as HTMLElement;
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, selectedSeason, currentEpisode]);
 
   const activeSeasonData = useMemo(() => {
     return seasons.find((s) => s.season_number === selectedSeason) || seasons[0];
@@ -127,13 +143,14 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
         </div>
 
         {/* Episode List */}
-        <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+        <div ref={episodeListRef} className="flex-1 overflow-y-auto space-y-2.5 pr-1">
           {filteredEpisodes.length === 0 ? (
             <div className="py-12 text-center text-white/40 text-xs">No episodes found for this search.</div>
           ) : (
             filteredEpisodes.map((ep) => {
-              const isCurrentPlaying =
-                selectedSeason === currentSeason && ep.episode_number === currentEpisode;
+              const isCurrentPlaying = isAnime
+                ? ep.episode_number === currentEpisode
+                : selectedSeason === currentSeason && ep.episode_number === currentEpisode;
               const thumbUrl = ep.still_path
                 ? ep.still_path.startsWith("http")
                   ? ep.still_path
@@ -143,13 +160,15 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
               return (
                 <button
                   key={ep.id || ep.episode_number}
+                  data-current={isCurrentPlaying ? "true" : undefined}
+                  data-episode={ep.episode_number}
                   onClick={() => {
                     onSelectEpisode(selectedSeason, ep.episode_number);
                     onClose();
                   }}
                   className={`w-full text-left p-3 rounded-2xl border transition-all flex gap-3.5 group cursor-pointer ${
                     isCurrentPlaying
-                      ? "bg-primary/20 border-primary/60 ring-1 ring-primary/40 shadow-lg"
+                      ? "bg-emerald-950/30 border-emerald-500/70 ring-1 ring-emerald-500/40 shadow-lg"
                       : "bg-white/[0.03] border-white/8 hover:bg-white/[0.08] hover:border-white/15"
                   }`}
                 >
@@ -171,16 +190,27 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
                       <Play className="w-5 h-5 text-white fill-current drop-shadow-md" />
                     </div>
                     {isCurrentPlaying && (
-                      <div className="absolute top-1 left-1 bg-emerald-500 text-black text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow">
-                        Playing
+                      <div className="absolute top-1 left-1 bg-emerald-500 text-black text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+                        Current
+                      </div>
+                    )}
+                    {ep.isFiller && (
+                      <div className="absolute bottom-1 left-1 bg-amber-400 text-black text-[8px] font-black uppercase px-1 py-0.2 rounded shadow border border-amber-300">
+                        Filler
                       </div>
                     )}
                   </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <div className="flex items-center gap-2 mb-0.5">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                       <span className="text-[11px] font-bold text-primary">EP {ep.episode_number}</span>
+                      {ep.isFiller && (
+                        <span className="px-1.5 py-0.2 rounded bg-amber-400 text-black text-[9px] font-black uppercase tracking-wider shadow">
+                          Filler
+                        </span>
+                      )}
                       {ep.runtime ? (
                         <span className="text-[10px] text-white/40 flex items-center gap-1">
                           <Clock className="w-2.5 h-2.5" />
@@ -194,7 +224,9 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
                         </span>
                       ) : null}
                     </div>
-                    <h4 className="text-white font-bold text-xs sm:text-sm line-clamp-1 group-hover:text-primary transition-colors">
+                    <h4 className={`text-xs sm:text-sm font-bold line-clamp-1 transition-colors ${
+                      isCurrentPlaying ? "text-emerald-400 font-extrabold" : "text-white group-hover:text-primary"
+                    }`}>
                       {ep.name || `Episode ${ep.episode_number}`}
                     </h4>
                     {ep.overview && (
