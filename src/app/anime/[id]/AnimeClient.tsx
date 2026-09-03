@@ -2302,6 +2302,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     };
   }, [anime, currentSeasonId, displayPoster, displayTitle, handleWatchEpisode, isPlaying, isSingleItem, selectedEp, watchStarted]);
 
+  // ── Memoized list of EpisodeItems for high-performance rendering without reallocating ──
+  const episodeItems = useMemo(() => {
+    return currentSeasonEps.map(episodeToItem);
+  }, [currentSeasonEps, episodeToItem]);
 
   // ── Prev / Next episode ─────────────────────────────────────────────────
   const handlePrev = useCallback(() => {
@@ -2322,8 +2326,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   const handleAutoNext = useCallback(() => handleNext(), [handleNext]);
 
-  // ── Lazy thumbnail loading ──────────────────────────────────────────────
-  const thumbnailFetchingRef = useRef(new Set<string>());
+  // ── Pre-fetch thumbnails for the current page only ──────────────────────
+  // Batched to avoid rendering thrashing when multiple thumbnail images resolve in quick succession
+  const thumbnailFetchingRef = useRef<Set<string>>(new Set());
   const thumbEpVersionRef = useRef(0);
 
   useEffect(() => {
@@ -2353,6 +2358,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const BATCH = 6;
     let pos = 0;
     const total = needThumb.length;
+    let pendingUpdates: Record<string, string> = {};
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    const flushUpdates = () => {
+      if (Object.keys(pendingUpdates).length === 0) return;
+      const updates = { ...pendingUpdates };
+      pendingUpdates = {};
+      setEpisodes(prev => prev.map(e =>
+        updates[e.episodeId] ? { ...e, thumbnail: updates[e.episodeId] } : e
+      ));
+    };
 
     const tick = () => {
       const batch = needThumb.slice(pos, pos + BATCH);
@@ -2363,17 +2379,26 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           .then(r => r.json())
           .then(data => {
             if (data.success && data.thumbnail) {
-              setEpisodes(prev => prev.map(e =>
-                e.episodeId === ep.episodeId ? { ...e, thumbnail: data.thumbnail } : e
-              ));
+              pendingUpdates[ep.episodeId] = data.thumbnail;
+              if (!debounceTimer) {
+                debounceTimer = setTimeout(() => {
+                  debounceTimer = null;
+                  flushUpdates();
+                }, 120);
+              }
             }
           })
           .catch(() => {})
           .finally(() => loading.delete(ep.episodeId));
       }
-      if (pos < total) setTimeout(tick, 200);
+      if (pos < total) setTimeout(tick, 250);
     };
     tick();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      flushUpdates();
+    };
   }, [episodePage, currentSeasonId, id, currentSeasonEps.length]);
 
   const { theme } = useTheme();
@@ -2971,7 +2996,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     );
                   }
 
-                  const items = currentSeasonEps.map(episodeToItem);
+                  const items = episodeItems;
 
                   // Numbers view renders the full list — it's a fast navigation
                   // tool for long series and must never paginate.
@@ -3084,7 +3109,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 px-5 md:px-0">
+                <div
+                  className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 px-5 md:px-0"
+                  style={{ contentVisibility: "auto", containIntrinsicSize: "400px" }}
+                >
                   {recommendations.slice(0, 20).map((item: any, i: number) => {
                     const visibilityClass =
                       i < 4
@@ -3120,7 +3148,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     You May Like
                   </h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 px-5 md:px-0">
+                <div
+                  className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 px-5 md:px-0"
+                  style={{ contentVisibility: "auto", containIntrinsicSize: "400px" }}
+                >
                   {Array.from({ length: 20 }).map((_, i) => {
                     const visibilityClass =
                       i < 4

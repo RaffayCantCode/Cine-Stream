@@ -690,23 +690,6 @@ export default function Home() {
       setLoadError(null);
 
       try {
-        // Fast hero fetch — dedicated lightweight edge call that returns hero candidates in <80ms
-        // Only used when heroPool is empty (stale/first load) to show something quickly before the
-        // full home payload arrives. Always runs through buildHeroPool to keep exactly 3 slides.
-        if (heroPool.length === 0) {
-          fetchJson<{ results: MediaItem[] }>("/api/tmdb/home-hero", { cacheTtlMs: 3600000 })
-            .then((heroData) => {
-              if (cancelled || !heroData?.results || heroData.results.length === 0) return;
-              const filtered = heroData.results.filter((i) => i && i.backdrop_path && i.poster_path);
-              if (filtered.length > 0) {
-                const fastPool = buildHeroPool(filtered);
-                if (fastPool.length > 0) {
-                  setHeroPool((current) => (current && current.length >= 3 ? current : fastPool));
-                }
-              }
-            })
-            .catch(() => {});
-        }
 
         // Consolidated home endpoint for content rows below the hero
         const homePromise = fetchJson<{
@@ -857,13 +840,32 @@ export default function Home() {
           setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
           setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
           setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
-          setHeroFeed(fullHeroFeed);
-          setHeroPool(chosenHeroPool);
+          let finalHeroPool = chosenHeroPool;
+          setHeroPool((current) => {
+            // CRITICAL FIX: If the user is ALREADY looking at slide 0 (from fastPool or fresh session),
+            // NEVER abruptly swap slide 0 with a completely different movie!
+            if (current && current.length > 0 && current[0]) {
+              const stableFirst = current[0];
+              const merged = [
+                stableFirst,
+                chosenHeroPool[1] || current[1],
+                chosenHeroPool[2] || current[2],
+              ].filter(Boolean);
+              saveHeroPoolToSession(merged);
+              if (globalHomeCache) globalHomeCache.heroPool = merged;
+              finalHeroPool = merged;
+              return merged;
+            }
+            saveHeroPoolToSession(chosenHeroPool);
+            if (globalHomeCache) globalHomeCache.heroPool = chosenHeroPool;
+            finalHeroPool = chosenHeroPool;
+            return chosenHeroPool;
+          });
 
-          if (chosenHeroPool.length > 0) {
+          if (finalHeroPool.length > 0) {
             // Preload hero slide 1 backdrop image immediately
-            if (typeof document !== "undefined" && chosenHeroPool[0]?.backdrop_path) {
-              const bg = chosenHeroPool[0].backdrop_path;
+            if (typeof document !== "undefined" && finalHeroPool[0]?.backdrop_path) {
+              const bg = finalHeroPool[0].backdrop_path;
               const link = document.createElement("link");
               link.rel = "preload";
               link.as = "image";
@@ -872,8 +874,8 @@ export default function Home() {
               document.head.appendChild(link);
             }
 
-            // Pre-warm logos for hero items so artwork displays first with 0 delay
-            chosenHeroPool.slice(0, 3).forEach((hItem) => {
+            // Pre-warm logos and TMDB artwork for hero items so artwork displays first with 0 delay
+            finalHeroPool.slice(0, 3).forEach((hItem) => {
               const hTitle = hItem.title || hItem.name || "";
               const anilistId = (hItem as any)?.anilistId;
               const isAnime = hItem.media_type === "anime" || !!anilistId || isTmdbAnime(hItem);
@@ -882,18 +884,36 @@ export default function Home() {
               const effectiveId = (hItem as any)?.tmdbId || hItem.id;
               const cacheKey = `${effectiveId || hItem.id}-${hTitle}`;
 
-              if (typeof window !== "undefined" && !sessionStorage.getItem(`logo_v7_${cacheKey}`)) {
-                fetch(`/api/tmdb/logo?id=${effectiveId}&type=${isAnime ? "anime" : isMovie ? "movie" : "tv"}&title=${encodeURIComponent(hTitle)}`)
-                  .then((r) => (r.ok ? r.json() : null))
-                  .then((d) => {
-                    if (d?.logoUrl) {
-                      try { sessionStorage.setItem(`logo_v7_${cacheKey}`, d.logoUrl); } catch {}
-                      const img = new Image();
-                      img.src = d.logoUrl;
+              fetch(`/api/tmdb/logo?id=${effectiveId}&type=${isAnime ? "anime" : isMovie ? "movie" : "tv"}&title=${encodeURIComponent(hTitle)}`)
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => {
+                  if (d?.logoUrl) {
+                    try { sessionStorage.setItem(`logo_v7_${cacheKey}`, d.logoUrl); } catch {}
+                    const img = new Image();
+                    img.src = d.logoUrl;
+                  }
+                  if (d?.backdropUrl || d?.posterUrl) {
+                    try {
+                      sessionStorage.setItem(`artwork_v1_${cacheKey}`, JSON.stringify({
+                        backdropUrl: d.backdropUrl || null,
+                        posterUrl: d.posterUrl || null,
+                      }));
+                    } catch {}
+                    if (d.backdropUrl) {
+                      const bImg = new Image();
+                      bImg.src = d.backdropUrl;
+                      // Update heroPool item so background and ambient glow immediately use the TMDB backdrop
+                      setHeroPool((prev) =>
+                        prev.map((item) =>
+                          item.id === hItem.id
+                            ? { ...item, backdrop_path: d.backdropUrl, poster_path: d.posterUrl || item.poster_path }
+                            : item
+                        )
+                      );
                     }
-                  })
-                  .catch(() => {});
-              }
+                  }
+                })
+                .catch(() => {});
             });
           }
 
@@ -1032,7 +1052,21 @@ export default function Home() {
         const logoImg = new Image();
         if (priority === "high") logoImg.fetchPriority = "high";
         logoImg.src = cached;
-      } else if (title) {
+      }
+
+      const cachedArt = typeof window !== "undefined" ? sessionStorage.getItem(`artwork_v1_${cacheKey}`) : null;
+      if (cachedArt) {
+        try {
+          const parsed = JSON.parse(cachedArt);
+          if (parsed?.backdropUrl) {
+            const bImg = new Image();
+            if (priority === "high") bImg.fetchPriority = "high";
+            bImg.src = parsed.backdropUrl;
+          }
+        } catch {}
+      }
+
+      if (!cached && title) {
         fetch(`/api/tmdb/logo?id=${effectiveId}&type=${mediaType}&title=${encodeURIComponent(title)}`, {
           cache: "force-cache",
         })
@@ -1042,6 +1076,16 @@ export default function Home() {
               try { sessionStorage.setItem(`logo_v7_${cacheKey}`, data.logoUrl); } catch {}
               const logoImg = new Image();
               logoImg.src = data.logoUrl;
+            }
+            if (data?.backdropUrl) {
+              try {
+                sessionStorage.setItem(`artwork_v1_${cacheKey}`, JSON.stringify({
+                  backdropUrl: data.backdropUrl || null,
+                  posterUrl: data.posterUrl || null,
+                }));
+              } catch {}
+              const bImg = new Image();
+              bImg.src = data.backdropUrl;
             }
           })
           .catch(() => {});

@@ -146,7 +146,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
           </h2>
         </div>
 
-        <div className="overflow-hidden pb-3" ref={emblaRef}>
+        <div className="overflow-hidden -mx-3 px-3 md:-mx-4 md:px-4 -mt-3 pt-3 pb-6 -mb-3" ref={emblaRef}>
           <div className="flex gap-3 md:gap-4">
             {filteredItems.map((item: WatchHistoryItem) => {
               const posterUrl = item.posterPath
@@ -159,7 +159,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                 <div
                   key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                   onClick={() => handlePlay(item)}
-                  className="flex-[0_0_auto] w-[124px] sm:w-[146px] md:w-[158px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+                  className="flex-[0_0_auto] w-[124px] sm:w-[146px] md:w-[158px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.03] first:origin-left hover:z-10 will-change-transform"
                 >
                   <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card/80 ring-1 ring-white/10 mb-2.5 relative shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:ring-white/35 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] sheen-wrapper">
                     {posterUrl ? (

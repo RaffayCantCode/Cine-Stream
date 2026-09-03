@@ -122,6 +122,22 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
     return !!cached;
   });
 
+  const [tmdbArtwork, setTmdbArtwork] = useState<{ backdropUrl: string | null; posterUrl: string | null }>(() => {
+    if ((item as any)?.backdropUrl || (item as any)?.backdrop_url) {
+      return {
+        backdropUrl: (item as any).backdropUrl || (item as any).backdrop_url,
+        posterUrl: (item as any).posterUrl || (item as any).poster_url || null,
+      };
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem(`artwork_v1_${cacheKey}`);
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return { backdropUrl: null, posterUrl: null };
+  });
+
   const [logoState, setLogoState] = useState<{ url: string | null; status: "cached" | "fetching" | "done" }>(() => {
     if ((item as any)?.logoUrl) {
       saveLogoToCache(cacheKey, (item as any).logoUrl);
@@ -136,7 +152,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
   const logoUrl = logoState.url;
 
-  // Reset load states and load logo on item change
+  // Reset load states and load logo & artwork on item change
   useEffect(() => {
     setUsePoster(false);
     setImgFailed(false);
@@ -176,6 +192,16 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
         const url = data?.logoUrl || null;
         saveLogoToCache(cacheKey, url);
         setLogoState({ url, status: "done" });
+        if (data?.backdropUrl || data?.posterUrl) {
+          const art = {
+            backdropUrl: data.backdropUrl || null,
+            posterUrl: data.posterUrl || null,
+          };
+          setTmdbArtwork(art);
+          try {
+            sessionStorage.setItem(`artwork_v1_${cacheKey}`, JSON.stringify(art));
+          } catch {}
+        }
       })
       .catch(() => {
         if (!isMounted) return;
@@ -187,6 +213,39 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
       isMounted = false;
     };
   }, [item?.id, effectiveId, title, isMovie, isAnime, cacheKey]);
+
+  // Dedicated fallback: For anime missing a widescreen backdrop, query TMDB search with include_anime=true
+  useEffect(() => {
+    if (!isAnime || tmdbArtwork.backdropUrl) return;
+    const isCoverOnly = !item?.backdrop_path || item.backdrop_path === item.poster_path || (item.backdrop_path && (item.backdrop_path.includes("/cover/") || item.backdrop_path.includes("/media/anime/cover/")));
+    if (!isCoverOnly) return;
+
+    let isMounted = true;
+    const clean = title.replace(/\s*\([^)]*\)\s*/g, " ").trim();
+    if (!clean) return;
+
+    fetch(`/api/tmdb/search?query=${encodeURIComponent(clean)}&type=tv&include_anime=true`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!isMounted) return;
+        const results = d?.results || [];
+        const match = results.find((r: any) => r && r.backdrop_path);
+        if (match?.backdrop_path) {
+          const bgUrl = `https://image.tmdb.org/t/p/original${match.backdrop_path}`;
+          const postUrl = match.poster_path ? `https://image.tmdb.org/t/p/w780${match.poster_path}` : null;
+          const art = { backdropUrl: bgUrl, posterUrl: postUrl };
+          setTmdbArtwork(art);
+          try {
+            sessionStorage.setItem(`artwork_v1_${cacheKey}`, JSON.stringify(art));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAnime, tmdbArtwork.backdropUrl, item?.backdrop_path, item?.poster_path, title, cacheKey]);
 
   if (!item) return null;
 
@@ -216,27 +275,47 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const rating = item.vote_average ?? 0;
 
-  const resolveHighResImageUrl = (path?: string) =>
+  const resolveHighResImageUrl = (path?: string | null) =>
     path
       ? path.startsWith("http")
         ? path
         : `https://image.tmdb.org/t/p/original${path}`
       : null;
 
-  const resolveFastImageUrl = (path?: string) =>
+  const resolveFastImageUrl = (path?: string | null) =>
     path
       ? path.startsWith("http")
-        ? path
+        ? path.includes("/original/")
+          ? path.replace("/original/", "/w1280/")
+          : path
         : `https://image.tmdb.org/t/p/w1280${path}`
       : null;
 
   const eventuallyOptimizable = (url?: string | null) =>
     !!url && !/(anilist\.co|myanimelist\.net|kitsu\.app|media\.kitsu\.io|media\.kitsu\.app)/i.test(url);
 
-  const backdropPath = usePoster ? item.poster_path : item.backdrop_path;
-  const fastBackdropUrl = resolveFastImageUrl(backdropPath);
-  const highResBackdropUrl = resolveHighResImageUrl(backdropPath);
-  const posterUrl = item.poster_path ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w780${item.poster_path}`) : null;
+  const isPortraitPoster = (url?: string | null) =>
+    !!url && (url.includes("/cover/") || url.includes("/media/anime/cover/"));
+
+  const hasGenuineBackdrop =
+    item?.backdrop_path &&
+    item.backdrop_path !== item.poster_path &&
+    !isPortraitPoster(item.backdrop_path);
+
+  const backdropSource =
+    tmdbArtwork.backdropUrl ||
+    (hasGenuineBackdrop ? item.backdrop_path : null) ||
+    (!usePoster ? item.backdrop_path : item.poster_path);
+
+  const fastBackdropUrl = resolveFastImageUrl(backdropSource);
+  const highResBackdropUrl = resolveHighResImageUrl(backdropSource);
+  const posterUrl =
+    tmdbArtwork.posterUrl ||
+    (item.poster_path
+      ? item.poster_path.startsWith("http")
+        ? item.poster_path
+        : `https://image.tmdb.org/t/p/w780${item.poster_path}`
+      : null);
 
   const [highResLoaded, setHighResLoaded] = useState(false);
 
@@ -253,10 +332,10 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
     img.onload = () => setHighResLoaded(true);
   }, [highResBackdropUrl]);
 
-  const isPortraitPoster = (url?: string | null) =>
-    !!url && (url.includes("/cover/") || url.includes("/media/anime/cover/"));
   const isPosterOnly =
     isAnime &&
+    !tmdbArtwork.backdropUrl &&
+    !hasGenuineBackdrop &&
     (usePoster ||
       !item.backdrop_path ||
       item.backdrop_path === item.poster_path ||

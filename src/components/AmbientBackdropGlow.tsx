@@ -51,12 +51,22 @@ export function AmbientBackdropGlow({
   }
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+    <div
+      className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
+      aria-hidden="true"
+      style={{
+        transform: "translate3d(0, 0, 0)",
+        willChange: "transform",
+        contain: "strict",
+        backfaceVisibility: "hidden",
+      }}
+    >
       {ambientBackdrop.previous && (
         <img
           src={ambientBackdrop.previous}
           alt=""
-          className="absolute inset-0 w-full h-full object-cover blur-[120px] opacity-0 scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none"
+          className="absolute inset-0 w-full h-full object-cover blur-[90px] opacity-0 scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none"
+          style={{ transform: "translate3d(0, 0, 0)", backfaceVisibility: "hidden" }}
           aria-hidden
         />
       )}
@@ -65,8 +75,8 @@ export function AmbientBackdropGlow({
           key={ambientBackdrop.current}
           src={ambientBackdrop.current}
           alt=""
-          style={{ opacity }}
-          className="absolute inset-0 w-full h-full object-cover blur-[120px] scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
+          style={{ opacity, transform: "translate3d(0, 0, 0)", backfaceVisibility: "hidden" }}
+          className="absolute inset-0 w-full h-full object-cover blur-[90px] scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
           aria-hidden
         />
       )}

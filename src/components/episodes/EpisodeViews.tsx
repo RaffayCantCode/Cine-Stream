@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, type KeyboardEvent, type ReactNode } from "react";
+import { useState, useMemo, memo, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { List, LayoutGrid, Hash, Play, Lock, Star, Clock } from "lucide-react";
 
@@ -86,7 +86,7 @@ function handleKeyClick(e: KeyboardEvent, onClick: () => void) {
 }
 
 // ── List Card (Netflix-Style Cinematic Row) ───────────────────────────────────
-export function EpisodeListCard({ item }: { item: EpisodeItem }) {
+export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: EpisodeItem }) {
   const isUpcoming = item.isReleased === false;
   const dateLabel = formatAirDate(item.airDate);
 
@@ -98,7 +98,7 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
       onKeyDown={(e) => handleKeyClick(e, item.onClick)}
       title={`Episode ${item.number}${item.isFiller ? " (Filler)" : ""}`}
       className={cn(
-        "group relative flex flex-col md:flex-row items-start md:items-center gap-4 sm:gap-6 p-3.5 sm:p-5 rounded-2xl border transition-all duration-300 cursor-pointer select-none touch-manipulation overflow-hidden w-full",
+        "group relative flex flex-col md:flex-row items-start md:items-center gap-4 sm:gap-6 p-3.5 sm:p-5 rounded-2xl border transition-colors transition-shadow duration-200 cursor-pointer select-none touch-manipulation overflow-hidden w-full",
         item.isSelected
           ? "border-primary/50 bg-gradient-to-r from-primary/15 via-white/[0.03] to-white/[0.01] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6)] ring-1 ring-primary/30"
           : isUpcoming
@@ -236,9 +236,9 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
       </div>
     </div>
   );
-}
+});
 
-export function EpisodeListView({ items, className }: { items: EpisodeItem[]; className?: string }) {
+export const EpisodeListView = memo(function EpisodeListView({ items, className }: { items: EpisodeItem[]; className?: string }) {
   return (
     <div className={cn("w-full space-y-3 sm:space-y-3.5", className)}>
       {items.map((item) => (
@@ -246,10 +246,10 @@ export function EpisodeListView({ items, className }: { items: EpisodeItem[]; cl
       ))}
     </div>
   );
-}
+});
 
 // ── Grid Card ───────────────────────────────────────────────────────────────
-export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
+export const EpisodeGridCard = memo(function EpisodeGridCard({ item }: { item: EpisodeItem }) {
   const isUpcoming = item.isReleased === false;
 
   return (
@@ -260,14 +260,14 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
       onKeyDown={(e) => handleKeyClick(e, item.onClick)}
       title={`Episode ${item.number}${item.isFiller ? " (Filler)" : ""}`}
       className={cn(
-        "group relative flex flex-col cursor-pointer select-none touch-manipulation transition-all duration-300",
-        isUpcoming ? "opacity-70 hover:opacity-95" : "hover:-translate-y-1.5"
+        "group relative flex flex-col cursor-pointer select-none touch-manipulation transition-transform duration-200 will-change-transform",
+        isUpcoming ? "opacity-70 hover:opacity-95" : "hover:-translate-y-1"
       )}
     >
       {/* Thumbnail */}
       <div
         className={cn(
-          "relative w-full aspect-video overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/10 transition-all duration-300",
+          "relative w-full aspect-video overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/10 transition-colors transition-shadow duration-200",
           item.isSelected ? "ring-2 ring-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)]" : "group-hover:ring-white/30 group-hover:shadow-[0_12px_28px_-8px_rgba(0,0,0,0.8)]"
         )}
       >
@@ -277,7 +277,7 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
             alt={item.title}
             loading="lazy"
             decoding="async"
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.07] to-transparent">
@@ -286,7 +286,7 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
         )}
 
         {/* Gradient shade */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-60 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-60 group-hover:opacity-100 transition-opacity duration-200" />
 
         {/* Episode number badge — top-left floating glass pill */}
         <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-white/20 shadow-md">
@@ -319,8 +319,8 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
 
         {/* Play overlay */}
         {!isUpcoming && (
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 text-black flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.8)] transform scale-80 group-hover:scale-100 transition-all duration-300">
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 text-black flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.8)] transform scale-80 group-hover:scale-100 transition-all duration-200">
               <Play className="w-4 h-4 fill-black text-black ml-0.5" />
             </div>
           </div>
@@ -348,9 +348,9 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
       </div>
     </div>
   );
-}
+});
 
-export function EpisodeGridView({ items }: { items: EpisodeItem[] }) {
+export const EpisodeGridView = memo(function EpisodeGridView({ items }: { items: EpisodeItem[] }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-6 4xl:grid-cols-7 gap-3.5 sm:gap-4 md:gap-5 w-full">
       {items.map((item) => (
@@ -358,7 +358,7 @@ export function EpisodeGridView({ items }: { items: EpisodeItem[] }) {
       ))}
     </div>
   );
-}
+});
 
 // ── Numbers View (Dynamic episode navigation for series of any size) ──────
 interface NumbersTierConfig {
@@ -429,7 +429,7 @@ function getNumberFontSize(num: number, tier: 1 | 2 | 3 | 4): string {
   return "text-xs sm:text-sm font-bold";
 }
 
-export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
+export const EpisodeNumbersView = memo(function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
   const count = items.length;
   const config = getTierConfig(count);
 
@@ -545,7 +545,7 @@ export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
       </div>
     </div>
   );
-}
+});
 
 // ── Episode Pagination Component (for clean 50-episode page navigation) ────
 export interface EpisodePaginationProps {

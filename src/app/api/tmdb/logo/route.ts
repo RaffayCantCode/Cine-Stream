@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     if (tmdbId && !isAnime) {
       const directLogo = await fetchLogosForId(type as "movie" | "tv", tmdbId);
       if (directLogo) {
-        return Response.json(directLogo, { headers: cacheHeaders(86400 * 30) });
+        return Response.json({ ...directLogo, tmdbId }, { headers: cacheHeaders(86400 * 30) });
       }
       // If direct TMDB ID failed and media is non-anime, do not guess unrelated titles
       if (!title) {
@@ -137,14 +137,14 @@ export async function GET(request: NextRequest) {
           tmdbFetch(`/search/movie`, { query, include_adult: "false" }).catch(() => null) as Promise<any>,
         ]);
 
-        const candidateList: { type: "tv" | "movie"; id: string; name: string }[] = [];
+        const candidateList: { type: "tv" | "movie"; id: string; name: string; backdrop_path?: string; poster_path?: string }[] = [];
 
         for (const item of (tvSearch?.results || []).slice(0, 6)) {
           const candName = item.name || item.original_name || "";
           // Must be actual Japanese origin OR animation genre to prevent matching live-action TV shows with the same name
           const isAnimeCandidate = item.original_language === "ja" || item.genre_ids?.includes(16);
           if (item?.id && isAnimeCandidate && isTitleMatch(query, candName)) {
-            candidateList.push({ type: "tv", id: String(item.id), name: candName });
+            candidateList.push({ type: "tv", id: String(item.id), name: candName, backdrop_path: item.backdrop_path, poster_path: item.poster_path });
           }
         }
 
@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
           const candName = item.title || item.original_title || "";
           const isAnimeCandidate = item.original_language === "ja" || item.genre_ids?.includes(16);
           if (item?.id && isAnimeCandidate && isTitleMatch(query, candName)) {
-            candidateList.push({ type: "movie", id: String(item.id), name: candName });
+            candidateList.push({ type: "movie", id: String(item.id), name: candName, backdrop_path: item.backdrop_path, poster_path: item.poster_path });
           }
         }
 
@@ -161,9 +161,27 @@ export async function GET(request: NextRequest) {
           const logoResults = await Promise.all(
             candidateList.map(cand => fetchLogosForId(cand.type, cand.id))
           );
-          const found = logoResults.find(Boolean);
-          if (found) {
-            return Response.json(found, { headers: cacheHeaders(86400 * 30) });
+          const foundIdx = logoResults.findIndex(Boolean);
+          if (foundIdx !== -1) {
+            const found = logoResults[foundIdx];
+            const matchedCand = candidateList[foundIdx];
+            return Response.json({
+              ...found,
+              backdropUrl: matchedCand?.backdrop_path ? `https://image.tmdb.org/t/p/original${matchedCand.backdrop_path}` : null,
+              posterUrl: matchedCand?.poster_path ? `https://image.tmdb.org/t/p/w780${matchedCand.poster_path}` : null,
+              tmdbId: matchedCand?.id || null,
+            }, { headers: cacheHeaders(86400 * 30) });
+          } else {
+            // Even if no clear logo image exists on TMDB, return the matched artwork so hero has a proper backdrop
+            const bestCand = candidateList.find(c => c.backdrop_path) || candidateList[0];
+            if (bestCand) {
+              return Response.json({
+                logoUrl: null,
+                backdropUrl: bestCand.backdrop_path ? `https://image.tmdb.org/t/p/original${bestCand.backdrop_path}` : null,
+                posterUrl: bestCand.poster_path ? `https://image.tmdb.org/t/p/w780${bestCand.poster_path}` : null,
+                tmdbId: bestCand.id || null,
+              }, { headers: cacheHeaders(86400 * 30) });
+            }
           }
         }
       } else {
@@ -176,19 +194,19 @@ export async function GET(request: NextRequest) {
           tmdbFetch(`/search/${secondaryType}`, { query, include_adult: "false" }).catch(() => null) as Promise<any>,
         ]);
 
-        const candidateList: { type: "movie" | "tv"; id: string; name: string }[] = [];
+        const candidateList: { type: "movie" | "tv"; id: string; name: string; backdrop_path?: string; poster_path?: string }[] = [];
 
         for (const item of (primarySearch?.results || []).slice(0, 4)) {
           const candName = item.title || item.name || item.original_title || item.original_name || "";
           if (item?.id && isTitleMatch(query, candName)) {
-            candidateList.push({ type: primaryType, id: String(item.id), name: candName });
+            candidateList.push({ type: primaryType, id: String(item.id), name: candName, backdrop_path: item.backdrop_path, poster_path: item.poster_path });
           }
         }
 
         for (const item of (secondarySearch?.results || []).slice(0, 2)) {
           const candName = item.title || item.name || item.original_title || item.original_name || "";
           if (item?.id && isTitleMatch(query, candName)) {
-            candidateList.push({ type: secondaryType, id: String(item.id), name: candName });
+            candidateList.push({ type: secondaryType, id: String(item.id), name: candName, backdrop_path: item.backdrop_path, poster_path: item.poster_path });
           }
         }
 
@@ -196,9 +214,16 @@ export async function GET(request: NextRequest) {
           const logoResults = await Promise.all(
             candidateList.map(cand => fetchLogosForId(cand.type, cand.id))
           );
-          const found = logoResults.find(Boolean);
-          if (found) {
-            return Response.json(found, { headers: cacheHeaders(86400 * 30) });
+          const foundIdx = logoResults.findIndex(Boolean);
+          if (foundIdx !== -1) {
+            const found = logoResults[foundIdx];
+            const matchedCand = candidateList[foundIdx];
+            return Response.json({
+              ...found,
+              backdropUrl: matchedCand?.backdrop_path ? `https://image.tmdb.org/t/p/original${matchedCand.backdrop_path}` : null,
+              posterUrl: matchedCand?.poster_path ? `https://image.tmdb.org/t/p/w780${matchedCand.poster_path}` : null,
+              tmdbId: matchedCand?.id || null,
+            }, { headers: cacheHeaders(86400 * 30) });
           }
         }
       }

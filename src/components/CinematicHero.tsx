@@ -168,12 +168,16 @@ export function CinematicHero({
     }
   }, [activeTrailerId, isMobile]);
 
-  // Track scroll position for scroll anchoring
+  // Track scroll position for scroll anchoring without triggering redundant re-renders
   useEffect(() => {
+    let currentAtTop = window.scrollY < 100;
     const handleScroll = () => {
-      setIsAtTop(window.scrollY < 100);
+      const atTop = window.scrollY < 100;
+      if (atTop !== currentAtTop) {
+        currentAtTop = atTop;
+        setIsAtTop(atTop);
+      }
     };
-    handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
