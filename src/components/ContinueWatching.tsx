@@ -62,9 +62,9 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     status === "authenticated" ? "/api/watch-history" : null,
     fetcher,
     { 
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
       revalidateOnMount: true,
-      dedupingInterval: 60000,
+      dedupingInterval: 2000,
     }
   );
 

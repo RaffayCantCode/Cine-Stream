@@ -1065,7 +1065,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   });
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const animeTitle = anime?.name || (anime as any)?.title || (anime as any)?.english_name || (typeof id === "string" ? id.replace(/-\d+$/, "").replace(/-/g, " ") : undefined);
-  const { logoUrl } = useMediaLogo(id, "anime", animeTitle);
+  const { logoUrl, loading: logoLoading } = useMediaLogo(id, "anime", animeTitle);
   // If we already have initialData, skip the blank skeleton entirely.
   const [isLoading, setIsLoading] = useState(!initialData);
   const [episodesLoading, setEpisodesLoading] = useState(true);
@@ -1556,23 +1556,59 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
 
-          // Preload hero banner and poster image immediately
-          if (typeof document !== "undefined") {
-            const heroImg = a.bannerImage || a.poster;
-            if (heroImg && heroImg.startsWith("http")) {
-              const link = document.createElement("link");
-              link.rel = "preload";
-              link.as = "image";
-              link.href = heroImg;
-              link.fetchPriority = "high";
-              document.head.appendChild(link);
+          // Preload hero banner, poster, and logo artwork before ending loading state
+          if (typeof window !== "undefined") {
+            const preloadImg = (src?: string | null): Promise<boolean> => {
+              return new Promise((resolve) => {
+                if (!src || !src.startsWith("http")) return resolve(false);
+                const img = new Image();
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = src;
+                setTimeout(() => resolve(false), 1200);
+              });
+            };
+
+            const preloads: Promise<any>[] = [];
+            const banner = a.bannerImage || a.backdrop;
+            if (banner) preloads.push(preloadImg(banner));
+            if (a.poster) preloads.push(preloadImg(a.poster));
+
+            const resolvedTitle = a.name || a.title || a.english_name || "";
+            const logoKey = `${a.id || id}-${resolvedTitle}`;
+            let hasSavedLogo = false;
+            try {
+              hasSavedLogo = Boolean(sessionStorage.getItem(`logo_v7_${logoKey}`));
+            } catch {}
+
+            if (!hasSavedLogo) {
+              const logoPromise = fetch(
+                `/api/tmdb/logo?id=${encodeURIComponent(a.id || id)}&title=${encodeURIComponent(resolvedTitle)}&type=anime`,
+                { cache: "force-cache" }
+              )
+                .then((res) => (res.ok ? res.json() : null))
+                .then((d) => {
+                  if (d?.logoUrl) {
+                    try { sessionStorage.setItem(`logo_v7_${logoKey}`, d.logoUrl); } catch {}
+                    return preloadImg(d.logoUrl);
+                  }
+                  return false;
+                })
+                .catch(() => false);
+              preloads.push(logoPromise);
+            }
+
+            if (preloads.length > 0) {
+              await Promise.allSettled(preloads);
             }
           }
 
-          setIsLoading(false);
+          if (cancelled) return;
+
           setAnime(a);
           setFranchiseNodes(data.data.franchiseNodes || []);
           tmdbIdRef.current = a.tmdbId || null;
+          setIsLoading(false);
 
           const seasons = a.seasons || [];
           let urlSeasonId: string | null = null;
@@ -1805,9 +1841,30 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           }
         }
       } catch {}
+
+      if (!target) {
+        try {
+          const cwRaw = localStorage.getItem("cinestream_cw_cache");
+          if (cwRaw) {
+            const cw = JSON.parse(cwRaw);
+            const animeMatchId = String(anime?.id || id);
+            const found = (cw.items || []).find(
+              (it: any) =>
+                (String(it.mediaId) === animeMatchId || String(it.mediaId) === String(id)) &&
+                it.mediaType === "anime"
+            );
+            if (found && found.episode) {
+              target = episodes.find((ep) => Number(ep.episodeNum) === Number(found.episode));
+              if (target) {
+                isFromActiveShow = true;
+              }
+            }
+          }
+        } catch {}
+      }
     }
 
-    if (target && !selectedEp) {
+    if (target && (!selectedEp || selectedEp.episodeNum === 1)) {
       setSelectedEp(target);
       if (autoPlay) {
         const targetAnimeId = anime?.id || id;
@@ -1816,10 +1873,36 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
     }
 
+    // Always check database watch history for authenticated users
+    if (status === "authenticated") {
+      fetch("/api/watch-history")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.items && Array.isArray(data.items)) {
+            const animeMatchId = String(anime?.id || id);
+            const tmdbMatch = anime?.tmdbId ? String(anime.tmdbId) : null;
+            const found = data.items.find(
+              (it: any) =>
+                (String(it.mediaId) === animeMatchId ||
+                  String(it.mediaId) === String(id) ||
+                  (tmdbMatch && String(it.mediaId) === tmdbMatch)) &&
+                it.mediaType === "anime"
+            );
+            if (found && found.episode) {
+              const matchedEp = episodes.find((ep) => Number(ep.episodeNum) === Number(found.episode));
+              if (matchedEp) {
+                setSelectedEp(matchedEp);
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
     if (!hasRestoredState) {
       setHasRestoredState(true);
     }
-  }, [episodes, id, anime, hasRestoredState]);
+  }, [episodes, id, anime, hasRestoredState, status, selectedEp]);
 
   // Persist State
   useEffect(() => {
@@ -2157,10 +2240,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const thumbSrc = isUnreleased
       ? (ep.thumbnail || null)
       : (ep.thumbnail || (isSingleItem && displayPoster) || backdropFallback);
-    const isSelected = selectedEp?.episodeId === ep.episodeId;
-    // The "Current"/"Playing" badge only shows once the user has actually
-    // started an episode (either by clicking it or resuming with autoplay).
-    const isCurrent = isSelected && (isPlaying || watchStarted);
+    const isSelected = selectedEp?.episodeId === ep.episodeId || Number(selectedEp?.episodeNum) === Number(ep.episodeNum);
+    const isCurrent = isSelected;
     return {
       key: `${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || 'ep'}`,
       number: ep.episodeNum,
@@ -2343,6 +2424,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]"
                         />
                       </div>
+                    ) : logoLoading ? (
+                      <div className="mb-4 sm:mb-5 h-12 sm:h-16 md:h-20 w-48 sm:w-64 rounded-xl bg-white/[0.08] animate-pulse" />
                     ) : (
                       <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
                     )}

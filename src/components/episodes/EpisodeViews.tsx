@@ -147,6 +147,14 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
           E{item.number}
         </div>
 
+        {/* Selected / Current pill badge on thumbnail */}
+        {item.isSelected && (
+          <div className="absolute top-2.5 left-2.5 z-20 px-2 py-0.5 rounded-md bg-emerald-500 text-black text-[9px] font-black uppercase tracking-wider shadow-lg flex items-center gap-1 border border-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+            Current
+          </div>
+        )}
+
         {/* Runtime badge */}
         {item.runtime && item.runtime > 0 && (
           <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-white/90 text-[10px] font-bold tracking-tight border border-white/15 shadow-sm">
@@ -176,7 +184,9 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
       <div className="flex-1 min-w-0 flex flex-col justify-center space-y-1.5 w-full">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h4 className="text-white font-black text-base sm:text-lg tracking-tight group-hover:text-primary transition-colors">
+            <h4 className={`font-black text-base sm:text-lg tracking-tight transition-colors ${
+              item.isSelected ? "text-emerald-400" : "text-white group-hover:text-primary"
+            }`}>
               {item.title}
             </h4>
             {item.isFiller && (
@@ -188,9 +198,9 @@ export function EpisodeListCard({ item }: { item: EpisodeItem }) {
 
           {/* Selected / Playing pill */}
           {item.isSelected && (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black tracking-wider uppercase shadow-md border border-white/20">
-              {item.isPlaying && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-              {item.isPlaying ? "Playing" : "Current"}
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500 text-black text-[10px] font-black tracking-wider uppercase shadow-lg shadow-emerald-500/30 border border-emerald-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+              <span>{item.isPlaying ? "Playing" : "Current"}</span>
             </div>
           )}
         </div>
@@ -258,7 +268,7 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
       <div
         className={cn(
           "relative w-full aspect-video overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/10 transition-all duration-300",
-          item.isSelected ? "ring-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.35)]" : "group-hover:ring-white/30 group-hover:shadow-[0_12px_28px_-8px_rgba(0,0,0,0.8)]"
+          item.isSelected ? "ring-2 ring-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)]" : "group-hover:ring-white/30 group-hover:shadow-[0_12px_28px_-8px_rgba(0,0,0,0.8)]"
         )}
       >
         {item.thumbnail ? (
@@ -301,9 +311,9 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
 
         {/* Selected / playing badge */}
         {item.isSelected && (
-          <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary text-primary-foreground text-[9px] font-black tracking-wider uppercase shadow-xl border border-white/25">
-            {item.isPlaying && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-            {item.isPlaying ? "Playing" : "Current"}
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-500 text-black text-[9px] font-black tracking-wider uppercase shadow-xl border border-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+            <span>{item.isPlaying ? "Playing" : "Current"}</span>
           </div>
         )}
 
@@ -330,7 +340,7 @@ export function EpisodeGridCard({ item }: { item: EpisodeItem }) {
         <h3
           className={cn(
             "text-xs sm:text-sm font-bold leading-snug line-clamp-1 truncate transition-colors duration-200 tracking-tight",
-            item.isSelected ? "text-primary" : "text-white/90 group-hover:text-white"
+            item.isSelected ? "text-emerald-400 font-extrabold" : "text-white/90 group-hover:text-white"
           )}
         >
           {item.title}
@@ -495,7 +505,7 @@ export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
                 config.boxClass,
                 fontClass,
                 item.isSelected
-                  ? "bg-primary text-white shadow-lg shadow-primary/30 scale-105 ring-1 ring-white/20 z-10"
+                  ? "bg-emerald-500 text-black font-black shadow-lg shadow-emerald-500/30 scale-105 ring-2 ring-emerald-300 z-10"
                   : isUpcoming
                   ? "bg-white/[0.03] text-white/20 border border-white/[0.05] cursor-not-allowed"
                   : item.isFiller
@@ -504,6 +514,11 @@ export function EpisodeNumbersView({ items }: { items: EpisodeItem[] }) {
               )}
             >
               {item.number}
+              {item.isSelected && (
+                <span className="absolute -top-1.5 -right-1.5 z-20 px-1 py-0.2 rounded-full bg-emerald-400 text-black text-[7px] font-black uppercase tracking-tight shadow-md border border-emerald-300">
+                  Cur
+                </span>
+              )}
               {isUpcoming ? (
                 <Lock className={cn("absolute text-white/35", config.lockIconClass)} />
               ) : item.isFiller && !item.isSelected ? (

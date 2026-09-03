@@ -141,7 +141,7 @@ function loadHeroPoolFromSession(): MediaItem[] {
   return [];
 }
 
-function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] {
+function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[], existingPool?: MediaItem[]): MediaItem[] {
   if (!Array.isArray(feed) || feed.length === 0) return [];
 
   const isValidHeroCandidate = (i: MediaItem) => {
@@ -156,11 +156,24 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
   const validFeed = feed.filter(isValidHeroCandidate);
   if (validFeed.length === 0) return [];
 
-  const movieCandidates = validFeed.filter(
-    (i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+  const movieCandidates = Array.from(
+    new Map(
+      validFeed
+        .filter(
+          (i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+        )
+        .map((m) => [m.id, m])
+    ).values()
   );
-  const tvCandidates = validFeed.filter(
-    (i) => (i.media_type === "tv" || !!i.name) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+
+  const tvCandidates = Array.from(
+    new Map(
+      validFeed
+        .filter(
+          (i) => (i.media_type === "tv" || !!i.name) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+        )
+        .map((t) => [t.id, t])
+    ).values()
   );
 
   // Build anime candidates strictly from AniList anime items first, fallback to TMDB
@@ -262,6 +275,7 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
   const pickBestCandidate = (candidates: MediaItem[]): MediaItem | null => {
     if (candidates.length === 0) return null;
 
+    // Filter unseen candidates; if all have been seen, cycle back through the pool
     const unseen = candidates.filter((c) => !seenIds.has(c.id));
     const pool = unseen.length > 0 ? unseen : candidates;
 
@@ -272,13 +286,14 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     return picked || null;
   };
 
-  const movieCard = pickBestCandidate(movieCandidates);
-  const tvCard = pickBestCandidate(tvCandidates);
-  const animeCard = pickBestCandidate(animeCandidates);
+  // If existingPool is provided (e.g. background anime load), keep existing movie and tv cards
+  const movieCard = (existingPool && existingPool[0]) ? existingPool[0] : pickBestCandidate(movieCandidates);
+  const tvCard = (existingPool && existingPool[1]) ? existingPool[1] : pickBestCandidate(tvCandidates);
+  const animeCard = pickBestCandidate(animeCandidates) || (existingPool && existingPool[2]) || null;
 
   try {
     if (typeof window !== "undefined") {
-      const arr = Array.from(seenIds).slice(-50);
+      const arr = Array.from(seenIds).slice(-60);
       sessionStorage.setItem("sv_seen_hero_ids", JSON.stringify(arr));
     }
   } catch {}
@@ -777,7 +792,7 @@ export default function Home() {
           setHeroFeed(fullHeroFeed);
 
           if (fullHeroPool.length > 0) {
-            setHeroPool((current) => (current && current.length >= 3 ? current : fullHeroPool));
+            setHeroPool(fullHeroPool);
             saveHeroPoolToSession(fullHeroPool);
 
             // Preload hero slide 1 backdrop image immediately
@@ -831,7 +846,7 @@ export default function Home() {
             setAnimeList(finalAnimeList);
             setAnimeLoading(false);
 
-            const updatedHeroPool = buildHeroPool(fullHeroFeed, finalAnimeList);
+            const updatedHeroPool = buildHeroPool(fullHeroFeed, finalAnimeList, fullHeroPool);
             if (updatedHeroPool.length > 0) {
               setHeroPool(updatedHeroPool);
               saveHeroPoolToSession(updatedHeroPool);

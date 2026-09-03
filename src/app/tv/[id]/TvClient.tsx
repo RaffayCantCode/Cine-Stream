@@ -137,18 +137,6 @@ export default function TvClient() {
   };
 
   useEffect(() => {
-    setEpisodeChunk(0);
-    setGridEpisodePage(1);
-  }, [selectedSeason]);
-
-  useEffect(() => {
-    if (playingSeason === selectedSeason && playingEpisode) {
-      const targetChunk = Math.floor((playingEpisode - 1) / TV_CHUNK_SIZE);
-      setEpisodeChunk(targetChunk);
-    }
-  }, [playingSeason, selectedSeason, playingEpisode]);
-
-  useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
   }, [id]);
 
@@ -173,33 +161,83 @@ export default function TvClient() {
           if (activeShowRaw) {
             const activeShow = JSON.parse(activeShowRaw);
             if (String(activeShow?.id) === String(id)) {
-              if (activeShow?.season) initSeason = activeShow.season;
-              if (activeShow?.episode) initEp = activeShow.episode;
+              if (activeShow?.season) initSeason = Number(activeShow.season);
+              if (activeShow?.episode) initEp = Number(activeShow.episode);
               hasActiveShow = true;
             }
           }
         } catch {}
+
+        if (!hasActiveShow) {
+          try {
+            const cwRaw = localStorage.getItem("cinestream_cw_cache");
+            if (cwRaw) {
+              const cw = JSON.parse(cwRaw);
+              const found = (cw.items || []).find(
+                (it: any) => String(it.mediaId) === String(id) && it.mediaType === "tv"
+              );
+              if (found) {
+                if (found.season) initSeason = Number(found.season);
+                if (found.episode) initEp = Number(found.episode);
+                hasActiveShow = true;
+              }
+            }
+          } catch {}
+        }
       }
     }
-    setSelectedSeason(initSeason);
-    setPlayingSeason(initSeason);
-    setPlayingEpisode(initEp);
-    setHasActiveProgress(hasActiveShow);
+
+    if (hasActiveShow) {
+      setSelectedSeason(initSeason);
+      setPlayingSeason(initSeason);
+      setPlayingEpisode(initEp);
+      setHasActiveProgress(true);
+    }
+
+    // Always query database watch history to ensure logged in users have exact latest episode
+    if (status === "authenticated") {
+      fetch("/api/watch-history")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.items && Array.isArray(data.items)) {
+            const found = data.items.find(
+              (it: any) => String(it.mediaId) === String(id) && it.mediaType === "tv"
+            );
+            if (found && found.season && found.episode) {
+              const sNum = Number(found.season);
+              const eNum = Number(found.episode);
+              setSelectedSeason(sNum);
+              setPlayingSeason(sNum);
+              setPlayingEpisode(eNum);
+              setHasActiveProgress(true);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
     setIsStateLoaded(true);
-  }, [id, status, session, isStateLoaded]);
+  }, [id, status, isStateLoaded]);
 
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Synchronize chunk bar and grid pagination to the active episode
   useEffect(() => {
     if (playingSeason === selectedSeason && playingEpisode) {
+      const targetChunk = Math.floor((playingEpisode - 1) / TV_CHUNK_SIZE);
+      setEpisodeChunk(targetChunk);
+
       const totalEps = seasonData?.episodes?.length || 0;
       const gridPageSize = totalEps > 500 ? 50 : 25;
       const targetPage = Math.floor((playingEpisode - 1) / gridPageSize) + 1;
       setGridEpisodePage(targetPage);
+    } else {
+      setEpisodeChunk(0);
+      setGridEpisodePage(1);
     }
-  }, [playingSeason, selectedSeason, playingEpisode, seasonData?.episodes?.length]);
+  }, [selectedSeason, playingSeason, playingEpisode, seasonData?.episodes?.length]);
 
   const isOngoingShow = (statusValue?: string | null) => {
     const normalized = (statusValue || "").toLowerCase();
@@ -237,6 +275,7 @@ export default function TvClient() {
         setShow(data);
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(prev => {
+          if (hasActiveProgress && playingSeason) return playingSeason;
           if (prev === 1 && firstSeason > 1 && typeof window !== "undefined" && !new URLSearchParams(window.location.search).get("season")) {
             return firstSeason;
           }
@@ -429,7 +468,7 @@ export default function TvClient() {
 
   // ── Normalize TV episodes into the shared EpisodeItem shape ──────────────
   const episodeToItem = (episode: Episode): EpisodeItem => {
-    const isWatching = hasActiveProgress && playingSeason === selectedSeason && playingEpisode === episode.episode_number;
+    const isWatching = (hasActiveProgress || Boolean(playingEpisode)) && Number(playingSeason) === Number(selectedSeason) && Number(playingEpisode) === Number(episode.episode_number);
     const isUpcoming = isUpcomingEpisode(episode);
     return {
       key: String(episode.id),

@@ -1,7 +1,8 @@
 "use client";
 
-import { memo, useState, useMemo, useRef, useEffect } from "react";
-import { X, Play, Clock, Star, Calendar, Search, Layers } from "lucide-react";
+import { memo, useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { X, Play, Clock, Star, Calendar, Search, Layers, SkipForward, Lock, ChevronLeft, ChevronRight } from "lucide-react";
+import { isEpisodeUpcoming } from "@/lib/episode-availability";
 import Image from "next/image";
 
 export interface DrawerEpisode {
@@ -46,6 +47,13 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
   isAnime = false,
 }: EpisodeDrawerProps) {
   const [selectedSeason, setSelectedSeason] = useState<number>(currentSeason || 1);
+
+  useEffect(() => {
+    if (currentSeason && Number(currentSeason) > 0) {
+      setSelectedSeason(Number(currentSeason));
+    }
+  }, [currentSeason]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const episodeListRef = useRef<HTMLDivElement>(null);
 
@@ -78,6 +86,103 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
     );
   }, [activeSeasonData, searchQuery]);
 
+  const isEpisodeUpcomingFn = useCallback((ep: DrawerEpisode, allEpisodes: DrawerEpisode[]): boolean => {
+    if (!ep) return false;
+    if (ep.air_date && isEpisodeUpcoming(ep.air_date)) return true;
+
+    const epNum = Number(ep.episode_number);
+    const idx = allEpisodes.findIndex((e) => Number(e.episode_number) === epNum);
+    if (idx > 0) {
+      for (let i = 0; i < idx; i++) {
+        const prev = allEpisodes[i];
+        if (prev?.air_date && isEpisodeUpcoming(prev.air_date)) {
+          return true;
+        }
+      }
+    }
+
+    if (!ep.air_date && !ep.still_path) {
+      const hasUpcomingInSeason = allEpisodes.some(
+        (e) => e.air_date && isEpisodeUpcoming(e.air_date) && Number(e.episode_number) <= epNum
+      );
+      if (hasUpcomingInSeason) return true;
+    }
+
+    return false;
+  }, []);
+
+  const nextEpisodeInfo = useMemo(() => {
+    if (!seasons || seasons.length === 0) return null;
+    const curSeasonNum = Number(currentSeason || 1);
+    const curEpNum = Number(currentEpisode || 1);
+
+    if (isAnime) {
+      const allEps = activeSeasonData?.episodes || seasons[0]?.episodes || [];
+      const nextEp = allEps.find((e) => Number(e.episode_number) === curEpNum + 1);
+      if (nextEp) {
+        if (isEpisodeUpcomingFn(nextEp, allEps)) return null;
+        return { season: curSeasonNum, episode: Number(nextEp.episode_number) };
+      }
+      return null;
+    }
+
+    const curSeason = seasons.find((s) => Number(s.season_number) === curSeasonNum);
+    const curSeasonEps = curSeason?.episodes || [];
+    const nextInSameSeason = curSeasonEps.find((e) => Number(e.episode_number) === curEpNum + 1);
+    if (nextInSameSeason) {
+      if (isEpisodeUpcomingFn(nextInSameSeason, curSeasonEps)) return null;
+      return { season: curSeasonNum, episode: Number(nextInSameSeason.episode_number) };
+    }
+
+    const nextSeason = seasons.find((s) => Number(s.season_number) === curSeasonNum + 1);
+    if (nextSeason && nextSeason.episodes && nextSeason.episodes.length > 0) {
+      const firstEpOfNextSeason = nextSeason.episodes[0];
+      if (isEpisodeUpcomingFn(firstEpOfNextSeason, nextSeason.episodes)) return null;
+      return { season: Number(nextSeason.season_number), episode: Number(firstEpOfNextSeason.episode_number || 1) };
+    }
+
+    return null;
+  }, [seasons, currentSeason, currentEpisode, isAnime, activeSeasonData, isEpisodeUpcomingFn]);
+
+  const prevEpisodeInfo = useMemo(() => {
+    if (!seasons || seasons.length === 0) return null;
+    const curSeasonNum = Number(currentSeason || 1);
+    const curEpNum = Number(currentEpisode || 1);
+
+    if (isAnime) {
+      if (curEpNum <= 1) return null;
+      const allEps = activeSeasonData?.episodes || seasons[0]?.episodes || [];
+      const prevEp = allEps.find((e) => Number(e.episode_number) === curEpNum - 1);
+      return {
+        season: curSeasonNum,
+        episode: prevEp ? Number(prevEp.episode_number) : curEpNum - 1,
+      };
+    }
+
+    const curSeason = seasons.find((s) => Number(s.season_number) === curSeasonNum);
+    const curSeasonEps = curSeason?.episodes || [];
+    if (curEpNum > 1) {
+      const prevInSameSeason = curSeasonEps.find((e) => Number(e.episode_number) === curEpNum - 1);
+      return {
+        season: curSeasonNum,
+        episode: prevInSameSeason ? Number(prevInSameSeason.episode_number) : curEpNum - 1,
+      };
+    }
+
+    if (curSeasonNum > 1) {
+      const prevSeason = seasons.find((s) => Number(s.season_number) === curSeasonNum - 1);
+      if (prevSeason && prevSeason.episodes && prevSeason.episodes.length > 0) {
+        const lastEpOfPrevSeason = prevSeason.episodes[prevSeason.episodes.length - 1];
+        return {
+          season: Number(prevSeason.season_number),
+          episode: Number(lastEpOfPrevSeason.episode_number || prevSeason.episodes.length),
+        };
+      }
+    }
+
+    return null;
+  }, [seasons, currentSeason, currentEpisode, isAnime, activeSeasonData]);
+
   if (!isOpen) return null;
 
   return (
@@ -99,13 +204,49 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
               <p className="text-xs text-white/50">Season {selectedSeason}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/15 text-white/70 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-            aria-label="Close episode drawer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {prevEpisodeInfo && (
+              <button
+                onClick={() => {
+                  onSelectEpisode(prevEpisodeInfo.season, prevEpisodeInfo.episode);
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-black text-xs shadow-md border border-white/15 transition-all cursor-pointer group"
+                title={`Jump to Previous Episode (${isAnime ? `EP ${prevEpisodeInfo.episode}` : `S${prevEpisodeInfo.season}E${prevEpisodeInfo.episode}`})`}
+              >
+                <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Prev Ep</span>
+                <span className="text-[10px] font-bold opacity-75">
+                  {isAnime ? `EP ${prevEpisodeInfo.episode}` : `S${prevEpisodeInfo.season}E${prevEpisodeInfo.episode}`}
+                </span>
+              </button>
+            )}
+
+            {nextEpisodeInfo && (
+              <button
+                onClick={() => {
+                  onSelectEpisode(nextEpisodeInfo.season, nextEpisodeInfo.episode);
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 active:scale-95 text-primary-foreground font-black text-xs shadow-md border border-white/20 transition-all cursor-pointer group"
+                title={`Jump to Next Episode (${isAnime ? `EP ${nextEpisodeInfo.episode}` : `S${nextEpisodeInfo.season}E${nextEpisodeInfo.episode}`})`}
+              >
+                <span>Next Ep</span>
+                <span className="text-[10px] font-bold opacity-80">
+                  {isAnime ? `EP ${nextEpisodeInfo.episode}` : `S${nextEpisodeInfo.season}E${nextEpisodeInfo.episode}`}
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/15 text-white/70 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Close episode drawer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Season Selector Tabs */}
@@ -149,8 +290,9 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
           ) : (
             filteredEpisodes.map((ep) => {
               const isCurrentPlaying = isAnime
-                ? ep.episode_number === currentEpisode
-                : selectedSeason === currentSeason && ep.episode_number === currentEpisode;
+                ? Number(ep.episode_number) === Number(currentEpisode)
+                : Number(selectedSeason) === Number(currentSeason) && Number(ep.episode_number) === Number(currentEpisode);
+              const isUpcoming = isEpisodeUpcomingFn(ep, activeSeasonData?.episodes || []);
               const thumbUrl = ep.still_path
                 ? ep.still_path.startsWith("http")
                   ? ep.still_path
@@ -162,14 +304,18 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
                   key={ep.id || ep.episode_number}
                   data-current={isCurrentPlaying ? "true" : undefined}
                   data-episode={ep.episode_number}
+                  disabled={isUpcoming}
                   onClick={() => {
+                    if (isUpcoming) return;
                     onSelectEpisode(selectedSeason, ep.episode_number);
                     onClose();
                   }}
-                  className={`w-full text-left p-3 rounded-2xl border transition-all flex gap-3.5 group cursor-pointer ${
-                    isCurrentPlaying
-                      ? "bg-emerald-950/30 border-emerald-500/70 ring-1 ring-emerald-500/40 shadow-lg"
-                      : "bg-white/[0.03] border-white/8 hover:bg-white/[0.08] hover:border-white/15"
+                  className={`w-full text-left p-3 rounded-2xl border transition-all flex gap-3.5 group ${
+                    isUpcoming
+                      ? "bg-white/[0.015] border-white/5 opacity-60 cursor-not-allowed"
+                      : isCurrentPlaying
+                      ? "bg-emerald-950/30 border-emerald-500/70 ring-1 ring-emerald-500/40 shadow-lg cursor-pointer"
+                      : "bg-white/[0.03] border-white/8 hover:bg-white/[0.08] hover:border-white/15 cursor-pointer"
                   }`}
                 >
                   {/* Thumbnail */}
@@ -178,7 +324,9 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
                       <img
                         src={thumbUrl}
                         alt={ep.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-cover transition-transform duration-300 ${
+                          isUpcoming ? "" : "group-hover:scale-105"
+                        }`}
                         loading="lazy"
                       />
                     ) : (
@@ -186,16 +334,24 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
                         EP {ep.episode_number}
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Play className="w-5 h-5 text-white fill-current drop-shadow-md" />
-                    </div>
+                    {!isUpcoming && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Play className="w-5 h-5 text-white fill-current drop-shadow-md" />
+                      </div>
+                    )}
+                    {isUpcoming && (
+                      <div className="absolute inset-0 z-10 bg-black/75 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1">
+                        <Lock className="w-4 h-4 text-white/60" />
+                        <span className="text-[8px] font-black uppercase tracking-widest text-white/70">Upcoming</span>
+                      </div>
+                    )}
                     {isCurrentPlaying && (
                       <div className="absolute top-1 left-1 bg-emerald-500 text-black text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
                         Current
                       </div>
                     )}
-                    {ep.isFiller && (
+                    {ep.isFiller && !isUpcoming && (
                       <div className="absolute bottom-1 left-1 bg-amber-400 text-black text-[8px] font-black uppercase px-1 py-0.2 rounded shadow border border-amber-300">
                         Filler
                       </div>

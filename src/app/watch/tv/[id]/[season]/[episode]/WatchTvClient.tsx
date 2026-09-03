@@ -123,23 +123,6 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
             }));
           setAllSeasonsData(formattedSeasons);
         }
-
-        // Record watch history
-        if (session?.user) {
-          fetch("/api/watch-history", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mediaId: showRes.id,
-              mediaType: "tv",
-              title: showRes.name,
-              posterPath: showRes.poster_path ?? null,
-              backdropPath: showRes.backdrop_path ?? null,
-              season: seasonNumber,
-              episode: episodeNumber,
-            }),
-          }).catch(() => {});
-        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load TV show");
       } finally {
@@ -148,17 +131,101 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     };
 
     loadShowAndSeason();
-  }, [showId, seasonNumber, episodeNumber, session]);
+  }, [showId, seasonNumber, episodeNumber]);
 
   const currentEpisodeData = useMemo(() => {
     return seasonData?.episodes?.find((e) => e.episode_number === episodeNumber);
   }, [seasonData, episodeNumber]);
 
+  // ── Reliably record watch history in Database and localStorage cache on every episode change ──
+  useEffect(() => {
+    if (!show || !showId) return;
+
+    const payload = {
+      mediaId: show.id || showId,
+      mediaType: "tv" as const,
+      title: show.name,
+      posterPath: show.poster_path ?? null,
+      backdropPath: show.backdrop_path ?? null,
+      season: seasonNumber,
+      episode: episodeNumber,
+      episodeName: currentEpisodeData?.name || `Episode ${episodeNumber}`,
+    };
+
+    // 1. Post to database
+    fetch("/api/watch-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+
+    // 2. Optimistically update localStorage cache for Continue Watching with 0ms delay
+    try {
+      const saved = localStorage.getItem("cinestream_cw_cache");
+      const parsed = saved ? JSON.parse(saved) : { items: [] };
+      const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+
+      const updatedItem = {
+        id: show.id || showId,
+        mediaId: show.id || showId,
+        mediaType: "tv",
+        title: show.name,
+        posterPath: show.poster_path ?? null,
+        backdropPath: show.backdrop_path ?? null,
+        season: seasonNumber,
+        episode: episodeNumber,
+        episodeName: currentEpisodeData?.name || `Episode ${episodeNumber}`,
+        watchedAt: new Date().toISOString(),
+      };
+
+      const filtered = items.filter((it) => !(it.mediaId === (show.id || showId) && it.mediaType === "tv"));
+      filtered.unshift(updatedItem);
+      localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+
+      // Also update active tv tracker for the details page
+      localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
+        id: String(show.id || showId),
+        season: seasonNumber,
+        episode: episodeNumber,
+      }));
+    } catch {}
+  }, [show, showId, seasonNumber, episodeNumber, currentEpisodeData?.name]);
+
   const handleSelectEpisode = useCallback(
     (newSeason: number, newEpisode: number) => {
+      if (show) {
+        try {
+          const saved = localStorage.getItem("cinestream_cw_cache");
+          const parsed = saved ? JSON.parse(saved) : { items: [] };
+          const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+
+          const updatedItem = {
+            id: show.id || showId,
+            mediaId: show.id || showId,
+            mediaType: "tv",
+            title: show.name,
+            posterPath: show.poster_path ?? null,
+            backdropPath: show.backdrop_path ?? null,
+            season: newSeason,
+            episode: newEpisode,
+            episodeName: `Episode ${newEpisode}`,
+            watchedAt: new Date().toISOString(),
+          };
+
+          const filtered = items.filter((it) => !(it.mediaId === (show.id || showId) && it.mediaType === "tv"));
+          filtered.unshift(updatedItem);
+          localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+
+          localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
+            id: String(show.id || showId),
+            season: newSeason,
+            episode: newEpisode,
+          }));
+        } catch {}
+      }
       router.push(`/watch/tv/${showId}/${newSeason}/${newEpisode}`);
     },
-    [router, showId]
+    [router, show, showId]
   );
 
   if (isLoading) {

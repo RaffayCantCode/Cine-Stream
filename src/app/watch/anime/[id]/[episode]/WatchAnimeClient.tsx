@@ -253,12 +253,99 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   }, [animeEpisodes, anime?.totalEpisodes]);
 
   const totalEps = anime?.totalEpisodes || anime?.episodes?.sub || (cappedEpisodes.length > 0 ? cappedEpisodes.length : 12);
+  const ratingNum = anime?.rating ? parseFloat(anime.rating) : 0;
+  const currentEpDetail = cappedEpisodes.find((e) => e.episodeNum === episodeNumber);
+
+  // ── Reliably record watch history in Database and localStorage cache on every episode change ──
+  useEffect(() => {
+    if (!anime || !animeId) return;
+
+    const numericId = Number(anime.id) || (anime.tmdbId ? Number(anime.tmdbId) : parseInt(animeId, 10) || 0);
+
+    const payload = {
+      mediaId: numericId,
+      mediaType: "anime" as const,
+      title: anime.name,
+      posterPath: anime.poster ?? null,
+      backdropPath: anime.bannerImage ?? null,
+      season: 1,
+      episode: episodeNumber,
+      episodeName: currentEpDetail?.title || `Episode ${episodeNumber}`,
+    };
+
+    // 1. Post to database
+    fetch("/api/watch-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+
+    // 2. Optimistically update localStorage cache for Continue Watching with 0ms delay
+    try {
+      const saved = localStorage.getItem("cinestream_cw_cache");
+      const parsed = saved ? JSON.parse(saved) : { items: [] };
+      const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+
+      const updatedItem = {
+        id: numericId,
+        mediaId: numericId,
+        mediaType: "anime",
+        title: anime.name,
+        posterPath: anime.poster ?? null,
+        backdropPath: anime.bannerImage ?? null,
+        season: 1,
+        episode: episodeNumber,
+        episodeName: currentEpDetail?.title || `Episode ${episodeNumber}`,
+        watchedAt: new Date().toISOString(),
+      };
+
+      const filtered = items.filter((it) => !(it.mediaId === numericId && it.mediaType === "anime"));
+      filtered.unshift(updatedItem);
+      localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+
+      // Also update active anime tracker for the details page
+      localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
+        id: String(anime.id || animeId),
+        episodeNum: episodeNumber,
+      }));
+    } catch {}
+  }, [anime, animeId, episodeNumber, currentEpDetail?.title]);
 
   const handleSelectEpisode = useCallback(
     (newEp: number) => {
+      if (anime) {
+        try {
+          const saved = localStorage.getItem("cinestream_cw_cache");
+          const parsed = saved ? JSON.parse(saved) : { items: [] };
+          const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+          const numericId = Number(anime.id) || (anime.tmdbId ? Number(anime.tmdbId) : parseInt(animeId, 10) || 0);
+
+          const updatedItem = {
+            id: numericId,
+            mediaId: numericId,
+            mediaType: "anime",
+            title: anime.name,
+            posterPath: anime.poster ?? null,
+            backdropPath: anime.bannerImage ?? null,
+            season: 1,
+            episode: newEp,
+            episodeName: `Episode ${newEp}`,
+            watchedAt: new Date().toISOString(),
+          };
+
+          const filtered = items.filter((it) => !(it.mediaId === numericId && it.mediaType === "anime"));
+          filtered.unshift(updatedItem);
+          localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+
+          localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
+            id: String(anime.id || animeId),
+            episodeNum: newEp,
+          }));
+        } catch {}
+      }
       router.push(`/watch/anime/${animeId}/${newEp}?source=${forcedSource}`);
     },
-    [router, animeId, forcedSource]
+    [router, animeId, anime, forcedSource]
   );
 
   const handleAutoNext = useCallback(() => {
@@ -266,9 +353,6 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       handleSelectEpisode(episodeNumber + 1);
     }
   }, [episodeNumber, totalEps, handleSelectEpisode]);
-
-  const ratingNum = anime?.rating ? parseFloat(anime.rating) : 0;
-  const currentEpDetail = cappedEpisodes.find((e) => e.episodeNum === episodeNumber);
 
   const metadata: CinemaPlayerMetadata = useMemo(() => {
     if (!anime) {
@@ -310,6 +394,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
               isFiller: Boolean(ep.isFiller),
               runtime: ep.runtime || undefined,
               vote_average: ep.vote_average || undefined,
+              air_date: ep.releasedDate || undefined,
             }))
           : Array.from({ length: totalEps }).map((_, idx) => ({
               id: idx + 1,
