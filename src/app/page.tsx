@@ -466,7 +466,7 @@ export default function Home() {
       : INITIAL_COLLECTIONS
   );
   const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
-  const [heroArtworkReady, setHeroArtworkReady] = useState(false);
+  const [heroArtworkReady, setHeroArtworkReady] = useState(true);
   const [revealedSections, setRevealedSections] = useState(1);
   const [moodSeed, setMoodSeed] = useState("");
   const [customSections, setCustomSections] = useState<any[]>(() => {
@@ -652,6 +652,7 @@ export default function Home() {
             if (fastCandidates.length > 0) {
               setHeroPool((current) => (current && current.length >= 3 ? current : fastCandidates));
               saveHeroPoolToSession(fastCandidates);
+              setIsLoading(false);
             }
           })
           .catch(() => {});
@@ -1068,54 +1069,17 @@ export default function Home() {
     }
   }, [activeBackdropUrl, ambientBackdrop.current]);
 
-  // ── Artwork verification gate: Ensure artwork is decoded before revealing HeroBanner ──
+  // Pre-warm hero slide artwork in background without delaying rendering
   useEffect(() => {
-    if (!hero) {
-      setHeroArtworkReady(false);
-      return;
-    }
-
-    const bg = hero.backdrop_path || hero.poster_path;
-    if (!bg) {
-      setHeroArtworkReady(true);
-      return;
-    }
-
-    const bgUrl = bg.startsWith("http") ? bg : `https://image.tmdb.org/t/p/w1280${bg}`;
-    let isCancelled = false;
-
-    // Safety timeout: Maximum 1.5s skeleton display so slow network doesn't block indefinitely
-    const timer = setTimeout(() => {
-      if (!isCancelled) setHeroArtworkReady(true);
-    }, 1500);
-
-    if (typeof window !== "undefined") {
+    if (!hero) return;
+    const nextItem = heroPool[(heroIndex + 1) % (heroPool.length || 1)];
+    const nextBg = nextItem?.backdrop_path || nextItem?.poster_path;
+    if (nextBg && typeof window !== "undefined") {
+      const nextUrl = nextBg.startsWith("http") ? nextBg : `https://image.tmdb.org/t/p/w1280${nextBg}`;
       const img = new Image();
-      img.src = bgUrl;
-      img.onload = () => {
-        if (isCancelled) return;
-        clearTimeout(timer);
-        setHeroArtworkReady(true);
-      };
-      img.onerror = () => {
-        if (isCancelled) return;
-        clearTimeout(timer);
-        setHeroArtworkReady(true);
-      };
-
-      if (img.complete) {
-        clearTimeout(timer);
-        setHeroArtworkReady(true);
-      }
-    } else {
-      setHeroArtworkReady(true);
+      img.src = nextUrl;
     }
-
-    return () => {
-      isCancelled = true;
-      clearTimeout(timer);
-    };
-  }, [hero?.id, hero?.backdrop_path]);
+  }, [hero?.id, heroIndex, heroPool]);
 
   // ── Modular Progressive Hydration of Sections Below the Hero ─────────
   useEffect(() => {
@@ -1173,7 +1137,7 @@ export default function Home() {
       <main className="relative z-10 w-full bleed-header">
 
         {/* ─── HERO BANNER ─── */}
-        {hero && heroArtworkReady ? (
+        {hero ? (
           <div
             className="relative group/hero select-none animate-in fade-in duration-500"
             onTouchStart={handleTouchStart}

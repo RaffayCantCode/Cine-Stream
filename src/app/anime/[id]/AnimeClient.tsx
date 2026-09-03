@@ -1065,7 +1065,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   });
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const animeTitle = anime?.name || (anime as any)?.title || (anime as any)?.english_name || (typeof id === "string" ? id.replace(/-\d+$/, "").replace(/-/g, " ") : undefined);
-  const { logoUrl, loading: logoLoading } = useMediaLogo(id, "anime", animeTitle);
+  const { logoUrl, loading: logoLoading } = useMediaLogo(id, "anime", animeTitle, anime?.tmdbId);
   // If we already have initialData, skip the blank skeleton entirely.
   const [isLoading, setIsLoading] = useState(!initialData);
   const [episodesLoading, setEpisodesLoading] = useState(true);
@@ -1556,23 +1556,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
 
-          // Preload hero banner, poster, and logo artwork before ending loading state
+          // Pre-warm hero banner, poster, and logo artwork asynchronously in background
           if (typeof window !== "undefined") {
-            const preloadImg = (src?: string | null): Promise<boolean> => {
-              return new Promise((resolve) => {
-                if (!src || !src.startsWith("http")) return resolve(false);
-                const img = new Image();
-                img.onload = () => resolve(true);
-                img.onerror = () => resolve(false);
-                img.src = src;
-                setTimeout(() => resolve(false), 1200);
-              });
-            };
-
-            const preloads: Promise<any>[] = [];
             const banner = a.bannerImage || a.backdrop;
-            if (banner) preloads.push(preloadImg(banner));
-            if (a.poster) preloads.push(preloadImg(a.poster));
+            if (banner && banner.startsWith("http")) {
+              const img = new Image();
+              img.src = banner;
+            }
+            if (a.poster && a.poster.startsWith("http")) {
+              const img = new Image();
+              img.src = a.poster;
+            }
 
             const resolvedTitle = a.name || a.title || a.english_name || "";
             const logoKey = `${a.id || id}-${resolvedTitle}`;
@@ -1582,24 +1576,20 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             } catch {}
 
             if (!hasSavedLogo) {
-              const logoPromise = fetch(
-                `/api/tmdb/logo?id=${encodeURIComponent(a.id || id)}&title=${encodeURIComponent(resolvedTitle)}&type=anime`,
+              const tmdbQuery = a.tmdbId ? `&tmdbId=${encodeURIComponent(a.tmdbId)}` : "";
+              fetch(
+                `/api/tmdb/logo?id=${encodeURIComponent(a.id || id)}&title=${encodeURIComponent(resolvedTitle)}&type=anime${tmdbQuery}`,
                 { cache: "force-cache" }
               )
                 .then((res) => (res.ok ? res.json() : null))
                 .then((d) => {
                   if (d?.logoUrl) {
                     try { sessionStorage.setItem(`logo_v7_${logoKey}`, d.logoUrl); } catch {}
-                    return preloadImg(d.logoUrl);
+                    const img = new Image();
+                    img.src = d.logoUrl;
                   }
-                  return false;
                 })
-                .catch(() => false);
-              preloads.push(logoPromise);
-            }
-
-            if (preloads.length > 0) {
-              await Promise.allSettled(preloads);
+                .catch(() => {});
             }
           }
 
