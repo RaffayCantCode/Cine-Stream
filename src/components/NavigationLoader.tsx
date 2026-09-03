@@ -7,6 +7,8 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import {
   PAGE_LOADING_EVENT,
   PAGE_READY_EVENT,
+  declarePageLoading,
+  isPageContentLoading,
 } from "@/lib/pageLoad";
 
 /** Route-enter completion event dispatched by the app template. */
@@ -119,16 +121,32 @@ export function NavigationLoader() {
       }
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname) return;
-      pendingNavRef.current = normalizePath(url.pathname);
+      const targetPath = normalizePath(url.pathname);
+      pendingNavRef.current = targetPath;
+
+      // When navigating to media pages like /anime/ or /watch/, trigger the loader immediately for instant feedback
+      if (
+        targetPath.startsWith("/anime/") ||
+        targetPath.startsWith("/watch/") ||
+        targetPath.startsWith("/movie/") ||
+        targetPath.startsWith("/tv/") ||
+        targetPath.startsWith("/manga/")
+      ) {
+        declarePageLoading();
+        awaitingContentRef.current = true;
+        if (shownAtRef.current === null) {
+          shownAtRef.current = Date.now();
+        }
+        setVisible(true);
+      }
     };
 
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
   }, []);
 
-  /* Navigation API: cover programmatic router.push/replace (ContinueWatching),
-     but only for real pathname changes — live search param updates must not
-     flash the loader. */
+  /* Navigation API: cover programmatic router.push/replace and history traversal,
+     so clicking an episode, going to watch page, and returning back triggers proper loader */
   useEffect(() => {
     if (typeof window === "undefined" || !("navigation" in window)) return;
 
@@ -138,12 +156,27 @@ export function NavigationLoader() {
         navigationType?: string;
         destination?: { url?: string };
       };
-      if (nav.hashChange || nav.navigationType === "traverse") return;
+      if (nav.hashChange) return;
       try {
         const url = new URL(nav.destination?.url ?? "");
         if (url.origin !== window.location.origin) return;
-        if (url.pathname === window.location.pathname) return;
-        pendingNavRef.current = normalizePath(url.pathname);
+        if (url.pathname === window.location.pathname && !url.search) return;
+        const targetPath = normalizePath(url.pathname);
+        pendingNavRef.current = targetPath;
+        if (
+          targetPath.startsWith("/anime/") ||
+          targetPath.startsWith("/watch/") ||
+          targetPath.startsWith("/movie/") ||
+          targetPath.startsWith("/tv/") ||
+          targetPath.startsWith("/manga/")
+        ) {
+          declarePageLoading();
+          awaitingContentRef.current = true;
+          if (shownAtRef.current === null) {
+            shownAtRef.current = Date.now();
+          }
+          setVisible(true);
+        }
       } catch {
         return;
       }
@@ -155,27 +188,63 @@ export function NavigationLoader() {
     return () => navigation?.removeEventListener("navigate", onNavigate);
   }, []);
 
+  /* Popstate (browser back/forward button): catch transitions back to anime or media pages */
+  useEffect(() => {
+    const onPopState = () => {
+      const currentPath = normalizePath(window.location.pathname);
+      pendingNavRef.current = currentPath;
+      if (
+        currentPath.startsWith("/anime/") ||
+        currentPath.startsWith("/watch/") ||
+        currentPath.startsWith("/movie/") ||
+        currentPath.startsWith("/tv/") ||
+        currentPath.startsWith("/manga/")
+      ) {
+        declarePageLoading();
+        awaitingContentRef.current = true;
+        if (shownAtRef.current === null) {
+          shownAtRef.current = Date.now();
+        }
+        setVisible(true);
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   /* End signals from the page:
      - route enter complete -> end unless the page is still loading content
      - page content loading  -> wait for the page's own content, not just the shell
      - page content ready    -> content is on screen, end the loader */
   useEffect(() => {
     const onEnterComplete = () => {
-      if (!awaitingContentRef.current) requestHide();
+      if (!awaitingContentRef.current && !isPageContentLoading()) {
+        requestHide();
+      }
     };
     const onContentLoading = () => {
-      if (shownAtRef.current === null) return;
       awaitingContentRef.current = true;
+      if (shownAtRef.current === null) {
+        shownAtRef.current = Date.now();
+      }
+      setVisible(true);
       if (timersRef.current.enterFallback) {
         window.clearTimeout(timersRef.current.enterFallback);
         timersRef.current.enterFallback = undefined;
+      }
+      if (timersRef.current.contentFallback) {
+        window.clearTimeout(timersRef.current.contentFallback);
       }
       timersRef.current.contentFallback = window.setTimeout(
         hide,
         CONTENT_FALLBACK_MS
       );
     };
-    const onContentReady = () => requestHide();
+    const onContentReady = () => {
+      awaitingContentRef.current = false;
+      requestHide();
+    };
 
     window.addEventListener(ROUTE_ENTER_COMPLETE, onEnterComplete);
     window.addEventListener(PAGE_LOADING_EVENT, onContentLoading);
@@ -194,11 +263,27 @@ export function NavigationLoader() {
     if (shownAtRef.current === null) {
       shownAtRef.current = Date.now();
     }
-    awaitingContentRef.current = false;
-    timersRef.current = {
-      enterFallback: window.setTimeout(hide, ENTER_FALLBACK_MS),
-      safety: window.setTimeout(hide, SAFETY_MS),
-    };
+
+    const isAwaiting = awaitingContentRef.current || isPageContentLoading();
+    awaitingContentRef.current = isAwaiting;
+
+    if (!isAwaiting) {
+      timersRef.current.enterFallback = window.setTimeout(hide, ENTER_FALLBACK_MS);
+    } else {
+      if (timersRef.current.enterFallback) {
+        window.clearTimeout(timersRef.current.enterFallback);
+        timersRef.current.enterFallback = undefined;
+      }
+      if (!timersRef.current.contentFallback) {
+        timersRef.current.contentFallback = window.setTimeout(
+          hide,
+          CONTENT_FALLBACK_MS
+        );
+      }
+    }
+    if (!timersRef.current.safety) {
+      timersRef.current.safety = window.setTimeout(hide, SAFETY_MS);
+    }
   }, [pathname, visible, hide]);
 
   /* Cleanup all pending timers on unmount. */

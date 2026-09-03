@@ -8,6 +8,7 @@ import { CinemaPlayer, type CinemaPlayerMetadata } from "@/components/player/Cin
 import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { DrawerSeason } from "@/components/player/EpisodeDrawer";
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
+import { usePageContentReady } from "@/lib/pageLoad";
 
 function buildAnimeIframeUrl(
   provider: string,
@@ -97,6 +98,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [forcedSource, setForcedSource] = useState<string>("animeplay");
+  usePageContentReady(!isLoading);
 
   // Restore current/preferred source from URL query param or sessionStorage
   useEffect(() => {

@@ -6,16 +6,24 @@ export const PAGE_LOADING_EVENT = "sv:content-loading";
 /** Dispatched when a page's primary content has finished loading. */
 export const PAGE_READY_EVENT = "sv:content-ready";
 
+let isCurrentPageContentLoading = false;
+
 export function declarePageLoading(): void {
+  isCurrentPageContentLoading = true;
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(PAGE_LOADING_EVENT));
   }
 }
 
 export function declarePageReady(): void {
+  isCurrentPageContentLoading = false;
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(PAGE_READY_EVENT));
   }
+}
+
+export function isPageContentLoading(): boolean {
+  return isCurrentPageContentLoading;
 }
 
 /**
@@ -28,8 +36,10 @@ export function usePageContentReady(ready: boolean): void {
   const announced = useRef(false);
 
   useEffect(() => {
-    declarePageLoading();
-    announced.current = false;
+    if (!ready) {
+      declarePageLoading();
+      announced.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -38,6 +48,8 @@ export function usePageContentReady(ready: boolean): void {
       declarePageReady();
     } else if (!ready) {
       announced.current = false;
+      declarePageLoading();
     }
   }, [ready]);
 }
+

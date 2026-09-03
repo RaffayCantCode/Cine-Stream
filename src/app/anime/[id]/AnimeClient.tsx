@@ -1050,6 +1050,46 @@ interface Episode {
   seasonMalId?: number | null;
 }
 
+function preloadAndDecodeImage(src: string | null | undefined): Promise<boolean> {
+  if (!src || typeof window === "undefined" || !src.startsWith("http")) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    const img = new Image();
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve(true);
+    };
+
+    const timer = setTimeout(finish, 2800); // 2.8s safety fallback
+
+    img.src = src;
+    if (img.complete && img.naturalWidth > 0) {
+      clearTimeout(timer);
+      if ("decode" in img) {
+        img.decode().then(finish).catch(finish);
+      } else {
+        finish();
+      }
+      return;
+    }
+
+    img.onload = () => {
+      clearTimeout(timer);
+      if ("decode" in img) {
+        img.decode().then(finish).catch(finish);
+      } else {
+        finish();
+      }
+    };
+
+    img.onerror = () => {
+      clearTimeout(timer);
+      finish();
+    };
+  });
+}
+
 export default function AnimeClient({ initialData }: { initialData?: any | null } = {}) {
   const router = useRouter();
   const params = useParams();
@@ -1106,7 +1146,22 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     }
     return false;
   });
-  usePageContentReady(!isLoading);
+  const [imagesReady, setImagesReady] = useState(Boolean(initialData));
+  const [episodesTimedOut, setEpisodesTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setEpisodesTimedOut(true);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [id]);
+
+  const isPageReady = Boolean(
+    (!isLoading && (!episodesLoading || episodesTimedOut) && imagesReady) ||
+    error ||
+    (anime as any)?.isHidden
+  );
+  usePageContentReady(isPageReady);
 
   interface FranchiseNode {
     id: number;
@@ -1460,6 +1515,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setRecommendations([]);
     setIsLoading(true);
     setEpisodesLoading(true);
+    setImagesReady(false);
+    setEpisodesTimedOut(false);
     setError(null);
   }, [id]);
 
@@ -1556,9 +1613,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
 
+          const initialBanner = a.backdrop
+            ? (a.backdrop.startsWith("http") ? a.backdrop : `https://image.tmdb.org/t/p/original${a.backdrop}`)
+            : (a.bannerImage || a.poster || "");
+
+          if (a.backdrop && !tmdbBackdropUrl) {
+            setTmdbBackdropUrl(initialBanner);
+          }
+
           // Preload hero banner and poster image immediately
           if (typeof document !== "undefined") {
-            const heroImg = a.bannerImage || a.poster;
+            const heroImg = initialBanner || a.poster;
             if (heroImg && heroImg.startsWith("http")) {
               const link = document.createElement("link");
               link.rel = "preload";
@@ -1569,6 +1634,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             }
           }
 
+          // Preload and decode both critical images before revealing page
+          if (typeof window !== "undefined") {
+            await Promise.allSettled([
+              preloadAndDecodeImage(initialBanner),
+              preloadAndDecodeImage(a.poster),
+            ]);
+          }
+
+          if (cancelled) return;
+          setImagesReady(true);
           setIsLoading(false);
           setAnime(a);
           setFranchiseNodes(data.data.franchiseNodes || []);
@@ -1618,10 +1693,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           if (!anime) {
             setError(e instanceof Error ? e.message : "Failed to load anime");
           }
+          setImagesReady(true);
           setIsLoading(false);
         }
       } finally {
         if (!cancelled) {
+          setImagesReady(true);
           setIsLoading(false);
         }
       }
@@ -2331,24 +2408,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       <Sidebar />
 
       <main className="relative z-10 w-full pt-0 bleed-header select-none">
-        {isLoading ? (
-          <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
-            <div className="w-full h-[62vh] md:h-[75vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">
-              <div className="flex gap-6 items-end w-full">
-                <div className="shrink-0 w-28 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl bg-white/[0.06]" />
-                <div className="flex-1 space-y-3 max-w-2xl pb-2">
-                  <div className="h-3 w-16 rounded-full bg-white/[0.06]" />
-                  <div className="h-8 w-3/4 rounded-lg bg-white/[0.06]" />
-                  <div className="h-4 w-1/2 rounded-lg bg-white/[0.04]" />
-                  <div className="flex gap-2 mt-2">
-                    <div className="h-5 w-14 rounded-full bg-white/[0.05]" />
-                    <div className="h-5 w-16 rounded-full bg-white/[0.05]" />
-                    <div className="h-5 w-12 rounded-full bg-white/[0.05]" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+        {!isPageReady ? (
+          <div className="min-h-screen w-full" />
         ) : (error || (anime as any)?.isHidden) ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl max-w-lg mx-auto space-y-3">
