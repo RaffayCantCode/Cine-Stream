@@ -120,15 +120,42 @@ function loadSpotlightFromSession(): { fetched: boolean; spotlight: any | null }
   return null;
 }
 
-const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v3";
+const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v4";
 const HERO_CACHE_TTL = 5 * 60 * 1000; // 5-minute TTL: instant load from cache, fresh entries after 5 minutes
+const ANILIST_CACHE_KEY = "sv_home_anilist_items_v2";
+
+function saveCachedAniListItems(items: AnimeItem[]): void {
+  if (typeof window === "undefined" || !Array.isArray(items) || items.length === 0) return;
+  try {
+    const valid = items.filter((i) => i && i.id && i.name);
+    if (valid.length > 0) {
+      localStorage.setItem(ANILIST_CACHE_KEY, JSON.stringify(valid.slice(0, 50)));
+    }
+  } catch {}
+}
+
+function loadCachedAniListItems(): AnimeItem[] {
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(ANILIST_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+  return [];
+}
 
 function saveHeroPoolToSession(pool: MediaItem[]): void {
-  if (typeof window === "undefined" || pool.length === 0) return;
+  if (typeof window === "undefined" || !Array.isArray(pool) || pool.length === 0) return;
   try {
-    sessionStorage.setItem(
+    // Keep exactly 3 slides (Movie, TV, Anime)
+    localStorage.setItem(
       SESSION_HERO_POOL_KEY,
-      JSON.stringify({ pool, timestamp: Date.now() })
+      JSON.stringify({ pool: pool.slice(0, 3), timestamp: Date.now() })
     );
   } catch {}
 }
@@ -136,14 +163,14 @@ function saveHeroPoolToSession(pool: MediaItem[]): void {
 function loadHeroPoolFromSession(): MediaItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = sessionStorage.getItem(SESSION_HERO_POOL_KEY);
+    const raw = localStorage.getItem(SESSION_HERO_POOL_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
       if (parsed && Array.isArray(parsed.pool) && parsed.pool.length > 0) {
-        return parsed.pool;
+        return parsed.pool.slice(0, 3);
+      }
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.slice(0, 3);
       }
     }
   } catch {}
@@ -153,7 +180,7 @@ function loadHeroPoolFromSession(): MediaItem[] {
 function isHeroSessionStale(): boolean {
   if (typeof window === "undefined") return true;
   try {
-    const raw = sessionStorage.getItem(SESSION_HERO_POOL_KEY);
+    const raw = localStorage.getItem(SESSION_HERO_POOL_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed.timestamp === "number") {
@@ -248,47 +275,34 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
   );
 
   // ── Anime candidates ──────────────────────────────────────────────────────
-  // AniList items first (best quality metadata + banners), then TMDB anime as supplement
-  let animeCandidates: MediaItem[] = [];
+  // AniList items dynamically fetched from AniList (trending + popular)
+  const rawAnimePool = (Array.isArray(animeList) && animeList.length > 0)
+    ? animeList
+    : loadCachedAniListItems();
 
-  if (Array.isArray(animeList) && animeList.length > 0) {
-    const buildAnimeCard = (a: AnimeItem) => ({
-      id: a.id as any,
-      anilistId: a.id,
-      title: a.name,
-      name: a.name,
-      poster_path: a.poster || a.bannerImage || "",
-      backdrop_path: a.bannerImage || a.poster,
-      media_type: "anime",
-      vote_average: a.rating ? parseFloat(a.rating) : 8.5,
-      vote_count: 500,
-      overview: (a.description || "").replace(/<[^>]*>/g, "").trim(),
-      release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
-      original_language: "ja",
-      genre_ids: [16],
-      isTmdbAnime: false,
-    });
+  const validAnime = rawAnimePool.filter(
+    (a) =>
+      a && a.id && a.name &&
+      ((typeof a.poster === "string" && a.poster.startsWith("http")) ||
+        (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http")))
+  );
 
-    const validAnime = animeList.filter(
-      (a) =>
-        a && a.id && a.name && a.description &&
-        a.description.trim().length >= 20 &&
-        ((typeof a.poster === "string" && a.poster.startsWith("http")) ||
-          (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http")))
-    );
-    animeCandidates.push(...validAnime.map(buildAnimeCard));
-  }
-
-  // Supplement with TMDB anime (Spirited Away, Your Name, Attack on Titan, etc.)
-  const tmdbAnimeFeed = validFeed
-    .filter(
-      (i) =>
-        (isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja")) &&
-        (i.vote_count || 0) >= 100
-    )
-    .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
-    .map((i) => ({ ...i, media_type: "anime" as const, isTmdbAnime: true }));
-  animeCandidates.push(...tmdbAnimeFeed);
+  const animeCandidates = validAnime.map((a) => ({
+    id: (Number(a.id) || a.id) as any,
+    anilistId: String(a.id),
+    title: a.name,
+    name: a.name,
+    poster_path: a.poster || a.bannerImage || "",
+    backdrop_path: a.bannerImage || a.poster || "",
+    media_type: "anime" as const,
+    vote_average: a.rating ? parseFloat(a.rating) : 8.5,
+    vote_count: 500,
+    overview: (a.description || "").replace(/<[^>]*>/g, "").trim(),
+    release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
+    original_language: "ja",
+    genre_ids: [16],
+    isTmdbAnime: false,
+  })) as MediaItem[];
 
   // Deduplicate anime by normalised title
   const uniqueAnimeMap = new Map<string, MediaItem>();
@@ -296,7 +310,7 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     const key = (c.name || c.title || "").toLowerCase().trim();
     if (key && !uniqueAnimeMap.has(key)) uniqueAnimeMap.set(key, c);
   }
-  animeCandidates = Array.from(uniqueAnimeMap.values());
+  const uniqueAnimeCandidates = Array.from(uniqueAnimeMap.values());
 
   // ── Seen-ID tracking (localStorage, 30-day TTL) ───────────────────────────
   const seenIds = loadSeenHeroIds();
@@ -330,25 +344,12 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
 
   const movieCard = pickBestCandidate(movieCandidates);
   const tvCard = pickBestCandidate(tvCandidates);
-  const animeCard = pickBestCandidate(animeCandidates);
+  const animeCard = pickBestCandidate(uniqueAnimeCandidates);
 
   saveSeenHeroIds(seenIds);
 
   const heroPool = [movieCard, tvCard, animeCard].filter(Boolean) as MediaItem[];
-
-  // Pad to 3 if any slot came up null (very sparse feed)
-  if (heroPool.length < 3) {
-    const heroIds = new Set(heroPool.map((h) => String(h.id)));
-    for (const item of validFeed.sort((a, b) => heroQualityScore(b) - heroQualityScore(a))) {
-      if (!heroIds.has(String(item.id))) {
-        heroPool.push(item);
-        heroIds.add(String(item.id));
-        if (heroPool.length >= 3) break;
-      }
-    }
-  }
-
-  return heroPool;
+  return heroPool.slice(0, 3);
 }
 
 // ─── Session-stable shuffle ───────────────────────────────────────────────────
@@ -656,16 +657,21 @@ export default function Home() {
       }
       if (loadError) setLoadError(null);
 
-      // Periodically refresh hero pool when navigating back after 5+ minutes
-      const now = Date.now();
-      if (now - lastHeroShuffleTime > HERO_CACHE_TTL && globalHomeCache.heroFeed && globalHomeCache.heroFeed.length > 0) {
-        const freshPool = buildHeroPool(globalHomeCache.heroFeed, globalHomeCache.animeList);
+      // Only rebuild hero pool when the localStorage TTL has actually expired — same gate
+      // used by fresh page loads. This prevents back-navigation from changing the hero mid-session.
+      if (isHeroSessionStale() && globalHomeCache.heroFeed && globalHomeCache.heroFeed.length > 0) {
+        const freshPool = buildHeroPool(globalHomeCache.heroFeed, globalHomeCache.animeList || loadCachedAniListItems());
         if (freshPool.length >= 3) {
-          lastHeroShuffleTime = now;
           setHeroPool(freshPool);
           saveHeroPoolToSession(freshPool);
           globalHomeCache.heroPool = freshPool;
         }
+      } else {
+        // Cache is still fresh (< 5 mins)! Maintain the EXACT same 3 hero cards!
+        const saved = loadHeroPoolFromSession();
+        const active = saved.length >= 3 ? saved : globalHomeCache.heroPool;
+        setHeroPool(active);
+        globalHomeCache.heroPool = active;
       }
       return;
     }
@@ -736,8 +742,8 @@ export default function Home() {
         }).catch(() => ({ items: [], trending: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        // Await homeData first — edge-cached TMDB endpoint returns in <100ms
-        const homeData = await homePromise;
+        // Await homeData and dynamic animePromise together in parallel
+        const [homeData, animeResponse] = await Promise.all([homePromise, animePromise]);
         if (cancelled) return;
 
         if (homeData) {
@@ -793,17 +799,20 @@ export default function Home() {
             ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja")
           );
 
-          const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].map((item) => ({
-            id: String(item.id),
-            name: item.name || item.title || "Anime",
-            poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : "",
-            bannerImage: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : undefined,
-            type: item.media_type === "movie" ? "MOVIE" : "TV",
-            rating: item.vote_average ? String(item.vote_average.toFixed(1)) : null,
-            description: item.overview || "",
-            genres: ["Animation", "Anime"],
-            episodes: { sub: null, dub: null },
-          }));
+          // Dynamic AniList anime (trending & popular)
+          const rawDynamicAnime = ((animeResponse as any)?.items && (animeResponse as any).items.length > 0)
+            ? (animeResponse as any).items
+            : ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
+              ? (animeResponse as any).trending
+              : loadCachedAniListItems();
+
+          if (rawDynamicAnime.length > 0) {
+            saveCachedAniListItems(rawDynamicAnime);
+          }
+
+          const finalAnimeList = rawDynamicAnime.slice(0, 18);
+          setAnimeList(finalAnimeList);
+          setAnimeLoading(false);
 
           const recPool = filterExcludeAnime([...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe]);
           const daySalt = Math.floor(Date.now() / 86400000).toString();
@@ -820,7 +829,20 @@ export default function Home() {
             ...animeTvSafe,
           ];
 
-          const fullHeroPool = buildHeroPool(fullHeroFeed, initialAnimeItems);
+          // Check if existing 5-minute pool in localStorage is still fresh
+          const existingSaved = loadHeroPoolFromSession();
+          const shouldKeepExisting = !isHeroSessionStale() && existingSaved.length >= 3;
+
+          let chosenHeroPool: MediaItem[];
+          if (shouldKeepExisting) {
+            chosenHeroPool = existingSaved;
+          } else {
+            // Build fresh hero pool with genuine dynamic AniList anime:
+            chosenHeroPool = buildHeroPool(fullHeroFeed, rawDynamicAnime);
+            if (chosenHeroPool.length >= 3) {
+              saveHeroPoolToSession(chosenHeroPool);
+            }
+          }
 
           setTrending(trendingSafe);
           setPopular(sessionShuffle(popularSafe, "popular"));
@@ -830,26 +852,18 @@ export default function Home() {
           setRecent(heroRecentSafe);
           setTrendingMoviesToday(trendingMoviesTodaySafe);
           setTrendingTvToday(trendingTvTodaySafe);
-          setAnimeList(initialAnimeItems);
           setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
           setGenres((homeData.genres?.genres || []).slice(0, 18));
           setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
           setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
           setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
           setHeroFeed(fullHeroFeed);
+          setHeroPool(chosenHeroPool);
 
-          if (fullHeroPool.length > 0) {
-            setHeroPool((current) => {
-              if (!current || current.length < 3 || isHeroSessionStale()) {
-                saveHeroPoolToSession(fullHeroPool);
-                return fullHeroPool;
-              }
-              return current;
-            });
-
+          if (chosenHeroPool.length > 0) {
             // Preload hero slide 1 backdrop image immediately
-            if (typeof document !== "undefined" && fullHeroPool[0]?.backdrop_path) {
-              const bg = fullHeroPool[0].backdrop_path;
+            if (typeof document !== "undefined" && chosenHeroPool[0]?.backdrop_path) {
+              const bg = chosenHeroPool[0].backdrop_path;
               const link = document.createElement("link");
               link.rel = "preload";
               link.as = "image";
@@ -859,7 +873,7 @@ export default function Home() {
             }
 
             // Pre-warm logos for hero items so artwork displays first with 0 delay
-            fullHeroPool.slice(0, 3).forEach((hItem) => {
+            chosenHeroPool.slice(0, 3).forEach((hItem) => {
               const hTitle = hItem.title || hItem.name || "";
               const anilistId = (hItem as any)?.anilistId;
               const isAnime = hItem.media_type === "anime" || !!anilistId || isTmdbAnime(hItem);
@@ -886,59 +900,6 @@ export default function Home() {
           // Release hero and top rows immediately
           setIsLoading(false);
 
-          // Background resolve anime and collections in parallel
-          animePromise.then((animeResponse) => {
-            if (cancelled) return;
-            const rawAnimeList = ((animeResponse as any)?.items && (animeResponse as any).items.length > 0)
-              ? (animeResponse as any).items
-              : ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
-                ? (animeResponse as any).trending
-                : initialAnimeItems;
-            const finalAnimeList = rawAnimeList.slice(0, 18);
-
-            setAnimeList(finalAnimeList);
-            setAnimeLoading(false);
-
-            // If the session cache is still fresh, the hero pool was already restored from session
-            // (movie, TV, anime all locked in). Don't let the background AniList fetch overwrite the
-            // anime slot — that would make it change on every refresh, inconsistent with movie/TV.
-            if (!isHeroSessionStale()) {
-              if (globalHomeCache) globalHomeCache.animeList = finalAnimeList;
-              return;
-            }
-
-            const updatedHeroPool = buildHeroPool(fullHeroFeed, rawAnimeList);
-            if (updatedHeroPool.length >= 3) {
-              setHeroPool((current) => {
-                if (current && current.length >= 3) {
-                  const newAnime = updatedHeroPool[2];
-                  // Only update anime slot if it's a genuinely different entry
-                  if (newAnime && String(newAnime.id) !== String(current[2]?.id)) {
-                    const merged = [current[0], current[1], newAnime];
-                    saveHeroPoolToSession(merged);
-                    if (globalHomeCache) globalHomeCache.heroPool = merged;
-                    return merged;
-                  }
-                  return current;
-                }
-                if (current && current.length >= 2) {
-                  const merged = [current[0], current[1], updatedHeroPool[2]];
-                  saveHeroPoolToSession(merged);
-                  if (globalHomeCache) globalHomeCache.heroPool = merged;
-                  return merged;
-                }
-                saveHeroPoolToSession(updatedHeroPool);
-                return updatedHeroPool;
-              });
-            }
-
-            if (globalHomeCache) {
-              globalHomeCache.animeList = finalAnimeList;
-            }
-          }).catch(() => {
-            if (!cancelled) setAnimeLoading(false);
-          });
-
           collectionsPromise.then((collectionsData) => {
             if (cancelled) return;
             const validCollections = (collectionsData?.collections && collectionsData.collections.length > 0)
@@ -961,10 +922,10 @@ export default function Home() {
             heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
             heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
             heroFeed: fullHeroFeed,
-            heroPool: fullHeroPool,
+            heroPool: chosenHeroPool,
             recommended: recPool,
             genres: (homeData.genres?.genres || []).slice(0, 18),
-            animeList: initialAnimeItems,
+            animeList: finalAnimeList,
             collections: INITIAL_COLLECTIONS,
             spotlightBanner: globalSpotlightCache?.spotlight ?? spotlightBanner ?? null,
             customSections: globalCustomSectionsCache ?? (customSections.length > 0 ? customSections : undefined),

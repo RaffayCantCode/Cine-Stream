@@ -406,10 +406,14 @@ export default function MangaReaderClient({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [brightness]);
 
-  // Handle tap to toggle controls with touch drag discrimination
+  // Handle tap to toggle controls on mobile with proper scroll discrimination
+  // A "tap" = touchstart + touchend with minimal movement and short duration
+  const touchStartTime = useRef<number>(0);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length > 0) {
       touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      touchStartTime.current = Date.now();
     }
   };
 
@@ -417,9 +421,17 @@ export default function MangaReaderClient({
     if (e.changedTouches.length > 0) {
       const dx = Math.abs(e.changedTouches[0].clientX - touchStartPos.current.x);
       const dy = Math.abs(e.changedTouches[0].clientY - touchStartPos.current.y);
-      // Only toggle if tap wasn't a scroll or swipe
-      if (dx < 10 && dy < 10) {
-        setShowControls((prev) => !prev);
+      const elapsed = Date.now() - touchStartTime.current;
+      // Tap = minimal movement (< 12px in any direction) AND short duration (< 300ms)
+      if (dx < 12 && dy < 12 && elapsed < 300) {
+        // Close any open menus first; if none open, toggle the bar
+        if (chapterPickerOpen || brightnessPickerOpen || mobileNavOpen) {
+          setChapterPickerOpen(false);
+          setBrightnessPickerOpen(false);
+          setMobileNavOpen(false);
+        } else {
+          setShowControls((prev) => !prev);
+        }
       }
     }
   };
@@ -829,7 +841,6 @@ export default function MangaReaderClient({
         }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        onClick={() => setShowControls((prev) => !prev)}
         className="flex-1 flex flex-col items-center justify-start min-h-screen w-full cursor-default overflow-x-hidden"
       >
         <div
@@ -843,6 +854,7 @@ export default function MangaReaderClient({
         >
           {pagesData.pageUrls.map((url, idx) => {
             const pageNum = idx + 1;
+            const dataSaverUrl = pagesData.dataSaverUrls?.[idx] || "";
             return (
               <div
                 key={pageNum}
@@ -865,9 +877,19 @@ export default function MangaReaderClient({
                   }}
                   onError={(e) => {
                     const target = e.currentTarget;
-                    if (!target.dataset.retried) {
-                      target.dataset.retried = "true";
-                      target.src = `${url}${url.includes("?") ? "&" : "?"}_retry=${Date.now()}`;
+                    const retryCount = parseInt(target.dataset.retryCount || "0", 10);
+                    if (retryCount < 3) {
+                      target.dataset.retryCount = String(retryCount + 1);
+                      // Retry 1 & 2: same URL with cache-bust after a small delay
+                      // Retry 3: fall back to data-saver URL if available
+                      const delay = retryCount < 2 ? 800 : 2000;
+                      setTimeout(() => {
+                        if (retryCount === 2 && dataSaverUrl) {
+                          target.src = dataSaverUrl;
+                        } else {
+                          target.src = `${url}${url.includes("?") ? "&" : "?"}_r=${retryCount + 1}_${Date.now()}`;
+                        }
+                      }, delay);
                     }
                   }}
                   className="w-full h-auto object-contain block select-none transition-[filter] duration-150"

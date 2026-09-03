@@ -192,12 +192,9 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
   let link = (item as any).targetUrl || (item as any).target_url;
   if (!link) {
-    if (anilistId) {
-      link = `/anime/${anilistId}`;
-    } else if (item.media_type === "anime" && typeof item.id === "string" && !isNaN(Number(item.id)) && !(item as any).isTmdbAnime) {
-      link = `/anime/${item.id}`;
-    } else if (isAnime) {
-      link = `/api/anime/redirect?tmdbId=${item.id}&type=${isMovie ? 'movie' : 'tv'}&title=${encodeURIComponent(title)}`;
+    if (anilistId || item.media_type === "anime") {
+      const animeId = anilistId || item.id;
+      link = `/anime/${animeId}`;
     } else if (isTv) {
       link = `/tv/${item.id}`;
     } else {
@@ -207,10 +204,9 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
 
   // Direct watch link
   let watchLink = link;
-  if (anilistId) {
-    watchLink = `/watch/anime/${anilistId}/1`;
-  } else if (isAnime) {
-    watchLink = `/watch/anime/${item.id}/1`;
+  if (anilistId || item.media_type === "anime") {
+    const animeId = anilistId || item.id;
+    watchLink = `/watch/anime/${animeId}/1`;
   } else if (isTv) {
     watchLink = `/watch/tv/${item.id}/1/1`;
   } else {
