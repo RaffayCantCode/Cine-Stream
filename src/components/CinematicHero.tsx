@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { VolumeX, Volume2, X, Play, Pause, Film } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
 
 export const CinematicHeroContext = React.createContext<{ playTrailer: () => void; hasTrailer: boolean }>({
   playTrailer: () => {},
@@ -41,6 +42,45 @@ export function CinematicHero({
   theme = "movie",
   children,
 }: CinematicHeroProps) {
+  let activeTheme = "global";
+  try {
+    const themeContext = useTheme();
+    if (themeContext?.theme) activeTheme = themeContext.theme;
+  } catch {}
+  const isGlobalTheme = activeTheme === "global";
+
+  const heroThemeStyles = useMemo(() => {
+    switch (activeTheme) {
+      case "oled":
+        return {
+          bottom: "from-[#000000] via-[#000000]/90 to-transparent",
+          side: "from-[#000000]/90 via-[#000000]/40 to-transparent",
+        };
+      case "glass":
+        return {
+          bottom: "from-[#080d1e]/85 via-[#080d1e]/40 to-transparent",
+          side: "from-[#080d1e]/80 via-[#080d1e]/25 to-transparent",
+        };
+      case "cinema":
+        return {
+          bottom: "from-[#140509] via-[#140509]/90 to-transparent",
+          side: "from-[#140509]/90 via-[#140509]/40 to-transparent",
+        };
+      case "wisteria":
+        return {
+          bottom: "from-[#0e071c] via-[#0e071c]/90 to-transparent",
+          side: "from-[#0e071c]/90 via-[#0e071c]/40 to-transparent",
+        };
+      case "solaris":
+        return {
+          bottom: "from-[#100b05] via-[#100b05]/90 to-transparent",
+          side: "from-[#100b05]/90 via-[#100b05]/40 to-transparent",
+        };
+      default:
+        return null;
+    }
+  }, [activeTheme]);
+
   const [activeTrailerId, setActiveTrailerId] = useState<string | null>(null);
   const [trailerReady, setTrailerReady] = useState(false);
   const [trailerVisible, setTrailerVisible] = useState(false);
@@ -434,8 +474,14 @@ export function CinematicHero({
 
   return (
     <div ref={heroRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} className="relative w-full flex flex-col">
-      {/* ── Background layer ──────────────────────────────────────── */}
-      <div className="absolute inset-0 overflow-hidden z-0">
+      {/* ── Background layer with smooth gradient bottom fade (eliminates cutoff line) ── */}
+      <div 
+        className="absolute inset-0 overflow-hidden z-0 pointer-events-none"
+        style={{
+          maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0.7) 65%, rgba(0,0,0,0.2) 88%, rgba(0,0,0,0) 100%)",
+          WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0.7) 65%, rgba(0,0,0,0.2) 88%, rgba(0,0,0,0) 100%)",
+        }}
+      >
         {/* Backdrop image — visible when trailer is not visible */}
         {backdropUrl && (
           <img
@@ -473,11 +519,21 @@ export function CinematicHero({
           </div>
         )}
 
-        {/* Gradient overlays */}
-        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-t from-background via-background/60 to-transparent z-10`} />
-        <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-r from-background/90 via-background/40 to-transparent z-10`} />
-        <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-background via-background/95 to-transparent z-10" />
-        <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-background/60 to-transparent z-10" />
+        {/* Gradient overlays — In global theme, translucent for ambient backdrop glow. In non-global themes, blends into theme background color */}
+        {heroThemeStyles ? (
+          <>
+            <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-t ${heroThemeStyles.bottom} z-10`} />
+            <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-r ${heroThemeStyles.side} z-10`} />
+            <div className={`absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t ${heroThemeStyles.bottom} z-10`} />
+          </>
+        ) : (
+          <>
+            <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-t from-[#07080d]/80 via-transparent to-transparent z-10`} />
+            <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-r from-[#07080d]/85 via-[#07080d]/35 to-transparent z-10`} />
+            <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#07080d]/60 via-[#07080d]/20 to-transparent z-10" />
+          </>
+        )}
+        <div className="absolute top-0 inset-x-0 h-28 bg-gradient-to-b from-black/50 to-transparent z-10" />
       </div>
 
       {/* ── Fullscreen Video Modal for Mobile / Direct Trailer Click ───── */}

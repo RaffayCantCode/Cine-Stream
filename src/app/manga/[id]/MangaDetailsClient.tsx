@@ -15,6 +15,7 @@ import {
 } from "@/lib/manga-history";
 import { useWatchlist } from "@/context/WatchlistContext";
 import { fetchJson } from "@/lib/utils";
+import { useTheme } from "@/context/ThemeContext";
 import { 
   BookOpen, 
   ArrowLeft, 
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 
 export interface MangaDetailsClientProps {
   id: string;
@@ -233,9 +235,33 @@ export default function MangaDetailsClient({
     return chapters.find((c) => c.id === progress.chapterId) || null;
   }, [progress, chapters]);
 
+  const mangaBackdropUrl = manga?.bannerImage || manga?.coverImage || (manga as any)?.image || null;
+
+  const { theme } = useTheme();
+  const isGlobalTheme = theme === "global";
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
+
   return (
     <div
-      className="min-h-screen bg-background text-foreground pb-24 select-none"
+      className={`relative min-h-screen ${pageBgClass} text-foreground pb-24 select-none overflow-x-clip transition-colors duration-500`}
       style={
         {
           "--primary": "48 100% 50%",
@@ -245,9 +271,12 @@ export default function MangaDetailsClient({
         } as React.CSSProperties
       }
     >
+      {/* Ambient Backdrop Glow - changes background color according to media backdrop colors (global theme only) */}
+      <AmbientBackdropGlow backdropUrl={mangaBackdropUrl} />
+
       <Sidebar />
 
-      <main className="w-full pt-8 md:pt-24 lg:pt-28">
+      <main className="relative z-10 w-full pt-8 md:pt-24 lg:pt-28">
         {/* Error State */}
         {error && !manga && (
           <div className="max-w-4xl mx-auto px-6 py-20 text-center">

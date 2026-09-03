@@ -15,16 +15,7 @@ const EMPTY_PALETTE: AmbientPalette = {
 };
 
 export function useAmbientColor(imageUrl?: string | null): AmbientPalette {
-  let activeTheme = "global";
-  try {
-    const themeContext = useTheme();
-    if (themeContext?.theme) {
-      activeTheme = themeContext.theme;
-    }
-  } catch {}
-
   const [palette, setPalette] = useState<AmbientPalette>(() => {
-    if (activeTheme !== "global") return EMPTY_PALETTE;
     if (!imageUrl) return buildAmbientPalette(99, 102, 241);
     if (cache.has(imageUrl)) return cache.get(imageUrl)!;
     if (typeof window !== "undefined") {
@@ -42,13 +33,6 @@ export function useAmbientColor(imageUrl?: string | null): AmbientPalette {
   });
 
   useEffect(() => {
-    // If a non-global theme (OLED, Cinema, Glass, Wisteria, Solaris, or Custom) is selected,
-    // do not override with poster ambient color — respect the theme's colors!
-    if (activeTheme !== "global") {
-      setPalette(EMPTY_PALETTE);
-      return;
-    }
-
     if (!imageUrl) return;
 
     if (cache.has(imageUrl)) {
@@ -72,11 +56,7 @@ export function useAmbientColor(imageUrl?: string | null): AmbientPalette {
     return () => {
       isMounted = false;
     };
-  }, [imageUrl, activeTheme]);
-
-  if (activeTheme !== "global") {
-    return EMPTY_PALETTE;
-  }
+  }, [imageUrl]);
 
   return palette;
 }

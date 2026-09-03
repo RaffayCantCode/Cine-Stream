@@ -2,7 +2,7 @@
 
 import { memo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, User } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Person {
   id: number;
@@ -18,8 +18,22 @@ interface CastRowProps {
 }
 
 export const CastRow = memo(function CastRow({ cast, crew }: CastRowProps) {
-  // Combine directors/creators with cast
-  const directors = crew.filter((c) => c.job === "Director" || c.job === "Creator");
+  const [failedImageIds, setFailedImageIds] = useState<Set<number>>(new Set());
+
+  const hasValidPicture = (p: Person) =>
+    Boolean(
+      p?.profile_path &&
+      typeof p.profile_path === "string" &&
+      p.profile_path.trim().length > 0 &&
+      p.profile_path !== "null" &&
+      !p.profile_path.includes("null") &&
+      !failedImageIds.has(p.id)
+    );
+
+  // Combine directors/creators with cast (only those with a valid picture)
+  const directors = (crew || []).filter(
+    (c) => (c.job === "Director" || c.job === "Creator") && hasValidPicture(c)
+  );
   
   // Create a combined list, removing duplicates if someone directed AND acted
   const seenIds = new Set<number>();
@@ -32,15 +46,15 @@ export const CastRow = memo(function CastRow({ cast, crew }: CastRowProps) {
     }
   }
 
-  for (const c of cast) {
-    if (!seenIds.has(c.id)) {
+  for (const c of (cast || [])) {
+    if (!seenIds.has(c.id) && hasValidPicture(c)) {
       const charName = c.character?.toLowerCase() || "";
       if (
         !charName.includes("background") &&
         !charName.includes("uncredited") &&
         !charName.includes("extra") &&
         !charName.includes("additional") &&
-        combined.length < 15
+        combined.length < 24
       ) {
         seenIds.add(c.id);
         combined.push(c);
@@ -135,19 +149,20 @@ export const CastRow = memo(function CastRow({ cast, crew }: CastRowProps) {
               className="w-[100px] shrink-0 text-center group cursor-pointer"
             >
               <div className="aspect-[2/3] rounded-xl bg-card overflow-hidden mb-2.5 ring-1 ring-white/[0.06] transition-transform duration-300 group-hover:scale-105 group-hover:ring-primary/50 relative">
-                {person.profile_path ? (
-                  <img
-                    src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
-                    alt={person.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-muted">
-                    <User className="w-8 h-8 text-white/20" />
-                  </div>
-                )}
+                <img
+                  src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
+                  alt={person.name}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
+                  onError={() => {
+                    setFailedImageIds((prev) => {
+                      const next = new Set(prev);
+                      next.add(person.id);
+                      return next;
+                    });
+                  }}
+                />
                 {/* Director Badge */}
                 {person.job && (
                   <div className="absolute top-1 right-1 bg-primary text-primary-foreground text-[9px] font-black px-1.5 py-0.5 rounded backdrop-blur-sm uppercase tracking-wider shadow-lg">

@@ -119,7 +119,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   }
 
   const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null;
-  const backdropUrl = movie.backdrop_path ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}` : null;
+  const backdropUrl = movie.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : null;
   const year = movie.release_date ? movie.release_date.slice(0, 4) : "";
   const rating = movie.vote_average ?? 0;
 

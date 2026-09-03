@@ -12,6 +12,7 @@ import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film, Layers } from
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { useMediaLogo } from "@/components/MediaLogo";
+import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 
 function TvHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -34,6 +35,7 @@ import { format } from "date-fns";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { useTheme } from "@/context/ThemeContext";
 
 const TV_CHUNK_SIZE = 10;
 
@@ -232,7 +234,7 @@ export default function TvClient() {
         if (data.backdrop_path) {
           const link = document.createElement("link");
           link.rel = "preload"; link.as = "image";
-          link.href = `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`;
+          link.href = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
           link.fetchPriority = "high";
           document.head.appendChild(link);
         }
@@ -437,7 +439,7 @@ export default function TvClient() {
   }
 
   const backdropUrl = show.backdrop_path
-    ? `https://image.tmdb.org/t/p/w1280${show.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/original${show.backdrop_path}`
     : null;
   const posterUrl = show.poster_path
     ? `https://image.tmdb.org/t/p/w342${show.poster_path}`
@@ -502,11 +504,42 @@ export default function TvClient() {
     };
   };
 
+  const tvBackdropUrl = show.backdrop_path
+    ? `https://image.tmdb.org/t/p/original${show.backdrop_path}`
+    : show.poster_path
+    ? `https://image.tmdb.org/t/p/original${show.poster_path}`
+    : null;
+
+  const { theme } = useTheme();
+  const isGlobalTheme = theme === "global";
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
+
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
+    <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-24 overflow-x-clip transition-colors duration-500`}>
+      {/* Ambient Backdrop Glow - changes background color according to media backdrop colors (global theme only) */}
+      <AmbientBackdropGlow backdropUrl={tvBackdropUrl} />
+
       <Sidebar />
 
-      <main className="w-full bleed-header select-none">
+      <main className="relative z-10 w-full bleed-header select-none">
       <CinematicHero
         backdropPath={show.backdrop_path || show.poster_path}
         trailerId={seasonTrailerId || mainTrailerId}
@@ -912,12 +945,9 @@ export default function TvClient() {
           if (filtered.length >= 6) {
             return (
               <section className="pt-4">
-                <div className="flex items-center gap-3 mb-8">
+                <div className="flex items-center gap-3 mb-6">
                   <div className="w-1 h-5 bg-primary rounded-full" />
-                  <div>
-                    <h2 className="text-base font-bold text-white tracking-wide">More Like This</h2>
-                    <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
-                  </div>
+                  <h2 className="text-base font-bold text-white tracking-wide">More Like This</h2>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6">
                   {filtered.slice(0, 20).map((item: any, i: number) => {

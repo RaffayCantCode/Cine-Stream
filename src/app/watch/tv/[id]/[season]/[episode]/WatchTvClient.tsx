@@ -183,7 +183,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
   }
 
   const posterUrl = show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null;
-  const backdropUrl = show.backdrop_path ? `https://image.tmdb.org/t/p/w1280${show.backdrop_path}` : null;
+  const backdropUrl = show.backdrop_path ? `https://image.tmdb.org/t/p/original${show.backdrop_path}` : null;
   const year = show.first_air_date ? show.first_air_date.slice(0, 4) : "";
   const rating = show.vote_average ?? 0;
 

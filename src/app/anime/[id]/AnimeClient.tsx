@@ -14,10 +14,12 @@ import { WatchlistButton } from "@/components/WatchlistButton";
 import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, EpisodeChunkBar, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { useMediaLogo } from "@/components/MediaLogo";
+import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { cleanAnimeDescription } from "@/lib/anime-fetch";
+import { useTheme } from "@/context/ThemeContext";
 import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
 import { isEpisodeAvailable, isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv, Compass, LayoutGrid, StretchHorizontal, Clock } from "lucide-react";
@@ -2252,12 +2254,38 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     tick();
   }, [episodePage, currentSeasonId, id, currentSeasonEps.length]);
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  const { theme } = useTheme();
+  const isGlobalTheme = theme === "global";
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
+
+  const animeBackdropUrl = displayBanner || displayPoster || null;
+
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20">
+    <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}>
+      {/* Ambient Backdrop Glow - changes background color according to media backdrop colors (global theme only) */}
+      <AmbientBackdropGlow backdropUrl={animeBackdropUrl} />
+
       <Sidebar />
 
-      <main className="w-full pt-0 bleed-header select-none">
+      <main className="relative z-10 w-full pt-0 bleed-header select-none">
         {isLoading ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-6 animate-pulse">
             <div className="w-full h-[62vh] md:h-[75vh] rounded-2xl bg-gradient-to-br from-[#111844]/20 to-background flex items-end p-8">

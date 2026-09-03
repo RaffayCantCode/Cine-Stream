@@ -107,11 +107,6 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
           {year && <span>•</span>}
           <span>{isAnime ? "Anime" : isMovie ? "Movie" : "TV"}</span>
         </div>
-        {item.reason && (
-          <div className="text-[10px] font-medium text-emerald-400 mt-0.5 line-clamp-1">
-            ✨ {item.reason}
-          </div>
-        )}
       </div>
     </div>
   );

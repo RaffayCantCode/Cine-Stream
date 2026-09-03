@@ -135,136 +135,158 @@
     --safe-card-border: rgba(255, 255, 255, 0.25);
   }
 
-  /* Liquid Glass Palette Background: soft obsidian liquid slate with subtle ambient glass glows */
-  /* Base layer is a static opaque gradient (no per-frame repaint); the drifting
-     aurora lives on a GPU-composited fixed layer animated via transform only. */
-  html.theme-glass.dark body {
-    background: linear-gradient(160deg, #090b12 0%, #111422 50%, #090b12 100%);
+  /* ============ 1. LIQUID GLASS ============ */
+  html.theme-glass,
+  html.theme-glass.dark {
+    --background: 228 50% 7%;
+    --foreground: 210 40% 98%;
+    --card: 228 35% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 228 35% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 199 89% 60%; /* Liquid Cyan #38BDF8 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 228 30% 14%;
+    --secondary-foreground: 210 40% 95%;
+    --muted: 228 25% 12%;
+    --muted-foreground: 220 20% 75%;
+    --accent: 265 89% 68%; /* Liquid Electric Violet */
+    --accent-foreground: 0 0% 100%;
+    --border: 0 0% 100% / 0.16;
+    --input: 0 0% 100% / 0.10;
+    --ring: 199 89% 60%;
+    --safe-card-border: rgba(255, 255, 255, 0.20);
+    background-color: #080d1e !important;
+    background: #080d1e !important;
   }
+
+  html.theme-glass body,
+  html.theme-glass.dark body {
+    background: radial-gradient(120% 120% at 50% 0%, #0d162d 0%, #080d1e 50%, #050814 100%) !important;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Liquid Luminous Aurora Background Mesh */
+  html.theme-glass body::before,
   html.theme-glass.dark body::before {
     content: "";
     position: fixed;
-    inset: -10%;
-    z-index: -1;
+    inset: -15%;
+    z-index: 0;
     pointer-events: none;
+
     background:
-      radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.12) 0%, transparent 45%),
-      radial-gradient(circle at 85% 12%, rgba(168, 85, 247, 0.12) 0%, transparent 45%),
-      radial-gradient(circle at 50% 60%, rgba(236, 72, 153, 0.08) 0%, transparent 50%),
-      radial-gradient(circle at 85% 85%, rgba(52, 211, 153, 0.08) 0%, transparent 45%);
-    background-size: 130% 130%, 120% 120%, 140% 140%, 130% 130%;
-    will-change: transform;
-    animation: liquid-glass-aurora 24s ease-in-out infinite alternate;
-  }
-  @keyframes liquid-glass-aurora {
-    0%   { transform: translate3d(-1.5%, -1%, 0) scale(1); }
-    50%  { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
-    100% { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+      radial-gradient(ellipse 55% 45% at 18% 18%, rgba(56, 189, 248, 0.48), transparent 60%),
+      radial-gradient(ellipse 50% 50% at 85% 16%, rgba(168, 85, 247, 0.44), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 52% 52%, rgba(236, 72, 153, 0.28), transparent 62%),
+      radial-gradient(ellipse 55% 50% at 82% 85%, rgba(45, 212, 191, 0.38), transparent 60%),
+      radial-gradient(ellipse 50% 45% at 16% 82%, rgba(99, 102, 241, 0.42), transparent 60%);
+
+    filter: blur(65px);
+    animation: liquidMove 16s ease-in-out infinite alternate;
   }
 
-  /* Refined Glass Panels */
-  html.theme-glass.dark .glass-card,
-  html.theme-glass.dark .premium-glass,
-  html.theme-glass.dark .glass-pill {
-    background: rgba(255, 255, 255, 0.06) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-top-color: rgba(255, 255, 255, 0.35) !important;
-    border-left-color: rgba(255, 255, 255, 0.22) !important;
-    box-shadow:
-      0 20px 50px -15px rgba(0, 0, 0, 0.6),
-      inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
-    backdrop-filter: blur(16px) saturate(150%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
-  }
-
-  html.theme-glass.dark .glass-card {
-    position: relative;
-    overflow: hidden;
-  }
-  html.theme-glass.dark .glass-card::before {
+  /* Refractive specular sheen overhead */
+  html.theme-glass body::after,
+  html.theme-glass.dark body::after {
     content: "";
-    position: absolute;
+    position: fixed;
     inset: 0;
+    z-index: 0;
     pointer-events: none;
-    background: linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.25) 0%,
-      rgba(255, 255, 255, 0.04) 24%,
-      transparent 42%,
-      transparent 68%,
-      rgba(255, 255, 255, 0.08) 100%
-    );
-    z-index: 1;
-  }
-  /* Iridescent Liquid Light Streak */
-  html.theme-glass.dark .glass-card::after {
-    content: "";
-    position: absolute;
-    top: -70%;
-    left: -60%;
-    height: 240%;
-    width: 40%;
-    pointer-events: none;
-    z-index: 1;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.25),
-      rgba(200, 220, 255, 0.15),
-      transparent
-    );
-    transform: rotate(20deg) translateX(-180%);
-    animation: liquid-glass-streak 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+
+    background:
+      radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.12), transparent 45%),
+      radial-gradient(circle at 80% 50%, rgba(168, 85, 247, 0.08), transparent 40%);
+
+    opacity: 0.9;
   }
 
-  /* Refined Glass Floating Sidebar — modest blur + higher opacity so the
-     fixed sidebar doesn't re-blur the whole page behind it on every scroll. */
-  html.theme-glass.dark aside {
-    background: rgba(15, 18, 32, 0.72) !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
-    backdrop-filter: blur(16px) saturate(160%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+  @keyframes liquidMove {
+    0% {
+      transform: translate3d(-3%, -2%, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(2.5%, 3%, 0) scale(1.06);
+    }
+    100% {
+      transform: translate3d(-1.5%, 2%, 0) scale(1.03);
+    }
   }
 
-  /* Translucent Card Surfaces — translucent + hairline border only.
-     backdrop-filter is intentionally avoided here: it's applied to hundreds
-     of grid cards at once and forces a re-blur behind every card while
-     scrolling, which is the #1 scroll-lag culprit. */
+  /* True Liquid Glass UI effect for Cards, Pills & Surfaces */
+  .glass,
+  html.theme-glass .glass-card,
+  html.theme-glass.dark .glass-card,
+  html.theme-glass .premium-glass,
+  html.theme-glass.dark .premium-glass,
+  html.theme-glass .glass-pill,
+  html.theme-glass.dark .glass-pill,
+  html.theme-glass .bg-card,
   html.theme-glass.dark .bg-card,
-  html.theme-glass.dark .bg-card\/95,
-  html.theme-glass.dark .bg-card\/90,
-  html.theme-glass.dark .bg-card\/80,
-  html.theme-glass.dark .bg-card\/60,
-  html.theme-glass.dark .bg-card\/40 {
-    background: rgba(255, 255, 255, 0.06) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-top-color: rgba(255, 255, 255, 0.25) !important;
+  html.theme-glass [class*="bg-card"],
+  html.theme-glass.dark [class*="bg-card"] {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
+    backdrop-filter: blur(24px) saturate(180%) contrast(104%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) contrast(104%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.38) !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.22) !important;
+    box-shadow:
+      0 14px 38px -8px rgba(0, 0, 0, 0.45),
+      0 0 20px -2px rgba(56, 189, 248, 0.12),
+      inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.30),
+      inset 0 -1px 2px 0 rgba(0, 0, 0, 0.25) !important;
+    border-radius: 20px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Frosted Top Chrome Header */
-  html.theme-glass.dark .bg-background\/95 {
-    background-color: rgba(9, 11, 18, 0.85) !important;
-    backdrop-filter: blur(16px) saturate(160%);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
+  /* Fluidity: Reactive light shimmer & distortion on hover/touch */
+  html.theme-glass .glass:hover,
+  html.theme-glass .glass-card:hover,
+  html.theme-glass.dark .glass-card:hover,
+  html.theme-glass .premium-glass:hover,
+  html.theme-glass.dark .premium-glass:hover,
+  html.theme-glass .group:hover [class*="aspect-"],
+  html.theme-glass.dark .group:hover [class*="aspect-"] {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.32) !important;
+    border-top-color: rgba(255, 255, 255, 0.70) !important;
+    box-shadow:
+      0 20px 48px -10px rgba(56, 189, 248, 0.28),
+      0 0 28px rgba(168, 85, 247, 0.22),
+      inset 0 2px 1.5px 0 rgba(255, 255, 255, 0.50) !important;
+    transform: translateY(-3px) scale(1.015);
   }
 
-  /* Smooth Gradient Vignettes for Hero / Section Overlays */
-  html.theme-glass.dark .from-background {
-    --tw-gradient-from: #090b12 var(--tw-gradient-from-position) !important;
+  /* Layering: Toolbars, navbars, modals and sidebars strictly float over content */
+  html.theme-glass nav,
+  html.theme-glass.dark nav,
+  html.theme-glass header,
+  html.theme-glass.dark header,
+  html.theme-glass [class*="bg-background"],
+  html.theme-glass.dark [class*="bg-background"],
+  html.theme-glass [role="dialog"],
+  html.theme-glass.dark [role="dialog"],
+  html.theme-glass .modal-content,
+  html.theme-glass.dark .modal-content {
+    background: rgba(13, 22, 45, 0.60) !important;
+    backdrop-filter: blur(28px) saturate(190%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.30) !important;
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
   }
-  html.theme-glass.dark .via-background\/95,
-  html.theme-glass.dark .via-background\/90,
-  html.theme-glass.dark .via-background\/80,
-  html.theme-glass.dark .via-background\/60,
-  html.theme-glass.dark .via-background\/45,
-  html.theme-glass.dark .via-background {
-    --tw-gradient-via: rgba(9, 11, 18, 0.65) var(--tw-gradient-via-position) !important;
-  }
-  html.theme-glass.dark .to-background {
-    --tw-gradient-to: rgba(9, 11, 18, 0) var(--tw-gradient-to-position) !important;
-  }
-  html.theme-glass.dark .bg-background {
-    background-color: transparent !important;
+
+  html.theme-glass aside,
+  html.theme-glass.dark aside {
+    background: rgba(10, 18, 38, 0.60) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.14) !important;
+    backdrop-filter: blur(28px) saturate(190%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
   }
 
   /* Clean contrast text */
@@ -304,7 +326,7 @@
   100% { transform: rotate(20deg) translateX(480%) skewX(-8deg); opacity: 0; }
 }
 
-/* ============ 2. OLED ============ */
+/* ============ 2. OLED (Pure Black & High-Contrast Red) ============ */
 @layer base {
   html.theme-oled.dark {
     --background: 0 0% 0%;
@@ -313,86 +335,115 @@
     --card-foreground: 0 0% 100%;
     --popover: 0 0% 0%;
     --popover-foreground: 0 0% 100%;
-    --primary: 348 72% 55%;
+    --primary: 357 100% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 6%;
-    --secondary-foreground: 0 0% 88%;
-    --muted: 0 0% 6%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 348 72% 55%;
+    --secondary: 0 0% 5%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 5%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 357 100% 50%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 70% 55%;
+    --destructive: 357 100% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 14%;
     --input: 0 0% 10%;
-    --ring: 348 72% 55%;
+    --ring: 357 100% 50%;
     --app-background: 0 0% 0%;
-    --brand-glow-opacity: 0;
-    --card-border-opacity: 0.08;
-    --hairline-opacity: 0.06;
-    --safe-card-border: rgba(255, 255, 255, 0.08);
+    --brand-glow-opacity: 0.9;
+    --card-border-opacity: 0.15;
+    --hairline-opacity: 0.1;
+    --safe-card-border: rgba(229, 9, 20, 0.3);
   }
-  html.theme-oled.mode-tv.dark {
-    --primary: 160 70% 42%;
-    --ring: 160 70% 42%;
+
+  html.theme-oled.dark body {
+    background: #000000 !important;
+    background-color: #000000 !important;
   }
-  html.theme-oled.mode-anime.dark {
-    --primary: 266 70% 60%;
-    --ring: 266 70% 60%;
+
+  /* OLED pure pitch black surfaces */
+  html.theme-oled.dark .bg-card,
+  html.theme-oled.dark .premium-glass,
+  html.theme-oled.dark .glass-card,
+  html.theme-oled.dark .glass-pill {
+    background: #000000 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
   }
-  html.theme-oled.mode-manga.dark {
-    --primary: 169 91% 47%;
-    --primary-foreground: 0 0% 0%;
-    --ring: 169 91% 47%;
+
+  html.theme-oled.dark .glass-card:hover {
+    border-color: rgba(229, 9, 20, 0.5) !important;
+    box-shadow: 0 0 25px rgba(229, 9, 20, 0.25) !important;
+  }
+
+  /* OLED punchy red text and highlights */
+  html.theme-oled.dark .text-primary {
+    color: #FF0B16 !important;
+  }
+
+  html.theme-oled.dark .bg-primary {
+    background-color: #FF0B16 !important;
+  }
+
+  html.theme-oled.dark .border-primary {
+    border-color: #FF0B16 !important;
   }
 }
 
-/* ============ 3. CINEMA (Premium gold & crimson) ============ */
+/* ============ 3. CINEMA (Velvet Theatre Noir & Imperial Gold) ============ */
 @layer base {
   html.theme-cinema.dark {
-    --background: 348 34% 12%;
-    --foreground: 42 20% 92%;
-    --card: 348 30% 18%;
-    --card-foreground: 42 20% 92%;
-    --popover: 348 32% 16%;
-    --popover-foreground: 42 20% 92%;
-    --primary: 45 94% 58%;
+    --background: 348 38% 8%;
+    --foreground: 42 25% 94%;
+    --card: 348 32% 13%;
+    --card-foreground: 42 25% 94%;
+    --popover: 348 32% 11%;
+    --popover-foreground: 42 25% 94%;
+    --primary: 43 96% 56%;
     --primary-foreground: 350 60% 8%;
-    --secondary: 350 26% 22%;
-    --secondary-foreground: 42 20% 94%;
-    --muted: 348 28% 16%;
-    --muted-foreground: 42 14% 66%;
-    --accent: 45 94% 58%;
+    --secondary: 350 26% 18%;
+    --secondary-foreground: 42 25% 94%;
+    --muted: 348 24% 14%;
+    --muted-foreground: 42 16% 68%;
+    --accent: 43 96% 56%;
     --accent-foreground: 350 60% 8%;
     --destructive: 0 82% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 28 60% 30%;
-    --input: 28 44% 24%;
-    --ring: 45 94% 64%;
-    --app-background: 348 36% 12%;
-    --brand-glow-opacity: 0.85;
-    --card-border-opacity: 0.24;
+    --border: 35 40% 22%;
+    --input: 35 30% 18%;
+    --ring: 43 96% 56%;
+    --app-background: 348 38% 8%;
+    --brand-glow-opacity: 0.9;
+    --card-border-opacity: 0.25;
     --hairline-opacity: 0.22;
-    --safe-card-border: rgba(255, 210, 130, 0.3);
+    --safe-card-border: rgba(245, 158, 11, 0.25);
+  }
 
-    background-image:
-      radial-gradient(1000px 560px at 8% -8%, rgba(224, 40, 48, 0.55), transparent 62%),
-      radial-gradient(760px 680px at 106% 16%, rgba(250, 190, 80, 0.4), transparent 60%),
-      radial-gradient(900px 740px at 50% 118%, rgba(190, 20, 40, 0.4), transparent 60%),
-      linear-gradient(165deg, rgba(60, 12, 18, 0.55), rgba(20, 12, 10, 0.6));
+  html.theme-cinema.dark body {
+    background: #140509 !important;
+  }
+
+  html.theme-cinema.dark body::before {
+    content: "";
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 75% 60% at 20% 10%, rgba(225, 29, 72, 0.22) 0%, transparent 60%),
+      radial-gradient(ellipse 70% 55% at 85% 20%, rgba(245, 158, 11, 0.20) 0%, transparent 55%),
+      radial-gradient(circle at 50% 90%, rgba(159, 18, 57, 0.20) 0%, transparent 60%);
+    filter: blur(90px);
   }
 
   html.theme-cinema.dark .premium-glass,
   html.theme-cinema.dark .glass-card,
   html.theme-cinema.dark .glass-pill {
-    background: linear-gradient(160deg, rgba(170, 40, 30, 0.28), rgba(60, 20, 16, 0.55) 45%, rgba(26, 14, 10, 0.7));
-    border: 1px solid rgba(255, 200, 110, 0.3);
-    border-top-color: rgba(255, 226, 160, 0.6);
-    border-bottom-color: rgba(180, 30, 40, 0.45);
+    background: linear-gradient(160deg, rgba(55, 14, 22, 0.6) 0%, rgba(26, 8, 12, 0.75) 100%) !important;
+    border: 1px solid rgba(245, 158, 11, 0.22) !important;
+    border-top-color: rgba(251, 191, 36, 0.45) !important;
+    border-bottom-color: rgba(180, 30, 40, 0.35) !important;
     box-shadow:
-      0 22px 60px -22px rgba(20, 4, 8, 0.85),
-      inset 0 1px 0 rgba(255, 224, 150, 0.35),
-      inset 0 -26px 44px -30px rgba(220, 60, 50, 0.55);
+      0 22px 60px -22px rgba(18, 4, 8, 0.85),
+      inset 0 1px 0 rgba(251, 191, 36, 0.25) !important;
   }
 
   html.theme-cinema.mode-movies.dark {

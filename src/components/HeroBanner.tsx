@@ -1,11 +1,11 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Play, Info, Star, Calendar, Sparkles } from "lucide-react";
 import { isTmdbAnime, cn } from "@/lib/utils";
 import { WatchlistButton } from "@/components/WatchlistButton";
+import { useTheme } from "@/context/ThemeContext";
 
 interface MediaItem {
   id: number | string;
@@ -60,6 +60,50 @@ function saveLogoToCache(key: string, url: string | null) {
 }
 
 export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
+  let activeTheme = "global";
+  try {
+    const themeContext = useTheme();
+    if (themeContext?.theme) activeTheme = themeContext.theme;
+  } catch {}
+  const isGlobalTheme = activeTheme === "global";
+
+  const heroThemeStyles = useMemo(() => {
+    switch (activeTheme) {
+      case "oled":
+        return {
+          bottom: "from-[#000000] via-[#000000]/80 to-transparent",
+          side: "from-[#000000]/90 via-[#000000]/40 to-transparent",
+          mobile: "from-[#000000] via-[#000000]/50 to-transparent",
+        };
+      case "glass":
+        return {
+          bottom: "from-[#080d1e]/85 via-[#080d1e]/40 to-transparent",
+          side: "from-[#080d1e]/80 via-[#080d1e]/25 to-transparent",
+          mobile: "from-[#080d1e]/85 via-[#080d1e]/35 to-transparent",
+        };
+      case "cinema":
+        return {
+          bottom: "from-[#140509] via-[#140509]/80 to-transparent",
+          side: "from-[#140509]/90 via-[#140509]/40 to-transparent",
+          mobile: "from-[#140509] via-[#140509]/50 to-transparent",
+        };
+      case "wisteria":
+        return {
+          bottom: "from-[#0e071c] via-[#0e071c]/80 to-transparent",
+          side: "from-[#0e071c]/90 via-[#0e071c]/40 to-transparent",
+          mobile: "from-[#0e071c] via-[#0e071c]/50 to-transparent",
+        };
+      case "solaris":
+        return {
+          bottom: "from-[#100b05] via-[#100b05]/80 to-transparent",
+          side: "from-[#100b05]/90 via-[#100b05]/40 to-transparent",
+          mobile: "from-[#100b05] via-[#100b05]/50 to-transparent",
+        };
+      default:
+        return null;
+    }
+  }, [activeTheme]);
+
   const [usePoster, setUsePoster] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -73,11 +117,16 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const cacheKey = `${effectiveId || item?.id}-${title}`;
 
   const [logoImgLoaded, setLogoImgLoaded] = useState(() => {
+    if ((item as any)?.logoUrl) return true;
     const cached = getCachedLogo(cacheKey);
     return !!cached;
   });
 
   const [logoState, setLogoState] = useState<{ url: string | null; status: "cached" | "fetching" | "done" }>(() => {
+    if ((item as any)?.logoUrl) {
+      saveLogoToCache(cacheKey, (item as any).logoUrl);
+      return { url: (item as any).logoUrl, status: "cached" };
+    }
     const cached = getCachedLogo(cacheKey);
     if (cached !== undefined) {
       return { url: cached, status: "cached" };
@@ -96,6 +145,14 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
     if (!item?.id) {
       setLogoState({ url: null, status: "done" });
       setLogoImgLoaded(false);
+      return;
+    }
+
+    if ((item as any)?.logoUrl) {
+      const u = (item as any).logoUrl;
+      saveLogoToCache(cacheKey, u);
+      setLogoState({ url: u, status: "done" });
+      setLogoImgLoaded(true);
       return;
     }
 
@@ -163,19 +220,42 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const rating = item.vote_average ?? 0;
 
-  const resolveImageUrl = (path?: string) =>
+  const resolveHighResImageUrl = (path?: string) =>
     path
       ? path.startsWith("http")
         ? path
         : `https://image.tmdb.org/t/p/original${path}`
       : null;
 
+  const resolveFastImageUrl = (path?: string) =>
+    path
+      ? path.startsWith("http")
+        ? path
+        : `https://image.tmdb.org/t/p/w1280${path}`
+      : null;
+
   const eventuallyOptimizable = (url?: string | null) =>
     !!url && !/(anilist\.co|myanimelist\.net|kitsu\.app|media\.kitsu\.io|media\.kitsu\.app)/i.test(url);
 
   const backdropPath = usePoster ? item.poster_path : item.backdrop_path;
-  const backdropUrl = resolveImageUrl(backdropPath);
+  const fastBackdropUrl = resolveFastImageUrl(backdropPath);
+  const highResBackdropUrl = resolveHighResImageUrl(backdropPath);
   const posterUrl = item.poster_path ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w780${item.poster_path}`) : null;
+
+  const [highResLoaded, setHighResLoaded] = useState(false);
+
+  useEffect(() => {
+    setHighResLoaded(false);
+    if (!highResBackdropUrl || typeof window === "undefined") return;
+
+    const img = new window.Image();
+    img.src = highResBackdropUrl;
+    if (img.complete) {
+      setHighResLoaded(true);
+      return;
+    }
+    img.onload = () => setHighResLoaded(true);
+  }, [highResBackdropUrl]);
 
   const isPortraitPoster = (url?: string | null) =>
     !!url && (url.includes("/cover/") || url.includes("/media/anime/cover/"));
@@ -184,9 +264,9 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
     (usePoster ||
       !item.backdrop_path ||
       item.backdrop_path === item.poster_path ||
-      isPortraitPoster(resolveImageUrl(item.backdrop_path)));
+      isPortraitPoster(highResBackdropUrl));
 
-  const showBackdrop = !imgFailed && !!backdropUrl && !isPosterOnly;
+  const showBackdrop = !imgFailed && (!!fastBackdropUrl || !!highResBackdropUrl) && !isPosterOnly;
   const showPosterCard = !!posterUrl && !imgFailed;
 
   return (
@@ -199,27 +279,56 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
             WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.15) 85%, rgba(0,0,0,0) 100%)",
           }}
         >
-          <img
-            key={backdropUrl}
-            src={backdropUrl!}
-            alt={title}
-            className="w-full h-full object-cover object-center md:object-top"
-            style={{
-              filter: "brightness(0.92) saturate(1.1)",
-            }}
-            loading="eager"
-            fetchPriority="high"
-            onError={() => {
-              if (!usePoster && item.poster_path && item.poster_path !== item.backdrop_path) {
-                setUsePoster(true);
-              } else {
-                setImgFailed(true);
-              }
-            }}
-          />
-          {/* Subtle text legibility shadows only — NO solid color bottom block */}
-          <div className="hidden md:block absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-black/80 via-black/25 to-transparent" />
-          <div className="md:hidden absolute inset-0 bg-gradient-to-t from-[#07080d]/90 via-black/35 to-transparent pointer-events-none" />
+          {/* Fast baseline backdrop for instant first render */}
+          {fastBackdropUrl && (
+            <img
+              key={`fast-${fastBackdropUrl}`}
+              src={fastBackdropUrl}
+              alt={title}
+              className="w-full h-full object-cover object-center md:object-top"
+              style={{
+                filter: "brightness(0.92) saturate(1.1)",
+              }}
+              loading="eager"
+              fetchPriority="high"
+              onLoad={() => setImgLoaded(true)}
+              onError={() => {
+                if (!usePoster && item.poster_path && item.poster_path !== item.backdrop_path) {
+                  setUsePoster(true);
+                } else {
+                  setImgFailed(true);
+                }
+              }}
+            />
+          )}
+
+          {/* Ultra-high quality original resolution backdrop (crossfades in when ready) */}
+          {highResBackdropUrl && highResLoaded && (
+            <img
+              key={`hires-${highResBackdropUrl}`}
+              src={highResBackdropUrl}
+              alt={title}
+              className="absolute inset-0 w-full h-full object-cover object-center md:object-top transition-opacity duration-500 ease-out"
+              style={{
+                filter: "brightness(0.92) saturate(1.1)",
+              }}
+              aria-hidden
+            />
+          )}
+          {/* In non-global themes, blend hero seamlessly into the theme background */}
+          {heroThemeStyles ? (
+            <>
+              <div className={`absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t ${heroThemeStyles.bottom} pointer-events-none z-10`} />
+              <div className={`hidden md:block absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r ${heroThemeStyles.side} pointer-events-none z-10`} />
+              <div className={`md:hidden absolute inset-0 bg-gradient-to-t ${heroThemeStyles.mobile} pointer-events-none z-10`} />
+            </>
+          ) : (
+            <>
+              {/* Subtle text legibility shadows only — NO solid color bottom block */}
+              <div className="hidden md:block absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-black/80 via-black/25 to-transparent" />
+              <div className="md:hidden absolute inset-0 bg-gradient-to-t from-[#07080d]/90 via-black/35 to-transparent pointer-events-none" />
+            </>
+          )}
           <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-black/50 to-transparent" />
         </div>
       ) : (
@@ -272,7 +381,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
             </div>
           )}
 
-          {/* Official ClearArt Logo OR Smoothly Crossfading Cinema Typography */}
+          {/* Official ClearArt Logo OR Stylized Cinema Typography */}
           <div className="relative mb-6 sm:mb-7 md:mb-8 flex items-center justify-center md:justify-start min-h-[52px] sm:min-h-[64px] md:min-h-[84px] max-w-[85%] sm:max-w-[380px] md:max-w-[460px]">
             {/* Logo Image */}
             {logoUrl && (
@@ -280,7 +389,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
                 key={`logo-${logoUrl}`}
                 src={logoUrl}
                 alt={title}
-                className={`max-h-24 sm:max-h-28 md:max-h-36 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.95)] transition-all duration-200 ease-out ${
+                className={`max-h-24 sm:max-h-28 md:max-h-36 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.95)] transition-all duration-300 ease-out ${
                   logoImgLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
                 }`}
                 loading="eager"
@@ -290,12 +399,15 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               />
             )}
 
-            {/* Stylized Typography — only visible when no logo is available or gently crossfading out */}
-            {(!logoUrl || !logoImgLoaded) && (
+            {/* If fetching logo, keep clean skeleton placeholder rather than jarring raw text */}
+            {logoState.status === "fetching" && !logoUrl && (
+              <div className="h-10 sm:h-12 md:h-14 w-48 sm:w-60 md:w-72 rounded-xl skeleton-pulse opacity-40" />
+            )}
+
+            {/* Stylized Typography — ONLY visible if logo lookup completed and no logo exists */}
+            {logoState.status === "done" && !logoUrl && (
               <h1
-                className={`text-white font-black line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text transition-opacity duration-300 ease-out ${
-                  logoUrl && logoImgLoaded ? "opacity-0 pointer-events-none absolute" : "opacity-100 relative"
-                }`}
+                className="text-white font-black line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text animate-fade-in"
                 style={{
                   fontSize:
                     title.length > 40

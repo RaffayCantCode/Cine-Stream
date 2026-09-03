@@ -19,6 +19,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { TrendingProvidersHub } from "@/components/TrendingProvidersHub";
 import { FRANCHISES } from "@/lib/franchises";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { useTheme } from "@/context/ThemeContext";
 
 const INITIAL_COLLECTIONS = FRANCHISES.map(f => ({
   id: f.id,
@@ -392,6 +393,28 @@ function SectionHeading({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
+  const { theme } = useTheme();
+  const isGlobalTheme = theme === "global";
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
+
   const [heroIndex, setHeroIndex] = useState(0);
   const [trending, setTrending] = useState<MediaItem[]>(() => globalHomeCache?.trending || []);
   const [popular, setPopular] = useState<MediaItem[]>(() => globalHomeCache?.popular || []);
@@ -428,7 +451,8 @@ export default function Home() {
       : INITIAL_COLLECTIONS
   );
   const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
-  const [revealedSections] = useState(8);
+  const [heroArtworkReady, setHeroArtworkReady] = useState(false);
+  const [revealedSections, setRevealedSections] = useState(1);
   const [moodSeed, setMoodSeed] = useState("");
   const [customSections, setCustomSections] = useState<any[]>(() => {
     if (globalCustomSectionsCache !== null) {
@@ -605,8 +629,19 @@ export default function Home() {
       setLoadError(null);
 
       try {
-        // Single consolidated home endpoint — returns identical data to home-hero
-        // plus genre list. Eliminates the duplicate 15-TMDB-call home-hero fetch.
+        // Fast hero fetch — dedicated lightweight edge call that returns hero candidates in <80ms
+        fetchJson<{ results: MediaItem[] }>("/api/tmdb/home-hero", { cacheTtlMs: 3600000 })
+          .then((heroData) => {
+            if (cancelled || !heroData?.results || heroData.results.length === 0) return;
+            const fastCandidates = heroData.results.filter((i) => i && i.backdrop_path && i.poster_path);
+            if (fastCandidates.length > 0) {
+              setHeroPool((current) => (current && current.length >= 3 ? current : fastCandidates));
+              saveHeroPoolToSession(fastCandidates);
+            }
+          })
+          .catch(() => {});
+
+        // Consolidated home endpoint for content rows below the hero
         const homePromise = fetchJson<{
           trending: { results: MediaItem[] };
           popularMovies: { results: MediaItem[] };
@@ -906,22 +941,29 @@ export default function Home() {
     }
   }, [heroPool.length, heroIndex]);
 
-  // ── Preload all hero backdrop and logo artwork for instant transitions ────
+  // ── Preload hero artwork: Slide 0 immediately, and next 2 slides sequentially in background ──
   useEffect(() => {
-    const links: HTMLLinkElement[] = [];
-    heroPool.forEach((item) => {
+    if (!heroPool || heroPool.length === 0) return;
+
+    // Helper to preload a single slide's backdrop and logo
+    const preloadItem = (item: MediaItem, priority: "high" | "low" = "low") => {
       const path = item.backdrop_path || item.poster_path;
       if (path) {
-        const link = document.createElement("link");
-        link.rel = "preload";
-        link.as = "image";
-        link.href = path.startsWith("http") ? path : `https://image.tmdb.org/t/p/w1280${path}`;
-        link.fetchPriority = "high";
-        document.head.appendChild(link);
-        links.push(link);
+        const fastUrl = path.startsWith("http") ? path : `https://image.tmdb.org/t/p/w1280${path}`;
+        const img = new Image();
+        if (priority === "high") {
+          img.fetchPriority = "high";
+        }
+        img.src = fastUrl;
+
+        if (!path.startsWith("http")) {
+          const highResUrl = `https://image.tmdb.org/t/p/original${path}`;
+          const origImg = new Image();
+          origImg.src = highResUrl;
+        }
       }
 
-      // Preload logo artwork immediately so it displays instantly
+      // Preload logo artwork
       const title = item.title || item.name || "";
       const anilistId = (item as any)?.anilistId;
       const isAnime = item.media_type === "anime" || !!anilistId || isTmdbAnime(item);
@@ -932,13 +974,9 @@ export default function Home() {
 
       const cached = typeof window !== "undefined" ? sessionStorage.getItem(`logo_v7_${cacheKey}`) : null;
       if (cached) {
-        const logoLink = document.createElement("link");
-        logoLink.rel = "preload";
-        logoLink.as = "image";
-        logoLink.href = cached;
-        logoLink.fetchPriority = "high";
-        document.head.appendChild(logoLink);
-        links.push(logoLink);
+        const logoImg = new Image();
+        if (priority === "high") logoImg.fetchPriority = "high";
+        logoImg.src = cached;
       } else if (title) {
         fetch(`/api/tmdb/logo?id=${effectiveId}&type=${mediaType}&title=${encodeURIComponent(title)}`, {
           cache: "force-cache",
@@ -947,20 +985,32 @@ export default function Home() {
           .then((data) => {
             if (data?.logoUrl) {
               try { sessionStorage.setItem(`logo_v7_${cacheKey}`, data.logoUrl); } catch {}
-              const logoLink = document.createElement("link");
-              logoLink.rel = "preload";
-              logoLink.as = "image";
-              logoLink.href = data.logoUrl;
-              logoLink.fetchPriority = "high";
-              document.head.appendChild(logoLink);
-              links.push(logoLink);
+              const logoImg = new Image();
+              logoImg.src = data.logoUrl;
             }
           })
           .catch(() => {});
       }
-    });
-    return () => links.forEach(l => l.remove());
-  }, [heroPool]);
+    };
+
+    // Phase 1: Only fetch & preload the first slide's artwork immediately
+    const currentSlide = heroPool[heroIndex] || heroPool[0];
+    if (currentSlide) {
+      preloadItem(currentSlide, "high");
+    }
+
+    // Phase 2: ONLY AFTER first slide artwork is ready, prefetch the next 2 slides during the 10-second idle window
+    if (heroArtworkReady && heroPool.length > 1) {
+      const timer = setTimeout(() => {
+        const next1 = heroPool[(heroIndex + 1) % heroPool.length];
+        const next2 = heroPool[(heroIndex + 2) % heroPool.length];
+        if (next1) preloadItem(next1, "low");
+        if (next2) preloadItem(next2, "low");
+      }, 400);
+
+      return () => clearTimeout(timer);
+    }
+  }, [heroPool, heroIndex, heroArtworkReady]);
 
   // ── Auto-rotation timer (10 seconds, resets on manual nav) ─────────────
   useEffect(() => {
@@ -1003,16 +1053,81 @@ export default function Home() {
     }
   }, [activeBackdropUrl, ambientBackdrop.current]);
 
+  // ── Artwork verification gate: Ensure artwork is decoded before revealing HeroBanner ──
+  useEffect(() => {
+    if (!hero) {
+      setHeroArtworkReady(false);
+      return;
+    }
+
+    const bg = hero.backdrop_path || hero.poster_path;
+    if (!bg) {
+      setHeroArtworkReady(true);
+      return;
+    }
+
+    const bgUrl = bg.startsWith("http") ? bg : `https://image.tmdb.org/t/p/w1280${bg}`;
+    let isCancelled = false;
+
+    // Safety timeout: Maximum 1.5s skeleton display so slow network doesn't block indefinitely
+    const timer = setTimeout(() => {
+      if (!isCancelled) setHeroArtworkReady(true);
+    }, 1500);
+
+    if (typeof window !== "undefined") {
+      const img = new Image();
+      img.src = bgUrl;
+      img.onload = () => {
+        if (isCancelled) return;
+        clearTimeout(timer);
+        setHeroArtworkReady(true);
+      };
+      img.onerror = () => {
+        if (isCancelled) return;
+        clearTimeout(timer);
+        setHeroArtworkReady(true);
+      };
+
+      if (img.complete) {
+        clearTimeout(timer);
+        setHeroArtworkReady(true);
+      }
+    } else {
+      setHeroArtworkReady(true);
+    }
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [hero?.id, hero?.backdrop_path]);
+
+  // ── Modular Progressive Hydration of Sections Below the Hero ─────────
+  useEffect(() => {
+    if (heroArtworkReady) {
+      const t1 = setTimeout(() => setRevealedSections(2), 150);
+      const t2 = setTimeout(() => setRevealedSections(3), 350);
+      const t3 = setTimeout(() => setRevealedSections(5), 600);
+      const t4 = setTimeout(() => setRevealedSections(8), 900);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+      };
+    }
+  }, [heroArtworkReady]);
+
   return (
-    <div className="relative min-h-screen bg-[#07080d] text-foreground pb-20 overflow-x-clip">
-      {/* Ambient Hero Backdrop Glow with smooth, seamless crossfading */}
-      {(ambientBackdrop.current || ambientBackdrop.previous) && (
+    <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}>
+      {/* Ambient Hero Backdrop Glow — ONLY active for the "global" theme! */}
+      {isGlobalTheme && (ambientBackdrop.current || ambientBackdrop.previous) && (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
           {ambientBackdrop.previous && (
             <img
               src={ambientBackdrop.previous}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover blur-[130px] opacity-0 scale-140 saturate-[2.5] brightness-[0.72] transition-opacity duration-1000 ease-in-out pointer-events-none"
+              className="absolute inset-0 w-full h-full object-cover blur-[120px] opacity-0 scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none"
               aria-hidden
             />
           )}
@@ -1021,12 +1136,12 @@ export default function Home() {
               key={ambientBackdrop.current}
               src={ambientBackdrop.current}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover blur-[130px] opacity-[0.48] scale-140 saturate-[2.5] brightness-[0.72] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
+              className="absolute inset-0 w-full h-full object-cover blur-[120px] opacity-[0.78] scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
               aria-hidden
             />
           )}
-          {/* Subtle uniform overlay allowing the hero colors to permeate the entire home page */}
-          <div className="absolute inset-0 bg-[#07080d]/55 transition-colors duration-1000" />
+          {/* Subtle uniform overlay allowing light and vibrant hero colors to permeate the entire home page */}
+          <div className="absolute inset-0 bg-[#07080d]/25 transition-colors duration-1000" />
         </div>
       )}
 
@@ -1043,9 +1158,9 @@ export default function Home() {
       <main className="relative z-10 w-full bleed-header">
 
         {/* ─── HERO BANNER ─── */}
-        {hero ? (
+        {hero && heroArtworkReady ? (
           <div
-            className="relative group/hero select-none"
+            className="relative group/hero select-none animate-in fade-in duration-500"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -1108,7 +1223,7 @@ export default function Home() {
             )}
           </div>
         ) : (
-          (!loadError && isLoading) && (
+          !loadError && (
             <HeroSkeleton />
           )
         )}

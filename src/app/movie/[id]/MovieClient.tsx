@@ -16,6 +16,8 @@ import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { useMediaLogo } from "@/components/MediaLogo";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
+import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
+import { useTheme } from "@/context/ThemeContext";
 
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer").then(m => m.VideoPlayer), { ssr: false });
 
@@ -103,7 +105,7 @@ export default function MovieClient() {
         if (data.backdrop_path) {
           const link = document.createElement("link");
           link.rel = "preload"; link.as = "image";
-          link.href = `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`;
+          link.href = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
           link.fetchPriority = "high";
           document.head.appendChild(link);
         }
@@ -200,7 +202,7 @@ export default function MovieClient() {
   }
 
   const backdropUrl = movie.backdrop_path
-    ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}`
     : null;
   const posterUrl = movie.poster_path
     ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`
@@ -211,12 +213,38 @@ export default function MovieClient() {
     score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
 
   const trailerId = movie.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
+  const { theme } = useTheme();
+  const isGlobalTheme = theme === "global";
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
+
+  const ambientBackdrop = backdropUrl || (movie.poster_path ? `https://image.tmdb.org/t/p/w1280${movie.poster_path}` : null);
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
+    <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-24 overflow-x-clip transition-colors duration-500`}>
+      {/* Ambient Backdrop Glow - changes background color according to media backdrop colors (global theme only) */}
+      <AmbientBackdropGlow backdropUrl={ambientBackdrop} />
+
       <Sidebar />
 
-      <main className="w-full bleed-header">
+      <main className="relative z-10 w-full bleed-header">
         <CinematicHero
           backdropPath={movie.backdrop_path || movie.poster_path}
           trailerId={trailerId}
@@ -395,12 +423,9 @@ export default function MovieClient() {
           if (filtered.length >= 6) {
             return (
               <section className="pt-4">
-                <div className="flex items-center gap-3 mb-8">
+                <div className="flex items-center gap-3 mb-6">
                   <div className="w-1 h-5 bg-primary rounded-full" />
-                  <div>
-                    <h2 className="text-base font-bold text-white tracking-wide">More Like This</h2>
-                    <p className="text-xs text-white/35 mt-0.5">Ranked by matching genres, audience signal, and TMDB recommendations.</p>
-                  </div>
+                  <h2 className="text-base font-bold text-white tracking-wide">More Like This</h2>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6">
                   {filtered.slice(0, 20).map((item: any, i: number) => {

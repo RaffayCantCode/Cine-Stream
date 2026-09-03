@@ -5,98 +5,67 @@ import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export const revalidate = 3600;
 
-function dailySeededShuffle<T>(array: T[]): T[] {
-  if (!array || array.length === 0) return array;
-  const today = new Date().toISOString().slice(0, 10);
-  let seed = 0;
-  for (let i = 0; i < today.length; i++) {
-    seed = (seed * 31 + today.charCodeAt(i)) >>> 0;
-  }
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    const j = Math.floor((seed / 4294967296) * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
 export async function GET(_request: NextRequest) {
-  const results = await Promise.allSettled([
-    tmdbFetch("/trending/all/week", { page: "1", include_adult: "false" }),
-    tmdbFetch("/movie/popular", { page: "1", include_adult: "false" }),
-    tmdbFetch("/movie/top_rated", { page: "1", include_adult: "false" }),
-    tmdbFetch("/movie/top_rated", { page: "2", include_adult: "false" }),
-    tmdbFetch("/movie/top_rated", { page: "3", include_adult: "false" }),
-    tmdbFetch("/movie/now_playing", { page: "1", include_adult: "false" }),
-    tmdbFetch("/tv/popular", { page: "1", include_adult: "false" }),
-    tmdbFetch("/tv/top_rated", { page: "1", include_adult: "false" }),
-    tmdbFetch("/tv/top_rated", { page: "2", include_adult: "false" }),
-    tmdbFetch("/tv/top_rated", { page: "3", include_adult: "false" }),
-    tmdbFetch("/tv/on_the_air", { page: "1", include_adult: "false" }),
-    tmdbFetch("/discover/movie", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
-    tmdbFetch("/discover/tv", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
-    tmdbFetch("/trending/movie/day", { page: "1", include_adult: "false" }),
-    tmdbFetch("/trending/tv/day", { page: "1", include_adult: "false" }),
-  ]);
+  try {
+    // High-speed edge queries to get prime hero candidates in <100ms
+    const results = await Promise.allSettled([
+      tmdbFetch("/trending/all/day", { page: "1", include_adult: "false" }),
+      tmdbFetch("/trending/movie/day", { page: "1", include_adult: "false" }),
+      tmdbFetch("/trending/tv/day", { page: "1", include_adult: "false" }),
+      tmdbFetch("/movie/popular", { page: "1", include_adult: "false" }),
+    ]);
 
-  const extractResults = (res: PromiseSettledResult<unknown>) => {
-    if (res.status === "fulfilled" && res.value && typeof res.value === "object" && "results" in res.value) {
-      return (res.value as { results?: unknown[] }).results || [];
+    const extractResults = (res: PromiseSettledResult<unknown>) => {
+      if (res.status === "fulfilled" && res.value && typeof res.value === "object" && "results" in res.value) {
+        return (res.value as { results?: any[] }).results || [];
+      }
+      return [];
+    };
+
+    const rawList = [
+      ...extractResults(results[0]),
+      ...extractResults(results[1]).map((i) => ({ ...i, media_type: "movie" })),
+      ...extractResults(results[2]).map((i) => ({ ...i, media_type: "tv" })),
+      ...extractResults(results[3]).map((i) => ({ ...i, media_type: "movie" })),
+    ];
+
+    // Deduplicate and filter high-quality hero candidates
+    const seen = new Set<string | number>();
+    const candidates: any[] = [];
+
+    for (const item of rawList) {
+      if (!item || !item.id || seen.has(item.id)) continue;
+      if (item.adult) continue;
+      if (!item.backdrop_path || !item.poster_path) continue;
+      if (!item.overview || item.overview.trim().length < 20) continue;
+      if (item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16)) continue;
+
+      seen.add(item.id);
+      candidates.push(item);
+      if (candidates.length >= 10) break;
     }
-    return [];
-  };
 
-  // Strip Japanese animated content (anime) from movie/TV result arrays.
-  // The dedicated animeMovies/animeTv keys (results[11], results[12]) are
-  // intentionally excluded from this filter — they are the anime home row data.
-  const excludeAnime = (items: any[]): any[] =>
-    items.filter(
-      (item) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
-    );
-
-  const topRatedMoviesRaw = [
-    ...extractResults(results[2]),
-    ...extractResults(results[3]),
-    ...extractResults(results[4]),
-  ].filter(
-    (item: any) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
-  );
-  const uniqueTopRatedMoviesMap = new Map();
-  topRatedMoviesRaw.forEach((item: any) => {
-    if (item?.id && !uniqueTopRatedMoviesMap.has(item.id)) {
-      uniqueTopRatedMoviesMap.set(item.id, item);
+    // Pre-resolve logo for the first hero candidate so artwork & logo load with 0 delay on client
+    if (candidates.length > 0) {
+      const top = candidates[0];
+      const targetType = top.media_type === "tv" ? "tv" : "movie";
+      try {
+        const imgRes = (await tmdbFetch(`/${targetType}/${top.id}/images`, {
+          include_image_language: "en,null,ja",
+        })) as any;
+        if (imgRes && Array.isArray(imgRes.logos) && imgRes.logos.length > 0) {
+          const enLogo = imgRes.logos.find((l: any) => l.iso_639_1 === "en" && l.file_path);
+          const fallbackLogo = imgRes.logos.find((l: any) => l.file_path);
+          const chosen = enLogo || fallbackLogo;
+          if (chosen?.file_path) {
+            top.logoUrl = `https://image.tmdb.org/t/p/w500${chosen.file_path}`;
+          }
+        }
+      } catch {}
     }
-  });
-  const shuffledTopRatedMovies = dailySeededShuffle(Array.from(uniqueTopRatedMoviesMap.values()));
 
-  const topRatedTvRaw = [
-    ...extractResults(results[7]),
-    ...extractResults(results[8]),
-    ...extractResults(results[9]),
-  ].filter(
-    (item: any) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
-  );
-  const uniqueTopRatedTvMap = new Map();
-  topRatedTvRaw.forEach((item: any) => {
-    if (item?.id && !uniqueTopRatedTvMap.has(item.id)) {
-      uniqueTopRatedTvMap.set(item.id, item);
-    }
-  });
-  const shuffledTopRatedTv = dailySeededShuffle(Array.from(uniqueTopRatedTvMap.values()));
-
-  return Response.json({
-    trending: { results: extractResults(results[0]) },
-    popularMovies: { results: excludeAnime(extractResults(results[1]) as any[]) },
-    topRatedMovies: { results: shuffledTopRatedMovies },
-    nowPlaying: { results: excludeAnime(extractResults(results[5]) as any[]) },
-    popularTv: { results: excludeAnime(extractResults(results[6]) as any[]) },
-    topRatedTv: { results: shuffledTopRatedTv },
-    onTheAir: { results: excludeAnime(extractResults(results[10]) as any[]) },
-    animeMovies: { results: extractResults(results[11]) },
-    animeTv: { results: extractResults(results[12]) },
-    trendingMoviesToday: { results: excludeAnime(extractResults(results[13]) as any[]) },
-    trendingTvToday: { results: excludeAnime(extractResults(results[14]) as any[]) },
-  }, { headers: cacheHeaders(3600) });
+    return Response.json({ results: candidates }, { headers: cacheHeaders(3600) });
+  } catch {
+    return Response.json({ results: [] }, { status: 500 });
+  }
 }
-
