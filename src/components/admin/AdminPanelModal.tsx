@@ -1043,10 +1043,10 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
       {/* Section Editor Modal */}
       {sectionModalOpen && editingSection && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
-          <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden sm:overflow-y-auto">
+          <div className="relative w-full max-w-3xl bg-[#0D1117] border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40 pt-[max(0.75rem,env(safe-area-inset-top))]">
               <h3 className="text-sm sm:text-base font-bold text-white">
                 {editingSection.id ? "Edit Custom Row" : "Create Custom Row"}
               </h3>
@@ -1284,7 +1284,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
             </div>
 
             {/* Sticky Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
+            <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
                 onClick={() => setSectionModalOpen(false)}
@@ -1945,10 +1945,10 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
         {/* Franchise Editor Modal */}
         {franchiseModalOpen && editingFranchise && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
-            <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden sm:overflow-y-auto">
+            <div className="relative w-full max-w-3xl bg-[#0D1117] border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden">
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40 pt-[max(0.75rem,env(safe-area-inset-top))]">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm sm:text-base font-bold text-white">
                     {editingFranchise.id ? `Edit Franchise: ${editingFranchise.name}` : "Create Franchise Collection"}
@@ -2121,7 +2121,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               </div>
 
               {/* Sticky Modal Footer */}
-              <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
+              <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => setFranchiseModalOpen(false)}
@@ -2574,10 +2574,10 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
         {/* Override Editor Modal */}
         {overrideModalOpen && selectedOverrideItem && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
-            <div className="relative w-full max-w-3xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden sm:overflow-y-auto">
+            <div className="relative w-full max-w-3xl bg-[#0D1117] border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden">
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40 pt-[max(0.75rem,env(safe-area-inset-top))]">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Sliders className="w-5 h-5 text-amber-400 shrink-0" />
                   <div>
@@ -3018,7 +3018,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               </div>
 
               {/* Sticky Modal Footer */}
-              <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
+              <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={async () => {
@@ -3295,9 +3295,9 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
         {/* Theme Studio Modal */}
         {themeModalOpen && editingTheme && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md">
-            <div className="relative w-full max-w-2xl bg-[#0D1117] border border-zinc-800 rounded-2xl shadow-2xl max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden sm:overflow-y-auto">
+            <div className="relative w-full max-w-2xl bg-[#0D1117] border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] max-h-[100dvh] flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 shrink-0 bg-zinc-900/40 pt-[max(0.75rem,env(safe-area-inset-top))]">
                 <div className="flex items-center gap-2.5">
                   <Palette className="w-4 h-4 text-fuchsia-400" />
                   <div>
@@ -3552,7 +3552,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
               </div>
 
               {/* Actions Sticky Footer */}
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-zinc-800 bg-[#0D1117] shrink-0 sticky bottom-0 z-10 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => {
@@ -3888,7 +3888,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   return (
     <>
       {renderPreviewBanner()}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden sm:overflow-y-auto">
         {/* Backdrop */}
         <div 
           className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300"
@@ -3897,12 +3897,12 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
         {/* Main Modal Shell */}
         <div 
-          className="relative w-full max-w-5xl bg-[#090D16] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-auto max-h-[96vh] sm:max-h-[92vh] h-[96vh] sm:h-auto"
+          className="relative w-full max-w-5xl bg-[#090D16] border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col h-[100dvh] sm:h-auto sm:max-h-[92vh] max-h-[100dvh]"
           role="dialog"
           aria-modal="true"
         >
           {/* Modal Top Header */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 bg-zinc-900/40 shrink-0">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 bg-zinc-900/40 shrink-0 pt-[max(0.75rem,env(safe-area-inset-top))]">
             <div className="flex items-center gap-2.5 sm:gap-3">
               <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
                 <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -3932,7 +3932,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
           {/* Modal Body with Sidebar Tabs + Content Area */}
           <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
             {/* Left Tab Navigation */}
-            <div className="w-full md:w-56 lg:w-60 bg-zinc-950/60 border-b md:border-b-0 md:border-r border-zinc-800 p-2 sm:p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto shrink-0 custom-scrollbar flex-nowrap">
+            <div className="w-full md:w-56 lg:w-60 bg-zinc-950/60 border-b md:border-b-0 md:border-r border-zinc-800 p-2 sm:p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto shrink-0 custom-scrollbar flex-nowrap scroll-smooth touch-pan-x">
               {[
                 { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
                 { id: "announcements", label: "Announcements", icon: Megaphone, badge: currentAnnouncement ? "Live" : null },
@@ -3975,7 +3975,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
             </div>
 
             {/* Right Content Panel */}
-            <div className="flex-1 min-h-0 p-3.5 sm:p-6 overflow-y-auto custom-scrollbar bg-black/20">
+            <div className="flex-1 min-h-0 p-3.5 sm:p-6 overflow-y-auto custom-scrollbar bg-black/20 overscroll-contain">
               {activeTab === "dashboard" && renderDashboardTab()}
               {activeTab === "announcements" && renderAnnouncementsTab()}
               {activeTab === "sections" && renderSectionsTab()}
@@ -4002,7 +4002,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
           </div>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 border-t border-zinc-800 bg-zinc-900/40 text-[10px] sm:text-[11px] text-zinc-500 shrink-0">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 border-t border-zinc-800 bg-zinc-900/40 text-[10px] sm:text-[11px] text-zinc-500 shrink-0 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
             <span className="truncate">Database-verified administrator console</span>
             <button
               type="button"

@@ -85,6 +85,28 @@ export default function MovieClient() {
   const activeLogo = logoUrl || fallbackLogo;
   usePageContentReady(!isLoading);
 
+  const { theme } = useTheme();
+  const isGlobalTheme = theme === "global";
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
+
   const handleToggleTheater = () => {
     setIsTheaterMode(prev => {
       const next = !prev;
@@ -213,28 +235,6 @@ export default function MovieClient() {
     score >= 7.5 ? "text-emerald-400" : score >= 5 ? "text-amber-400" : "text-red-400";
 
   const trailerId = movie.videos?.results?.find((v: any) => v.type === "Trailer" && v.site === "YouTube")?.key;
-  const { theme } = useTheme();
-  const isGlobalTheme = theme === "global";
-
-  const pageBgClass = useMemo(() => {
-    switch (theme) {
-      case "global":
-        return "bg-[#07080d]";
-      case "glass":
-        return "bg-transparent";
-      case "oled":
-        return "bg-[#000000]";
-      case "cinema":
-        return "bg-[#140509]";
-      case "wisteria":
-        return "bg-[#0e071c]";
-      case "solaris":
-        return "bg-[#100b05]";
-      default:
-        return "bg-[#07080d]";
-    }
-  }, [theme]);
-
   const ambientBackdrop = backdropUrl || (movie.poster_path ? `https://image.tmdb.org/t/p/w1280${movie.poster_path}` : null);
 
   return (

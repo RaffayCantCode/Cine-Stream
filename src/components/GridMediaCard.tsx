@@ -53,7 +53,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
       <Link
         href={link}
         prefetch={false}
-        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out hover:scale-[1.01] hover:-translate-y-2 hover:shadow-[0_24px_48px_rgba(0,0,0,0.85)] hover:ring-white/40 focus:outline-none sheen-wrapper will-change-transform"
+        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out hover:scale-[1.01] hover:-translate-y-2 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] hover:ring-white/40 focus:outline-none sheen-wrapper will-change-transform"
       >
         {posterUrl ? (
           <img

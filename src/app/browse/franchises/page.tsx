@@ -66,7 +66,7 @@ export default function BrowseFranchisesPage() {
                 <Link
                   key={col.id}
                   href={`/browse/franchise/${col.id}`}
-                  className="group relative overflow-hidden rounded-xl border border-white/10 bg-card/80 aspect-[2/3] hover:border-white/35 hover:scale-[1.03] hover:-translate-y-1 shadow-[0_12px_32px_rgba(0,0,0,0.65)] hover:shadow-[0_24px_48px_rgba(0,0,0,0.9)] transition-all duration-300 sheen-wrapper focus:outline-none"
+                  className="group relative overflow-hidden rounded-xl border border-white/10 bg-card/80 aspect-[2/3] hover:border-white/35 hover:scale-[1.03] hover:-translate-y-1 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] transition-all duration-300 sheen-wrapper focus:outline-none"
                 >
                   {posterUrl ? (
                     <>

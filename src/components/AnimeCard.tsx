@@ -78,7 +78,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_10px_28px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:shadow-[0_22px_45px_rgba(0,0,0,0.88)] group-hover:ring-white/40 sheen-wrapper ${
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] group-hover:ring-white/40 sheen-wrapper ${
             rank ? "ml-6 sm:ml-7 md:ml-8 w-[calc(100%-1.5rem)] sm:w-[calc(100%-1.75rem)] md:w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}

@@ -120,6 +120,28 @@ export default function TvClient() {
   const activeLogo = logoUrl || fallbackLogo;
   usePageContentReady(!isLoading);
 
+  const { theme } = useTheme();
+  const isGlobalTheme = theme === "global";
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
+
   const handleToggleTheater = () => {
     setIsTheaterMode(prev => {
       const next = !prev;
@@ -509,28 +531,6 @@ export default function TvClient() {
     : show.poster_path
     ? `https://image.tmdb.org/t/p/original${show.poster_path}`
     : null;
-
-  const { theme } = useTheme();
-  const isGlobalTheme = theme === "global";
-
-  const pageBgClass = useMemo(() => {
-    switch (theme) {
-      case "global":
-        return "bg-[#07080d]";
-      case "glass":
-        return "bg-transparent";
-      case "oled":
-        return "bg-[#000000]";
-      case "cinema":
-        return "bg-[#140509]";
-      case "wisteria":
-        return "bg-[#0e071c]";
-      case "solaris":
-        return "bg-[#100b05]";
-      default:
-        return "bg-[#07080d]";
-    }
-  }, [theme]);
 
   return (
     <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-24 overflow-x-clip transition-colors duration-500`}>

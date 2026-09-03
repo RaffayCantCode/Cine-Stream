@@ -162,7 +162,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                   onClick={() => handlePlay(item)}
                   className="flex-[0_0_auto] w-[124px] sm:w-[146px] md:w-[158px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
                 >
-                  <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card/80 ring-1 ring-white/10 mb-2.5 relative shadow-[0_12px_32px_rgba(0,0,0,0.65)] transition-all duration-300 group-hover:ring-white/35 group-hover:shadow-[0_24px_48px_rgba(0,0,0,0.9)] sheen-wrapper">
+                  <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card/80 ring-1 ring-white/10 mb-2.5 relative shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:ring-white/35 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] sheen-wrapper">
                     {posterUrl ? (
                       <img
                         src={posterUrl}
