@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 
 const logoCache = new Map<string, string | null>();
 
-export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime", title?: string, tmdbId?: string | number | null) {
+export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime", title?: string) {
   const isAnime = type === "anime";
-  const cacheKey = `${id}-${tmdbId || ""}-${title || ""}`;
+  const cacheKey = `${id}-${title || ""}`;
 
   const [logoUrl, setLogoUrl] = useState<string | null>(() => {
     if (logoCache.has(cacheKey)) return logoCache.get(cacheKey) || null;
@@ -25,7 +25,7 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
   const [loading, setLoading] = useState(!logoUrl);
 
   useEffect(() => {
-    if ((!id || id === "undefined" || id === "null") && !title && !tmdbId) {
+    if ((!id || id === "undefined" || id === "null") && !title) {
       setLoading(false);
       return;
     }
@@ -37,10 +37,9 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
     }
 
     let cancelled = false;
-    const tmdbParam = tmdbId ? `&tmdbId=${encodeURIComponent(tmdbId)}` : "";
     const url = isAnime
-      ? `/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(title || "")}&type=anime${tmdbParam}`
-      : `/api/tmdb/logo?id=${id}&type=${type}${title ? `&title=${encodeURIComponent(title)}` : ""}${tmdbParam}`;
+      ? `/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(title || "")}&type=anime`
+      : `/api/tmdb/logo?id=${id}&type=${type}${title ? `&title=${encodeURIComponent(title)}` : ""}`;
 
     fetch(url, { cache: "force-cache" })
       .then((res) => (res.ok ? res.json() : null))

@@ -120,13 +120,19 @@ function loadSpotlightFromSession(): { fetched: boolean; spotlight: any | null }
   return null;
 }
 
-const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v2";
+const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v3";
+const HERO_CACHE_TTL = 5 * 60 * 1000; // 5-minute TTL: instant load from cache, fresh entries after 5 minutes
+
 function saveHeroPoolToSession(pool: MediaItem[]): void {
   if (typeof window === "undefined" || pool.length === 0) return;
   try {
-    sessionStorage.setItem(SESSION_HERO_POOL_KEY, JSON.stringify(pool));
+    sessionStorage.setItem(
+      SESSION_HERO_POOL_KEY,
+      JSON.stringify({ pool, timestamp: Date.now() })
+    );
   } catch {}
 }
+
 function loadHeroPoolFromSession(): MediaItem[] {
   if (typeof window === "undefined") return [];
   try {
@@ -136,19 +142,71 @@ function loadHeroPoolFromSession(): MediaItem[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
+      if (parsed && Array.isArray(parsed.pool) && parsed.pool.length > 0) {
+        return parsed.pool;
+      }
     }
   } catch {}
   return [];
 }
 
-function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[], existingPool?: MediaItem[]): MediaItem[] {
+function isHeroSessionStale(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = sessionStorage.getItem(SESSION_HERO_POOL_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.timestamp === "number") {
+        return Date.now() - parsed.timestamp > HERO_CACHE_TTL;
+      }
+    }
+  } catch {}
+  return true;
+}
+
+// Persist seen hero IDs in localStorage (not sessionStorage) so no repeats across multiple visits.
+// Keeps the last 120 seen IDs with a 30-day expiry.
+const SEEN_HERO_KEY = "sv_seen_hero_v2";
+function loadSeenHeroIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(SEEN_HERO_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.ids)) {
+        const age = Date.now() - (parsed.ts || 0);
+        if (age < 30 * 24 * 60 * 60 * 1000) {
+          return new Set(parsed.ids.map(String));
+        }
+      }
+    }
+  } catch {}
+  return new Set();
+}
+function saveSeenHeroIds(ids: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    const arr = Array.from(ids).slice(-120);
+    localStorage.setItem(SEEN_HERO_KEY, JSON.stringify({ ids: arr, ts: Date.now() }));
+  } catch {}
+}
+
+// Quality score: weighted rating × log10(vote count) to favour acclaimed + well-known entries
+function heroQualityScore(item: MediaItem): number {
+  const rating = item.vote_average || 0;
+  const votes = item.vote_count || 0;
+  if (votes < 50) return 0;
+  return rating * Math.log10(Math.max(votes, 10));
+}
+
+function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] {
   if (!Array.isArray(feed) || feed.length === 0) return [];
 
   const isValidHeroCandidate = (i: MediaItem) => {
     if (!i || !i.id) return false;
-    if ((i as any).adult) return false; // Exclude adult content
+    if ((i as any).adult) return false;
     if (!i.backdrop_path || !i.poster_path) return false;
-    if (!i.overview || i.overview.trim().length < 10) return false;
+    if (!i.overview || i.overview.trim().length < 20) return false;
     if (EXCLUDED_LANGS.has(i.original_language || "")) return false;
     return true;
   };
@@ -156,48 +214,44 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[], existingPool?
   const validFeed = feed.filter(isValidHeroCandidate);
   if (validFeed.length === 0) return [];
 
+  // ── Movie candidates ──────────────────────────────────────────────────────
+  // Must have explicit media_type=movie OR title-but-no-name. Require ≥200 votes for legitimacy.
   const movieCandidates = Array.from(
     new Map(
       validFeed
         .filter(
-          (i) => (i.media_type === "movie" || !!i.title) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+          (i) =>
+            !isTmdbAnime(i) &&
+            !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
+            (i.media_type === "movie" || (!!i.title && !i.name)) &&
+            (i.vote_count || 0) >= 50
         )
+        .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
         .map((m) => [m.id, m])
     ).values()
   );
 
+  // ── TV candidates ─────────────────────────────────────────────────────────
   const tvCandidates = Array.from(
     new Map(
       validFeed
         .filter(
-          (i) => (i.media_type === "tv" || !!i.name) && !isTmdbAnime(i) && !(i.genre_ids?.includes(16) && i.original_language === "ja")
+          (i) =>
+            !isTmdbAnime(i) &&
+            !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
+            (i.media_type === "tv" || (!!i.name && !i.title)) &&
+            (i.vote_count || 0) >= 50
         )
+        .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
         .map((t) => [t.id, t])
     ).values()
   );
 
-  // Build anime candidates strictly from AniList anime items first, fallback to TMDB
+  // ── Anime candidates ──────────────────────────────────────────────────────
+  // AniList items first (best quality metadata + banners), then TMDB anime as supplement
   let animeCandidates: MediaItem[] = [];
 
   if (Array.isArray(animeList) && animeList.length > 0) {
-    const isRichAnimeDescription = (desc?: string | null) => {
-      if (!desc) return false;
-      const clean = desc.replace(/<[^>]*>/g, "").trim();
-      if (clean.length < 45) return false;
-      const lower = clean.toLowerCase();
-      if (
-        lower.startsWith("the second season") ||
-        lower.startsWith("the third season") ||
-        lower.startsWith("the 2nd season") ||
-        lower.startsWith("the 3rd season") ||
-        lower.startsWith("season 2 of") ||
-        lower.startsWith("season 3 of")
-      ) {
-        return false;
-      }
-      return true;
-    };
-
     const buildAnimeCard = (a: AnimeItem) => ({
       id: a.id as any,
       anilistId: a.id,
@@ -215,97 +269,80 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[], existingPool?
       isTmdbAnime: false,
     });
 
-    const richBannerAnime = animeList.filter(
-      (a) =>
-        a &&
-        a.id &&
-        a.name &&
-        isRichAnimeDescription(a.description) &&
-        typeof a.bannerImage === "string" &&
-        a.bannerImage.startsWith("http") &&
-        (a.name || "").length < 65
-    );
-
     const validAnime = animeList.filter(
       (a) =>
-        a &&
-        a.id &&
-        a.name &&
-        a.description &&
-        a.description.trim().length >= 10 &&
+        a && a.id && a.name && a.description &&
+        a.description.trim().length >= 20 &&
         ((typeof a.poster === "string" && a.poster.startsWith("http")) ||
           (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http")))
     );
-
-    const aniListCards = (richBannerAnime.length > 0 ? richBannerAnime : validAnime).map(buildAnimeCard);
-    animeCandidates.push(...aniListCards);
+    animeCandidates.push(...validAnime.map(buildAnimeCard));
   }
 
-  // Fallback: If no AniList items are loaded yet or if AniList descriptions are weak, use high-quality TMDB anime items
-  if (animeCandidates.length === 0) {
-    const tmdbAnimeFeed = validFeed
-      .filter((i) => isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja"))
-      .map((i) => ({ ...i, media_type: "anime" as const, isTmdbAnime: true }));
-    animeCandidates.push(...tmdbAnimeFeed);
-  }
+  // Supplement with TMDB anime (Spirited Away, Your Name, Attack on Titan, etc.)
+  const tmdbAnimeFeed = validFeed
+    .filter(
+      (i) =>
+        (isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja")) &&
+        (i.vote_count || 0) >= 100
+    )
+    .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
+    .map((i) => ({ ...i, media_type: "anime" as const, isTmdbAnime: true }));
+  animeCandidates.push(...tmdbAnimeFeed);
 
-  // Deduplicate anime candidates by normalized title so we don't repeat titles
+  // Deduplicate anime by normalised title
   const uniqueAnimeMap = new Map<string, MediaItem>();
-  for (const candidate of animeCandidates) {
-    const normTitle = (candidate.name || candidate.title || "").toLowerCase().trim();
-    if (normTitle && !uniqueAnimeMap.has(normTitle)) {
-      uniqueAnimeMap.set(normTitle, candidate);
-    }
+  for (const c of animeCandidates) {
+    const key = (c.name || c.title || "").toLowerCase().trim();
+    if (key && !uniqueAnimeMap.has(key)) uniqueAnimeMap.set(key, c);
   }
   animeCandidates = Array.from(uniqueAnimeMap.values());
 
-  const seenIds = new Set<number | string>();
-  try {
-    if (typeof window !== "undefined") {
-      const raw = sessionStorage.getItem("sv_seen_hero_ids");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((id: number | string) => seenIds.add(id));
-        }
-      }
-    }
-  } catch {}
+  // ── Seen-ID tracking (localStorage, 30-day TTL) ───────────────────────────
+  const seenIds = loadSeenHeroIds();
 
+  // Pick from the top quality tier (top 60%) but prefer unseen entries.
+  // When all candidates in a category have been seen, cycle resets for that category.
   const pickBestCandidate = (candidates: MediaItem[]): MediaItem | null => {
     if (candidates.length === 0) return null;
 
-    // Filter unseen candidates; if all have been seen, cycle back through the pool
-    const unseen = candidates.filter((c) => !seenIds.has(c.id));
-    const pool = unseen.length > 0 ? unseen : candidates;
+    // Work in the top-quality tier (top 60% by quality score, minimum 6 entries)
+    const tierSize = Math.max(6, Math.ceil(candidates.length * 0.6));
+    const topTier = candidates.slice(0, tierSize);
+
+    let pool = topTier.filter((c) => !seenIds.has(String(c.id)));
+
+    if (pool.length === 0) {
+      // All top-tier seen — widen to full list for a fresh candidate
+      pool = candidates.filter((c) => !seenIds.has(String(c.id)));
+    }
+
+    if (pool.length === 0) {
+      // Every candidate seen — reset seen for this category and start fresh
+      candidates.forEach((c) => seenIds.delete(String(c.id)));
+      pool = topTier;
+    }
 
     const picked = pool[Math.floor(Math.random() * pool.length)];
-    if (picked) {
-      seenIds.add(picked.id);
-    }
+    if (picked) seenIds.add(String(picked.id));
     return picked || null;
   };
 
-  // If existingPool is provided (e.g. background anime load), keep existing movie and tv cards
-  const movieCard = (existingPool && existingPool[0]) ? existingPool[0] : pickBestCandidate(movieCandidates);
-  const tvCard = (existingPool && existingPool[1]) ? existingPool[1] : pickBestCandidate(tvCandidates);
-  const animeCard = pickBestCandidate(animeCandidates) || (existingPool && existingPool[2]) || null;
+  const movieCard = pickBestCandidate(movieCandidates);
+  const tvCard = pickBestCandidate(tvCandidates);
+  const animeCard = pickBestCandidate(animeCandidates);
 
-  try {
-    if (typeof window !== "undefined") {
-      const arr = Array.from(seenIds).slice(-60);
-      sessionStorage.setItem("sv_seen_hero_ids", JSON.stringify(arr));
-    }
-  } catch {}
+  saveSeenHeroIds(seenIds);
 
   const heroPool = [movieCard, tvCard, animeCard].filter(Boolean) as MediaItem[];
 
+  // Pad to 3 if any slot came up null (very sparse feed)
   if (heroPool.length < 3) {
-    const heroIds = new Set(heroPool.map((h) => h.id));
-    for (const item of validFeed) {
-      if (!heroIds.has(item.id)) {
+    const heroIds = new Set(heroPool.map((h) => String(h.id)));
+    for (const item of validFeed.sort((a, b) => heroQualityScore(b) - heroQualityScore(a))) {
+      if (!heroIds.has(String(item.id))) {
         heroPool.push(item);
-        heroIds.add(item.id);
+        heroIds.add(String(item.id));
         if (heroPool.length >= 3) break;
       }
     }
@@ -406,6 +443,8 @@ function SectionHeading({
   );
 }
 
+let lastHeroShuffleTime = Date.now();
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
   const { theme } = useTheme();
@@ -444,19 +483,24 @@ export default function Home() {
   const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTopRatedFeed || []);
   const [heroFeed, setHeroFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroFeed || []);
   const [heroPool, setHeroPool] = useState<MediaItem[]>(() => {
+    // 1. In-memory globalHomeCache: back-navigation within the same SPA session (instant)
     if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) {
       return globalHomeCache.heroPool;
     }
-    return loadHeroPoolFromSession();
+    // 2. sessionStorage: fresh cache (≤5 min) → instant load on hard refresh with no extra requests
+    if (!isHeroSessionStale()) {
+      return loadHeroPoolFromSession();
+    }
+    // 3. Stale or empty → will fetch fresh entries
+    return [];
   });
   const [recommended, setRecommended] = useState<MediaItem[]>(() => globalHomeCache?.recommended || []);
   const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || []);
   const [isLoading, setIsLoading] = useState(() => {
-    if (globalHomeCache && globalHomeCache.heroPool && globalHomeCache.heroPool.length > 0) {
-      return false;
-    }
-    const saved = loadHeroPoolFromSession();
-    return saved.length > 0 ? false : true;
+    // No skeleton if we have a valid cached pool (either in-memory or fresh session)
+    if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) return false;
+    if (!isHeroSessionStale() && loadHeroPoolFromSession().length > 0) return false;
+    return true;
   });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [animeList, setAnimeList] = useState<AnimeItem[]>(() => globalHomeCache?.animeList || []);
@@ -466,7 +510,7 @@ export default function Home() {
       : INITIAL_COLLECTIONS
   );
   const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
-  const [heroArtworkReady, setHeroArtworkReady] = useState(true);
+  const [heroArtworkReady, setHeroArtworkReady] = useState(false);
   const [revealedSections, setRevealedSections] = useState(1);
   const [moodSeed, setMoodSeed] = useState("");
   const [customSections, setCustomSections] = useState<any[]>(() => {
@@ -611,18 +655,19 @@ export default function Home() {
         setCustomSections(globalHomeCache.customSections);
       }
       if (loadError) setLoadError(null);
-      return;
-    }
 
-    // Try sessionStorage fallback — covers the case where module-level
-    // cache was reset (hard back-nav, full page reload, etc.)
-    if (heroPool.length === 0) {
-      const saved = loadHeroPoolFromSession();
-      if (saved.length > 0) {
-        setHeroPool(saved);
-        setIsLoading(false);
-        setAnimeLoading(false);
+      // Periodically refresh hero pool when navigating back after 5+ minutes
+      const now = Date.now();
+      if (now - lastHeroShuffleTime > HERO_CACHE_TTL && globalHomeCache.heroFeed && globalHomeCache.heroFeed.length > 0) {
+        const freshPool = buildHeroPool(globalHomeCache.heroFeed, globalHomeCache.animeList);
+        if (freshPool.length >= 3) {
+          lastHeroShuffleTime = now;
+          setHeroPool(freshPool);
+          saveHeroPoolToSession(freshPool);
+          globalHomeCache.heroPool = freshPool;
+        }
       }
+      return;
     }
 
     // Safety timeout: never let the loading skeleton show indefinitely
@@ -630,11 +675,6 @@ export default function Home() {
       if (cancelled) return;
       setIsLoading(false);
       setAnimeLoading(false);
-      setHeroPool((current) => {
-        if (current.length > 0) return current;
-        const saved = loadHeroPoolFromSession();
-        return saved.length > 0 ? saved : current;
-      });
     }, 5000);
 
     const load = async () => {
@@ -645,17 +685,22 @@ export default function Home() {
 
       try {
         // Fast hero fetch — dedicated lightweight edge call that returns hero candidates in <80ms
-        fetchJson<{ results: MediaItem[] }>("/api/tmdb/home-hero", { cacheTtlMs: 3600000 })
-          .then((heroData) => {
-            if (cancelled || !heroData?.results || heroData.results.length === 0) return;
-            const fastCandidates = heroData.results.filter((i) => i && i.backdrop_path && i.poster_path);
-            if (fastCandidates.length > 0) {
-              setHeroPool((current) => (current && current.length >= 3 ? current : fastCandidates));
-              saveHeroPoolToSession(fastCandidates);
-              setIsLoading(false);
-            }
-          })
-          .catch(() => {});
+        // Only used when heroPool is empty (stale/first load) to show something quickly before the
+        // full home payload arrives. Always runs through buildHeroPool to keep exactly 3 slides.
+        if (heroPool.length === 0) {
+          fetchJson<{ results: MediaItem[] }>("/api/tmdb/home-hero", { cacheTtlMs: 3600000 })
+            .then((heroData) => {
+              if (cancelled || !heroData?.results || heroData.results.length === 0) return;
+              const filtered = heroData.results.filter((i) => i && i.backdrop_path && i.poster_path);
+              if (filtered.length > 0) {
+                const fastPool = buildHeroPool(filtered);
+                if (fastPool.length > 0) {
+                  setHeroPool((current) => (current && current.length >= 3 ? current : fastPool));
+                }
+              }
+            })
+            .catch(() => {});
+        }
 
         // Consolidated home endpoint for content rows below the hero
         const homePromise = fetchJson<{
@@ -748,10 +793,11 @@ export default function Home() {
             ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja")
           );
 
-          const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].slice(0, 10).map((item) => ({
+          const initialAnimeItems: AnimeItem[] = [...animeTvSafe, ...animeMovieSafe].map((item) => ({
             id: String(item.id),
             name: item.name || item.title || "Anime",
             poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : "",
+            bannerImage: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : undefined,
             type: item.media_type === "movie" ? "MOVIE" : "TV",
             rating: item.vote_average ? String(item.vote_average.toFixed(1)) : null,
             description: item.overview || "",
@@ -793,8 +839,13 @@ export default function Home() {
           setHeroFeed(fullHeroFeed);
 
           if (fullHeroPool.length > 0) {
-            setHeroPool(fullHeroPool);
-            saveHeroPoolToSession(fullHeroPool);
+            setHeroPool((current) => {
+              if (!current || current.length < 3 || isHeroSessionStale()) {
+                saveHeroPoolToSession(fullHeroPool);
+                return fullHeroPool;
+              }
+              return current;
+            });
 
             // Preload hero slide 1 backdrop image immediately
             if (typeof document !== "undefined" && fullHeroPool[0]?.backdrop_path) {
@@ -838,24 +889,51 @@ export default function Home() {
           // Background resolve anime and collections in parallel
           animePromise.then((animeResponse) => {
             if (cancelled) return;
-            const finalAnimeList = ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
-              ? (animeResponse as any).trending.slice(0, 10)
-              : (animeResponse?.items && animeResponse.items.length > 0)
-                ? animeResponse.items.slice(0, 10)
+            const rawAnimeList = ((animeResponse as any)?.items && (animeResponse as any).items.length > 0)
+              ? (animeResponse as any).items
+              : ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
+                ? (animeResponse as any).trending
                 : initialAnimeItems;
+            const finalAnimeList = rawAnimeList.slice(0, 18);
 
             setAnimeList(finalAnimeList);
             setAnimeLoading(false);
 
-            const updatedHeroPool = buildHeroPool(fullHeroFeed, finalAnimeList, fullHeroPool);
-            if (updatedHeroPool.length > 0) {
-              setHeroPool(updatedHeroPool);
-              saveHeroPoolToSession(updatedHeroPool);
+            // If the session cache is still fresh, the hero pool was already restored from session
+            // (movie, TV, anime all locked in). Don't let the background AniList fetch overwrite the
+            // anime slot — that would make it change on every refresh, inconsistent with movie/TV.
+            if (!isHeroSessionStale()) {
+              if (globalHomeCache) globalHomeCache.animeList = finalAnimeList;
+              return;
+            }
+
+            const updatedHeroPool = buildHeroPool(fullHeroFeed, rawAnimeList);
+            if (updatedHeroPool.length >= 3) {
+              setHeroPool((current) => {
+                if (current && current.length >= 3) {
+                  const newAnime = updatedHeroPool[2];
+                  // Only update anime slot if it's a genuinely different entry
+                  if (newAnime && String(newAnime.id) !== String(current[2]?.id)) {
+                    const merged = [current[0], current[1], newAnime];
+                    saveHeroPoolToSession(merged);
+                    if (globalHomeCache) globalHomeCache.heroPool = merged;
+                    return merged;
+                  }
+                  return current;
+                }
+                if (current && current.length >= 2) {
+                  const merged = [current[0], current[1], updatedHeroPool[2]];
+                  saveHeroPoolToSession(merged);
+                  if (globalHomeCache) globalHomeCache.heroPool = merged;
+                  return merged;
+                }
+                saveHeroPoolToSession(updatedHeroPool);
+                return updatedHeroPool;
+              });
             }
 
             if (globalHomeCache) {
               globalHomeCache.animeList = finalAnimeList;
-              if (updatedHeroPool.length > 0) globalHomeCache.heroPool = updatedHeroPool;
             }
           }).catch(() => {
             if (!cancelled) setAnimeLoading(false);
@@ -1069,17 +1147,54 @@ export default function Home() {
     }
   }, [activeBackdropUrl, ambientBackdrop.current]);
 
-  // Pre-warm hero slide artwork in background without delaying rendering
+  // ── Artwork verification gate: Ensure artwork is decoded before revealing HeroBanner ──
   useEffect(() => {
-    if (!hero) return;
-    const nextItem = heroPool[(heroIndex + 1) % (heroPool.length || 1)];
-    const nextBg = nextItem?.backdrop_path || nextItem?.poster_path;
-    if (nextBg && typeof window !== "undefined") {
-      const nextUrl = nextBg.startsWith("http") ? nextBg : `https://image.tmdb.org/t/p/w1280${nextBg}`;
-      const img = new Image();
-      img.src = nextUrl;
+    if (!hero) {
+      setHeroArtworkReady(false);
+      return;
     }
-  }, [hero?.id, heroIndex, heroPool]);
+
+    const bg = hero.backdrop_path || hero.poster_path;
+    if (!bg) {
+      setHeroArtworkReady(true);
+      return;
+    }
+
+    const bgUrl = bg.startsWith("http") ? bg : `https://image.tmdb.org/t/p/w1280${bg}`;
+    let isCancelled = false;
+
+    // Safety timeout: Maximum 1.5s skeleton display so slow network doesn't block indefinitely
+    const timer = setTimeout(() => {
+      if (!isCancelled) setHeroArtworkReady(true);
+    }, 1500);
+
+    if (typeof window !== "undefined") {
+      const img = new Image();
+      img.src = bgUrl;
+      img.onload = () => {
+        if (isCancelled) return;
+        clearTimeout(timer);
+        setHeroArtworkReady(true);
+      };
+      img.onerror = () => {
+        if (isCancelled) return;
+        clearTimeout(timer);
+        setHeroArtworkReady(true);
+      };
+
+      if (img.complete) {
+        clearTimeout(timer);
+        setHeroArtworkReady(true);
+      }
+    } else {
+      setHeroArtworkReady(true);
+    }
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [hero?.id, hero?.backdrop_path]);
 
   // ── Modular Progressive Hydration of Sections Below the Hero ─────────
   useEffect(() => {
@@ -1137,7 +1252,7 @@ export default function Home() {
       <main className="relative z-10 w-full bleed-header">
 
         {/* ─── HERO BANNER ─── */}
-        {hero ? (
+        {hero && heroArtworkReady ? (
           <div
             className="relative group/hero select-none animate-in fade-in duration-500"
             onTouchStart={handleTouchStart}

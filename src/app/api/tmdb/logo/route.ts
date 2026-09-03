@@ -6,9 +6,6 @@ import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
 export const revalidate = 2592000; // 30 days cache
 
-// Edge memory cache for fast sub-millisecond repeated logo queries
-const logoMemoryCache = new Map<string, { logoUrl: string | null; aspectRatio?: number; width?: number; height?: number }>();
-
 function cleanSearchTitle(raw: string): string {
   if (!raw) return "";
   return raw
@@ -58,30 +55,17 @@ function isTitleMatch(target: string, candidate: string): boolean {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
-  const explicitTmdbId = searchParams.get("tmdbId");
   const typeParam = searchParams.get("type") || "movie";
   const title = searchParams.get("title") || "";
   const isAnime = typeParam === "anime";
   const type = isAnime ? "tv" : typeParam === "tv" ? "tv" : "movie";
 
-  if (!id && !title && !explicitTmdbId) {
+  if (!id && !title) {
     return Response.json({ logoUrl: null }, { status: 400 });
   }
 
-  const cacheKey = `${id || ""}_${explicitTmdbId || ""}_${typeParam}_${title.trim().toLowerCase()}`;
-  if (logoMemoryCache.has(cacheKey)) {
-    return Response.json(logoMemoryCache.get(cacheKey), { headers: cacheHeaders(86400 * 30) });
-  }
-
-  const returnLogo = (data: { logoUrl: string | null; aspectRatio?: number; width?: number; height?: number }) => {
-    logoMemoryCache.set(cacheKey, data);
-    return Response.json(data, { headers: cacheHeaders(data.logoUrl ? 86400 * 30 : 86400 * 7) });
-  };
-
   try {
-    let tmdbId: string | null = (explicitTmdbId && !isNaN(Number(explicitTmdbId))) 
-      ? explicitTmdbId 
-      : (id && !isNaN(Number(id)) && Number(id) > 0 ? id : null);
+    let tmdbId: string | null = id && !isNaN(Number(id)) && Number(id) > 0 ? id : null;
 
     // Helper to fetch logos for a given type & ID
     const fetchLogosForId = async (targetType: "movie" | "tv", targetId: string) => {
@@ -113,24 +97,16 @@ export async function GET(request: NextRequest) {
       return null;
     };
 
-    // 0. Explicit TMDB ID lookup (if caller specifically provided a tmdbId, even for anime)
-    if (explicitTmdbId) {
-      const directLogo = (await fetchLogosForId("tv", explicitTmdbId)) || (await fetchLogosForId("movie", explicitTmdbId));
-      if (directLogo) {
-        return returnLogo(directLogo);
-      }
-    }
-
     // 1. Direct TMDB ID lookup first (fastest and most accurate)
     // CRITICAL: NEVER treat an anime ID as a TMDB ID because anime uses AniList IDs (e.g. Bleach is 269 on AniList, but TMDB TV 269 is One Tree Hill!)
-    if (tmdbId && !isAnime && !explicitTmdbId) {
+    if (tmdbId && !isAnime) {
       const directLogo = await fetchLogosForId(type as "movie" | "tv", tmdbId);
       if (directLogo) {
-        return returnLogo(directLogo);
+        return Response.json(directLogo, { headers: cacheHeaders(86400 * 30) });
       }
       // If direct TMDB ID failed and media is non-anime, do not guess unrelated titles
       if (!title) {
-        return returnLogo({ logoUrl: null });
+        return Response.json({ logoUrl: null }, { headers: cacheHeaders(86400 * 7) });
       }
     }
 
@@ -187,7 +163,7 @@ export async function GET(request: NextRequest) {
           );
           const found = logoResults.find(Boolean);
           if (found) {
-            return returnLogo(found);
+            return Response.json(found, { headers: cacheHeaders(86400 * 30) });
           }
         }
       } else {
@@ -222,13 +198,13 @@ export async function GET(request: NextRequest) {
           );
           const found = logoResults.find(Boolean);
           if (found) {
-            return returnLogo(found);
+            return Response.json(found, { headers: cacheHeaders(86400 * 30) });
           }
         }
       }
     }
 
-    return returnLogo({ logoUrl: null });
+    return Response.json({ logoUrl: null }, { headers: cacheHeaders(86400 * 7) });
   } catch (error) {
     console.error("[TMDB Logo API Error]:", error);
     return Response.json({ logoUrl: null }, { status: 200, headers: cacheHeaders(86400) });

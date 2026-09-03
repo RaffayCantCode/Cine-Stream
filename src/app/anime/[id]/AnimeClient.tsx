@@ -1065,7 +1065,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   });
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const animeTitle = anime?.name || (anime as any)?.title || (anime as any)?.english_name || (typeof id === "string" ? id.replace(/-\d+$/, "").replace(/-/g, " ") : undefined);
-  const { logoUrl, loading: logoLoading } = useMediaLogo(id, "anime", animeTitle, anime?.tmdbId);
+  const { logoUrl } = useMediaLogo(id, "anime", animeTitle);
   // If we already have initialData, skip the blank skeleton entirely.
   const [isLoading, setIsLoading] = useState(!initialData);
   const [episodesLoading, setEpisodesLoading] = useState(true);
@@ -1556,49 +1556,23 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
 
-          // Pre-warm hero banner, poster, and logo artwork asynchronously in background
-          if (typeof window !== "undefined") {
-            const banner = a.bannerImage || a.backdrop;
-            if (banner && banner.startsWith("http")) {
-              const img = new Image();
-              img.src = banner;
-            }
-            if (a.poster && a.poster.startsWith("http")) {
-              const img = new Image();
-              img.src = a.poster;
-            }
-
-            const resolvedTitle = a.name || a.title || a.english_name || "";
-            const logoKey = `${a.id || id}-${resolvedTitle}`;
-            let hasSavedLogo = false;
-            try {
-              hasSavedLogo = Boolean(sessionStorage.getItem(`logo_v7_${logoKey}`));
-            } catch {}
-
-            if (!hasSavedLogo) {
-              const tmdbQuery = a.tmdbId ? `&tmdbId=${encodeURIComponent(a.tmdbId)}` : "";
-              fetch(
-                `/api/tmdb/logo?id=${encodeURIComponent(a.id || id)}&title=${encodeURIComponent(resolvedTitle)}&type=anime${tmdbQuery}`,
-                { cache: "force-cache" }
-              )
-                .then((res) => (res.ok ? res.json() : null))
-                .then((d) => {
-                  if (d?.logoUrl) {
-                    try { sessionStorage.setItem(`logo_v7_${logoKey}`, d.logoUrl); } catch {}
-                    const img = new Image();
-                    img.src = d.logoUrl;
-                  }
-                })
-                .catch(() => {});
+          // Preload hero banner and poster image immediately
+          if (typeof document !== "undefined") {
+            const heroImg = a.bannerImage || a.poster;
+            if (heroImg && heroImg.startsWith("http")) {
+              const link = document.createElement("link");
+              link.rel = "preload";
+              link.as = "image";
+              link.href = heroImg;
+              link.fetchPriority = "high";
+              document.head.appendChild(link);
             }
           }
 
-          if (cancelled) return;
-
+          setIsLoading(false);
           setAnime(a);
           setFranchiseNodes(data.data.franchiseNodes || []);
           tmdbIdRef.current = a.tmdbId || null;
-          setIsLoading(false);
 
           const seasons = a.seasons || [];
           let urlSeasonId: string | null = null;
@@ -2414,8 +2388,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]"
                         />
                       </div>
-                    ) : logoLoading ? (
-                      <div className="mb-4 sm:mb-5 h-12 sm:h-16 md:h-20 w-48 sm:w-64 rounded-xl bg-white/[0.08] animate-pulse" />
                     ) : (
                       <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
                     )}
