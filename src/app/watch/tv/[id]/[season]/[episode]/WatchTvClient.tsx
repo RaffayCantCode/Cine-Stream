@@ -55,8 +55,29 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
   const router = useRouter();
   const { data: session } = useSession();
 
-  const [show, setShow] = useState<TvShow | null>(null);
-  const [seasonData, setSeasonData] = useState<Season | null>(null);
+  const [show, setShow] = useState<TvShow | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`cinestream_tv_${showId}`);
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+  const [seasonData, setSeasonData] = useState<Season | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`cinestream_tv_${showId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?._initialSeasonNum === seasonNumber && parsed?._initialSeasonData) {
+            return parsed._initialSeasonData;
+          }
+        }
+      } catch {}
+    }
+    return null;
+  });
   const [allSeasonsData, setAllSeasonsData] = useState<DrawerSeason[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,30 +122,39 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
 
   useEffect(() => {
     const loadShowAndSeason = async () => {
-      setIsLoading(true);
       try {
-        const [showRes, sRes] = await Promise.all([
-          fetchJson<TvShow>(`/api/tmdb/tv/${showId}`),
-          fetchJson<Season>(`/api/tmdb/tv/${showId}/season/${seasonNumber}`).catch(() => null),
-        ]);
+        let activeShow = show;
+        if (!activeShow) {
+          activeShow = await fetchJson<TvShow>(`/api/tmdb/tv/${showId}`);
+          setShow(activeShow);
+        }
 
-        setShow(showRes);
-        setSeasonData(sRes);
+        let activeSeason = seasonData;
+        if (!activeSeason) {
+          if ((activeShow as any)?._initialSeasonNum === seasonNumber && (activeShow as any)?._initialSeasonData) {
+            activeSeason = (activeShow as any)._initialSeasonData;
+          } else {
+            activeSeason = await fetchJson<Season>(`/api/tmdb/tv/${showId}/season/${seasonNumber}`).catch(() => null);
+          }
+          if (activeSeason) setSeasonData(activeSeason);
+        }
 
         // Preload all seasons summary for EpisodeDrawer
-        if (showRes.seasons) {
-          const formattedSeasons: DrawerSeason[] = showRes.seasons
+        if (activeShow?.seasons) {
+          const formattedSeasons: DrawerSeason[] = activeShow.seasons
             .filter((s) => s.season_number > 0)
             .map((s) => ({
               id: s.id,
               season_number: s.season_number,
               name: s.name || `Season ${s.season_number}`,
-              episodes: s.season_number === seasonNumber && sRes?.episodes ? sRes.episodes : [],
+              episodes: s.season_number === seasonNumber && activeSeason?.episodes ? activeSeason.episodes : [],
             }));
           setAllSeasonsData(formattedSeasons);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load TV show");
+        if (!show) {
+          setError(err instanceof Error ? err.message : "Failed to load TV show");
+        }
       } finally {
         setIsLoading(false);
       }

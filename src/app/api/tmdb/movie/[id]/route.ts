@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";

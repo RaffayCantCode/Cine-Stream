@@ -230,7 +230,7 @@ export async function getHiddenMediaSet(): Promise<Set<string>> {
       }
     }
 
-    cachedHiddenSet = { set, expiresAt: now + 5000 }; // 5s TTL cache
+    cachedHiddenSet = { set, expiresAt: now + OVERRIDES_CACHE_TTL }; // 10 min TTL cache
     return set;
   } catch (error) {
     console.error("[Media Overrides] getHiddenMediaSet Error:", error);

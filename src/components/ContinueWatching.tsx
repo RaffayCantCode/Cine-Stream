@@ -29,7 +29,7 @@ const fetcher = async (url: string) => {
     const json = await res.json();
     if (json?.items && typeof window !== "undefined") {
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(json));
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ ...json, cachedAt: Date.now() }));
       } catch {}
     }
     return json;
@@ -105,7 +105,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
             !(item.mediaId === mediaId && item.mediaType === mediaType)
         );
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ ...currentData, items: nextItems }));
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ ...currentData, items: nextItems, cachedAt: Date.now() }));
         } catch {}
         return {
           ...currentData,

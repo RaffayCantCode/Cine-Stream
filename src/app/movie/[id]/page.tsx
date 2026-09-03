@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import type { Metadata } from "next";
 import { tmdbFetch } from "@/lib/tmdb";

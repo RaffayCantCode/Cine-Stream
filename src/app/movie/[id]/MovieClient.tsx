@@ -13,7 +13,8 @@ import { GridMediaCard } from "@/components/GridMediaCard";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
-import { useMediaLogo } from "@/components/MediaLogo";
+
+
 import { usePageContentReady } from "@/lib/pageLoad";
 import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
@@ -60,8 +61,7 @@ export default function MovieClient() {
   const [movie, setMovie] = useState<Movie | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { logoUrl } = useMediaLogo(id, "movie", movie?.title);
-  const fallbackLogo = useMemo(() => {
+  const activeLogo = useMemo(() => {
     const logos = (movie as any)?.images?.logos;
     if (!logos || !Array.isArray(logos) || logos.length === 0) return null;
     const englishLogo = logos.find((l: any) => l.iso_639_1 === "en" && l.file_path);
@@ -70,7 +70,6 @@ export default function MovieClient() {
     const chosen = englishLogo || nullLangLogo || jaLogo || logos[0];
     return chosen?.file_path ? `https://image.tmdb.org/t/p/w500${chosen.file_path}` : null;
   }, [movie]);
-  const activeLogo = logoUrl || fallbackLogo;
   usePageContentReady(!isLoading);
 
   const { theme } = useTheme();
@@ -113,17 +112,10 @@ export default function MovieClient() {
           document.head.appendChild(link);
         }
         setMovie(data);
-        // Decode backdrop before revealing the page so it's already painted
-        if (backdropSrc) {
-          const img = new Image();
-          img.src = backdropSrc;
-          await new Promise<void>(resolve => {
-            const done = () => resolve();
-            const t = setTimeout(done, 1000);
-            if (img.complete && img.naturalWidth > 0) { clearTimeout(t); done(); return; }
-            img.onload = () => { clearTimeout(t); if ("decode" in img) img.decode().then(done).catch(done); else done(); };
-            img.onerror = () => { clearTimeout(t); done(); };
-          });
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(`cinestream_movie_${id}`, JSON.stringify(data));
+          } catch {}
         }
       } catch (error) {
         setMovie(null);

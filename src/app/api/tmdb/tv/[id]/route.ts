@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 import { getMediaOverride, applyMediaOverride } from "@/lib/media-overrides";
@@ -71,7 +70,25 @@ export async function GET(
       }
     }
 
-    const finalResult = applyMediaOverride(result, override);
+    // Find the first real season number from the seasons list (skip season 0 specials)
+    const seasons = (result.seasons as any[]) || [];
+    const firstSeasonNum = seasons.find((s: any) => s.season_number > 0)?.season_number ?? 1;
+
+    // Fetch season 1 data in parallel — this eliminates the immediate season fetch in TvClient.
+    // We only bundle the FIRST real season. Subsequent season changes still fetch on demand.
+    let initialSeasonData: any = null;
+    try {
+      initialSeasonData = await tmdbFetch(`/tv/${id}/season/${firstSeasonNum}`, {
+        append_to_response: "videos",
+      }).catch(() => null);
+    } catch {}
+
+    const finalResult = applyMediaOverride(result, override) as any;
+    if (initialSeasonData) {
+      finalResult._initialSeasonNum = firstSeasonNum;
+      finalResult._initialSeasonData = initialSeasonData;
+    }
+
     return Response.json(finalResult, {
       headers: cacheHeaders(3600),
     });

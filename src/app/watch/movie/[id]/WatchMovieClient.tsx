@@ -26,8 +26,24 @@ interface Movie {
 
 export default function WatchMovieClient({ movieId }: { movieId: number }) {
   const { data: session } = useSession();
-  const [movie, setMovie] = useState<Movie | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [movie, setMovie] = useState<Movie | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`cinestream_movie_${movieId}`);
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`cinestream_movie_${movieId}`);
+        if (cached) return false;
+      } catch {}
+    }
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
 
   const [sourceConfig, setSourceConfig] = useState<{ key: string; tag: SourceTag }[] | null>(null);
@@ -71,25 +87,30 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   useEffect(() => {
     const fetchMovie = async () => {
       try {
-        const data = await fetchJson<Movie>(`/api/tmdb/movie/${movieId}`);
-        setMovie(data);
+        let activeMovie = movie;
+        if (!activeMovie) {
+          activeMovie = await fetchJson<Movie>(`/api/tmdb/movie/${movieId}`);
+          setMovie(activeMovie);
+        }
 
         // Record watch history
-        if (session?.user) {
+        if (session?.user && activeMovie) {
           fetch("/api/watch-history", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              mediaId: data.id,
+              mediaId: activeMovie.id,
               mediaType: "movie",
-              title: data.title,
-              posterPath: data.poster_path ?? null,
-              backdropPath: data.backdrop_path ?? null,
+              title: activeMovie.title,
+              posterPath: activeMovie.poster_path ?? null,
+              backdropPath: activeMovie.backdrop_path ?? null,
             }),
           }).catch(() => {});
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load movie");
+        if (!movie) {
+          setError(err instanceof Error ? err.message : "Failed to load movie");
+        }
       } finally {
         setIsLoading(false);
       }

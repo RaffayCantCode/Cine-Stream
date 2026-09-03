@@ -9,7 +9,8 @@ import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film, Layers } from "lucide-react";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
-import { useMediaLogo } from "@/components/MediaLogo";
+
+
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 
 function TvHeroTrailerButton() {
@@ -95,8 +96,7 @@ export default function TvClient() {
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>("list");
-  const { logoUrl } = useMediaLogo(id, "tv", show?.name);
-  const fallbackLogo = useMemo(() => {
+  const activeLogo = useMemo(() => {
     const logos = (show as any)?.images?.logos;
     if (!logos || !Array.isArray(logos) || logos.length === 0) return null;
     const englishLogo = logos.find((l: any) => l.iso_639_1 === "en" && l.file_path);
@@ -105,7 +105,6 @@ export default function TvClient() {
     const chosen = englishLogo || nullLangLogo || jaLogo || logos[0];
     return chosen?.file_path ? `https://image.tmdb.org/t/p/w500${chosen.file_path}` : null;
   }, [show]);
-  const activeLogo = logoUrl || fallbackLogo;
   usePageContentReady(!isLoading);
 
   const { theme } = useTheme();
@@ -138,6 +137,7 @@ export default function TvClient() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    seasonCacheRef.current.clear();
   }, [id]);
 
   useEffect(() => {
@@ -145,6 +145,7 @@ export default function TvClient() {
     let initSeason = 1;
     let initEp = 1;
     let hasActiveShow = false;
+    let cwCacheFresh = false;
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search);
       const urlSeason = searchParams.get("season");
@@ -173,6 +174,9 @@ export default function TvClient() {
             const cwRaw = localStorage.getItem("cinestream_cw_cache");
             if (cwRaw) {
               const cw = JSON.parse(cwRaw);
+              if (cw?.cachedAt && Date.now() - cw.cachedAt < 5 * 60 * 1000) {
+                cwCacheFresh = true;
+              }
               const found = (cw.items || []).find(
                 (it: any) => String(it.mediaId) === String(id) && it.mediaType === "tv"
               );
@@ -194,8 +198,8 @@ export default function TvClient() {
       setHasActiveProgress(true);
     }
 
-    // Always query database watch history to ensure logged in users have exact latest episode
-    if (status === "authenticated") {
+    // Only query database watch history if we don't already have fresh local cache
+    if (status === "authenticated" && (!hasActiveShow || !cwCacheFresh)) {
       fetch("/api/watch-history")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
@@ -219,6 +223,7 @@ export default function TvClient() {
     setIsStateLoaded(true);
   }, [id, status, isStateLoaded]);
 
+  const seasonCacheRef = useRef<Map<number, Season>>(new Map());
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -277,6 +282,15 @@ export default function TvClient() {
         }
         // Set show data first so React can start rendering
         setShow(data);
+        if ((data as any)?._initialSeasonData && (data as any)?._initialSeasonNum) {
+          const sNum = Number((data as any)._initialSeasonNum);
+          const sData = (data as any)._initialSeasonData;
+          seasonCacheRef.current.set(sNum, sData);
+          if (selectedSeason === sNum || (!hasActiveProgress && selectedSeason === 1)) {
+            setSeasonData(sData);
+            setSeasonLoading(false);
+          }
+        }
         const firstSeason = data.seasons?.find((s: Season) => s.season_number > 0)?.season_number ?? 1;
         setSelectedSeason(prev => {
           if (hasActiveProgress && playingSeason) return playingSeason;
@@ -285,17 +299,10 @@ export default function TvClient() {
           }
           return prev;
         });
-        // Decode backdrop before revealing the page so it's already painted
-        if (backdropSrc) {
-          const img = new Image();
-          img.src = backdropSrc;
-          await new Promise<void>(resolve => {
-            const done = () => resolve();
-            const t = setTimeout(done, 1000);
-            if (img.complete && img.naturalWidth > 0) { clearTimeout(t); done(); return; }
-            img.onload = () => { clearTimeout(t); if ("decode" in img) img.decode().then(done).catch(done); else done(); };
-            img.onerror = () => { clearTimeout(t); done(); };
-          });
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(`cinestream_tv_${id}`, JSON.stringify(data));
+          } catch {}
         }
       } catch (error) {
         setShow(null);
@@ -368,13 +375,23 @@ export default function TvClient() {
 
   useEffect(() => {
     if (!selectedSeason) return;
+
+    if (seasonCacheRef.current.has(selectedSeason)) {
+      setSeasonData(seasonCacheRef.current.get(selectedSeason)!);
+      setSeasonLoading(false);
+      return;
+    }
+
     let isActive = true;
 
     const fetchSeason = async () => {
       setSeasonLoading(true);
       try {
         const data = await fetchJson<Season>(`/api/tmdb/tv/${id}/season/${selectedSeason}`);
-        if (isActive) setSeasonData(data);
+        if (isActive) {
+          seasonCacheRef.current.set(selectedSeason, data);
+          setSeasonData(data);
+        }
       } catch (error) {
         if (isActive) {
           setSeasonData(null);
