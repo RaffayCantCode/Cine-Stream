@@ -1,152 +1,129 @@
 # CineStream 🎬
+CineStream is a full-featured streaming and reading platform for movies, TV shows, anime, and manga. Built with Next.js 15 and deployed on Cloudflare Pages / Vercel.
 
-CineStream is a full-featured streaming platform for movies, TV shows, anime, and manga. Built with Next.js 15 and deployed on Vercel.
-
-<img width="1920" height="920" alt="1" src="https://github.com/user-attachments/assets/a1568e8b-91da-4300-9824-722f7328f50e" />
+<img width="1920" height="920" alt="1" src="https://github.com/user-attachments/assets/b623ac2b-f97b-4af0-ac95-c3489e041355" />
 
 ---
-
 ## ✨ Features
-
-### Entertainment Hub
+### Entertainment & Reading Hub
 - 🎬 **Movies** - Browse popular, top-rated, trending movies from TMDB
-- 📺 **TV Shows** - Stream TV series with episode selection
-- 🇯🇵 **Anime** - Japanese anime with sub/dub options
-
+- 📺 **TV Shows** - Stream TV series with season and episode selection
+- 🇯🇵 **Anime** - Japanese anime with sub/dub streaming options
+- 📖 **Manga & Manhwa** - Extensive library of Manga, Manhwa, and Manhua with an interactive reader
 ### User Experience
-- 🔍 **Search** - Find any movie, show, anime, or manga
-- 👤 **User Accounts** - Sign up/login with email or OAuth (Google)
-- 📊 **Watch History** - Track what you've watched
-- ⏭️ **Continue Watching** - Pick up where you left off
-- 🗑️ **Remove Items** - Clear items from your continue list
-- 📱 **Responsive Design** - Works on mobile, tablet, and desktop
-
-
-<img width="1908" height="917" alt="3" src="https://github.com/user-attachments/assets/9e95443f-5348-4f5b-86bd-8bdf29032ef3" />
-
----
-
-### Streaming
-- Multiple streaming sources for reliability
-- Auto-fallback if one source fails
-- English subtitles where available
-
-
-<img width="1908" height="923" alt="2" src="https://github.com/user-attachments/assets/a1773ced-df97-4776-b397-d1acf5dd0b09" />
+- 🔍 **Unified Search** - Quickly find any movie, TV show, anime, manga, or manhwa
+- 👤 **User Accounts** - Sign up / login with email or OAuth (Google)
+- 📊 **Watch & Read History** - Track what you have watched and read
+- ⏭️ **Continue Watching & Reading** - Pick up right where you left off
+- 🗑️ **Library Management** - Easily clear items from your continue lists
+- 📱 **Responsive Design** - Optimized for mobile, tablet, and desktop screens
 
 
 ---
+### 🎥 Movie & TV Streaming
+- Multiple streaming sources for high availability
+- Automatic failover if a source is unreachable
+- English subtitles and captions where available
+<img width="1908" height="916" alt="2" src="https://github.com/user-attachments/assets/821e2cce-e435-420a-99a9-acc66e48734a" />
 
-### Anime Streaming (Japanese Dub With English Subtitles)
-- Multiple streaming sources for reliability
-- Auto-fallback if one source fails
-- Currently in work!
 
+---
+### 🎌 Anime Streaming (Japanese Audio with English Subtitles)
+- Multiple dedicated anime streaming engines
+- Comprehensive episode selectors and anime metadata
+- Auto-fallback between sources
+<img width="1920" height="923" alt="6" src="https://github.com/user-attachments/assets/c5d51ffe-e4a0-4c47-8d55-980945e7679b" />
 
-<img width="1897" height="918" alt="4" src="https://github.com/user-attachments/assets/8d187927-b04a-4263-a337-2ca6cac34344" />
+---
+### 📖 Manga & Manhwa Reader
+- 📚 **Massive Library** - Read popular Manga, Korean Manhwa, and Chinese Manhua
+- 👓 **Reader Experience** - High-resolution chapter viewer with smooth page transitions
+- 📑 **Chapter Navigation** - Full chapter lists with release history and scanlation details
+- 🔖 **Reading Progress Tracking** - Automatically saves current chapter and position
+  <img width="1909" height="913" alt="3" src="https://github.com/user-attachments/assets/572a2f8c-d34a-4036-bc5d-e647d726c0e5" />
 
+  
 ---
 
 ## 🛠️ Tech Stack
-
 | Technology | Purpose |
 |------------|---------|
-| **Next.js 15** | Framework |
-| **React 19** | UI Library |
-| **TypeScript** | Type Safety |
-| **Tailwind CSS** | Styling |
-| **NextAuth.js** | Authentication |
-| **Drizzle ORM** | Database |
-| **Vercel Postgres** | Database |
-| **Framer Motion** | Animations |
-| **TMDB API** | Movie/TV Data |
+| **Next.js 15** | Full-Stack React Framework |
+| **React 19** | Modern UI Library |
+| **TypeScript** | Strict Type Safety |
+| **Tailwind CSS** | Responsive Styling |
+| **NextAuth.js** | Authentication & Sessions |
+| **Drizzle ORM** | Database ORM & Migrations |
+| **Cloudflare D1 / Postgres** | Database Layer |
+| **Framer Motion** | UI Animations & Transitions |
+| **TMDB API** | Movie & TV Show Metadata |
 | **Jikan API** | Anime Metadata |
+| **Manga Engines** | Manga & Manhwa Chapter Fetching |
+---
+<img width="1901" height="911" alt="4" src="https://github.com/user-attachments/assets/8ea9902b-b5a0-4872-92a8-08440d18c8e7" />
 
 ## 🚀 Getting Started
-
 ### Prerequisites
 - Node.js 18+
-- Vercel account (for deployment)
 - TMDB API key (free from themoviedb.org)
-
+- Database credentials (Postgres or Cloudflare D1)
 ### Local Development
-
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/stream-vault.git
-cd stream-vault
-
+git clone https://github.com/RaffayCantCode/Cine-Stream.git
+cd Cine-Stream
 # Install dependencies
 npm install
-
 # Copy environment file
 cp .env.example .env.local
-
 # Edit .env.local with your credentials
-# Required: TMDB_API_KEY, POSTGRES_URL, NEXTAUTH_SECRET
-
+# Required: TMDB_API_KEY, POSTGRES_URL / DB bindings, NEXTAUTH_SECRET
 # Run database migrations
 npm run db:migrate
-
 # Start the dev server
 npm run dev
-```
 
-### Deploy to Vercel
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
-
-1. Connect your GitHub repository
-2. Add the required environment variables in Vercel dashboard:
-   - `TMDB_API_KEY` - Get from [TMDB](https://www.themoviedb.org/settings/api)
-   - `POSTGRES_URL` - Add Vercel Postgres from the Storage tab
-   - `NEXTAUTH_SECRET` - Generate with: `openssl rand -base64 32`
-   - `NEXTAUTH_URL` - Your Vercel project URL
-3. Deploy!
-
-## 📁 Project Structure
-
-```
-stream-vault/
+📁 Project Structure
+Cine-Stream/
 ├── src/
 │   ├── app/                    # Next.js App Router
-│   │   ├── api/               # API routes
-│   │   │   ├── anime/         # Anime API
-│   │   │   ├── manga/         # Manga API
-│   │   │   ├── tmdb/          # Movie/TV API
-│   │   │   └── auth/          # Authentication
+│   │   ├── api/               # Backend API endpoints
+│   │   │   ├── anime/         # Anime streaming endpoints
+│   │   │   ├── manga/         # Manga & Manhwa API
+│   │   │   ├── tmdb/          # Movie & TV show endpoints
+│   │   │   └── auth/          # NextAuth endpoints
 │   │   ├── anime/             # Anime pages
+│   │   ├── manga/             # Manga discovery & reader pages
+│   │   │   ├── [id]/          # Manga details
+│   │   │   │   └── read/      # Interactive chapter reader
+│   │   │   └── continue-reading/
 │   │   ├── movie/             # Movie detail pages
-│   │   ├── tv/                # TV show pages
+│   │   ├── tv/                # TV show detail pages
 │   │   └── ...
-│   ├── components/             # React components
-│   │   ├── Sidebar.tsx        # Navigation sidebar
-│   │   ├── VideoPlayer.tsx    # Movie/TV player
+│   ├── components/             # Reusable UI components
+│   │   ├── manga/             # MangaCard, Reader, and related UI
+│   │   ├── VideoPlayer.tsx    # Movie & TV player
 │   │   ├── AnimePlayer.tsx    # Anime player
 │   │   └── ...
-│   └── lib/                   # Utilities & APIs
-│       ├── streaming-fetch.ts # Movie/TV sources
-│       ├── anime-embed.ts     # Anime sources
+│   └── lib/                   # Data fetching engines & helpers
+│       ├── streaming-fetch.ts # Movie & TV sources
+│       ├── anime-embed.ts     # Anime stream sources
 │       ├── jikan-fetch.ts     # Anime metadata
-│       └── mangadex-fetch.ts  # Manga API
-├── public/                     # Static assets
-└── .env.local                  # Environment variables
-```
+│       ├── manga-fetch.ts     # Manga/Manhwa fetching engine
+│       └── manga-history.ts   # Reading progress storage
+├── public/                    # Static assets & icons
+└── wrangler.toml              # Cloudflare configuration
 
-## 📝 API Credits
+📝 API Credits
+TMDB - Movie and TV show metadata (themoviedb.org)
+Jikan - Anime metadata (jikan.moe)
+Manga Sources - WeebCentral & Asura Scans
+Streaming Sources - All embed sources
 
-- **TMDB** - Movie and TV show data (themoviedb.org)
-- **Jikan** - Anime metadata (jikan.moe)
-- **Streaming Sources** - VidSrc, 2Embed, VidKing, VidSrc.in
+⚠️ Disclaimer
+CineStream is for educational purposes only. All video and reading content is retrieved from third-party sources. Please support original creators and publishers by purchasing licensed media and subscribing to official services.
 
-## ⚠️ Disclaimer
-
-CineStream is for educational purposes only. All content is provided by third-party sources. Please support the original creators by purchasing or subscribing to their services when possible.
-
-## 📄 License
-
+📄 License
 MIT License - feel free to use this for your own projects!
-
----
 
 Made with ❤️ using Next.js 15
