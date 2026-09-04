@@ -4,6 +4,7 @@ import {
   buildSeasonList, 
   parseSeasonNumberFromTitle, 
   fetchEpisodesFromAniZip,
+  cacheFranchiseNodes,
   type AnimeItem,
   type EpisodeDetail,
   type SeasonInfo,
@@ -642,39 +643,81 @@ export async function getAnimeDetailsViaKitsu(
       },
     ];
 
-    for (const rel of relAnimeList) {
-      const rAttr = rel.attributes || {};
-      const rSubtype = (rAttr.subtype || "TV").toUpperCase();
-      let rYear: number | null = null;
-      let rSeason: string | null = null;
-      if (rAttr.startDate) {
+    const mappedRelNodes = await Promise.all(
+      relAnimeList.map(async (rel) => {
+        const rAttr = rel.attributes || {};
+        const rSubtype = (rAttr.subtype || "TV").toUpperCase();
+        let rYear: number | null = null;
+        let rSeason: string | null = null;
+        if (rAttr.startDate) {
+          try {
+            const d = new Date(rAttr.startDate);
+            if (!isNaN(d.getTime())) {
+              rYear = d.getFullYear();
+              const seasons = ["WINTER", "SPRING", "SUMMER", "FALL"];
+              rSeason = seasons[Math.floor(d.getMonth() / 3)] || null;
+            }
+          } catch {}
+        }
+
+        let relAnilistId: number | null = null;
+        let relMalId: number | null = null;
         try {
-          const d = new Date(rAttr.startDate);
-          if (!isNaN(d.getTime())) {
-            rYear = d.getFullYear();
-            const seasons = ["WINTER", "SPRING", "SUMMER", "FALL"];
-            rSeason = seasons[Math.floor(d.getMonth() / 3)] || null;
+          const az = await fetch(`https://api.ani.zip/mappings?kitsu_id=${rel.id}`, {
+            signal: AbortSignal.timeout(2500),
+            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+            next: { revalidate: 86400 } as any,
+          });
+          if (az.ok) {
+            const azData = await az.json();
+            if (azData?.mappings?.anilist_id) {
+              const parsed = parseInt(String(azData.mappings.anilist_id), 10);
+              if (!isNaN(parsed)) relAnilistId = parsed;
+            }
+            if (azData?.mappings?.mal_id) {
+              const parsed = parseInt(String(azData.mappings.mal_id), 10);
+              if (!isNaN(parsed)) relMalId = parsed;
+            }
           }
         } catch {}
-      }
 
-      rawNodes.push({
-        id: parseInt(rel.id, 10),
-        idMal: null,
-        title: rAttr.titles?.en || rAttr.canonicalTitle || rAttr.titles?.en_jp || "Related",
-        episodes: rSubtype === "MOVIE" ? 1 : (rAttr.episodeCount || null),
-        season: rSeason,
-        seasonYear: rYear,
-        status: rAttr.status === "current" ? "RELEASING" : (rAttr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
-        format: rSubtype,
-        duration: rAttr.episodeLength || null,
-        coverImage: rAttr.posterImage?.large || rAttr.posterImage?.original || null,
-        bannerImage: rAttr.coverImage?.large || rAttr.coverImage?.original || null,
-      });
+        // Never assign a raw Kitsu numeric ID as an AniList ID! If no AniList mapping, prefix with "kitsu-"
+        const finalId = relAnilistId || `kitsu-${rel.id}`;
+
+        return {
+          id: finalId as any,
+          idMal: relMalId,
+          title: rAttr.titles?.en || rAttr.canonicalTitle || rAttr.titles?.en_jp || "Related",
+          episodes: rSubtype === "MOVIE" ? 1 : (rAttr.episodeCount || null),
+          season: rSeason,
+          seasonYear: rYear,
+          status: rAttr.status === "current" ? "RELEASING" : (rAttr.status === "upcoming" ? "NOT_YET_RELEASED" : "FINISHED"),
+          format: rSubtype,
+          duration: rAttr.episodeLength || null,
+          coverImage: rAttr.posterImage?.large || rAttr.posterImage?.original || null,
+          bannerImage: rAttr.coverImage?.large || rAttr.coverImage?.original || null,
+        } as FranchiseNode;
+      })
+    );
+
+    for (const n of mappedRelNodes) {
+      rawNodes.push(n);
     }
+
+    rawNodes.sort((a, b) => {
+      const yearA = a.seasonYear || 9999;
+      const yearB = b.seasonYear || 9999;
+      if (yearA !== yearB) return yearA - yearB;
+      const formatOrder = { TV: 0, TV_SHORT: 1, ONA: 2, OVA: 3, SPECIAL: 4, MOVIE: 5 };
+      const fA = (formatOrder as any)[a.format || "TV"] ?? 6;
+      const fB = (formatOrder as any)[b.format || "TV"] ?? 6;
+      if (fA !== fB) return fA - fB;
+      return 0;
+    });
 
     franchiseNodes = rawNodes;
     if (franchiseNodes.length > 1) {
+      cacheFranchiseNodes(franchiseNodes);
       seasonsList = buildSeasonList(franchiseNodes, anilistId ? parseInt(anilistId, 10) : parseInt(kitsuId, 10));
     } else {
       const isMovie = subtype === "MOVIE";

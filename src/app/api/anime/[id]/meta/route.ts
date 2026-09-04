@@ -54,7 +54,7 @@ export async function GET(
       );
     }
 
-    if (!data || !data.anime || !data.seasons || data.seasons.length === 0) {
+    if (!data || !data.anime) {
       if (override) {
         const synthetic = applyMediaOverride(null, override);
         return Response.json({
@@ -71,6 +71,17 @@ export async function GET(
         { error: "Anime details unavailable", success: false },
         { status: 404, headers: noStoreHeaders }
       );
+    }
+
+    if (!data.seasons || data.seasons.length === 0) {
+      data.seasons = [{
+        id: String(id),
+        name: data.anime.name || "Season 1",
+        seasonLabel: (data.anime.format === "MOVIE" || data.anime.type === "MOVIE") ? "Movie 1" : "Season 1",
+        totalEpisodes: data.anime.episodes?.sub || data.totalEpisodes || 1,
+        isCurrent: true,
+        idMal: data.anime.idMal ? Number(data.anime.idMal) : null,
+      }];
     }
 
     const { anime, totalEpisodes, seasons, openedSeasonId, franchiseNodes, tmdbId, tmdbSeasonMap } = data;

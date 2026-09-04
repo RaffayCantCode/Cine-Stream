@@ -141,7 +141,21 @@ async function clientAnilistQuery(query: string, variables: Record<string, any>,
 
 const clientAnimeCache = new Map<string, { data: { items: AnimeItem[]; hasMore: boolean }; expires: number }>();
 const CLIENT_ANIME_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const CLIENT_CACHE_VERSION = "v30-cache-update";
+const CLIENT_CACHE_VERSION = "v32-anime-section-update";
+
+export function invalidateClientAnimeCache(): void {
+  clientAnimeCache.clear();
+  if (typeof window !== "undefined") {
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && (k.startsWith("sv_client_") || k.startsWith("anime_") || k.startsWith("sv_anime_browse_page"))) {
+          sessionStorage.removeItem(k);
+        }
+      }
+    } catch {}
+  }
+}
 
 // Returns true if ALL items in the list are from the primary sources (AniList/Jikan),
 // not Kitsu. Kitsu items have IDs like "kitsu-12345" or very long slug-style IDs.

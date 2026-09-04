@@ -16,12 +16,12 @@ export function LoadingScreen() {
   const accent = getTheme(theme).accent;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background text-foreground p-6 select-none">
+    <div className="fixed inset-0 z-[999999] flex flex-col items-center justify-center bg-[#07090e] text-foreground p-6 select-none">
       {/* Theme-tinted ambient glow */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(circle at center, ${accent}14 0%, transparent 60%)`,
+          background: `radial-gradient(circle at center, ${accent}18 0%, transparent 65%)`,
         }}
       />
 

@@ -160,7 +160,7 @@ export function NavigationLoader() {
       try {
         const url = new URL(nav.destination?.url ?? "");
         if (url.origin !== window.location.origin) return;
-        if (url.pathname === window.location.pathname && !url.search) return;
+        if (url.pathname === window.location.pathname) return;
         const targetPath = normalizePath(url.pathname);
         pendingNavRef.current = targetPath;
         if (
@@ -294,7 +294,7 @@ export function NavigationLoader() {
       {visible && (
         <motion.div
           key="navigation-loader"
-          className="fixed inset-0 pointer-events-none"
+          className="fixed inset-0 z-[999999] pointer-events-auto"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.3, ease: "easeInOut" } }}

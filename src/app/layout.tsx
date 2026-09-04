@@ -84,6 +84,21 @@ export default function RootLayout({
         {/* Deployment Cache Invalidation */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
+            /* If accessed from a Cloudflare Pages preview/dev URL, migrate instantly to production domain */
+            try {
+              var host = window.location.hostname;
+              if (host && host.indexOf('pages.dev') !== -1) {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    regs.forEach(function(r) { r.unregister(); });
+                  });
+                }
+                window.location.replace('https://cine-stream.site' + window.location.pathname + window.location.search);
+                return;
+              }
+            } catch(e) {}
+          })();
+          (function() {
             /* Restore saved theme before first paint to avoid a flash */
             try {
               var THEMES = ['global','glass','oled','cinema','wisteria','solaris'];
@@ -94,33 +109,25 @@ export default function RootLayout({
             } catch(e) {}
           })();
           (function() {
-            var BUILD_VER = 'v32-erased-override-fix';
+            var BUILD_VER = 'v33-static-cache-first';
             try {
-              if (typeof sessionStorage !== 'undefined') {
-                var ver = sessionStorage.getItem('sv_build_ver');
+              if (typeof localStorage !== 'undefined') {
+                var ver = localStorage.getItem('sv_build_ver');
                 if (ver !== BUILD_VER) {
-                  sessionStorage.clear();
-                  sessionStorage.setItem('sv_build_ver', BUILD_VER);
+                  localStorage.setItem('sv_build_ver', BUILD_VER);
                   if (typeof caches !== 'undefined') {
                     caches.keys().then(function(keys) {
-                      keys.forEach(function(k) { caches.delete(k); });
+                      keys.forEach(function(k) {
+                        if (k.indexOf('v33') === -1) {
+                          caches.delete(k);
+                        }
+                      });
                     });
                   }
                 }
               }
             } catch(e) {}
           })();
-          if ('serviceWorker' in navigator) {
-            var registerSW = function() {
-              navigator.serviceWorker.register('/sw.js', { scope: '/' })
-                .catch(function(err) { console.warn('SW registration failed:', err); });
-            };
-            if (document.readyState === 'complete') {
-              registerSW();
-            } else {
-              window.addEventListener('load', registerSW);
-            }
-          }
         `}} />
 
         {/* Web App Manifest for PWA & Address Bar Install Icon */}

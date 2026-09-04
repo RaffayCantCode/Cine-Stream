@@ -1,12 +1,21 @@
 // CineStream Service Worker
 // Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
 // CACHE_VERSION is updated to bust previous worker cache.
-const CACHE_VERSION = 'v30-no-home-fallback-fix';
+const CACHE_VERSION = 'v33-static-cache-first';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
 
-const STATIC_ASSETS = ['/manifest.json', '/favicon.svg?v=23', '/logo-icon.svg?v=23'];
+const STATIC_ASSETS = [
+  '/manifest.json',
+  '/favicon.svg',
+  '/favicon.svg?v=22',
+  '/logo-icon.svg',
+  '/logo-icon.svg?v=22',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png'
+];
 
 // Install — pre-cache static shell
 self.addEventListener('install', (event) => {
@@ -28,6 +37,12 @@ self.addEventListener('activate', (event) => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -97,6 +112,33 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached;
         const response = await fetch(request);
         if (response.ok) cache.put(request, response.clone());
+        return response;
+      })
+    );
+    return;
+  }
+
+  // Cache-first for shell static assets (SVGs, favicon, manifest, icons)
+  const isStaticShell =
+    url.pathname === '/logo-icon.svg' ||
+    url.pathname === '/favicon.svg' ||
+    url.pathname === '/manifest.json' ||
+    url.pathname.startsWith('/icon-') ||
+    url.pathname.startsWith('/apple-') ||
+    url.pathname.endsWith('.svg') ||
+    url.pathname.endsWith('.png') ||
+    url.pathname.endsWith('.ico') ||
+    url.pathname.endsWith('.woff2');
+
+  if (isStaticShell) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = (await cache.match(request)) || (await cache.match(url.pathname));
+        if (cached) return cached;
+        const response = await fetch(request);
+        if (response && response.ok) {
+          cache.put(request, response.clone());
+        }
         return response;
       })
     );

@@ -6,6 +6,26 @@ import { verifyAdminSession } from "@/lib/auth/admin";
 import { users } from "@/lib/db/schema";
 import { desc, eq, like, or } from "drizzle-orm";
 
+function maskEmail(email: string | null | undefined): string {
+  if (!email || !email.includes("@")) return "***@***.com";
+  const [local, domain] = email.split("@");
+  if (local.length <= 2) {
+    return `${local[0]}***@${domain}`;
+  }
+  const firstTwo = local.slice(0, 2);
+  const lastChar = local.slice(-1);
+  const domainParts = domain.split(".");
+  const mainDomain = domainParts[0] || "";
+  const tld = domainParts.slice(1).join(".") || "com";
+  const maskedDomain =
+    mainDomain.length <= 2
+      ? `${mainDomain[0]}*`
+      : `${mainDomain[0]}${"*".repeat(Math.max(mainDomain.length - 2, 2))}${mainDomain.slice(-1)}`;
+
+  const asterisksCount = Math.max(local.length - 3, 3);
+  return `${firstTwo}${"*".repeat(asterisksCount)}${lastChar}@${maskedDomain}.${tld}`;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminSession();
   if (auth.error || !auth.db) {
@@ -55,9 +75,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Mask user emails for privacy so full addresses are never sent to client/DevTools
+    const sanitizedUsers = userList.map((u) => ({
+      ...u,
+      email: u.id === auth.user.id ? u.email : maskEmail(u.email),
+    }));
+
     return NextResponse.json({
       success: true,
-      users: userList,
+      users: sanitizedUsers,
       currentUserId: auth.user.id,
       currentUserRole: auth.user.role,
     });
@@ -153,7 +179,10 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      user: updatedUser,
+      user: {
+        ...updatedUser,
+        email: updatedUser.id === auth.user.id ? updatedUser.email : maskEmail(updatedUser.email),
+      },
     });
   } catch (error) {
     console.error("[Admin Users API] PATCH Error:", error);

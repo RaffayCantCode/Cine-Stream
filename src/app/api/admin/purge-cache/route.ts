@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { invalidateMediaOverridesCache } from "@/lib/media-overrides";
+import { invalidateAnimeDetailsCache, invalidateAnilistServerCache } from "@/lib/anime-fetch";
 import {
   invalidateStreamingSourcesCache,
   invalidateHomeSectionsCache,
@@ -12,6 +13,7 @@ import {
   invalidateCollectionCache,
   invalidateSimilarPeopleCache,
   invalidateCollectionsListCache,
+  invalidateAnimeSectionsCache,
 } from "@/lib/server-cache";
 
 export async function POST() {
@@ -21,6 +23,9 @@ export async function POST() {
   }
 
   try {
+    invalidateAnimeDetailsCache();
+    invalidateAnilistServerCache();
+    invalidateAnimeSectionsCache();
     invalidateMediaOverridesCache();
     invalidateStreamingSourcesCache();
     invalidateHomeSectionsCache();

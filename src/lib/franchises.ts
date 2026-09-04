@@ -903,18 +903,52 @@ export const FRANCHISES: FranchiseDefinition[] = [
   }
 ];
 
+const ANIME_FRANCHISE_ALIASES: Record<string, string[]> = {
+  "attack-on-titan": ["attack on titan", "shingeki no kyojin", "aot"],
+  "demon-slayer": ["demon slayer", "kimetsu no yaiba"],
+  "my-hero-academia": ["my hero academia", "boku no hero academia", "mha"],
+  "jujutsu-kaisen": ["jujutsu kaisen", "jjk"],
+  "naruto": ["naruto", "boruto", "shippuden"],
+  "dragon-ball": ["dragon ball", "dragonball", "dbz", "daima"],
+  "bleach": ["bleach", "sennen kessen", "thousand-year blood war"],
+  "pokemon": ["pokemon", "pokémon", "pocket monsters"],
+  "fate-series": ["fate", "stay night", "unlimited blade works", "heaven's feel", "apocrypha", "grand order", "fate/zero"],
+  "jojo": ["jojo", "stardust crusaders", "diamond is unbreakable", "golden wind", "stone ocean", "phantom blood"],
+};
+
+export function getFranchiseAnimeItem(idOrTmdbId: number | string): FranchiseItem | null {
+  if (!idOrTmdbId) return null;
+  const numId = typeof idOrTmdbId === "number"
+    ? idOrTmdbId
+    : parseInt(String(idOrTmdbId).replace(/^tmdb-/, "").split("-")[0], 10);
+  if (isNaN(numId) || numId <= 0) return null;
+  for (const franchise of FRANCHISES) {
+    const item = (franchise.items || []).find(
+      i => i.media_type === "anime" && (i.anilist_id === numId || i.id === numId || i.tmdb_id === numId)
+    );
+    if (item) return item;
+  }
+  return null;
+}
+
 export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string): any[] | null {
   const normTitle = (title || "").toLowerCase();
   
   for (const franchise of FRANCHISES) {
-    const animeItems = (franchise.items || []).filter(i => i.media_type === "anime" && i.anilist_id);
+    const animeItems = (franchise.items || []).filter(i => i.media_type === "anime" && (i.anilist_id || i.id));
     if (animeItems.length <= 1) continue;
 
-    const matchesId = animeItems.some(i => i.anilist_id === anilistId);
-    const matchesTitle = normTitle && franchise.name.toLowerCase().includes(normTitle.replace(/\s*(season|part|\dth|\dnd|\drd|\dst).*/i, "").trim());
+    const matchesId = anilistId > 0 && animeItems.some(i => i.anilist_id === anilistId || i.id === anilistId || i.tmdb_id === anilistId);
+    const cleanTitle = normTitle.replace(/\s*(season|part|cour|arc|\dth|\dnd|\drd|\dst).*/i, "").trim();
+    const aliases = ANIME_FRANCHISE_ALIASES[franchise.id] || [];
+    const matchesTitle = normTitle && (
+      franchise.name.toLowerCase().includes(cleanTitle) ||
+      aliases.some(alias => cleanTitle.includes(alias) || alias.includes(cleanTitle))
+    );
 
     if (matchesId || matchesTitle) {
-      return animeItems.map(item => {
+      const seenIds = new Set<string>();
+      return animeItems.map((item, idx) => {
         let poster = item.poster_path || franchise.poster_path || null;
         if (poster && poster.startsWith("/")) {
           poster = `https://image.tmdb.org/t/p/w500${poster}`;
@@ -924,8 +958,18 @@ export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string)
         const isSpecial = itemTitleLower.includes("special");
         const format = isMovie ? "MOVIE" : isSpecial ? "SPECIAL" : "TV";
 
+        const baseId = item.anilist_id || item.id;
+        let uniqueId: string | number = baseId;
+        if (seenIds.has(String(baseId)) && item.tmdb_season_number) {
+          uniqueId = `${baseId}-s${item.tmdb_season_number}`;
+        } else if (seenIds.has(String(baseId))) {
+          uniqueId = `${baseId}-${idx}`;
+        }
+        seenIds.add(String(uniqueId));
+
         return {
-          id: item.anilist_id || item.id,
+          id: uniqueId,
+          anilistId: item.anilist_id || item.id,
           idMal: null,
           title: item.title || franchise.name,
           episodes: item.episodes || (isMovie || isSpecial ? 1 : 12),

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { searchAnime, getPopularAnime, getTrendingAnime, getAiringAnime, getUpcomingAnime } from "@/lib/anime-fetch";
 import { cacheHeaders } from "@/lib/tmdb";
+import { getCachedAnimeSection, setCachedAnimeSection } from "@/lib/server-cache";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -19,6 +20,18 @@ export async function GET(request: NextRequest) {
       searchKeyword = decodeURIComponent(categoryRaw.substring("search&q=".length));
     } catch {
       searchKeyword = categoryRaw.substring("search&q=".length);
+    }
+  }
+
+  const cacheKey = `${category}_${page}_${genre}`;
+  if (category !== "search" && !searchKeyword) {
+    const cached = getCachedAnimeSection(cacheKey);
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      return Response.json({
+        success: true,
+        data: { items: cached },
+        hasMore: cached.length > 0,
+      }, { headers: cacheHeaders(3600) });
     }
   }
 
@@ -60,6 +73,10 @@ export async function GET(request: NextRequest) {
           "Cache-Control": "no-store, max-age=0",
         }
       });
+    }
+
+    if (category !== "search" && !searchKeyword && items.length > 0) {
+      setCachedAnimeSection(cacheKey, items, 30 * 60 * 1000);
     }
 
     return Response.json({

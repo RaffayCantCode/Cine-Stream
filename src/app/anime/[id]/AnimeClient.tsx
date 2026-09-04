@@ -20,7 +20,7 @@ import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { cleanAnimeDescription } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
-import { getCuratedAnimeFranchiseNodes } from "@/lib/franchises";
+import { getCuratedAnimeFranchiseNodes, getFranchiseAnimeItem } from "@/lib/franchises";
 import { isEpisodeAvailable, isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, ExternalLink, Loader2, Users, Film, CheckCircle2, Route, Sparkles, Tv, Compass, LayoutGrid, StretchHorizontal, Clock } from "lucide-react";
 
@@ -48,7 +48,7 @@ interface FranchiseNode {
   seasonYear: number | null;
   status?: string | null;
   format: string | null;
-  duration: number | null;
+  duration?: number | null;
   coverImage?: string | null;
   bannerImage?: string | null;
   tmdbId?: number | null;
@@ -57,7 +57,7 @@ interface FranchiseNode {
 }
 
 // ── Client-side AniList helpers with in-memory and session cache ─────────────
-const ANIME_API_VERSION = "v48-rating-fix";
+const ANIME_API_VERSION = "v51-fast-watch-order";
 const ANILIST_API = "https://graphql.anilist.co";
 const clientAnilistCache = new Map<string, { data: any; timestamp: number }>();
 
@@ -546,19 +546,29 @@ async function fetchEpisodesClientSide(
   return [];
 }
 
+// Module-level cache to retain full franchise graphs across client-side router navigation
+const FRANCHISE_MEMORY_CACHE = new Map<string, any[]>();
+
 async function fetchFranchiseClientSide(startId: number) {
   const curated = getCuratedAnimeFranchiseNodes(startId);
   if (curated && curated.length > 1) {
     return curated as FranchiseNode[];
   }
 
+  // Fast memory cache check
+  const mem = FRANCHISE_MEMORY_CACHE.get(String(startId));
+  if (mem && mem.length > 1) return mem as FranchiseNode[];
+
   // Fast session storage cache check
   if (typeof window !== "undefined") {
     try {
-      const cached = sessionStorage.getItem(`sv_franchise_${startId}`);
+      const cached = sessionStorage.getItem(`cs_watch_order_${startId}`) || sessionStorage.getItem(`sv_franchise_${startId}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed as FranchiseNode[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          FRANCHISE_MEMORY_CACHE.set(String(startId), parsed);
+          return parsed as FranchiseNode[];
+        }
       }
     } catch {}
   }
@@ -575,7 +585,7 @@ async function fetchFranchiseClientSide(startId: number) {
   const queue = [startId];
   let hops = 0;
   
-  while (queue.length > 0 && visited.size < 40 && hops < 3) {
+  while (queue.length > 0 && visited.size < 60 && hops < 5) {
     const batch = queue.splice(0, queue.length);
     hops++;
     
@@ -656,10 +666,25 @@ async function fetchFranchiseClientSide(startId: number) {
     return seasonOrder.indexOf(a.season || "FALL") - seasonOrder.indexOf(b.season || "FALL");
   });
 
-  if (typeof window !== "undefined" && sortedNodes.length > 0) {
-    try {
-      sessionStorage.setItem(`sv_franchise_${startId}`, JSON.stringify(sortedNodes));
-    } catch {}
+  if (sortedNodes.length > 0) {
+    FRANCHISE_MEMORY_CACHE.set(String(startId), sortedNodes);
+    if (typeof window !== "undefined") {
+      try {
+        const payload = JSON.stringify(sortedNodes);
+        sessionStorage.setItem(`sv_franchise_${startId}`, payload);
+        sessionStorage.setItem(`cs_watch_order_${startId}`, payload);
+        for (const n of sortedNodes) {
+          FRANCHISE_MEMORY_CACHE.set(String(n.id), sortedNodes);
+          sessionStorage.setItem(`sv_franchise_${n.id}`, payload);
+          sessionStorage.setItem(`cs_watch_order_${n.id}`, payload);
+          if (n.idMal) {
+            FRANCHISE_MEMORY_CACHE.set(String(n.idMal), sortedNodes);
+            sessionStorage.setItem(`sv_franchise_${n.idMal}`, payload);
+            sessionStorage.setItem(`cs_watch_order_${n.idMal}`, payload);
+          }
+        }
+      } catch {}
+    }
   }
 
   return sortedNodes;
@@ -834,6 +859,35 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
     return null;
   }
 
+  if (idStr.startsWith("tmdb-")) {
+    const curated = getFranchiseAnimeItem(idStr);
+    if (curated && curated.anilist_id) {
+      return fetchAnimeMetaClientSide(String(curated.anilist_id));
+    }
+    const parts = idStr.split("-");
+    const tmdbNum = parseInt(parts[1], 10);
+    if (!isNaN(tmdbNum)) {
+      const curatedByTmdb = getFranchiseAnimeItem(tmdbNum);
+      if (curatedByTmdb && curatedByTmdb.anilist_id) {
+        return fetchAnimeMetaClientSide(String(curatedByTmdb.anilist_id));
+      }
+      try {
+        const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${tmdbNum}`, { signal: AbortSignal.timeout(4000) });
+        if (azRes.ok) {
+          const azData = await azRes.json();
+          if (azData?.mappings?.anilist_id) {
+            return fetchAnimeMetaClientSide(String(azData.mappings.anilist_id));
+          }
+        }
+      } catch {}
+    }
+  }
+
+  const curatedDirect = getFranchiseAnimeItem(idStr);
+  if (curatedDirect && curatedDirect.anilist_id && String(curatedDirect.anilist_id) !== idStr) {
+    return fetchAnimeMetaClientSide(String(curatedDirect.anilist_id));
+  }
+
   const isMal = idStr.startsWith("mal-");
   const parsedId = parseInt(idStr.replace("mal-", ""), 10);
   if (isNaN(parsedId)) return null;
@@ -863,6 +917,42 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
     });
 
     if (!res.ok) {
+      const curatedNodes = getCuratedAnimeFranchiseNodes(parsedId);
+      const curatedItem = curatedNodes?.find(n => n.id === parsedId || (isMal && n.idMal === parsedId));
+      if (curatedItem && curatedNodes && curatedNodes.length > 0) {
+        const cSeasons = curatedNodes.map(cn => ({
+          id: String(cn.id),
+          name: cn.title,
+          seasonLabel: cn.format === "MOVIE" ? "Movie" : "Season",
+          totalEpisodes: cn.episodes || 12,
+          isCurrent: cn.id === curatedItem.id,
+          idMal: cn.idMal || null,
+          seasonYear: cn.seasonYear || null,
+        }));
+        const cAnime: AnimeDetail = {
+          id: String(curatedItem.id),
+          idMal: curatedItem.idMal ? String(curatedItem.idMal) : null,
+          name: curatedItem.title,
+          jname: null,
+          poster: curatedItem.coverImage || "",
+          description: "",
+          type: curatedItem.format || "TV",
+          rating: "8.8",
+          score: "8.8",
+          status: curatedItem.status || "FINISHED",
+          genres: [],
+          totalEpisodes: curatedItem.episodes || 12,
+          seasons: cSeasons,
+          season: null,
+          seasonYear: curatedItem.seasonYear || null,
+          format: curatedItem.format || "TV",
+          openedSeasonId: String(curatedItem.id),
+          tmdbId: curatedItem.tmdbId || null,
+          duration: null,
+          trailerId: null,
+        };
+        return { success: true, data: { anime: cAnime, franchiseNodes: curatedNodes } };
+      }
       try {
         const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${parsedId}`, { signal: AbortSignal.timeout(4000) });
         if (azRes.ok) {
@@ -989,7 +1079,15 @@ async function fetchAnimeMetaClientSide(idStr: string): Promise<{ success: boole
     // Get franchise nodes
     const clientNodes = await fetchFranchiseClientSide(media.id);
     const finalSeasons = mapNodesToSeasons(clientNodes, media.id);
-    anime.seasons = finalSeasons;
+    anime.seasons = (finalSeasons && finalSeasons.length > 0) ? finalSeasons : [{
+      id: String(media.id),
+      name: anime.name,
+      seasonLabel: (media.format === "MOVIE" || media.type === "MOVIE") ? "Movie 1" : "Season 1",
+      totalEpisodes: anime.totalEpisodes || 1,
+      isCurrent: true,
+      idMal: media.idMal || null,
+      seasonYear: anime.seasonYear || null,
+    }];
 
     return {
       success: true,
@@ -1142,8 +1240,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   // Franchise node data for Season Guide
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>(() => {
-    if (initialData?.franchiseNodes && Array.isArray(initialData.franchiseNodes)) {
+    if (initialData?.franchiseNodes && Array.isArray(initialData.franchiseNodes) && initialData.franchiseNodes.length > 1) {
       return initialData.franchiseNodes as FranchiseNode[];
+    }
+    const mem = FRANCHISE_MEMORY_CACHE.get(String(id));
+    if (mem && mem.length > 1) return mem as FranchiseNode[];
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem(`cs_watch_order_${id}`) || sessionStorage.getItem(`sv_franchise_${id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 1) return parsed as FranchiseNode[];
+        }
+      } catch {}
     }
     return [];
   });
@@ -1178,23 +1287,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }, [id]);
 
   const isPageReady = Boolean(
-    (!isLoading && imagesReady) ||
+    (!isLoading && Boolean(anime)) ||
     error ||
     (anime as any)?.isHidden
   );
   usePageContentReady(isPageReady);
-
-  interface FranchiseNode {
-    id: number;
-    idMal: number | null;
-    title: string;
-    episodes: number | null;
-    totalEpisodes?: number | null;
-    season: string | null;
-    seasonYear: number | null;
-    format: string | null;
-    coverImage?: string | null;
-  }
 
   // currentSeasonId tracks the ACTIVE season by its AniList ID
   const [currentSeasonId, setCurrentSeasonId] = useState<string>(id);
@@ -1532,7 +1629,36 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setIsPlaying(false);
     setWatchStarted(false);
     setSeasonOverview(null);
-    setFranchiseNodes([]);
+    const memFranchise = FRANCHISE_MEMORY_CACHE.get(String(id));
+    if (memFranchise && memFranchise.length > 1) {
+      setFranchiseNodes(memFranchise);
+    } else if (typeof window !== "undefined") {
+      let restored: any[] | null = null;
+      try {
+        const stored = sessionStorage.getItem(`cs_watch_order_${id}`) || sessionStorage.getItem(`sv_franchise_${id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 1) restored = parsed;
+        }
+      } catch {}
+      if (restored) {
+        setFranchiseNodes(restored);
+      } else {
+        setFranchiseNodes(prev => {
+          if (prev && prev.length > 1 && prev.some(n => String(n.id) === String(id) || (n.idMal && String(n.idMal) === String(id)))) {
+            return prev;
+          }
+          return [];
+        });
+      }
+    } else {
+      setFranchiseNodes(prev => {
+        if (prev && prev.length > 1 && prev.some(n => String(n.id) === String(id) || (n.idMal && String(n.idMal) === String(id)))) {
+          return prev;
+        }
+        return [];
+      });
+    }
     setRecommendations([]);
     setIsLoading(true);
     setEpisodesLoading(true);
@@ -1551,25 +1677,20 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     // Fire episode loading immediately on mount — no waiting for server meta
     loadSeasonEpisodes(targetSeasonId, false);
 
-    // Only fetch client-side franchise graph if not already provided
-    const numId = parseInt(String(id).replace(/\D/g, ""), 10);
-    if (!isNaN(numId) && numId > 0) {
-      fetchFranchiseClientSide(numId)
-        .then((clientNodes) => {
-          if (clientNodes && clientNodes.length > 0) {
-            setFranchiseNodes(clientNodes);
-            const mappedSeasons = mapNodesToSeasons(clientNodes, numId);
-            setAnime((prev) => {
-              if (!prev || String(prev.id) !== String(id)) return prev;
-              const currentSeasons = prev.seasons || [];
-              return {
-                ...prev,
-                seasons: mappedSeasons.length >= currentSeasons.length ? mappedSeasons : currentSeasons,
-              };
-            });
+    // Fast check: if memory or session storage already has franchise nodes, restore immediately
+    const mem = FRANCHISE_MEMORY_CACHE.get(String(id));
+    if (mem && mem.length > 1) {
+      setFranchiseNodes(mem);
+    } else if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem(`cs_watch_order_${id}`) || sessionStorage.getItem(`sv_franchise_${id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 1) {
+            setFranchiseNodes(parsed);
           }
-        })
-        .catch(() => {});
+        }
+      } catch {}
     }
   }, [id, loadSeasonEpisodes]);
 
@@ -1634,34 +1755,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const a = data.data.anime;
           animeStatusRef.current = a.status || null;
 
-          // Fire TMDB artwork lookup in parallel with image preloading — don't await it serially
           let resolvedBanner = mediaBackdropUrl || tmdbBackdropUrl;
           if (!resolvedBanner && a.backdrop) {
             resolvedBanner = a.backdrop.startsWith("http") ? a.backdrop : `https://image.tmdb.org/t/p/original${a.backdrop}`;
           }
 
-          // If still no high-quality widescreen, look up TMDB artwork NOW (already may be cached as force-cache)
-          const artworkPromise: Promise<string | null> = (!resolvedBanner)
-            ? fetch(`/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(a.name || animeTitle || "")}&type=anime`, { cache: "force-cache" })
-                .then(r => r.ok ? r.json() : null)
-                .then(d => {
-                  if (d?.backdropUrl) {
-                    setTmdbBackdropUrl(d.backdropUrl);
-                    return d.backdropUrl as string;
-                  }
-                  return null;
-                })
-                .catch(() => null)
-            : Promise.resolve(null);
-
-          // Determine the best banner available right now (may be enriched by artworkPromise)
+          // Determine the best banner available right now
           const initialBanner = resolvedBanner || a.bannerImage || a.poster || "";
 
           if (resolvedBanner && !tmdbBackdropUrl) {
             setTmdbBackdropUrl(resolvedBanner);
           }
 
-          // Preload hero banner and poster image immediately
+          // Preload hero banner and poster image immediately via link preload (non-blocking)
           if (typeof document !== "undefined") {
             const heroImg = initialBanner || a.poster;
             if (heroImg && heroImg.startsWith("http")) {
@@ -1674,24 +1780,55 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             }
           }
 
-          // Decode banner + poster. Also race against artwork fetch so if TMDB returns
-          // a better backdrop before the banner decodes, we use that URL.
+          // Preload and decode images in background without blocking page render
           if (typeof window !== "undefined") {
-            const bannerToPreload = resolvedBanner
-              ? preloadAndDecodeImage(resolvedBanner)
-              : artworkPromise.then(artUrl => preloadAndDecodeImage(artUrl || a.bannerImage || a.poster));
-            await Promise.allSettled([
-              bannerToPreload,
-              preloadAndDecodeImage(a.poster),
-            ]);
+            if (resolvedBanner) preloadAndDecodeImage(resolvedBanner);
+            preloadAndDecodeImage(a.poster);
           }
 
-          if (cancelled) return;
+          // If still no high-quality widescreen, look up TMDB artwork in background (already may be cached as force-cache)
+          if (!resolvedBanner) {
+            fetch(`/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(a.name || animeTitle || "")}&type=anime`, { cache: "force-cache" })
+              .then(r => r.ok ? r.json() : null)
+              .then(d => {
+                if (d?.backdropUrl && !cancelled) {
+                  setTmdbBackdropUrl(d.backdropUrl);
+                }
+              })
+              .catch(() => {});
+          }
+
+          // Synchronously batch state updates in the exact same render paint
+          setAnime(a);
           setImagesReady(true);
           setIsLoading(false);
-          setAnime(a);
-          setFranchiseNodes(data.data.franchiseNodes || []);
-          tmdbIdRef.current = a.tmdbId || null;
+          if (data?.data?.franchiseNodes && data.data.franchiseNodes.length > 1) {
+            setFranchiseNodes(data.data.franchiseNodes);
+            for (const fn of data.data.franchiseNodes) {
+              FRANCHISE_MEMORY_CACHE.set(String(fn.id), data.data.franchiseNodes);
+              if (fn.idMal) FRANCHISE_MEMORY_CACHE.set(String(fn.idMal), data.data.franchiseNodes);
+              if (typeof window !== "undefined") {
+                try {
+                  const p = JSON.stringify(data.data.franchiseNodes);
+                  sessionStorage.setItem(`cs_watch_order_${fn.id}`, p);
+                  sessionStorage.setItem(`sv_franchise_${fn.id}`, p);
+                  if (fn.idMal) {
+                    sessionStorage.setItem(`cs_watch_order_${fn.idMal}`, p);
+                    sessionStorage.setItem(`sv_franchise_${fn.idMal}`, p);
+                  }
+                } catch {}
+              }
+            }
+          } else {
+            setFranchiseNodes(prev => {
+              if (prev && prev.length > 1 && prev.some(n => String(n.id) === String(id) || (n.idMal && String(n.idMal) === String(id)))) {
+                return prev;
+              }
+              const mem = FRANCHISE_MEMORY_CACHE.get(String(id));
+              if (mem && mem.length > 1) return mem;
+              return data?.data?.franchiseNodes || [];
+            });
+          }
 
           const seasons = a.seasons || [];
           let urlSeasonId: string | null = null;
@@ -1751,6 +1888,73 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     loadMeta();
     return () => { cancelled = true; };
   }, [id, loadSeasonEpisodes, initialData]);
+
+  // ── 3) Background Watch Order Hydration (non-blocking, loads at last after page is ready) ──
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    // Fast check: if memory cache already has complete franchise nodes (> 1), no need to re-fetch
+    const mem = FRANCHISE_MEMORY_CACHE.get(String(id));
+    if (mem && mem.length > 1) {
+      setFranchiseNodes(mem);
+      return;
+    }
+
+    const loadWatchOrderInBackground = async () => {
+      try {
+        const res = await fetchJson<{ success: boolean; data: { franchiseNodes: FranchiseNode[] } }>(
+          `/api/anime/${id}/watch-order?v=${ANIME_API_VERSION}`
+        );
+        if (cancelled) return;
+        const nodes = res?.data?.franchiseNodes;
+        if (nodes && Array.isArray(nodes) && nodes.length > 1) {
+          setFranchiseNodes(nodes);
+          for (const fn of nodes) {
+            FRANCHISE_MEMORY_CACHE.set(String(fn.id), nodes);
+            if (fn.idMal) FRANCHISE_MEMORY_CACHE.set(String(fn.idMal), nodes);
+            if (typeof window !== "undefined") {
+              try {
+                const payload = JSON.stringify(nodes);
+                sessionStorage.setItem(`cs_watch_order_${fn.id}`, payload);
+                sessionStorage.setItem(`sv_franchise_${fn.id}`, payload);
+                if (fn.idMal) {
+                  sessionStorage.setItem(`cs_watch_order_${fn.idMal}`, payload);
+                  sessionStorage.setItem(`sv_franchise_${fn.idMal}`, payload);
+                }
+              } catch {}
+            }
+          }
+
+          // If more seasons exist than in anime.seasons, enrich them
+          const numId = parseInt(String(id).replace(/\D/g, ""), 10) || 0;
+          const mappedSeasons = mapNodesToSeasons(nodes, numId);
+          if (mappedSeasons && mappedSeasons.length > 0) {
+            setAnime(prev => {
+              if (!prev || String(prev.id) !== String(id)) return prev;
+              const currentSeasons = prev.seasons || [];
+              if (mappedSeasons.length > currentSeasons.length) {
+                return { ...prev, seasons: mappedSeasons };
+              }
+              return prev;
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("[Watch Order] Background load failed:", e);
+      }
+    };
+
+    // 150ms delay so initial hero banner artwork and episodes have full network priority
+    const timer = setTimeout(() => {
+      loadWatchOrderInBackground();
+    }, 150);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [id]);
 
   // ── Fetch You May Like recommendations (client-side AniList + server route fallback) ────────────
   useEffect(() => {
@@ -1987,7 +2191,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if (!hasRestoredState) {
       setHasRestoredState(true);
     }
-  }, [episodes, id, anime, hasRestoredState, status, selectedEp]);
+  }, [episodes, id, anime, hasRestoredState, anime?.status, selectedEp]);
 
   // Persist State
   useEffect(() => {
@@ -2297,6 +2501,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const displayTitle = (currentSeasonInfo as any)?.name || (currentSeasonInfo as any)?.title || currentSeason?.name || anime?.name || "";
   const displayStatus = currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "";
 
+  useEffect(() => {
+    if (typeof document !== "undefined" && displayTitle) {
+      document.title = `${displayTitle} - CineStream`;
+    }
+  }, [displayTitle]);
+
   // Single source of truth for the season description. Prefer the AniList
   // synopsis, but fall back to the TMDB season overview so every anime always
   // shows a description under the title (never duplicated above episodes).
@@ -2473,7 +2683,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   return (
     <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}>
       {/* Ambient Backdrop Glow - changes background color according to media backdrop colors (global theme only) */}
-      <AmbientBackdropGlow backdropUrl={animeBackdropUrl} />
+      {isPageReady && Boolean(anime) && (
+        <AmbientBackdropGlow backdropUrl={animeBackdropUrl} />
+      )}
 
       <Sidebar />
 
@@ -2644,30 +2856,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     </div>
                   </div>
                 </div>
-
-                {/* ── Right Side Detail Box (Episodes Count & Status) ── */}
-                <div className="hidden lg:flex items-center gap-3 px-4 py-2.5 bg-black/50 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl shrink-0 self-end mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-black text-white">
-                      {isMovieFormat ? 1 : (currentSeasonEps.length || anime.totalEpisodes || 1)}
-                    </span>
-                    <span className="text-xs text-white/50 font-semibold">
-                      {isMovieFormat ? (currentSeasonEps.length > 1 ? "Parts" : "Movie") : (currentSeasonEps.length === 1 ? "Episode" : "Episodes")}
-                    </span>
-                  </div>
-                  <div className="w-px h-5 bg-white/15" />
-                  {(() => {
-                    const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
-                    const statusLabel = formatted.style === "airing" ? "Ongoing" : formatted.style === "upcoming" ? "Upcoming" : "Completed";
-                    const dotColor = formatted.style === "airing" ? "bg-emerald-400" : formatted.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
-                    return (
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${dotColor} ${formatted.style === "airing" ? "animate-pulse" : ""}`} />
-                        <span className="text-sm font-bold text-white">{statusLabel}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
               </div>
             </CinematicHero>
 
@@ -2706,18 +2894,58 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   {anime.jname && anime.jname !== anime.name && (
                     <p className="text-xs text-white/40 mt-0.5">{anime.jname}</p>
                   )}
-                  <div className="flex items-center gap-3 mt-2 text-xs text-white/60">
-                    <span>{anime.format || anime.type || "Anime"}</span>
-                    {anime.duration && <span>• {anime.duration} min</span>}
-                    {anime.seasonYear && <span>• {anime.seasonYear}</span>}
-                    {animeScore > 0 && (
-                      <span className="flex items-center gap-1 text-amber-400 font-bold">
-                        <Star className="w-3 h-3 fill-current" /> {animeScore.toFixed(1)}
-                      </span>
-                    )}
-                  </div>
+                  {animeScore > 0 && (
+                    <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-400 font-bold">
+                      <Star className="w-3.5 h-3.5 fill-current" />
+                      <span>{animeScore.toFixed(1)}</span>
+                    </div>
+                  )}
                 </div>
 
+                {/* ── Right Side Detail Box (Media Type, Release Year, Episodes Count & Status) ── */}
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-black/50 backdrop-blur-xl border border-white/15 rounded-2xl shadow-xl shrink-0 self-start sm:self-center">
+                  {/* Media Type */}
+                  <span className="text-sm font-bold text-white/90 uppercase tracking-wider">
+                    {anime.format || anime.type || "Anime"}
+                  </span>
+
+                  {/* Release Year */}
+                  {anime.seasonYear && (
+                    <>
+                      <div className="w-px h-4 bg-white/15" />
+                      <span className="text-sm font-semibold text-white/70">
+                        {anime.seasonYear}
+                      </span>
+                    </>
+                  )}
+
+                  <div className="w-px h-4 bg-white/15" />
+
+                  {/* Episodes Count */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base font-black text-white">
+                      {isMovieFormat ? 1 : (currentSeasonEps.length || anime.totalEpisodes || 1)}
+                    </span>
+                    <span className="text-xs text-white/50 font-semibold">
+                      {isMovieFormat ? (currentSeasonEps.length > 1 ? "Parts" : "Movie") : ((currentSeasonEps.length || anime.totalEpisodes || 1) === 1 ? "Episode" : "Episodes")}
+                    </span>
+                  </div>
+
+                  <div className="w-px h-4 bg-white/15" />
+
+                  {/* Status */}
+                  {(() => {
+                    const formatted = formatAnimeStatus(displayStatus, currentSeasonEps);
+                    const statusLabel = formatted.style === "airing" ? "Ongoing" : formatted.style === "upcoming" ? "Upcoming" : "Completed";
+                    const dotColor = formatted.style === "airing" ? "bg-emerald-400" : formatted.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${dotColor} ${formatted.style === "airing" ? "animate-pulse" : ""}`} />
+                        <span className="text-sm font-bold text-white">{statusLabel}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
 
               <div className="flex flex-col gap-6">
@@ -2734,45 +2962,184 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 {(() => {
                   const numFranchiseId = parseInt(String(id).replace(/\D/g, ""), 10) || 0;
                   const curatedNodes = getCuratedAnimeFranchiseNodes(numFranchiseId, anime?.name);
-                  const nodesToUse: FranchiseNode[] = (franchiseNodes && franchiseNodes.length > 1)
-                    ? franchiseNodes
-                    : (curatedNodes && curatedNodes.length > 1)
-                      ? (curatedNodes as FranchiseNode[])
-                      : (anime?.seasons && anime.seasons.length > 1)
-                        ? anime.seasons.map(s => ({
-                            id: parseInt(String(s.id).replace(/\D/g, ""), 10) || numFranchiseId,
-                            idMal: s.idMal || null,
-                            title: s.name,
-                            episodes: s.totalEpisodes,
-                            season: null,
-                            seasonLabel: s.seasonLabel,
-                            totalEpisodes: s.totalEpisodes,
-                            seasonYear: s.seasonYear || null,
-                            format: "TV",
-                            coverImage: s.coverImage || null,
-                          }))
-                        : (franchiseNodes || []);
+                  const currentSeasons = anime?.seasons || [];
 
-                  const visibleFranchiseNodes = nodesToUse.filter(node => {
+                  type WatchOrderNode = {
+                    id: string;
+                    idMal?: number | null;
+                    title: string;
+                    episodes?: number | null;
+                    totalEpisodes?: number | null;
+                    format?: string | null;
+                    seasonYear?: number | null;
+                    coverImage?: string | null;
+                    matchingSeason?: SeasonInfo | null;
+                  };
+
+                  let rawList: WatchOrderNode[] = [];
+
+                  if (curatedNodes && curatedNodes.length > 1) {
+                    rawList = curatedNodes.map(c => ({
+                      id: String(c.id),
+                      idMal: c.idMal || null,
+                      title: c.title,
+                      episodes: c.episodes,
+                      totalEpisodes: c.episodes,
+                      format: c.format || "TV",
+                      seasonYear: c.seasonYear || null,
+                      coverImage: c.coverImage || null,
+                    }));
+                  } else if (franchiseNodes && franchiseNodes.length > 1) {
+                    rawList = franchiseNodes.map(f => ({
+                      id: String(f.id),
+                      idMal: f.idMal || null,
+                      title: f.title,
+                      episodes: f.episodes,
+                      totalEpisodes: f.totalEpisodes || f.episodes,
+                      format: f.format || "TV",
+                      seasonYear: f.seasonYear || null,
+                      coverImage: f.coverImage || null,
+                    }));
+                  } else if (currentSeasons.length > 1) {
+                    rawList = currentSeasons.map(s => ({
+                      id: String(s.id),
+                      idMal: s.idMal || null,
+                      title: s.name || s.seasonLabel,
+                      episodes: s.totalEpisodes,
+                      totalEpisodes: s.totalEpisodes,
+                      format: s.seasonLabel.startsWith("Movie") ? "MOVIE" : (s.seasonLabel.startsWith("OVA") ? "OVA" : "TV"),
+                      seasonYear: s.seasonYear || null,
+                      coverImage: s.coverImage || anime?.poster || null,
+                      matchingSeason: s,
+                    }));
+                  }
+
+                  // Fallback: if rawList is still empty, restore from memory cache or session storage
+                  if (rawList.length <= 1) {
+                    const mem = FRANCHISE_MEMORY_CACHE.get(String(id));
+                    if (mem && mem.length > 1) {
+                      rawList = mem.map((m: any) => ({
+                        id: String(m.id),
+                        idMal: m.idMal || null,
+                        title: m.title || m.name || "Unknown",
+                        episodes: m.episodes || m.totalEpisodes || null,
+                        totalEpisodes: m.totalEpisodes || m.episodes || null,
+                        format: m.format || "TV",
+                        seasonYear: m.seasonYear || null,
+                        coverImage: m.coverImage || null,
+                      }));
+                    } else if (typeof window !== "undefined") {
+                      try {
+                        const stored = sessionStorage.getItem(`cs_watch_order_${id}`) || sessionStorage.getItem(`sv_franchise_${id}`);
+                        if (stored) {
+                          const parsed = JSON.parse(stored);
+                          if (Array.isArray(parsed) && parsed.length > 1) {
+                            rawList = parsed.map((m: any) => ({
+                              id: String(m.id),
+                              idMal: m.idMal || null,
+                              title: m.title || m.name || "Unknown",
+                              episodes: m.episodes || m.totalEpisodes || null,
+                              totalEpisodes: m.totalEpisodes || m.episodes || null,
+                              format: m.format || "TV",
+                              seasonYear: m.seasonYear || null,
+                              coverImage: m.coverImage || null,
+                            }));
+                          }
+                        }
+                      } catch {}
+                    }
+                  }
+
+                  // Correlate entries with current seasons
+                  const entries: WatchOrderNode[] = rawList.map(item => {
+                    const match = item.matchingSeason || currentSeasons.find(s => {
+                      if (String(s.id).toLowerCase() === item.id.toLowerCase()) return true;
+                      if (s.idMal && item.idMal && s.idMal === item.idMal) return true;
+                      if (s.name && item.title && s.name.toLowerCase() === item.title.toLowerCase()) return true;
+                      if (s.seasonLabel && item.title && s.seasonLabel.toLowerCase() === item.title.toLowerCase()) return true;
+                      return false;
+                    }) || null;
+
+                    return {
+                      ...item,
+                      matchingSeason: match,
+                      totalEpisodes: match?.totalEpisodes || item.totalEpisodes || item.episodes,
+                    };
+                  });
+
+                  // If using franchiseNodes, also make sure any anime.seasons not present are appended
+                  if ((!curatedNodes || curatedNodes.length <= 1) && franchiseNodes && franchiseNodes.length > 1) {
+                    for (const s of currentSeasons) {
+                      const alreadyInList = entries.some(e =>
+                        e.matchingSeason?.id === s.id ||
+                        String(e.id).toLowerCase() === String(s.id).toLowerCase() ||
+                        (s.name && e.title.toLowerCase() === s.name.toLowerCase())
+                      );
+                      if (!alreadyInList) {
+                        entries.push({
+                          id: String(s.id),
+                          idMal: s.idMal || null,
+                          title: s.name || s.seasonLabel,
+                          episodes: s.totalEpisodes,
+                          totalEpisodes: s.totalEpisodes,
+                          format: s.seasonLabel.startsWith("Movie") ? "MOVIE" : (s.seasonLabel.startsWith("OVA") ? "OVA" : "TV"),
+                          seasonYear: s.seasonYear || null,
+                          coverImage: s.coverImage || anime?.poster || null,
+                          matchingSeason: s,
+                        });
+                      }
+                    }
+                  }
+
+                  const visibleFranchiseNodes = entries.filter(node => {
                     if (!node.title) return false;
-                    if (String(node.id) === anime?.id) return true;
-                    
-                    const format = node.format;
+                    if (node.matchingSeason) return true;
+                    if (String(node.id) === String(anime?.id)) return true;
+                    if (String(node.id) === String(id)) return true;
+                    if (currentSeasonId && String(node.id) === String(currentSeasonId)) return true;
+
+                    const format = (node.format || "").toUpperCase();
                     if (!format || format === "TV" || format === "TV_SHORT" || format === "ONA" || format === "MOVIE") {
                       return true;
                     }
-                    
+
                     if (format === "SPECIAL" || format === "OVA") {
                       const lowerTitle = node.title.toLowerCase();
-                      const plotKeywords = ["final", "part", "chapter", "season", "arc", "prologue", "epilogue", "special"];
-                      return plotKeywords.some(kw => lowerTitle.includes(kw));
+                      const isTinyShort = lowerTitle.includes("4-koma") || lowerTitle.includes("chibi") || lowerTitle.includes("commercial") || lowerTitle.includes("pv");
+                      if (isTinyShort) return false;
+                      return true;
                     }
-                    
+
                     return true;
                   });
+
                   if (visibleFranchiseNodes.length <= 1) return null;
-                  const totalParts = visibleFranchiseNodes.length;
-                  const activeIdx = visibleFranchiseNodes.findIndex(node => String(node.id) === currentSeasonId || String(node.id) === anime?.id);
+
+                  // Sort chronologically by release year and format (unless curatedNodes already defines custom order)
+                  const sortedVisibleNodes = [...visibleFranchiseNodes].sort((a, b) => {
+                    if (curatedNodes && curatedNodes.length > 1) {
+                      const idxA = curatedNodes.findIndex(c => String(c.id) === String(a.id));
+                      const idxB = curatedNodes.findIndex(c => String(c.id) === String(b.id));
+                      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    }
+                    const yearA = a.seasonYear || 9999;
+                    const yearB = b.seasonYear || 9999;
+                    if (yearA !== yearB) return yearA - yearB;
+                    const formatOrder = { TV: 0, TV_SHORT: 1, ONA: 2, OVA: 3, SPECIAL: 4, MOVIE: 5 };
+                    const fA = (formatOrder as any)[a.format || "TV"] ?? 6;
+                    const fB = (formatOrder as any)[b.format || "TV"] ?? 6;
+                    if (fA !== fB) return fA - fB;
+                    return 0;
+                  });
+
+                  const totalParts = sortedVisibleNodes.length;
+
+                  const activeIdx = sortedVisibleNodes.findIndex(node => {
+                    if (node.matchingSeason && String(node.matchingSeason.id) === String(currentSeasonId)) return true;
+                    if (String(node.id) === String(currentSeasonId)) return true;
+                    if (!currentSeasonId && String(node.id) === String(anime?.id)) return true;
+                    return false;
+                  });
                   const hasActive = activeIdx >= 0;
 
                   const formatMeta = (fmt: string | null) => {
@@ -2874,22 +3241,60 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             className="flex gap-3 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1 -mx-1 px-1"
                             style={{ scrollBehavior: "smooth" }}
                           >
-                            {visibleFranchiseNodes.map((node, orderIndex) => {
-                              const nodeId = String(node.id);
-                              const isActive = nodeId === currentSeasonId || nodeId === anime?.id;
-                              const meta = formatMeta(node.format);
+                            {sortedVisibleNodes.map((node, orderIndex) => {
+                              const isActive = (node.matchingSeason && String(node.matchingSeason.id) === String(currentSeasonId))
+                                || String(node.id) === String(currentSeasonId)
+                                || (!currentSeasonId && String(node.id) === String(anime?.id));
+
+                              const meta = formatMeta(node.format || "TV");
                               const FormatIcon = meta.icon;
-                              const poster = node.coverImage || (nodeId === anime?.id ? anime?.poster : null) || null;
+                              const poster = node.coverImage || (node.id === anime?.id ? anime?.poster : null) || anime?.poster || null;
                               const nodeEpCount = (isActive && currentSeasonEps.length > 0)
                                 ? currentSeasonEps.length
                                 : (node.totalEpisodes || node.episodes || null);
 
+                              const targetHref = `/anime/${node.id}`;
+
+                              const handleEntryClick = (e: React.MouseEvent) => {
+                                if (isActive) {
+                                  e.preventDefault();
+                                  const epEl = document.getElementById("anime-episodes-list") || document.getElementById("anime-episodes-section");
+                                  if (epEl) {
+                                    epEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }
+                                } else {
+                                  // Navigating to another season in the watch order!
+                                  // Pre-seed this exact watch order list into memory and session cache so the destination page has it instantly
+                                  const nodesToPersist = (sortedVisibleNodes && sortedVisibleNodes.length > 1) ? sortedVisibleNodes : visibleFranchiseNodes;
+                                  if (nodesToPersist && nodesToPersist.length > 1) {
+                                    for (const n of nodesToPersist) {
+                                      FRANCHISE_MEMORY_CACHE.set(String(n.id), nodesToPersist as any);
+                                      if (n.idMal) FRANCHISE_MEMORY_CACHE.set(String(n.idMal), nodesToPersist as any);
+                                    }
+                                    if (typeof window !== "undefined") {
+                                      try {
+                                        const payload = JSON.stringify(nodesToPersist);
+                                        for (const n of nodesToPersist) {
+                                          sessionStorage.setItem(`cs_watch_order_${n.id}`, payload);
+                                          sessionStorage.setItem(`sv_franchise_${n.id}`, payload);
+                                          if (n.idMal) {
+                                            sessionStorage.setItem(`cs_watch_order_${n.idMal}`, payload);
+                                            sessionStorage.setItem(`sv_franchise_${n.idMal}`, payload);
+                                          }
+                                        }
+                                      } catch {}
+                                    }
+                                  }
+                                }
+                              };
+
                               return (
                                 <Link
                                   key={`watch-node-${node.id}-${orderIndex}`}
-                                  href={`/anime/${node.id}`}
+                                  href={targetHref}
+                                  onClick={handleEntryClick}
                                   className={cn(
-                                    "group relative flex items-center gap-3 p-2.5 rounded-xl border transition-all duration-200 shrink-0 w-64 sm:w-72 snap-start",
+                                    "group relative flex items-center gap-3 p-2.5 rounded-xl border transition-all duration-200 shrink-0 w-64 sm:w-72 snap-start cursor-pointer",
                                     isActive
                                       ? "bg-primary/20 border-primary/50 ring-1 ring-primary/40 shadow-md shadow-primary/20"
                                       : "bg-white/[0.06] hover:bg-white/[0.12] border-white/10 hover:border-white/20"
@@ -2944,7 +3349,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                                         </span>
                                       ) : (
                                         <span className="text-[10px] font-bold text-white/40 group-hover:text-white flex items-center gap-0.5 transition-colors">
-                                          View <ChevronRight className="w-3 h-3" />
+                                          Open <ChevronRight className="w-3 h-3" />
                                         </span>
                                       )}
                                     </div>
@@ -2959,7 +3364,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   );
                 })()}
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
+                  <div id="anime-episodes-list" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg" />
                       <h2 className="text-2xl font-black text-white tracking-tight">Episodes</h2>

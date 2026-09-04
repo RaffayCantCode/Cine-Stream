@@ -50,6 +50,26 @@ export async function POST(request: NextRequest) {
   }
 }
 
+function maskEmail(email: string | null | undefined): string {
+  if (!email || !email.includes("@")) return "***@***.com";
+  const [local, domain] = email.split("@");
+  if (local.length <= 2) {
+    return `${local[0]}***@${domain}`;
+  }
+  const firstTwo = local.slice(0, 2);
+  const lastChar = local.slice(-1);
+  const domainParts = domain.split(".");
+  const mainDomain = domainParts[0] || "";
+  const tld = domainParts.slice(1).join(".") || "com";
+  const maskedDomain =
+    mainDomain.length <= 2
+      ? `${mainDomain[0]}*`
+      : `${mainDomain[0]}${"*".repeat(Math.max(mainDomain.length - 2, 2))}${mainDomain.slice(-1)}`;
+
+  const asterisksCount = Math.max(local.length - 3, 3);
+  return `${firstTwo}${"*".repeat(asterisksCount)}${lastChar}@${maskedDomain}.${tld}`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await verifyAdminSession();
@@ -59,7 +79,11 @@ export async function GET(request: NextRequest) {
 
     const db = auth.db;
     const reports = await db.select().from(issueReports).orderBy(desc(issueReports.createdAt)).limit(100);
-    return NextResponse.json({ reports });
+    const sanitizedReports = reports.map((r) => ({
+      ...r,
+      userEmail: maskEmail(r.userEmail),
+    }));
+    return NextResponse.json({ reports: sanitizedReports });
   } catch (error) {
     console.error("[Contact API GET] Error fetching reports:", error);
     return NextResponse.json({ reports: [] });

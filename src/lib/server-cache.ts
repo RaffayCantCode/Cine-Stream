@@ -124,3 +124,24 @@ export function setCachedCollectionsList(data: any[], ttlMs: number = 10 * 60 * 
 export function invalidateCollectionsListCache(): void {
   cachedCollectionsList = null;
 }
+
+// 8. Anime Sections & Browse Categories Cache (Bounded Map for Popular, Trending, Airing, Genres)
+const animeSectionsCache = new Map<string, CacheEntry<any>>();
+export function getCachedAnimeSection(key: string): any | null {
+  const entry = animeSectionsCache.get(key);
+  if (entry && entry.expiresAt > Date.now()) {
+    return entry.data;
+  }
+  return null;
+}
+export function setCachedAnimeSection(key: string, data: any, ttlMs: number = 30 * 60 * 1000): void {
+  if (animeSectionsCache.size > 200) {
+    const oldestKey = animeSectionsCache.keys().next().value;
+    if (oldestKey) animeSectionsCache.delete(oldestKey);
+  }
+  animeSectionsCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+export function invalidateAnimeSectionsCache(): void {
+  animeSectionsCache.clear();
+}
+

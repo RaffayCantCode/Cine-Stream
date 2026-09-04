@@ -1622,6 +1622,10 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
         </div>
       ) : (
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium mb-1">
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span>Privacy Active: User emails are permanently masked for account privacy.</span>
+          </div>
           {usersList.map((u) => {
             const isSelf = u.id === currentAdminId;
             const isOwner = u.role === "owner";
@@ -1667,7 +1671,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-zinc-400 truncate">{u.email}</p>
+                    <p className="text-[11px] text-zinc-400 font-mono tracking-wider truncate">{u.email}</p>
                   </div>
                 </div>
 
