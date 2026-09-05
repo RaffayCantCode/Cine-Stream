@@ -7,6 +7,12 @@ import { streamingSourceConfig } from "@/lib/db/schema";
 import { resolveSourceConfig, type SourceCategory } from "@/lib/streaming-config";
 import { getCachedStreamingSources, setCachedStreamingSources } from "@/lib/server-cache";
 
+const cacheHeaders = {
+  "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+  "CDN-Cache-Control": "public, max-age=3600",
+  "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
+};
+
 export async function GET() {
   const cached = getCachedStreamingSources();
   if (cached) {
@@ -16,11 +22,7 @@ export async function GET() {
         data: cached,
       },
       {
-        headers: {
-          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
-          "CDN-Cache-Control": "public, max-age=3600",
-          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
-        },
+        headers: cacheHeaders,
       }
     );
   }
@@ -43,20 +45,14 @@ export async function GET() {
       anime: forCategory("anime"),
     };
 
-    setCachedStreamingSources(payload);
+    setCachedStreamingSources(payload, 30 * 60 * 1000);
 
     return NextResponse.json(
       {
         success: true,
         data: payload,
       },
-      {
-        headers: {
-          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
-          "CDN-Cache-Control": "public, max-age=3600",
-          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
-        },
-      }
+      { headers: cacheHeaders }
     );
   } catch (error) {
     const fallback = {
@@ -70,11 +66,7 @@ export async function GET() {
         data: fallback,
       },
       {
-        headers: {
-          "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
-          "CDN-Cache-Control": "public, max-age=3600",
-          "Cloudflare-CDN-Cache-Control": "public, max-age=3600",
-        },
+        headers: cacheHeaders,
       }
     );
   }

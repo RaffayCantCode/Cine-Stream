@@ -55,7 +55,7 @@ import {
 import { useAnnouncement } from "@/hooks/useAnnouncement";
 import { useTheme } from "@/context/ThemeContext";
 import { harmonizeAccentToCineStreamTheme, ArchetypeStyle } from "@/lib/themes";
-import { SOURCE_TAGS, SOURCE_TAG_LABELS } from "@/lib/streaming-config";
+import { SOURCE_TAGS, SOURCE_TAG_LABELS, clearSourceConfigCache, setSourceConfigCache } from "@/lib/streaming-config";
 import { clearAllClientCaches } from "@/lib/utils";
 
 interface AdminPanelModalProps {
@@ -398,8 +398,17 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
-        if (json.config) setStreamingConfig(json.config);
-        showToast("success", "Source order saved — applies to new page loads instantly");
+        if (json.config) {
+          setStreamingConfig(json.config);
+          setSourceConfigCache(json.config);
+        } else {
+          clearSourceConfigCache();
+        }
+        try {
+          localStorage.setItem("cinestream_streaming_sources_updated", Date.now().toString());
+          window.dispatchEvent(new CustomEvent("cinestream_streaming_sources_updated", { detail: json.config }));
+        } catch {}
+        showToast("success", "Source order saved — applied to media players");
       } else {
         showToast("error", json.error || "Failed to save source order");
       }
@@ -417,9 +426,22 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
       const res = await fetch("/api/admin/streaming", { method: "DELETE" });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
-        const refetched = await fetch("/api/admin/streaming", { cache: "no-store" });
-        const refetchedJson = await refetched.json().catch(() => ({}));
-        if (refetchedJson.success && refetchedJson.config) setStreamingConfig(refetchedJson.config);
+        let finalConfig = json.config;
+        if (!finalConfig) {
+          const refetched = await fetch("/api/admin/streaming", { cache: "no-store" });
+          const refetchedJson = await refetched.json().catch(() => ({}));
+          if (refetchedJson.success && refetchedJson.config) finalConfig = refetchedJson.config;
+        }
+        if (finalConfig) {
+          setStreamingConfig(finalConfig);
+          setSourceConfigCache(finalConfig);
+        } else {
+          clearSourceConfigCache();
+        }
+        try {
+          localStorage.setItem("cinestream_streaming_sources_updated", Date.now().toString());
+          window.dispatchEvent(new CustomEvent("cinestream_streaming_sources_updated", { detail: finalConfig }));
+        } catch {}
         showToast("success", "Restored default source order and tags");
       } else {
         showToast("error", json.error || "Failed to reset source order");

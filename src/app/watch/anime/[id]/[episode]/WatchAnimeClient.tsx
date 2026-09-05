@@ -9,6 +9,7 @@ import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { DrawerSeason } from "@/components/player/EpisodeDrawer";
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceConfigEntry, type SourceTag, type SourceCategory } from "@/lib/streaming-config";
 
 function buildAnimeIframeUrl(
   provider: string,
@@ -17,7 +18,8 @@ function buildAnimeIframeUrl(
   episode: number,
   tmdbId?: number | null,
   tmdbSeason?: number | null,
-  isMovie?: boolean
+  isMovie?: boolean,
+  episodeOffset?: number | null
 ): string {
   const cleanNumeric = (id: string | null | undefined): string | null => {
     if (!id) return null;
@@ -25,6 +27,7 @@ function buildAnimeIframeUrl(
     return digits || null;
   };
   const primaryId = cleanNumeric(animeId) || cleanNumeric(malId) || "";
+  const effectiveTmdbEpisode = (episode || 1) + (episodeOffset || 0);
 
   switch (provider) {
     case "animeplay":
@@ -36,7 +39,7 @@ function buildAnimeIframeUrl(
       if (tmdbId) {
         return isMovie
           ? `https://embedmaster.link/movie/${tmdbId}`
-          : `https://embedmaster.link/tv/${tmdbId}/${tmdbSeason || 1}/${episode}`;
+          : `https://embedmaster.link/tv/${tmdbId}/${tmdbSeason || 1}/${effectiveTmdbEpisode}`;
       }
       return primaryId ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub` : "";
     case "animepahe":
@@ -48,7 +51,7 @@ function buildAnimeIframeUrl(
       if (tmdbId) {
         return isMovie
           ? `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`
-          : `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${tmdbSeason || 1}&episode=${episode}`;
+          : `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${tmdbSeason || 1}&episode=${effectiveTmdbEpisode}`;
       }
       return primaryId ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub` : "";
     default:
@@ -73,6 +76,7 @@ interface AnimeInfo {
   totalEpisodes?: number | null;
   tmdbId?: number | null;
   tmdbSeason?: number | null;
+  episodeOffset?: number | null;
   countryOfOrigin?: string | null;
 }
 
@@ -81,7 +85,7 @@ interface WatchAnimeClientProps {
   episodeNumber: number;
 }
 
-const ANIME_SERVERS: ServerOption[] = [
+const DEFAULT_ANIME_SERVERS: ServerOption[] = [
   { key: "animeplay", name: "Source 1", type: "animeplay", quality: "Recommended", tag: "recommended" },
   { key: "vidnest", name: "Source 2", type: "vidnest", quality: "Best", tag: "best" },
   { key: "embedmaster", name: "Source 3", type: "embedmaster", quality: "Best", tag: "best" },
@@ -97,26 +101,90 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   const [anime, setAnime] = useState<AnimeInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sourceConfig, setSourceConfig] = useState<SourceConfigEntry[] | null>(null);
+
+  // Load and listen to streaming source configuration
+  useEffect(() => {
+    fetchSourceConfig().then((cfg) => {
+      if (cfg?.anime) setSourceConfig(cfg.anime);
+    });
+
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<Record<SourceCategory, SourceConfigEntry[]>>;
+      if (customEvent.detail?.anime) {
+        setSourceConfig(customEvent.detail.anime);
+      } else {
+        fetchSourceConfig(true).then((cfg) => {
+          if (cfg?.anime) setSourceConfig(cfg.anime);
+        });
+      }
+    };
+
+    window.addEventListener("cinestream_streaming_sources_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("cinestream_streaming_sources_updated", handleUpdate);
+    };
+  }, []);
+
+  const servers: ServerOption[] = useMemo(() => {
+    if (!sourceConfig || sourceConfig.length === 0) return DEFAULT_ANIME_SERVERS;
+
+    const byKey = new Map(DEFAULT_ANIME_SERVERS.map((s) => [s.key, s]));
+    const ordered: ServerOption[] = [];
+
+    sourceConfig.forEach((entry, idx) => {
+      const base = byKey.get(entry.key);
+      const tag = entry.tag as SourceTag;
+      const quality = SOURCE_TAG_LABELS[tag] || "Best";
+      if (base) {
+        ordered.push({ ...base, name: `Source ${idx + 1}`, quality, tag });
+      } else {
+        ordered.push({
+          key: entry.key,
+          name: `Source ${idx + 1}`,
+          type: entry.key,
+          quality,
+          tag,
+        });
+      }
+    });
+
+    DEFAULT_ANIME_SERVERS.forEach((s) => {
+      if (!ordered.some((o) => o.key === s.key)) {
+        ordered.push({ ...s, name: `Source ${ordered.length + 1}` });
+      }
+    });
+
+    return ordered;
+  }, [sourceConfig]);
+
   const [forcedSource, setForcedSource] = useState<string>("animeplay");
   usePageContentReady(!isLoading);
 
   // Restore current/preferred source from URL query param or sessionStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && servers.length > 0) {
       const urlParams = new URLSearchParams(window.location.search);
       const sourceParam = urlParams.get("source");
       const savedSource = sessionStorage.getItem("cinestream_anime_source");
       const targetSource = sourceParam || savedSource;
-      if (targetSource && ANIME_SERVERS.some((s) => s.key === targetSource)) {
+      if (targetSource && servers.some((s) => s.key === targetSource)) {
         setForcedSource(targetSource);
+      } else if (!servers.some((s) => s.key === forcedSource)) {
+        setForcedSource(servers[0].key);
       }
     }
-  }, []);
+  }, [servers, forcedSource]);
 
   const handleSelectServer = useCallback((srvKey: string) => {
     setForcedSource(srvKey);
     if (typeof window !== "undefined") {
       sessionStorage.setItem("cinestream_anime_source", srvKey);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("source", srvKey);
+        window.history.replaceState(null, "", url.toString());
+      } catch {}
     }
   }, []);
 
@@ -138,8 +206,9 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
               poster: a.poster || a.coverImage?.extraLarge || a.coverImage?.large,
               bannerImage: a.bannerImage || a.backdrop,
               totalEpisodes: trueEpCount,
-              tmdbId: a.tmdbId || null,
-              tmdbSeason: a.tmdbSeason || 1,
+              tmdbId: matchingSeason?.tmdbId || a.tmdbId || null,
+              tmdbSeason: matchingSeason?.tmdbSeasonNumber || a.tmdbSeason || 1,
+              episodeOffset: matchingSeason?.episodeOffset || 0,
               countryOfOrigin: a.countryOfOrigin || (isChinese ? "CN" : null),
             });
             return;
@@ -410,12 +479,13 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   const activeIframeUrl = useMemo(() => {
     return buildAnimeIframeUrl(
       forcedSource,
-      animeId,
+      anime?.id || animeId,
       anime?.idMal,
       episodeNumber,
       anime?.tmdbId,
       anime?.tmdbSeason,
-      anime?.format === "MOVIE"
+      anime?.format === "MOVIE",
+      anime?.episodeOffset
     );
   }, [forcedSource, animeId, anime, episodeNumber]);
 
@@ -445,8 +515,8 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       {/* Pure Cinema Video Player with Episodes Drawer */}
       <CinemaPlayer
         metadata={metadata}
-        servers={ANIME_SERVERS}
-        activeServer={ANIME_SERVERS.find((s) => s.key === forcedSource) || ANIME_SERVERS[0]}
+        servers={servers}
+        activeServer={servers.find((s) => s.key === forcedSource) || servers[0]}
         onSelectServer={(srv) => handleSelectServer(srv.key)}
         seasons={drawerSeason}
         onSelectEpisode={(_, ep) => handleSelectEpisode(ep)}

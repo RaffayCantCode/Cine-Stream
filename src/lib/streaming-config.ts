@@ -90,16 +90,25 @@ export function resolveSourceConfig(
   return entries.map(({ key, tag }) => ({ key, tag }));
 }
 
-// Client-side fetch with a short module cache so rapid episode/page switches
-// don't hammer the API while admin saves still apply within ~30s.
+// Client-side fetch with a 30-minute cache to respect API request quotas.
+// Edge and browser caches will store for 30 minutes to 1 hour.
 let fetchCache: { ts: number; data: Record<SourceCategory, SourceConfigEntry[]> } | null = null;
 
-export async function fetchSourceConfig(): Promise<Record<SourceCategory, SourceConfigEntry[]>> {
-  if (fetchCache && Date.now() - fetchCache.ts < 600_000) { // 10 minutes
+export function clearSourceConfigCache(): void {
+  fetchCache = null;
+}
+
+export function setSourceConfigCache(data: Record<SourceCategory, SourceConfigEntry[]>): void {
+  fetchCache = { ts: Date.now(), data };
+}
+
+export async function fetchSourceConfig(forceFresh = false): Promise<Record<SourceCategory, SourceConfigEntry[]>> {
+  if (!forceFresh && fetchCache && Date.now() - fetchCache.ts < 1_800_000) { // 30 minutes
     return fetchCache.data;
   }
   try {
-    const res = await fetch("/api/stream/sources", { cache: "no-store" });
+    const url = forceFresh ? `/api/stream/sources?t=${Date.now()}` : "/api/stream/sources";
+    const res = await fetch(url);
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.data) {
@@ -109,5 +118,8 @@ export async function fetchSourceConfig(): Promise<Record<SourceCategory, Source
       }
     }
   } catch {}
-  return { movie: [], anime: [] };
+  return {
+    movie: resolveSourceConfig("movie", []),
+    anime: resolveSourceConfig("anime", []),
+  };
 }

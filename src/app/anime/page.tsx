@@ -37,11 +37,12 @@ export default function AnimeBrowsePage() {
   const [sortBy, setSortBy] = useState<AnimeSort>("popular");
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const debouncedQuery = useDebounce(query, 400);
+  const debouncedQuery = useDebounce(query, 300);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState<number | null>(null);
-  usePageContentReady(!isLoading);
+  const [initialContentReady, setInitialContentReady] = useState(false);
+  usePageContentReady(initialContentReady);
 
   // Set session-stable starting page client-side on mount
   useEffect(() => {
@@ -160,17 +161,10 @@ export default function AnimeBrowsePage() {
       if (lastFetchedUrlRef.current === fetchUrl) {
         setIsLoading(false);
         initialLoad.current = false;
+        setInitialContentReady(true);
       }
     }
   }, [getCategory, selectedGenre, sortBy]);
-
-  // Trigger loading state and clear items immediately on typing
-  useEffect(() => {
-    if (query.trim()) {
-      setIsLoading(true);
-      setItems([]);
-    }
-  }, [query]);
 
   // Auto-switch to search mode when user types, and restore popular when cleared
   useEffect(() => {
@@ -271,7 +265,11 @@ export default function AnimeBrowsePage() {
           </div>
 
           <div className="relative mb-6 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-300/40" />
+            {Boolean(query.trim()) && (query !== debouncedQuery || isLoading) ? (
+              <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400 animate-spin" />
+            ) : (
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-300/40" />
+            )}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -316,7 +314,7 @@ export default function AnimeBrowsePage() {
 
           {error && <div className="mb-6 text-sm text-[#7288AE]">{error}</div>}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6 pt-3 -mt-3">
             {isLoading && items.length === 0 && Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="aspect-[2/3] rounded-xl bg-white/[0.03] animate-pulse" />
             ))}

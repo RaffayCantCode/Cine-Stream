@@ -80,7 +80,6 @@ export default function RootLayout({
         {/* Anime image sources */}
         <link rel="preconnect" href="https://api.anipub.xyz" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://api.anipub.xyz" />
-        <link rel="dns-prefetch" href="https://api.tatakai.me" />
         {/* Deployment Cache Invalidation */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {

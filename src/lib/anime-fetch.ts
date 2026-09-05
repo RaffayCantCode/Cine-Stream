@@ -1,5 +1,5 @@
 // Multi-API Anime Fetcher
-// Metadata: AniList (primary) + Jikan (fallback)
+// Metadata: AniList (primary) -> TMDB -> AniZip -> Kitsu (fallback)
 // Streaming: iframe embed sources only (no HLS)
 
 import { isAdultContent } from "./content-filter";
@@ -28,6 +28,7 @@ export interface AnimeItem {
   trailerId?: string | null;
   nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
   backdrop?: string | null;
+  logoUrl?: string | null;
 }
 
 export interface SeasonInfo {
@@ -63,6 +64,8 @@ export interface EpisodeDetail {
   seasonName?: string;
   seasonMalId?: number | null;
   runtime?: number | null;
+  vote_average?: number | null;
+  vote_count?: number | null;
 }
 
 export interface FillerLookup {
@@ -104,6 +107,9 @@ export interface FranchiseNode {
   duration: number | null;
   coverImage?: string | null;
   bannerImage?: string | null;
+  tmdbId?: number | null;
+  tmdbSeasonNumber?: number | null;
+  episodeOffset?: number;
 }
 
 import {
@@ -135,16 +141,9 @@ export {
 };
 
 const ANILIST_API = "https://graphql.anilist.co";
-const JIKAN_BASE = "https://api.jikan.moe/v4";
 const ANIME_FILLER_LIST_BASE = "https://www.animefillerlist.com/shows";
 export const DEFAULT_FETCH_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 CineStream/1.0";
-// NOTE: No module-level Map caches here — they are wiped on every Cloudflare
-// Pages cold start (each isolate is fresh). CDN-level caching is handled by
-// passing `next: { revalidate: N }` on each individual fetch call instead.
 
-// Safe Jikan GET that tolerates non-JSON bodies (e.g. Cloudflare "error code:
-// 504" text pages). Throwing on `res.json()` here previously 500'd the whole
-// /api/anime route on edge cold starts.
 interface ServerCacheEntry<T> {
   data: T;
   expires: number;
@@ -169,37 +168,6 @@ function setCachedAnilist<T>(key: string, data: T, ttlSeconds = 3600): void {
   serverAnilistCache.set(key, { data, expires: Date.now() + ttlSeconds * 1000 });
 }
 
-export async function jikanFetchJson<T = any>(url: string): Promise<T | null> {
-  const cacheKey = `jk_${url}`;
-  const cached = getCachedAnilist<T>(cacheKey);
-  if (cached) {
-    recordPrimarySuccess();
-    return cached;
-  }
-
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-      signal: AbortSignal.timeout(4000),
-      next: { revalidate: 3600 } as any,
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    try {
-      const parsed = JSON.parse(text) as T;
-      if (parsed) {
-        recordPrimarySuccess();
-        setCachedAnilist(cacheKey, parsed, 3600);
-      }
-      return parsed;
-    } catch {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-}
-
 export async function anilistQuery(query: string, variables: Record<string, any>, retries = 1, revalidate = 3600): Promise<any> {
   const cacheKey = `al_${query.length}_${JSON.stringify(variables)}`;
   const cached = getCachedAnilist<any>(cacheKey);
@@ -215,7 +183,7 @@ export async function anilistQuery(query: string, variables: Record<string, any>
         headers: { 
           "Content-Type": "application/json", 
           "Accept": "application/json",
-          "User-Agent": "CineStream/1.0 (https://github.com/RaffayCantCode/Cine-Stream)"
+          "User-Agent": DEFAULT_FETCH_USER_AGENT,
         },
         body: JSON.stringify({ query, variables }),
         signal: AbortSignal.timeout(4500),
@@ -266,17 +234,12 @@ export function cleanAnimeDescription(html?: string | null): string {
 function transformAniList(media: AniListMedia): AnimeItem | null {
   if (media.isAdult) return null;
   let status = media.status || null;
-  // Only upgrade NOT_YET_RELEASED → RELEASING when the series has a confirmed
-  // next airing episode. Never override FINISHED (a sequel's nextAiringEpisode
-  // must not contaminate a completed season's status).
   if (
     media.nextAiringEpisode &&
     (status === "NOT_YET_RELEASED" || status === "NOT_YET_AIRED")
   ) {
     status = "RELEASING";
   }
-  // Guard: if AniList explicitly says FINISHED, never downgrade to RELEASING
-  // even if a related sequel has nextAiringEpisode data attached.
   if (media.status === "FINISHED") {
     status = "FINISHED";
   }
@@ -288,6 +251,7 @@ function transformAniList(media: AniListMedia): AnimeItem | null {
     jname: media.title.native || null,
     poster: media.coverImage?.extraLarge || media.coverImage?.large || "",
     bannerImage: media.bannerImage || null,
+    backdrop: media.bannerImage || null,
     type: media.type || "TV",
     episodes: { sub: media.episodes || null, dub: null },
     rating: media.averageScore ? (media.averageScore / 10).toFixed(1) : null,
@@ -312,7 +276,7 @@ const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
       genre: $genre,
       search: $q
     ) {
-      id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear trailer { id site }
     }
   }
@@ -323,7 +287,7 @@ const TRENDING_QUERY = `query ($page: Int, $genre: String) {
     media(
       type: ANIME,
       isAdult: false,
-      sort: [TRENDING_DESC, POPULARITY_DESC],
+      sort: [TRENDING_DESC],
       genre: $genre
     ) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
@@ -344,25 +308,6 @@ const AIRING_QUERY = `query ($page: Int, $genre: String, $season: MediaSeason, $
     ) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear duration
-    }
-  }
-}`;
-
-// AniList relations query — fetches immediate neighbors
-const RELATIONS_QUERY = `query ($id: Int) {
-  Media(id: $id, type: ANIME) {
-    id idMal
-    title { romaji english }
-    episodes season seasonYear format duration
-    relations {
-      edges {
-        node {
-          id idMal
-          title { romaji english }
-          type episodes season seasonYear format duration isAdult
-        }
-        relationType
-      }
     }
   }
 }`;
@@ -388,60 +333,24 @@ function filterUnreleased(items: AnimeItem[]): AnimeItem[] {
 function deduplicateAnime(items: AnimeItem[]): AnimeItem[] {
   const seen = new Set<string>();
   const seenMal = new Set<string>();
-  return items.filter(item => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    if (item.idMal) {
-      if (seenMal.has(item.idMal)) return false;
-      seenMal.add(item.idMal);
-    }
-    return true;
-  });
-}
-
-// Group anime by franchise — keeps only the first entry per exact normalized title
-// Does NOT strip season/part markers to prevent merging different entries
-function groupByFranchise(items: AnimeItem[]): AnimeItem[] {
+  const seenNames = new Set<string>();
   const grouped = new Map<string, AnimeItem>();
+
   for (const item of items) {
-    const normalized = item.name
-      .replace(/\s*\(tv\)\s*$/i, '')
-      .replace(/\s*\(.*?\)\s*$/g, '')
-      .replace(/:$/, '')
-      .trim()
-      .toLowerCase();
-    if (!grouped.has(normalized)) {
-      grouped.set(normalized, item);
-    } else {
-      const existing = grouped.get(normalized)!;
-      if (!existing.idMal && item.idMal) {
-        grouped.set(normalized, item);
-      }
+    if (!item || !item.name) continue;
+    const lowerName = item.name.toLowerCase().trim();
+
+    if (item.id && !seen.has(item.id)) {
+      if (item.idMal && seenMal.has(item.idMal)) continue;
+      if (seenNames.has(lowerName)) continue;
+
+      seen.add(item.id);
+      if (item.idMal) seenMal.add(item.idMal);
+      seenNames.add(lowerName);
+      grouped.set(item.id, item);
     }
   }
   return [...grouped.values()];
-}
-
-function transformJikan(a: any): AnimeItem {
-  return {
-    id: String(a.mal_id),
-    idMal: String(a.mal_id),
-    isAdult: a.rating === "Rx - Hentai",
-    name: a.title_english || a.title,
-    jname: a.title_japanese || null,
-    poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
-    type: a.type || "TV",
-    episodes: { sub: a.episodes || null, dub: null },
-    rating: a.score ? String(a.score) : null,
-    description: a.synopsis || "",
-    genres: a.genres?.map((g: any) => g.name) || [],
-    status: a.status || null,
-    season: a.season || null,
-    seasonYear: a.year || null,
-    format: a.type || null,
-    duration: a.duration ? parseInt(a.duration) : null,
-    trailerId: a.trailer?.youtube_id || null,
-  };
 }
 
 const SEARCH_QUERY = `query ($page: Int, $genre: String, $q: String) {
@@ -469,20 +378,10 @@ export async function searchAnime(q: string, page = 1, genre?: string): Promise<
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
-    console.warn("AniList search failed, falling back to Jikan/alternative queries:", e);
+    console.warn("AniList search failed:", e);
   }
 
-  // Fallback 1: Jikan search
-  try {
-    const jResults = await searchViaJikan(cleanQ);
-    if (jResults && jResults.length > 0) {
-      return filterUnreleased(deduplicateAnime(jResults));
-    }
-  } catch (e) {
-    console.warn("Jikan search failed:", e);
-  }
-
-  // Fallback 2: Clean punctuation / special chars search on AniList
+  // Fallback 1: Clean punctuation / special chars search on AniList
   if (cleanQ.includes("-") || cleanQ.includes("_") || cleanQ.includes(":") || cleanQ.includes("'")) {
     try {
       const altQ = cleanQ.replace(/[-_:'"]/g, " ").replace(/\s+/g, " ").trim();
@@ -495,10 +394,7 @@ export async function searchAnime(q: string, page = 1, genre?: string): Promise<
     } catch {}
   }
 
-  // Both primary sources failed for this query
-  recordPrimaryFailure();
-
-  // Emergency Fallback: Kitsu search (when both AniList and Jikan are down)
+  // Fallback 2: Kitsu search (only if AniList returns nothing)
   try {
     const kResults = await searchViaKitsu(cleanQ, page, genre);
     if (kResults && kResults.length > 0) {
@@ -518,23 +414,10 @@ export async function getPopularAnime(page = 1, genre?: string): Promise<AnimeIt
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
-    console.warn("AniList popular failed, falling back to Jikan:", e);
+    console.warn("AniList popular failed, falling back to Kitsu:", e);
   }
 
-  try {
-    const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`);
-    const jikanItems = filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
-    if (jikanItems && jikanItems.length > 0) {
-      return jikanItems;
-    }
-  } catch (e) {
-    console.warn("Jikan popular failed, falling back to Kitsu:", e);
-  }
-
-  // Both primary sources failed
-  recordPrimaryFailure();
-
-  // Emergency Fallback: Kitsu popular (when both AniList and Jikan are down)
+  // Fallback: Kitsu popular
   try {
     const kitsuItems = await getPopularAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {
@@ -554,23 +437,10 @@ export async function getTrendingAnime(page = 1, genre?: string): Promise<AnimeI
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
-    console.warn("AniList trending failed, falling back to Jikan:", e);
+    console.warn("AniList trending failed, falling back to Kitsu:", e);
   }
 
-  try {
-    const data = await jikanFetchJson(`${JIKAN_BASE}/top/anime?filter=airing&page=${page}`);
-    const jikanItems = filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
-    if (jikanItems && jikanItems.length > 0) {
-      return jikanItems;
-    }
-  } catch (e) {
-    console.warn("Jikan trending failed, falling back to Kitsu:", e);
-  }
-
-  // Both primary sources failed
-  recordPrimaryFailure();
-
-  // Emergency Fallback: Kitsu trending (when both AniList and Jikan are down)
+  // Fallback: Kitsu trending
   try {
     const kitsuItems = await getTrendingAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {
@@ -591,23 +461,10 @@ export async function getAiringAnime(page = 1, genre?: string): Promise<AnimeIte
       return filterUnreleased(deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]));
     }
   } catch (e) {
-    console.warn("AniList airing failed, falling back to Jikan:", e);
+    console.warn("AniList airing failed, falling back to Kitsu:", e);
   }
 
-  try {
-    const data = await jikanFetchJson(`${JIKAN_BASE}/seasons/now?page=${page}`);
-    const jikanItems = filterUnreleased(deduplicateAnime(((data as any)?.data || []).map(transformJikan)));
-    if (jikanItems && jikanItems.length > 0) {
-      return jikanItems;
-    }
-  } catch (e) {
-    console.warn("Jikan airing failed, falling back to Kitsu:", e);
-  }
-
-  // Both primary sources failed
-  recordPrimaryFailure();
-
-  // Emergency Fallback: Kitsu airing (when both AniList and Jikan are down)
+  // Fallback: Kitsu airing
   try {
     const kitsuItems = await getAiringAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {
@@ -636,23 +493,10 @@ export async function getUpcomingAnime(page = 1, genre?: string): Promise<AnimeI
       return deduplicateAnime((data.data.Page.media).map(transformAniList).filter(Boolean) as AnimeItem[]);
     }
   } catch (e) {
-    console.warn("AniList upcoming failed, falling back to Jikan:", e);
+    console.warn("AniList upcoming failed, falling back to Kitsu:", e);
   }
 
-  try {
-    const data = await jikanFetchJson(`${JIKAN_BASE}/seasons/upcoming?page=${page}`);
-    const jikanItems = deduplicateAnime(((data as any)?.data || []).map(transformJikan));
-    if (jikanItems && jikanItems.length > 0) {
-      return jikanItems;
-    }
-  } catch (e) {
-    console.warn("Jikan upcoming failed, falling back to Kitsu:", e);
-  }
-
-  // Both primary sources failed
-  recordPrimaryFailure();
-
-  // Emergency Fallback: Kitsu upcoming (when both AniList and Jikan are down)
+  // Fallback: Kitsu upcoming
   try {
     const kitsuItems = await getUpcomingAnimeViaKitsu(page, genre);
     if (kitsuItems && kitsuItems.length > 0) {
@@ -665,16 +509,16 @@ export async function getUpcomingAnime(page = 1, genre?: string): Promise<AnimeI
   return [];
 }
 
+export async function getAnimeByGenre(genre: string, page = 1): Promise<AnimeItem[]> {
+  return getPopularAnime(page, genre);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FRANCHISE GRAPH — FAST 2-LEVEL QUERY
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Relation types that constitute the same franchise
 const FRANCHISE_RELATION_TYPES = new Set(["SEQUEL", "PREQUEL", "ALTERNATIVE", "PARENT", "SIDE_STORY", "SPIN_OFF"]);
-// These formats get included in the season list
-const INCLUDABLE_FORMATS = new Set(["TV", "TV_SHORT", "OVA", "ONA", "SPECIAL", "MOVIE"]);
 
-// Single AniList query that retrieves the node AND its 1-hop relations in one request.
 const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   Media(id: $id, type: ANIME) {
     id idMal title { romaji english native } episodes status season seasonYear format duration bannerImage coverImage { large extraLarge }
@@ -684,7 +528,6 @@ const RELATIONS_SINGLE_QUERY = `query ($id: Int) {
   }
 }`;
 
-// Batch query for up to 50 IDs in a single AniList request
 const BATCH_RELATIONS_QUERY = `query ($ids: [Int]) {
   Page(page: 1, perPage: 50) {
     media(id_in: $ids, type: ANIME) {
@@ -716,13 +559,6 @@ export function cacheFranchiseNodes(nodes: FranchiseNode[]): void {
   }
 }
 
-/**
- * Fast franchise node resolver for initial details/meta:
- * 1. Curated nodes if available (0ms)
- * 2. In-memory cached franchise graph if available (0ms)
- * 3. Direct Level-1 relation edges from initialMedia (0ms, 0 extra queries!)
- * Never blocks initial page load on multi-hop network crawls.
- */
 export function getFastFranchiseNodes(startId: number, initialMedia?: any): FranchiseNode[] {
   const curated = getCuratedAnimeFranchiseNodes(startId);
   if (curated && curated.length > 1) {
@@ -858,66 +694,36 @@ export async function buildFranchiseGraph(startId: number, initialMedia?: any): 
         }
       } catch (e) {
         console.warn(`[Franchise] Level ${depth + 1} batch fetch failed:`, e);
-        break;
       }
     }
   } catch (e) {
-    console.warn("[Franchise] Level 1 fetch failed for", startId, e);
+    console.warn("[Franchise] Graph build failed:", e);
   }
 
-  const finalNodes = [...visited.values()].filter(n => n.title);
-  if (finalNodes.length > 0) {
-    cacheFranchiseNodes(finalNodes);
-    const cacheEntry = { nodes: finalNodes, timestamp: Date.now() };
-    FRANCHISE_GRAPH_CACHE.set(startId, cacheEntry);
+  const nodes = [...visited.values()].filter(n => n.title);
+  if (nodes.length > 1) {
+    cacheFranchiseNodes(nodes);
   }
-  return finalNodes;
+  return nodes;
 }
 
-/**
- * From the franchise graph, find the "root" — the earliest TV entry chronologically.
- * If there are no TV entries, fall back to the first entry by year.
- */
-function findFranchiseRoot(nodes: FranchiseNode[]): FranchiseNode | null {
-  if (nodes.length === 0) return null;
-
+export function buildSeasonList(
+  clientNodes: FranchiseNode[],
+  currentId: number
+): SeasonInfo[] {
   const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
+  const sorted = [...clientNodes].sort((a, b) => {
+    // Custom chronological order for Fate franchise
+    const FATE_ORDER = [10087, 11741, 356, 19603, 20792, 20791, 21718, 21719];
+    const idxA = FATE_ORDER.indexOf(Number(a.id));
+    const idxB = FATE_ORDER.indexOf(Number(b.id));
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
 
-  // Prefer TV/TV_SHORT entries with the earliest air date
-  const tvNodes = nodes.filter(n => n.format === "TV" || n.format === "TV_SHORT");
-  const candidates = tvNodes.length > 0 ? tvNodes : nodes;
-
-  return candidates.sort((a, b) => {
     const yearA = a.seasonYear || 9999;
     const yearB = b.seasonYear || 9999;
     if (yearA !== yearB) return yearA - yearB;
-    const seasonA = seasonOrder.indexOf(a.season || "FALL");
-    const seasonB = seasonOrder.indexOf(b.season || "FALL");
-    return seasonA - seasonB;
-  })[0] || null;
-}
-
-/**
- * Sort and label all franchise nodes into a clean SeasonInfo list.
- * TV entries → "Season N"
- * OVA/ONA → "OVA N"
- * Special → "Special N"
- * Movie → "Movie N"
- */
-export function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[] {
-  const seasonOrder = ["WINTER", "SPRING", "SUMMER", "FALL"];
-
-  // Filter to only includable formats with some content, always preserving the current requested node
-  const includable = nodes.filter(n =>
-    n.id === currentId || (n.format && INCLUDABLE_FORMATS.has(n.format)) || !n.format
-  );
-
-  // Sort chronologically
-  includable.sort((a, b) => {
-    const yearA = a.seasonYear || 9999;
-    const yearB = b.seasonYear || 9999;
-    if (yearA !== yearB) return yearA - yearB;
-    // Within same year, sort TV before specials/OVAs
     const formatOrder = { TV: 0, TV_SHORT: 1, ONA: 2, OVA: 3, SPECIAL: 4, MOVIE: 5 };
     const fA = (formatOrder as any)[a.format || "TV"] ?? 6;
     const fB = (formatOrder as any)[b.format || "TV"] ?? 6;
@@ -932,13 +738,7 @@ export function buildSeasonList(nodes: FranchiseNode[], currentId: number): Seas
   let ovaCount = 0;
   let specialCount = 0;
 
-  // ONA entries with 8+ episodes AND a known broadcast season are streaming TV series
-  // misclassified by AniList (e.g. Witch Hat Atelier is ONA on AniList but TV on MAL).
-  const knownBroadcastSeasons = new Set(["WINTER", "SPRING", "SUMMER", "FALL"]);
-
-  const mappedSeasons = includable.map(node => {
-    // Reclassify single-episode movies with short duration (< 40 min) as Specials
-    // These are usually compilation/recap films, not actual feature-length movies.
+  const mappedSeasons: SeasonInfo[] = sorted.map((node) => {
     const isShortMovie = node.format === "MOVIE"
       && (node.episodes || 1) <= 1
       && (node.duration || 0) > 0
@@ -947,7 +747,6 @@ export function buildSeasonList(nodes: FranchiseNode[], currentId: number): Seas
     const isMovie = node.format === "MOVIE" && !isShortMovie;
     const isSpecial = node.format === "SPECIAL" || isShortMovie;
     const isActualOva = node.format === "OVA";
-    const isTv = !isMovie && !isActualOva && !isSpecial;
 
     let label: string = (node as any).seasonLabel || "";
     if (!label) {
@@ -995,19 +794,17 @@ export function buildSeasonList(nodes: FranchiseNode[], currentId: number): Seas
       tmdbId: (node as any).tmdbId || null,
       tmdbSeasonNumber: (node as any).tmdbSeasonNumber || null,
       episodeOffset: (node as any).episodeOffset || 0,
+      coverImage: node.coverImage || null,
+      bannerImage: node.bannerImage || null,
     };
   });
 
   const filtered = mappedSeasons.filter(season => {
-    // Always keep the currently opened season, TV seasons, and Movies
     if (season.isCurrent) return true;
     if (season.seasonLabel.startsWith("Season") || season.seasonLabel.startsWith("Movie")) return true;
-    
-    // For OVAs and Specials, only keep them if they are likely plot-critical
     const lowerName = season.name.toLowerCase();
     const plotKeywords = ["final", "part", "chapter", "season", "arc", "prologue", "epilogue"];
     if (plotKeywords.some(kw => lowerName.includes(kw))) return true;
-    
     return false;
   });
 
@@ -1018,11 +815,6 @@ export function buildSeasonList(nodes: FranchiseNode[], currentId: number): Seas
   return filtered;
 }
 
-/**
- * Build season list from TMDB show data.
- * ALL seasons belong to the current anime — no cross-franchise matching.
- * Uses synthetic IDs (tmdb-{tmdbId}-s{num}) to avoid linking to other anime.
- */
 export function parseSeasonNumberFromTitle(title: string): number {
   const normalized = title.toLowerCase();
   
@@ -1045,15 +837,10 @@ export function parseSeasonNumberFromTitle(title: string): number {
   if (normalized.includes("eighth season") || normalized.includes("8th season")) return 8;
   if (normalized.includes("ninth season") || normalized.includes("9th season")) return 9;
   if (normalized.includes("tenth season") || normalized.includes("10th season")) return 10;
-  // For titles with "final season", try to find an explicit season number first
-  // e.g. "Season 4 Final Season" or "4th Final Season" or "Final Season 4"
+  
   const finalSeasonNum = normalized.match(/(?:season\s*)?(\d+)(?:st|nd|rd|th)?\s+final\s+season/i)
     || normalized.match(/final\s+season\s+(\d+)/i);
   if (finalSeasonNum) return parseInt(finalSeasonNum[1], 10);
-  // Default heuristic: most anime with "final season" in the title are on their 4th season
-  // (e.g. Attack on Titan, My Hero Academia, Haikyuu, etc.)
-  // NOTE: We intentionally do NOT match "final season.*?(\d+)" because it incorrectly
-  // captures "2" from "Final Season Part 2", mapping it to TMDB season 2 instead of 4.
   if (normalized.includes("final season")) return 4;
   
   const romanEndMatch = normalized.match(/\s+(ii|iii|iv|v|vi|vii|viii|ix|x)$/);
@@ -1069,76 +856,7 @@ export function parseSeasonNumberFromTitle(title: string): number {
   return 1;
 }
 
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NOTE: No server-side in-memory cache here.
-// Module-level Map caches are destroyed on every Cloudflare Pages cold start.
-// CDN caching is handled via `next: { revalidate: N }` on each fetch() call.
-// ─────────────────────────────────────────────────────────────────────────────
-
 const INITIAL_EP_LIMIT = 100;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VALIDATION FUNCTIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-function validateSeason(
-  season: SeasonInfo,
-  animeName: string,
-  nodes: FranchiseNode[]
-): { valid: boolean; warnings: string[] } {
-  const warnings: string[] = [];
-
-  // Check episode count is reasonable
-  if (season.totalEpisodes <= 0) {
-    warnings.push(`Season "${season.seasonLabel}" has 0 episodes`);
-  }
-  if (season.totalEpisodes > 1000) {
-    warnings.push(`Season "${season.seasonLabel}" has suspiciously many episodes (${season.totalEpisodes})`);
-  }
-
-  // Check season label makes sense given format
-  const node = nodes.find(n => n.id === parseInt(season.id, 10));
-  if (node) {
-    if (node.format === "MOVIE" && !season.seasonLabel.startsWith("Movie")) {
-      warnings.push(`Season "${season.seasonLabel}" is a movie but labeled as non-movie`);
-    }
-    if (node.format === "OVA" && !season.seasonLabel.startsWith("OVA") && !season.seasonLabel.startsWith("Special")) {
-      warnings.push(`Season "${season.seasonLabel}" is OVA but labeled differently`);
-    }
-  }
-
-  return { valid: warnings.length === 0, warnings };
-}
-
-function validateEpisode(
-  ep: EpisodeDetail,
-  season: SeasonInfo,
-  allEps: EpisodeDetail[]
-): { valid: boolean; warnings: string[] } {
-  const warnings: string[] = [];
-
-  // Check episode number is within expected range
-  if (ep.episodeNum < 1) {
-    warnings.push(`Episode ${ep.episodeNum} has invalid number`);
-  }
-  if (ep.episodeNum > (season.totalEpisodes + 5)) {
-    warnings.push(`Episode ${ep.episodeNum} exceeds season total (${season.totalEpisodes})`);
-  }
-
-  // Check for duplicate episode numbers
-  const sameNum = allEps.filter(e => e.episodeNum === ep.episodeNum);
-  if (sameNum.length > 1) {
-    warnings.push(`Duplicate episode number ${ep.episodeNum} in season "${season.seasonLabel}"`);
-  }
-
-  return { valid: warnings.length === 0, warnings };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN DETAIL FUNCTION
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface AnimeDetailsCacheEntry {
   data: {
@@ -1180,10 +898,9 @@ export function invalidateAnimeDetailsCache(animeId?: string | number): void {
 }
 
 /**
- * Fetch full anime franchise details for any season ID.
- * - Builds the complete franchise graph via BFS
- * - Always returns ALL seasons, OVAs, movies, specials
- * - openedSeasonId: the originally-requested AniList ID (for pre-selecting the tab)
+ * Clean Core Anime Detail Function
+ * Pipeline: AniList (Primary) -> TMDB -> AniZip -> Kitsu (Fallback)
+ * Artwork: Strictly corresponds to the anime opened (never overwritten by sequels)
  */
 export async function getAnimeDetails(
   id: string,
@@ -1302,90 +1019,55 @@ export async function getAnimeDetails(
     return null;
   }
 
-  // Step 0 & Step 1: Fetch AniZip mappings and main media metadata in parallel
-  let aniZipMapping: any = null;
-  let media: any = null;
-
+  // Fetch AniZip mappings and AniList main media metadata in parallel
   const aniZipPromise = fetch(`https://api.ani.zip/mappings?anilist_id=${id}`, {
-    signal: AbortSignal.timeout(2500),
+    signal: AbortSignal.timeout(3000),
     headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-    next: { revalidate: 86400 } // Cache mappings for 24h
+    next: { revalidate: 86400 },
   }).then(async res => res.ok ? res.json() : null).catch(() => null);
 
-  const mediaPromise = (!isMalInput || resolvedFromMal)
-    ? (async () => {
-        try {
-          const q = `query ($id: Int) {
-            Media(id: $id, type: ANIME, isAdult: false) {
-              id idMal isAdult title { romaji english native } coverImage { large extraLarge }
-              episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
-              relations {
-                edges {
-                  relationType
-                  node {
-                    id idMal title { romaji english native } episodes status season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge }
-                  }
-                }
+  const mediaPromise = (async () => {
+    try {
+      const q = `query ($id: Int) {
+        Media(id: $id, type: ANIME, isAdult: false) {
+          id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
+          episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
+          relations {
+            edges {
+              relationType
+              node {
+                id idMal title { romaji english native } episodes status season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge }
               }
             }
-          }`;
-          const data = await anilistQuery(q, { id: numId }, 2, 86400);
-          if (data?.data?.Media) {
-            return data.data.Media;
           }
-        } catch {}
+        }
+      }`;
+      const data = await anilistQuery(q, { id: numId }, 2, 86400);
+      if (data?.data?.Media) {
+        return data.data.Media;
+      }
+    } catch {}
+    return null;
+  })();
 
-        // Immediate fallback if AniList returns null or rate limits
-        try {
-          const tRes = await fetch(`https://api.tatakai.me/meta/anilist/info/${numId}?provider=zoro`, {
-            signal: AbortSignal.timeout(3000),
-            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }
-          });
-          if (tRes.ok) {
-            const tData = await tRes.json();
-            if (tData?.id || tData?.title) {
-              return {
-                id: tData.id,
-                idMal: tData.malId || null,
-                isAdult: false,
-                title: {
-                  romaji: tData.title?.romaji,
-                  english: tData.title?.english,
-                  native: tData.title?.native,
-                },
-                coverImage: {
-                  large: tData.image,
-                  extraLarge: tData.cover || tData.image,
-                },
-                episodes: tData.totalEpisodes,
-                genres: tData.genres || [],
-                averageScore: tData.rating || null,
-                description: tData.description || "",
-                status: tData.status || null,
-                type: tData.type || "TV",
-                format: tData.type || "TV",
-                season: tData.season || null,
-                seasonYear: tData.releaseDate || null,
-                duration: tData.duration || null,
-              };
-            }
-          }
-        } catch { /* ignore */ }
-        return null;
-      })()
-    : Promise.resolve(null);
+  const [aniZipMapping, fetchedMedia] = await Promise.all([aniZipPromise, mediaPromise]);
+  let media = fetchedMedia;
 
-  const [aniZipResData, fetchedMedia] = await Promise.all([aniZipPromise, mediaPromise]);
-  aniZipMapping = aniZipResData;
-  media = fetchedMedia;
-
-  // Fallback 1: If numId failed direct AniList ID lookup, try AniList lookup by MAL ID
+  // Fallback 1: Lookup AniList by MAL ID if numId was MAL ID
   if (!media && !isNaN(numId)) {
     try {
       const qMal = `query ($idMal: Int) {
         Media(idMal: $idMal, type: ANIME, isAdult: false) {
-          id idMal isAdult title { romaji english native } coverImage { large extraLarge }
+          id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
           episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
+          relations {
+            edges {
+              relationType
+              node {
+                id idMal title { romaji english native } episodes status season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge }
+              }
+            }
+          }
         }
       }`;
       const malRes = await anilistQuery(qMal, { idMal: numId }, 1, 86400);
@@ -1395,214 +1077,25 @@ export async function getAnimeDetails(
     } catch {}
   }
 
-  // Fallback 2: If numId was actually a TMDB ID or unknown ID that failed AniList direct lookup, try curated & AniZip TMDB mapping
+  // Fallback 2: Curated franchise definition (e.g. offline fallback / 429 protection)
   if (!media && !isNaN(numId)) {
-    const curatedByTmdb = getFranchiseAnimeItem(numId);
-    if (curatedByTmdb && curatedByTmdb.anilist_id) {
-      return getAnimeDetails(String(curatedByTmdb.anilist_id), epLimit, skipEpisodes);
-    }
-    try {
-      const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
-        signal: AbortSignal.timeout(2500),
-        headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-        next: { revalidate: 86400 }
-      });
-      if (azRes.ok) {
-        const azData = await azRes.json();
-        if (azData?.mappings?.anilist_id) {
-          return getAnimeDetails(String(azData.mappings.anilist_id), epLimit, skipEpisodes);
-        }
-      }
-    } catch {}
-  }
-
-  // Jikan fallback for the main metadata (use if we have valid MAL ID or numId as MAL ID)
-  if (!media) {
-    try {
-      let resolvedMalId = aniZipMapping?.mappings?.mal_id
-        ? String(aniZipMapping.mappings.mal_id)
-        : isMalInput || !isNaN(numId) ? String(numId) : null;
-
-      if (!resolvedMalId && !isNaN(numId)) {
-        try {
-          const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${numId}`, {
-            signal: AbortSignal.timeout(2500),
-            headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-            next: { revalidate: 86400 }
-          });
-          if (azRes.ok) {
-            const azData = await azRes.json();
-            if (azData?.mappings?.mal_id) {
-              resolvedMalId = String(azData.mappings.mal_id);
-            }
-          }
-        } catch {}
-      }
-
-      const targetMalId = resolvedMalId;
-      if (targetMalId) {
-        const jikanRes = await fetch(
-          `${JIKAN_BASE}/anime/${targetMalId}`,
-          { signal: AbortSignal.timeout(3000) }
-        );
-        if (jikanRes.ok) {
-          const jData = await jikanRes.json();
-          const a = jData.data;
-          if (a && a.rating !== "rx") {
-            const isUnreleasedJikan = a.status?.includes("Not yet aired") || a.status?.includes("Not Yet Aired");
-            // Prefer the real episode count from AniZip keys over Jikan's sentinel
-            // (e.g. airing shows report 1500 while AniZip knows the true count).
-            let aniZipEpCount: number | null = null;
-            if (aniZipMapping?.episodes) {
-              const keys = Object.keys(aniZipMapping.episodes).map(Number).filter(k => !isNaN(k));
-              if (keys.length > 0) aniZipEpCount = Math.max(...keys);
-            }
-            const jikanEpCount = a.episodes && a.episodes > 0 ? a.episodes : null;
-            const knownRealCount = Math.max(aniZipEpCount || 0, jikanEpCount || 0);
-            const totalEps = isUnreleasedJikan
-              ? 0
-              : knownRealCount > 0
-                ? knownRealCount
-                : Math.max(a.episodes || (a.status?.includes("Airing") ? 1500 : 12), 1);
-            let episodes: EpisodeDetail[] = [];
-            if (!isUnreleasedJikan && !skipEpisodes) {
-              const realEps = await fetchEpisodesFromJikan(a.mal_id, String(id), Math.min(totalEps, epLimit));
-              if (realEps) episodes = realEps;
-            }
-            if (!isUnreleasedJikan) {
-              const existingNums = new Set(episodes.map(e => e.episodeNum));
-              for (let i = 1; i <= Math.min(totalEps, epLimit); i++) {
-                if (!existingNums.has(i)) {
-                  episodes.push({
-                    episodeId: `${id}-${i}`, episodeNum: i, title: `Episode ${i}`,
-                    description: null, thumbnail: null, malUrl: null,
-                    releasedDate: null, isFiller: false, isRecap: false,
-                    seasonNum: 1, seasonId: id, seasonName: a.title_english || a.title,
-                    seasonMalId: a.mal_id,
-                  });
-                }
-              }
-            }
-            episodes.sort((a, b) => a.episodeNum - b.episodeNum);
-            const animeItem: AnimeItem = {
-              id: String(id),
-              idMal: String(a.mal_id),
-              name: a.title_english || a.title || "Unknown",
-              jname: a.title_japanese || null,
-              poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
-              type: a.type || "TV", episodes: { sub: a.episodes || null, dub: null },
-              rating: a.score ? String(a.score) : null, description: a.synopsis || "",
-              genres: a.genres?.map((g: any) => g.name) || [],
-              status: a.status || null, season: a.season || null,
-              seasonYear: a.year || null, format: a.type || null,
-            };
-            let tmdbId: number | null = null;
-            if (aniZipMapping?.mappings?.themoviedb_id) {
-              tmdbId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
-              if (isNaN(tmdbId)) tmdbId = null;
-            }
-
-            // Derive the TMDB season mapping from AniZip even on the Jikan fallback
-            // path. AniZip works reliably on the Cloudflare edge (where AniList can
-            // be unavailable), and its ep-1 seasonNumber/episodeNumber give us the
-            // TMDB season + offset that the TMDB-first episodes pipeline needs.
-            let tmdbSeasonNumber: number | null = null;
-            let episodeOffset = 0;
-            if (tmdbId) {
-              const azEp1 = aniZipMapping?.episodes?.["1"];
-              if (
-                azEp1 &&
-                azEp1.seasonNumber !== undefined &&
-                azEp1.episodeNumber !== undefined
-              ) {
-                tmdbSeasonNumber = azEp1.seasonNumber;
-                episodeOffset = Math.max(azEp1.episodeNumber - 1, 0);
-              }
-            }
-
-            // Prefer the curated franchise mapping over AniZip-derived values when
-            // available. AniZip can report TMDB season numbers that do not exist on
-            // TMDB (e.g. Bleach TYBW  Part 4 maps to TMDB 30984 "season 17", but the
-            // show only has 2 seasons), which makes every TMDB-based embed source
-            // request a non-existent season and return 404.
-            const curatedFallbackItem = getCuratedAnimeFranchiseNodes(numId)?.find(n => String(n.id) === String(numId));
-            if (curatedFallbackItem) {
-              if (curatedFallbackItem.tmdbId) tmdbId = curatedFallbackItem.tmdbId;
-              if (curatedFallbackItem.tmdbSeasonNumber != null) tmdbSeasonNumber = curatedFallbackItem.tmdbSeasonNumber;
-              if (curatedFallbackItem.episodeOffset != null) episodeOffset = curatedFallbackItem.episodeOffset;
-              else if (curatedFallbackItem.tmdbSeasonNumber != null) episodeOffset = 0;
-            }
-
-            const jikanSeason: SeasonInfo = {
-              id: String(id), name: animeItem.name,
-              seasonLabel: "Episodes", totalEpisodes: totalEps,
-              isCurrent: true, idMal: a.mal_id,
-              tmdbId,
-              tmdbSeasonNumber,
-              episodeOffset,
-            };
-
-            let tmdbSeasonMap: Record<string, number> | undefined = undefined;
-            if (tmdbId && tmdbSeasonNumber != null) {
-              tmdbSeasonMap = { [String(id)]: tmdbSeasonNumber };
-            }
-            let seasonsList: SeasonInfo[] = [jikanSeason];
-            // When curated franchise data is available (AniList is flaky on the
-            // edge), expose the full franchise season list so season tabs and the
-            // root/sequel episode mapping behave exactly like the normal path.
-            const jikanCuratedNodes = getCuratedAnimeFranchiseNodes(numId);
-            if (jikanCuratedNodes && jikanCuratedNodes.length > 1) {
-              seasonsList = buildSeasonList(jikanCuratedNodes, numId);
-            }
-
-            return cacheAndReturn({
-              anime: animeItem, episodes, totalEpisodes: totalEps,
-              seasons: seasonsList, openedSeasonId: id,
-              franchiseNodes: jikanCuratedNodes && jikanCuratedNodes.length > 1 ? jikanCuratedNodes : ([] as FranchiseNode[]),
-              tmdbId,
-              tmdbSeasonMap,
-            });
-          }
-        }
-      }
-    } catch { /* no fallback */ }
-
-    // Curated franchise node fallback (for Attack on Titan & curated series under 429 rate limit or AniList outage)
     const curatedNodes = getCuratedAnimeFranchiseNodes(numId);
     const curatedItem = curatedNodes?.find(n => String(n.id) === String(numId));
     if (curatedItem) {
       const epCount = curatedItem.episodes && curatedItem.episodes > 1 ? curatedItem.episodes : (curatedItem.format === "MOVIE" || curatedItem.format === "SPECIAL" ? 1 : 12);
-
-      // Try a lightweight AniList query for real description, genres, and rating
-      let realDescription = "";
-      let realGenres: string[] = [];
-      let realRating = "";
-      try {
-        const quickQ = `query ($id: Int) {
-          Media(id: $id, type: ANIME, isAdult: false) {
-            description averageScore genres title { english romaji }
-          }
-        }`;
-        const quickRes = await anilistQuery(quickQ, { id: numId });
-        const qMedia = quickRes?.data?.Media;
-        if (qMedia) {
-          realDescription = cleanAnimeDescription(qMedia.description) || "";
-          realGenres = qMedia.genres || [];
-          realRating = qMedia.averageScore ? String(qMedia.averageScore / 10) : "";
-        }
-      } catch { /* AniList still unreachable — leave blanks */ }
-
       const animeItem: AnimeItem = {
         id: String(curatedItem.id),
         idMal: curatedItem.idMal ? String(curatedItem.idMal) : null,
         name: curatedItem.title,
         jname: null,
         poster: curatedItem.coverImage || "",
+        bannerImage: curatedItem.bannerImage || null,
+        backdrop: curatedItem.bannerImage || null,
         type: curatedItem.format || "TV",
         episodes: { sub: epCount, dub: null },
-        rating: realRating || "8.8",
-        description: realDescription,
-        genres: realGenres.length > 0 ? realGenres : [],
+        rating: "8.8",
+        description: "",
+        genres: [],
         status: curatedItem.status || "FINISHED",
         season: null,
         seasonYear: curatedItem.seasonYear || null,
@@ -1631,17 +1124,17 @@ export async function getAnimeDetails(
 
       return cacheAndReturn({
         anime: animeItem,
-        episodes,
+        episodes: skipEpisodes ? [] : episodes,
         totalEpisodes: epCount,
         seasons: seasonsList,
         openedSeasonId: String(numId),
         franchiseNodes: curatedNodes || [],
-        tmdbId: curatedItem.tmdbId || 1429,
-        tmdbSeasonMap: { [String(numId)]: curatedItem.tmdbSeasonNumber || 4 },
+        tmdbId: curatedItem.tmdbId || null,
+        tmdbSeasonMap: curatedItem.tmdbSeasonNumber ? { [String(numId)]: curatedItem.tmdbSeasonNumber } : undefined,
       });
     }
 
-    // Fallback 2: Direct Kitsu + AniZip + TMDB metadata resolution
+    // Emergency Fallback: Kitsu details
     try {
       const kitsuFallback = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
       if (kitsuFallback) return cacheAndReturn(kitsuFallback);
@@ -1649,54 +1142,51 @@ export async function getAnimeDetails(
       console.warn("Kitsu details fallback failed:", e);
     }
 
-    // Fallback 3: Text search ONLY when id is an explicit non-numeric slug/title string
-    if (isNaN(numId) && !isMalInput && !id.startsWith("kitsu-") && !id.startsWith("tmdb-")) {
-      try {
-        const searchResults = await searchAnime(id.replace(/[-_]/g, " ").trim());
-        const firstMatch = searchResults?.[0];
-        if (firstMatch && firstMatch.id && firstMatch.id !== id) {
-          return getAnimeDetails(firstMatch.id, epLimit, skipEpisodes);
-        }
-      } catch {}
-    }
+    return null;
+  }
 
+  if (!media) {
+    const kitsuFallback = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
+    if (kitsuFallback) return cacheAndReturn(kitsuFallback);
     return null;
   }
 
   const anime = transformAniList(media);
   if (!anime) return null;
 
-  // Step 2 & 2.5: Fast franchise nodes (0ms, non-blocking) and TMDB ID resolution
+  // Resolve TMDB show/movie ID
   const isTargetMovie = anime.format === "MOVIE" || anime.type === "MOVIE" || media.format === "MOVIE";
-  const rawFranchiseNodes = getFastFranchiseNodes(media?.id ? Number(media.id) : numId, media);
-
   let searchedTmdbId: number | null = null;
   if (aniZipMapping?.mappings?.themoviedb_id) {
     searchedTmdbId = parseInt(aniZipMapping.mappings.themoviedb_id, 10);
     if (isNaN(searchedTmdbId)) searchedTmdbId = null;
   }
+
+  // Curated franchise mapping check
+  const curatedDirectItem = getFranchiseAnimeItem(numId);
+  if (curatedDirectItem && curatedDirectItem.tmdb_id) {
+    searchedTmdbId = curatedDirectItem.tmdb_id;
+  }
+
   if (!searchedTmdbId) {
-    if (isTargetMovie) {
-      try {
+    try {
+      if (isTargetMovie) {
         searchedTmdbId = await searchTmdbMovie(anime.name, anime.seasonYear || undefined);
         if (!searchedTmdbId && anime.jname) {
           searchedTmdbId = await searchTmdbMovie(anime.jname, anime.seasonYear || undefined);
         }
-      } catch {
-        searchedTmdbId = null;
-      }
-    } else {
-      try {
+      } else {
         searchedTmdbId = await searchTmdbShow(anime.name, anime.seasonYear || undefined);
         if (!searchedTmdbId && anime.jname) {
           searchedTmdbId = await searchTmdbShow(anime.jname, anime.seasonYear || undefined);
         }
-      } catch {
-        searchedTmdbId = null;
       }
+    } catch {
+      searchedTmdbId = null;
     }
   }
 
+  let rawFranchiseNodes = getFastFranchiseNodes(numId, media);
   let franchiseNodes: FranchiseNode[] = rawFranchiseNodes || [];
   let tmdbId: number | null = searchedTmdbId;
   let tmdbSeasonMap: Record<string, number> = {};
@@ -1710,7 +1200,6 @@ export async function getAnimeDetails(
       const FATE_ORDER = [10087, 11741, 356, 19603, 20792, 20791, 21718, 21719];
       const idxA = FATE_ORDER.indexOf(Number(a.id));
       const idxB = FATE_ORDER.indexOf(Number(b.id));
-
       if (idxA !== -1 && idxB !== -1) return idxA - idxB;
       if (idxA !== -1) return -1;
       if (idxB !== -1) return 1;
@@ -1757,151 +1246,47 @@ export async function getAnimeDetails(
       seasonYear: media.seasonYear || null,
       format: media.format || null,
       duration: media.duration || null,
+      coverImage: anime.poster,
+      bannerImage: anime.bannerImage,
     }];
   }
 
-  // Step 3: Build season list from the AniList franchise graph
+  // Build seasons from franchise nodes
   const baseSeasons = buildSeasonList(franchiseNodes, numId);
   const mappedSeasons: SeasonInfo[] = [];
-  const uniqueTmdbIds = new Set<number>();
-  const movieTmdbIds = new Set<number>();
-
-  // Resolve TMDB show IDs for each AniList season in parallel
-  const tmdbIds: Record<string, number | null> = {};
-  const allAniZipMappings: Record<string, any> = {};
-  let hasFailedAniZip = false;
-
-  // Pre-seed the requested season with data we already fetched
-  const activeSeasonKey = String(numId);
-  allAniZipMappings[activeSeasonKey] = aniZipMapping;
-  allAniZipMappings[id] = aniZipMapping;
-  tmdbIds[activeSeasonKey] = tmdbId;
-  tmdbIds[id] = tmdbId;
-  if (tmdbId) {
-    if (isTargetMovie) movieTmdbIds.add(tmdbId);
-    else uniqueTmdbIds.add(tmdbId);
-  }
-
-  // Optimize speed: only fetch additional AniZip mappings for other seasons if not skipping episodes.
-  // When skipping episodes (meta queries, episodes route meta), only the active anime is needed.
-  const seasonsToEnrich = skipEpisodes
-    ? baseSeasons.filter(s => String(s.id) === id || String(s.id) === activeSeasonKey)
-    : baseSeasons;
-
-  await Promise.all(
-    seasonsToEnrich.map(async (s) => {
-      if (String(s.id) === id || String(s.id) === activeSeasonKey) return;
-      try {
-        const isSeasonMovie = s.seasonLabel.startsWith("Movie") || isTargetMovie;
-        let tid: number | null = (s as any).tmdbId || null;
-        if (!tid) {
-          try {
-            const azRes = await fetch(`https://api.ani.zip/mappings?anilist_id=${s.id}`, {
-              signal: AbortSignal.timeout(2000),
-              headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-              next: { revalidate: 86400 }
-            });
-            if (azRes.ok) {
-              const azData = await azRes.json();
-              allAniZipMappings[s.id] = azData;
-              if (azData.mappings?.themoviedb_id) {
-                tid = parseInt(azData.mappings.themoviedb_id, 10);
-                if (isNaN(tid)) tid = isSeasonMovie ? null : tmdbId;
-              } else {
-                tid = isSeasonMovie ? null : tmdbId;
-              }
-            } else {
-              tid = isSeasonMovie ? null : tmdbId;
-            }
-          } catch {
-            tid = isSeasonMovie ? null : tmdbId;
-            hasFailedAniZip = true;
-          }
-        }
-        tmdbIds[s.id] = tid;
-        if (tid && !skipEpisodes) {
-          if (isSeasonMovie) movieTmdbIds.add(tid);
-          else uniqueTmdbIds.add(tid);
-        }
-      } catch {
-        tmdbIds[s.id] = null;
-        hasFailedAniZip = true;
-      }
-    })
-  );
-
-  // Fetch TMDB seasons for each unique TMDB TV ID in parallel, and TMDB movie details for movie IDs
-  const showSeasonsMap: Record<number, { season_number: number; episode_count: number }[]> = {};
-  const showBackdropsMap: Record<number, string | null> = {};
-
-  const tidsToQuery = (skipEpisodes && tmdbId && !isTargetMovie) ? [tmdbId] : Array.from(uniqueTmdbIds);
-  const midsToQuery = (skipEpisodes && tmdbId && isTargetMovie) ? [tmdbId] : Array.from(movieTmdbIds);
-
-  await Promise.all([
-    ...tidsToQuery.map(async (tid) => {
-      try {
-        const showData = await tmdbFetch(`/tv/${tid}`) as {
-          seasons?: { season_number: number; episode_count: number }[];
-          backdrop_path?: string | null;
-        };
-        showSeasonsMap[tid] = (showData?.seasons || []).filter(s => s.season_number >= 0 && s.episode_count > 0);
-        showBackdropsMap[tid] = showData?.backdrop_path || null;
-      } catch {
-        showSeasonsMap[tid] = [];
-        showBackdropsMap[tid] = null;
-      }
-    }),
-    ...midsToQuery.map(async (mid) => {
-      try {
-        const movieData = await tmdbFetch(`/movie/${mid}`) as {
-          backdrop_path?: string | null;
-        };
-        showBackdropsMap[mid] = movieData?.backdrop_path || null;
-      } catch {
-        showBackdropsMap[mid] = null;
-      }
-    })
-  ]);
-
-  if (tmdbId && showBackdropsMap[tmdbId]) {
-    anime.backdrop = showBackdropsMap[tmdbId];
-  }
 
   // Group and map each AniList season to its TMDB season number and episodeOffset
   for (const s of baseSeasons) {
     const isSeasonMovie = s.seasonLabel.startsWith("Movie") || isTargetMovie;
-    const tid = (s as any).tmdbId || tmdbIds[s.id];
+    let tid = (s as any).tmdbId || (isSeasonMovie ? null : tmdbId);
     let tmdbSeasonNum: number | null = isSeasonMovie ? null : ((s as any).tmdbSeasonNumber ?? null);
     let episodeOffset = isSeasonMovie ? 0 : ((s as any).episodeOffset ?? 0);
 
-    if (tid && !isSeasonMovie && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
-      const tmdbSeasons = showSeasonsMap[tid] || [];
-      const labelNumMatch = s.seasonLabel.match(/^Season\s+(\d+)$/i);
-      const parsedSeasonNum = labelNumMatch
-        ? parseInt(labelNumMatch[1], 10)
-        : parseSeasonNumberFromTitle(s.name);
-
-      const exactMatch = tmdbSeasons.find(ts => ts.season_number === parsedSeasonNum);
-      if (exactMatch) {
-        tmdbSeasonNum = parsedSeasonNum;
-      } else {
-        const matchByTitle = tmdbSeasons.find(ts => ts.season_number > 0);
-        if (matchByTitle) {
-          tmdbSeasonNum = matchByTitle.season_number;
-        }
-      }
+    // Curated franchise override for high-priority anime
+    const curatedSeason = getCuratedAnimeFranchiseNodes(Number(s.id) || numId)?.find(
+      (n: any) => String(n.id) === String(s.id) || String(n.anilistId) === String(s.id)
+    );
+    if (curatedSeason) {
+      if (!tid && curatedSeason.tmdbId) tid = curatedSeason.tmdbId;
+      if (tmdbSeasonNum == null && curatedSeason.tmdbSeasonNumber != null) tmdbSeasonNum = curatedSeason.tmdbSeasonNumber;
+      if (episodeOffset === 0 && curatedSeason.episodeOffset != null) episodeOffset = curatedSeason.episodeOffset;
     }
 
-    // Derive TMDB mapping from AniZip ep-1 data (only if not already provided by curated mapping)
-    const az = allAniZipMappings[s.id];
-    if (az && az.episodes && az.episodes["1"]) {
-      const ep1 = az.episodes["1"];
+    // Derive TMDB mapping from active season AniZip data if current season
+    if (String(s.id) === String(numId) && aniZipMapping?.episodes?.["1"]) {
+      const ep1 = aniZipMapping.episodes["1"];
       if (ep1.seasonNumber !== undefined && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
         tmdbSeasonNum = ep1.seasonNumber;
       }
-      if (ep1.episodeNumber !== undefined && ((s as any).episodeOffset === undefined || (s as any).episodeOffset === null)) {
+      if (ep1.episodeNumber !== undefined && (episodeOffset === 0)) {
         episodeOffset = Math.max(ep1.episodeNumber - 1, 0);
       }
+    }
+
+    if (!isSeasonMovie && (tmdbSeasonNum === null || tmdbSeasonNum === undefined)) {
+      const parsedLabel = parseSeasonNumberFromTitle(s.seasonLabel || "");
+      const parsedName = parseSeasonNumberFromTitle(s.name || "");
+      tmdbSeasonNum = parsedLabel > 1 ? parsedLabel : parsedName > 1 ? parsedName : 1;
     }
 
     if (tid && tmdbSeasonNum !== null) {
@@ -1913,11 +1298,12 @@ export async function getAnimeDetails(
       totalEpisodes: isSeasonMovie ? 1 : s.totalEpisodes,
       tmdbId: tid,
       tmdbSeasonNumber: tmdbSeasonNum,
-      episodeOffset: episodeOffset,
+      episodeOffset,
+      coverImage: (s as any).coverImage || anime.poster,
+      bannerImage: (s as any).bannerImage || anime.bannerImage,
     });
   }
 
-  // Ensure mappedSeasons has at least one season
   if (mappedSeasons.length === 0) {
     mappedSeasons.push({
       id: String(id),
@@ -1926,38 +1312,59 @@ export async function getAnimeDetails(
       totalEpisodes: isTargetMovie ? 1 : (anime.episodes?.sub || 12),
       isCurrent: true,
       idMal: anime.idMal ? Number(anime.idMal) : null,
-      tmdbId: tmdbId,
+      seasonYear: anime.seasonYear || null,
+      status: anime.status || null,
+      tmdbId,
       tmdbSeasonNumber: 1,
       episodeOffset: 0,
+      coverImage: anime.poster,
+      bannerImage: anime.bannerImage,
     });
   }
 
-  // Find the requested season
-  const openedSeasonIndex = mappedSeasons.findIndex(s => String(s.id) === id);
-  const openedSeason = openedSeasonIndex >= 0 ? mappedSeasons[openedSeasonIndex] : mappedSeasons[0];
-  const activeSeasonId = openedSeason ? String(openedSeason.id) : id;
+  // Artwork correctness:
+  // 1. AniList official bannerImage is authoritative
+  // 2. If no AniList bannerImage, attempt TMDB backdrop lookup
+  if (!anime.bannerImage && tmdbId && !isTargetMovie) {
+    try {
+      const showData = await tmdbFetch(`/tv/${tmdbId}`) as any;
+      if (showData?.backdrop_path) {
+        anime.backdrop = `https://image.tmdb.org/t/p/original${showData.backdrop_path}`;
+        anime.bannerImage = anime.backdrop;
+      }
+    } catch {}
+  } else if (anime.bannerImage) {
+    anime.backdrop = anime.bannerImage;
+  }
+
+  // Resolve official TMDB logo artwork for instant render on initial load
+  const effectiveTmdbId = tmdbId || searchedTmdbId;
+  if (effectiveTmdbId) {
+    try {
+      const imgRes = (await tmdbFetch(
+        `/${isTargetMovie ? "movie" : "tv"}/${effectiveTmdbId}/images`,
+        { include_image_language: "en,null,ja,es,fr,de,it,pt,ru,ko,zh" }
+      )) as any;
+      if (imgRes && Array.isArray(imgRes.logos) && imgRes.logos.length > 0) {
+        const englishLogo = imgRes.logos.find((l: any) => l.iso_639_1 === "en" && l.file_path);
+        const nullLangLogo = imgRes.logos.find((l: any) => (!l.iso_639_1 || l.iso_639_1 === "null") && l.file_path);
+        const jaLogo = imgRes.logos.find((l: any) => l.iso_639_1 === "ja" && l.file_path);
+        const chosen = englishLogo || nullLangLogo || jaLogo || imgRes.logos[0];
+        if (chosen?.file_path) {
+          anime.logoUrl = `https://image.tmdb.org/t/p/w500${chosen.file_path}`;
+        }
+      }
+    } catch {}
+  }
+
+  const activeSeason = mappedSeasons.find(s => String(s.id) === String(numId)) || mappedSeasons[0];
+  const activeSeasonId = activeSeason ? String(activeSeason.id) : String(id);
 
   if (skipEpisodes) {
-    const basicEpisodes: EpisodeDetail[] = [];
-    const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel.startsWith(t));
-    const count = isSpecialFormat ? 1 : Math.min(openedSeason.totalEpisodes, epLimit);
-    for (let i = 1; i <= count; i++) {
-      basicEpisodes.push({
-        episodeId: `${activeSeasonId}-${i}`,
-        episodeNum: i,
-        title: i === 1 && isSpecialFormat ? openedSeason.name : `Episode ${i}`,
-        description: null, thumbnail: null, malUrl: null,
-        releasedDate: null, isFiller: false, isRecap: false,
-        seasonNum: openedSeasonIndex + 1,
-        seasonId: activeSeasonId,
-        seasonName: openedSeason.name,
-        seasonMalId: openedSeason.idMal || null,
-      });
-    }
     return cacheAndReturn({
       anime,
-      episodes: basicEpisodes,
-      totalEpisodes: openedSeason.totalEpisodes,
+      episodes: [],
+      totalEpisodes: activeSeason ? activeSeason.totalEpisodes : (anime.episodes?.sub || 12),
       seasons: mappedSeasons,
       openedSeasonId: activeSeasonId,
       franchiseNodes,
@@ -1966,108 +1373,63 @@ export async function getAnimeDetails(
     });
   }
 
-  // Step 6: Check if anime season is unreleased
-  const isUnreleased = anime.status === "NOT_YET_RELEASED" || anime.status === "NOT_YET_AIRED" || media?.status === "NOT_YET_RELEASED" || media?.status === "NOT_YET_AIRED";
-  if (isUnreleased) {
-    const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel?.startsWith(t));
-    const animeEpCount = anime.episodes?.sub || 0;
-    const targetCount = isSpecialFormat ? 1 : (openedSeason.totalEpisodes > 0 ? openedSeason.totalEpisodes : (animeEpCount > 0 ? animeEpCount : 3));
-    const unreleasedEps: EpisodeDetail[] = [];
-    for (let i = 1; i <= targetCount; i++) {
-      unreleasedEps.push({
-        episodeId: `${activeSeasonId}-${i}`,
-        episodeNum: i,
-        title: isSpecialFormat && i === 1 ? openedSeason.name : `Episode ${i}`,
-        description: null,
-        thumbnail: null,
-        malUrl: null,
-        releasedDate: null,
-        isFiller: false,
-        isRecap: false,
-        isReleased: false,
-        seasonNum: openedSeasonIndex + 1,
-        seasonId: activeSeasonId,
-        seasonName: openedSeason.name,
-        seasonMalId: openedSeason.idMal || null,
-      });
-    }
-    return cacheAndReturn({
-      anime,
-      episodes: unreleasedEps,
-      totalEpisodes: targetCount,
-      seasons: mappedSeasons,
-      openedSeasonId: activeSeasonId,
-      franchiseNodes,
-      tmdbId,
-      tmdbSeasonMap: Object.keys(tmdbSeasonMap).length > 0 ? tmdbSeasonMap : undefined,
-    });
-  }
-
-  // Fetch real episodes for the active season
-  const allCombinedEpisodes: EpisodeDetail[] = [];
-  const isMovieFormat = openedSeason.seasonLabel?.startsWith("Movie") || anime.format === "MOVIE" || anime.type === "MOVIE";
-  const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => openedSeason.seasonLabel?.startsWith(t)) || isMovieFormat;
-  const maxEp = isMovieFormat ? 1 : (isSpecialFormat ? Math.max(openedSeason.totalEpisodes, 1) : Math.max(openedSeason.totalEpisodes, 1));
-  const seasonCap = isMovieFormat ? 1 : Math.min(maxEp, epLimit);
+  // Fetch episodes for active season via AniZip
+  const seasonCap = activeSeason ? activeSeason.totalEpisodes : (anime.episodes?.sub || 12);
   let seasonEps: EpisodeDetail[] = [];
-
-  let resolvedEps: EpisodeDetail[] | null = null;
   try {
-    resolvedEps = await fetchEpisodesFromAniZip(activeSeasonId, seasonCap);
-  } catch { /* ignore */ }
+    const azEps = await fetchEpisodesFromAniZip(activeSeasonId, seasonCap);
+    if (azEps && azEps.length > 0) {
+      seasonEps = isTargetMovie ? [azEps[0]] : azEps;
+    }
+  } catch {}
 
-  if (resolvedEps && resolvedEps.length > 0) {
-    seasonEps = isMovieFormat ? [resolvedEps[0]] : resolvedEps;
-  } else if (openedSeason.idMal) {
-    const realEps = await fetchEpisodesFromJikan(openedSeason.idMal, activeSeasonId, seasonCap);
-    if (realEps) seasonEps = isMovieFormat ? [realEps[0]] : realEps;
+  // Fallback to Kitsu episodes if AniZip had no episodes
+  if (seasonEps.length === 0) {
+    try {
+      const kitsuEps = await fetchEpisodesFromKitsu(anime.name, seasonCap);
+      if (kitsuEps && kitsuEps.length > 0) {
+        seasonEps = kitsuEps.map(ke => ({
+          episodeId: `${activeSeasonId}-${ke.episodeNum}`,
+          episodeNum: ke.episodeNum,
+          title: ke.title || `Episode ${ke.episodeNum}`,
+          description: ke.description || null,
+          thumbnail: ke.thumbnail || null,
+          releasedDate: ke.releasedDate || null,
+          isFiller: false,
+          isRecap: false,
+          seasonNum: 1,
+          seasonId: activeSeasonId,
+          seasonName: activeSeason?.name || anime.name,
+        }));
+      }
+    } catch {}
   }
 
-  // Fill missing episode numbers with placeholders
-  const existingNums = new Set(seasonEps.map(e => e.episodeNum));
-  const targetCount = isMovieFormat ? 1 : (openedSeason.totalEpisodes > 0 ? openedSeason.totalEpisodes : Math.max(seasonEps.length, 1));
-  for (let i = 1; i <= targetCount; i++) {
-    if (!existingNums.has(i)) {
+  // Ensure placeholders if still empty
+  if (seasonEps.length === 0) {
+    const epCount = isTargetMovie ? 1 : Math.max(seasonCap || 12, 1);
+    for (let i = 1; i <= epCount; i++) {
       seasonEps.push({
         episodeId: `${activeSeasonId}-${i}`,
         episodeNum: i,
-        title: isMovieFormat ? (openedSeason.name || anime.name || "Complete Movie") : `Episode ${i}`,
-        description: isMovieFormat ? anime.description || null : null,
-        thumbnail: isMovieFormat ? anime.poster || null : null,
+        title: isTargetMovie ? (activeSeason?.name || anime.name || "Complete Movie") : `Episode ${i}`,
+        description: isTargetMovie ? anime.description || null : null,
+        thumbnail: isTargetMovie ? anime.poster || null : null,
         malUrl: null,
         releasedDate: null,
         isFiller: false,
         isRecap: false,
+        seasonNum: 1,
+        seasonId: activeSeasonId,
+        seasonName: activeSeason?.name || anime.name,
       });
     }
   }
 
-  if (isMovieFormat && seasonEps.length > 1) {
-    seasonEps = [seasonEps[0]];
-  }
-
-  seasonEps.sort((a, b) => a.episodeNum - b.episodeNum);
-  seasonEps.forEach(ep => {
-    ep.seasonNum = openedSeasonIndex + 1;
-    ep.seasonId = activeSeasonId;
-    ep.seasonName = openedSeason.name;
-    ep.seasonMalId = openedSeason.idMal || null;
-  });
-
-  // Validate episodes
-  for (const ep of seasonEps) {
-    const val = validateEpisode(ep, openedSeason, seasonEps);
-    if (val.warnings.length > 0) {
-      console.warn(`[Validation] Episode ${ep.episodeNum} warnings:`, val.warnings);
-    }
-  }
-
-  allCombinedEpisodes.push(...seasonEps);
-
   return cacheAndReturn({
     anime,
-    episodes: allCombinedEpisodes,
-    totalEpisodes: allCombinedEpisodes.length,
+    episodes: seasonEps,
+    totalEpisodes: activeSeason ? activeSeason.totalEpisodes : seasonEps.length,
     seasons: mappedSeasons,
     openedSeasonId: activeSeasonId,
     franchiseNodes,
@@ -2077,37 +1439,9 @@ export async function getAnimeDetails(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SEARCH / LISTING APIs
+// EPISODE UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Search via Jikan (fallback)
-export async function searchViaJikan(query: string): Promise<AnimeItem[]> {
-  try {
-    const res = await fetch(
-      `${JIKAN_BASE}/anime?q=${encodeURIComponent(query)}&limit=25&sfw`,
-      { headers: { "User-Agent": "CineStream/1.0" }, signal: AbortSignal.timeout(6000) }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.data || []).map((a: any) => ({
-      id: "mal-" + String(a.mal_id),
-      idMal: String(a.mal_id),
-      name: a.title_english || a.title,
-      jname: a.title_japanese || null,
-      poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
-      type: a.type || "TV",
-      episodes: { sub: a.episodes || null, dub: null },
-      rating: a.score ? String(a.score) : null,
-      description: a.synopsis || "",
-      genres: a.genres?.map((g: any) => g.name) || [],
-      status: a.status || null,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-// Fetch real episode metadata (titles, thumbnails, summaries) from AniZip
 export async function fetchEpisodesFromAniZip(
   anilistId: string,
   seasonCap: number
@@ -2141,12 +1475,12 @@ export async function fetchEpisodesFromAniZip(
     });
     const isSingleEpCap = isExplicitMovie || hasPartSplits;
     const effectiveCap = isSingleEpCap ? 1 : (seasonCap && seasonCap > 1 ? seasonCap : 1500);
+
     for (const key of Object.keys(json.episodes)) {
       const epNum = parseInt(key, 10);
       if (isNaN(epNum) || epNum > effectiveCap) continue;
 
       const ep = json.episodes[key];
-      // If single episode cap is requested for a movie cut, skip secondary parts
       if (isSingleEpCap && epNum > 1) continue;
       const title = ep.title?.en || ep.title?.['x-jat'] || ep.title?.ja || `Episode ${epNum}`;
       const description = ep.overview || ep.summary || null;
@@ -2155,7 +1489,6 @@ export async function fetchEpisodesFromAniZip(
         thumbnail = null;
       }
       const releasedDate = ep.airDate || ep.airdate || null;
-      // AniZip provides duration in seconds; convert to minutes
       const runtime = typeof ep.duration === "number" ? Math.round(ep.duration / 60) : null;
 
       eps.push({
@@ -2179,12 +1512,6 @@ export async function fetchEpisodesFromAniZip(
   }
 }
 
-/**
- * Resolve the TMDB show + season mapping for an AniList season directly from
- * AniZip. This is the same mapping getAnimeDetails derives, but it works even
- * when AniList is unreachable (e.g. Cloudflare edge) because it only depends on
- * api.ani.zip, which is reliable. Returns null when no mapping is available.
- */
 export async function resolveTmdbMappingFromAniZip(
   anilistId: string
 ): Promise<{ tmdbId: number; tmdbSeason: number; episodeOffset: number } | null> {
@@ -2214,10 +1541,6 @@ export async function resolveTmdbMappingFromAniZip(
     if (!tmdbId) return null;
     const effectiveTmdbId: number = tmdbId;
 
-    // Prefer the curated franchise mapping over AniZip-derived values when the
-    // anime is in a curated franchise. AniZip can report TMDB season numbers
-    // that do not exist on TMDB (e.g. Bleach TYBW Part 4 → TMDB 30984 "season
-    // 17", but the show only has 2 seasons), which 404s every TMDB-based source.
     const curatedMappingItem = getCuratedAnimeFranchiseNodes(parseInt(anilistId, 10))
       ?.find(n => String(n.id) === String(anilistId));
     if (curatedMappingItem) {
@@ -2232,31 +1555,18 @@ export async function resolveTmdbMappingFromAniZip(
     }
 
     const azEp1 = az?.episodes?.["1"];
-    if (
-      azEp1 &&
-      azEp1.seasonNumber !== undefined &&
-      azEp1.episodeNumber !== undefined
-    ) {
-      return {
-        tmdbId: effectiveTmdbId,
-        tmdbSeason: azEp1.seasonNumber,
-        episodeOffset: Math.max(azEp1.episodeNumber - 1, 0),
-      };
+    let tmdbSeason = 1;
+    let episodeOffset = 0;
+    if (azEp1 && azEp1.seasonNumber !== undefined && azEp1.episodeNumber !== undefined) {
+      tmdbSeason = azEp1.seasonNumber;
+      episodeOffset = Math.max(azEp1.episodeNumber - 1, 0);
     }
 
-    // No per-episode season mapping — still expose the tmdbId so the caller can
-    // at least attempt TMDB as the primary thumbnail source.
-    return { tmdbId: effectiveTmdbId, tmdbSeason: 1, episodeOffset: 0 };
+    return { tmdbId: effectiveTmdbId, tmdbSeason, episodeOffset };
   } catch {
     return null;
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// JIKAN EPISODE FETCHING
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Fetch real episode metadata (titles, thumbnails, airdates) from Jikan
 
 function normalizeFillerSlugPart(value: string): string {
   return value
@@ -2283,10 +1593,8 @@ function buildAnimeFillerListSlugCandidates(animeName: string): string[] {
   };
 
   add(raw);
-
   const splitBase = raw.split(/\s*[:|-]\s*/)[0];
   if (splitBase && splitBase !== raw) add(splitBase);
-
   add(raw.replace(/\bshippuuden\b/i, "shippuden"));
   add(raw.replace(/\bboruto:\s*/i, "boruto-"));
 
@@ -2334,213 +1642,35 @@ export async function fetchFillerLookupFromAnimeFillerList(
       if (lookup.filler.size > 0 || lookup.mixed.size > 0) {
         return lookup;
       }
-    } catch {
-      // Try the next slug candidate.
-    }
+    } catch {}
   }
   return null;
 }
 
-export async function fetchEpisodesFromJikan(
-  malId: number | string,
-  anilistId: string,
-  maxEpisodes: number
-): Promise<EpisodeDetail[] | null> {
-  try {
-    const allEps: EpisodeDetail[] = [];
-    const effectiveCap = maxEpisodes && maxEpisodes > 0 ? Math.max(maxEpisodes, 1500) : 1500;
-
-    // First request to get total pages
-    let firstRes = await fetch(
-      `${JIKAN_BASE}/anime/${malId}/episodes?page=1`,
-      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
-    );
-    if (firstRes.status === 429) {
-      await new Promise(r => setTimeout(r, 1500));
-      firstRes = await fetch(
-        `${JIKAN_BASE}/anime/${malId}/episodes?page=1`,
-        { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
-      );
-    }
-    if (!firstRes.ok) return null;
-    
-    const firstData = await firstRes.json();
-    const totalPages = firstData.pagination?.last_visible_page || 1;
-    const pageEps = firstData.data || [];
-    
-    // Parse first page
-    for (const ep of pageEps) {
-      const epNum = typeof ep.episode === "number" ? ep.episode : ep.mal_id;
-      if (!epNum || epNum > effectiveCap) continue;
-      allEps.push({
-        episodeId: `${anilistId}-${epNum}`,
-        episodeNum: epNum,
-        title: ep.title || `Episode ${epNum}`,
-        description: ep.synopsis || null,
-        thumbnail: ep.images?.jpg?.image_url || null,
-        releasedDate: ep.aired || null,
-        isFiller: ep.filler || false,
-        isRecap: ep.recap || false,
-        malUrl: ep.url || null,
-      });
-    }
-
-    // Fetch remaining pages concurrently with 350ms stagger per request
-    if (totalPages > 1 && allEps.length < effectiveCap) {
-      const maxPagesToFetch = Math.min(totalPages, Math.ceil(effectiveCap / 100));
-      const promises = [];
-      
-      for (let p = 2; p <= maxPagesToFetch; p++) {
-        promises.push(
-          (async () => {
-            try {
-              const url = `${JIKAN_BASE}/anime/${malId}/episodes?page=${p}`;
-              const options = { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } };
-              const res = await fetch(url, options as any);
-              
-              if (res.status === 429) {
-                await new Promise(r => setTimeout(r, 1000 + (p * 350)));
-                const retryRes = await fetch(url, options as any);
-                if (retryRes.ok) return await retryRes.json();
-                return null;
-              }
-              
-              if (res.ok) return await res.json();
-            } catch {
-              return null;
-            }
-            return null;
-          })()
-        );
-      }
-      
-      const results = await Promise.all(promises);
-      for (const data of results) {
-        if (!data || !data.data) continue;
-        for (const ep of data.data) {
-          const epNum = typeof ep.episode === "number" ? ep.episode : ep.mal_id;
-          if (!epNum || epNum > effectiveCap) continue;
-          const thumb = ep.images?.jpg?.image_url || null;
-          const validThumb = thumb && !(thumb.includes("/cover/") || thumb.includes("/banner/") || /\/bx\d+[-]/.test(thumb)) ? thumb : null;
-          allEps.push({
-            episodeId: `${anilistId}-${epNum}`,
-            episodeNum: epNum,
-            title: ep.title || `Episode ${epNum}`,
-            description: ep.synopsis || null,
-            thumbnail: validThumb,
-            releasedDate: ep.aired || null,
-            isFiller: ep.filler || false,
-            isRecap: ep.recap || false,
-            malUrl: ep.url || null,
-          });
-        }
-      }
-    }
-
-    allEps.sort((a, b) => a.episodeNum - b.episodeNum);
-    return allEps.length > 0 ? allEps : null;
-  } catch {
-    return null;
-  }
-}
-
-// Fetch episodes from Jikan starting at a specific page (for lazy-loading more episodes)
-export async function fetchEpisodesFromJikanPage(
-  malId: number | string,
-  anilistId: string,
-  startPage: number,
-  limit: number
-): Promise<EpisodeDetail[]> {
-  try {
-    const allEps: EpisodeDetail[] = [];
-    let page = startPage;
-    let hasMore = true;
-    let retries = 0;
-
-    while (hasMore && allEps.length < limit) {
-      const res = await fetch(
-        `${JIKAN_BASE}/anime/${malId}/episodes?page=${page}`,
-        { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any }
-      );
-      if (res.status === 429 && retries < 3) {
-        retries++;
-        await new Promise(r => setTimeout(r, 1500 * retries));
-        continue;
-      }
-      if (!res.ok) break;
-
-      const data = await res.json();
-      const pageEps = data.data || [];
-      if (pageEps.length === 0) break;
-
-      for (const ep of pageEps) {
-        const epNum = typeof ep.episode === "number" ? ep.episode : ep.mal_id;
-        if (!epNum) continue;
-        allEps.push({
-          episodeId: `${anilistId}-${epNum}`,
-          episodeNum: epNum,
-          title: ep.title || `Episode ${epNum}`,
-          description: ep.synopsis || null,
-          thumbnail: ep.images?.jpg?.image_url || null,
-          releasedDate: ep.aired || null,
-          isFiller: ep.filler || false,
-          isRecap: ep.recap || false,
-          malUrl: ep.url || null,
-        });
-      }
-
-      const totalPages = data.pagination?.last_visible_page || page;
-      hasMore = page < totalPages && allEps.length < limit;
-      page++;
-      if (hasMore) await new Promise(r => setTimeout(r, 350));
-    }
-
-    allEps.sort((a, b) => a.episodeNum - b.episodeNum);
-    return allEps;
-  } catch {
-    return [];
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// THUMBNAIL FETCHING
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Scrape a single MAL episode page for an episode screenshot
-async function scrapeEpisodeThumbnail(malUrl: string): Promise<string | null> {
+export async function fetchEpisodeThumbnail(malUrl: string): Promise<string | null> {
   try {
     const res = await fetch(malUrl, {
       signal: AbortSignal.timeout(4000),
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
     });
     if (!res.ok) return null;
     const html = await res.text();
-
     const crMatch = html.match(/https?:\/\/img\d\.ak\.crunchyroll\.com\/[^"'\s]+\.(?:jpg|jpeg|png|webp)/i);
     if (crMatch) return crMatch[0];
-
     const lazyMatch = html.match(/data-src="([^"]+)"[^>]*width="800"/i);
     if (lazyMatch) return lazyMatch[1];
-
     const posterMatch = html.match(/poster="([^"]+)"/i);
     if (posterMatch) return posterMatch[1];
-
     const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
     if (ogMatch) return ogMatch[1];
-
     return null;
   } catch {
     return null;
   }
 }
 
-// Exported: fetch a single episode thumbnail (no local cache — too small a benefit for edge)
-export async function fetchEpisodeThumbnail(malUrl: string): Promise<string | null> {
-  return scrapeEpisodeThumbnail(malUrl);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// LEGACY fetchAnimeApi (used by main API route)
+// ROUTE HANDLER HELPER (used by main API routes)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchAnimeApi(
@@ -2553,12 +1683,7 @@ export async function fetchAnimeApi(
   const genre = params.get("genre") || undefined;
 
   const isSearch = path.includes("/search") || path.includes("keyword=");
-  const isAiring = path.includes("/airing") || path.includes("/latest") || path.includes("/recent");
-  const isTrending = path.includes("/trending");
-  const isUpcoming = path.includes("/upcoming");
   const isSeries = path.startsWith("/series/");
-
-  const cacheKey = `api:${endpoint}`;
 
   if (isDetail || isSeries) {
     const id = path.replace("/series/", "").split("?")[0];
@@ -2581,83 +1706,18 @@ export async function fetchAnimeApi(
     throw new Error("Anime not found");
   }
 
-  let result: any;
   if (isSearch) {
     const keyword = params.get("keyword") || params.get("q") || "";
-    const [anilistItems, jikanItems] = await Promise.all([
-      searchAnime(keyword, page, genre).catch(() => []),
-      searchViaJikan(keyword).catch(() => []),
-    ]);
-
-    const combined = [...anilistItems];
-    const seenNames = new Set(anilistItems.map(item => item.name.toLowerCase()));
-    const seenMalIds = new Set(anilistItems.map(item => item.idMal).filter(Boolean));
-
-    for (const item of jikanItems) {
-      const lowerName = item.name.toLowerCase();
-      if (!seenNames.has(lowerName) && (!item.idMal || !seenMalIds.has(item.idMal))) {
-        combined.push(item);
-        seenNames.add(lowerName);
-        if (item.idMal) seenMalIds.add(item.idMal);
-      }
-    }
-
-    result = { success: true, data: filterUnreleased(combined).filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
-  } else if (isAiring) {
-    const items = await getAiringAnime(page, genre);
-    result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
-  } else if (isTrending) {
-    const items = await getTrendingAnime(page, genre);
-    result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
-  } else if (isUpcoming) {
-    const items = await getUpcomingAnime(page, genre);
-    result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
-  } else {
-    // default: popular
-    const items = await getPopularAnime(page, genre);
-    result = { success: true, data: items.filter((item) => !isAdultContent(item.name, item.genres, item.description)) };
+    const items = await searchAnime(keyword, page, genre);
+    return {
+      success: true,
+      data: items,
+    };
   }
 
-  return result;
+  const items = await getPopularAnime(page, genre);
+  return {
+    success: true,
+    data: items,
+  };
 }
-
-// Fetch real episode metadata (titles, thumbnails, descriptions) from Tatakai / Zoro API
-export async function fetchEpisodesFromTatakai(
-  anilistId: string,
-  seasonCap: number
-): Promise<EpisodeDetail[] | null> {
-  try {
-    const res = await fetch(`https://api.tatakai.me/meta/anilist/info/${anilistId}?provider=gogoanime`, {
-      signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-      next: { revalidate: 86400 } as any,
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    if (!json.episodes || !Array.isArray(json.episodes)) return null;
-
-    const eps: EpisodeDetail[] = [];
-    const effectiveCap = seasonCap && seasonCap > 0 ? Math.max(seasonCap, 1500) : 1500;
-    for (const ep of json.episodes) {
-      const epNum = typeof ep.number === "number" ? ep.number : parseInt(String(ep.number), 10);
-      if (isNaN(epNum) || epNum > effectiveCap) continue;
-
-      eps.push({
-        episodeId: `${anilistId}-${epNum}`,
-        episodeNum: epNum,
-        title: ep.title || `Episode ${epNum}`,
-        description: ep.description || null,
-        thumbnail: ep.image || ep.thumbnail || null,
-        releasedDate: ep.airDate || null,
-        isFiller: Boolean(ep.isFiller),
-        isRecap: false,
-      });
-    }
-
-    return eps.sort((a, b) => a.episodeNum - b.episodeNum);
-  } catch (error) {
-    console.error("[AnimeFetch] Tatakai fetch failed:", error);
-    return null;
-  }
-}
-

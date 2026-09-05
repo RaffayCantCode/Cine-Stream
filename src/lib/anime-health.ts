@@ -1,9 +1,9 @@
 /**
  * Anime Primary API Health Tracker & Circuit Breaker
  *
- * Ensures AniList + Jikan remain the primary data sources at all times.
+ * Ensures AniList remains the primary data source at all times.
  * A single timeout or temporary rate-limit does NOT trigger emergency fallback.
- * Emergency fallback is only activated after confirmed, consecutive primary outages.
+ * Emergency fallback (Kitsu) is only activated after confirmed, consecutive primary outages.
  * Probes primary health periodically to auto-recover immediately when primary is back.
  */
 
@@ -30,7 +30,7 @@ const state: CircuitBreakerState = {
 };
 
 /**
- * Record a successful response from primary sources (AniList or Jikan).
+ * Record a successful response from primary sources (AniList).
  * Immediately restores circuit breaker status to HEALTHY.
  */
 export function recordPrimarySuccess(): void {

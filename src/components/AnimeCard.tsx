@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Star, Play } from "lucide-react";
-import { memo } from "react";
+import { memo, useCallback } from "react";
 
 export interface AnimeItem {
   id: string;
@@ -43,13 +43,23 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
   const subCount = item.episodes?.sub ?? null;
   const dubCount = item.episodes?.dub ?? null;
 
+  const handlePreload = useCallback(() => {
+    if (typeof window === "undefined" || !item?.id) return;
+    try {
+      sessionStorage.setItem(`cs_anime_seed_${item.id}`, JSON.stringify(item));
+    } catch {}
+  }, [item]);
+
   return (
     <div
+      className="relative hover:z-30 pt-2 -mt-2"
       style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${index * 0.04}s` }}
     >
       <Link
         href={`/anime/${item.id}`}
-        prefetch={false}
+        prefetch={true}
+        onMouseEnter={handlePreload}
+        onTouchStart={handlePreload}
         className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none will-change-transform ${
           rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"
         }`}

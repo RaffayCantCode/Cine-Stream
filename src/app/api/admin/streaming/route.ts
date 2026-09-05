@@ -119,7 +119,7 @@ export async function DELETE() {
     await auth.db.delete(streamingSourceConfig);
     const { invalidateStreamingSourcesCache } = await import("@/lib/server-cache");
     invalidateStreamingSourcesCache();
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, config: effectiveConfig([]) });
   } catch (error) {
     console.error("[Admin Streaming API] DELETE Error:", error);
     return NextResponse.json({ error: "Failed to reset streaming sources" }, { status: 500 });

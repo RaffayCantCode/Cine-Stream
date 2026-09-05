@@ -79,34 +79,6 @@ async function directClientAniListSearch(queryTerm: string): Promise<AnimeItem[]
   return [];
 }
 
-async function directClientJikanSearch(queryTerm: string): Promise<AnimeItem[]> {
-  try {
-    const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(queryTerm)}&limit=25`, {
-      signal: AbortSignal.timeout(6000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const list = data?.data || [];
-      return list.map((a: any) => ({
-        id: String(a.mal_id),
-        idMal: String(a.mal_id),
-        name: a.title_english || a.title,
-        jname: a.title_japanese || null,
-        poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
-        type: a.type || "TV",
-        episodes: { sub: a.episodes || null, dub: null },
-        rating: a.score ? String(a.score) : null,
-        description: a.synopsis || "",
-        genres: a.genres?.map((g: any) => g.name) || [],
-        status: a.status || null,
-        season: a.season || null,
-        seasonYear: a.year || null,
-        format: a.type || null,
-      }));
-    }
-  } catch {}
-  return [];
-}
 
 async function directClientKitsuSearch(queryTerm: string): Promise<AnimeItem[]> {
   try {
@@ -614,7 +586,7 @@ function SearchContent() {
               {/* Main Search Results — rendered progressively as each source streams in! */}
               {hasMainResults && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6 pt-3 -mt-3">
                     {showMedia && filteredResults.map((item, i) => (
                       <div key={`main-media-${item.id}`} className="w-full h-full flex justify-center">
                         {item.media_type === "person" ? (

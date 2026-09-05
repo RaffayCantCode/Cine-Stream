@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { CinemaPlayer, type CinemaPlayerMetadata } from "@/components/player/CinemaPlayer";
 import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { getStreamingSources, StreamingSource } from "@/lib/streaming-fetch";
-import { fetchSourceConfig, type SourceTag } from "@/lib/streaming-config";
+import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceTag, type SourceConfigEntry, type SourceCategory } from "@/lib/streaming-config";
 import { fetchJson } from "@/lib/utils";
 
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
@@ -46,23 +46,44 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   });
   const [error, setError] = useState<string | null>(null);
 
-  const [sourceConfig, setSourceConfig] = useState<{ key: string; tag: SourceTag }[] | null>(null);
+  const [sourceConfig, setSourceConfig] = useState<SourceConfigEntry[] | null>(null);
 
   useEffect(() => {
     fetchSourceConfig().then((cfg) => {
       if (cfg?.movie) setSourceConfig(cfg.movie);
     });
+
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<Record<SourceCategory, SourceConfigEntry[]>>;
+      if (customEvent.detail?.movie) {
+        setSourceConfig(customEvent.detail.movie);
+      } else {
+        fetchSourceConfig(true).then((cfg) => {
+          if (cfg?.movie) setSourceConfig(cfg.movie);
+        });
+      }
+    };
+
+    window.addEventListener("cinestream_streaming_sources_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("cinestream_streaming_sources_updated", handleUpdate);
+    };
   }, []);
 
   const sources = useMemo(() => {
     const base = getStreamingSources("movie", movieId);
-    if (!sourceConfig) return base;
+    if (!sourceConfig || sourceConfig.length === 0) return base;
     const byType = new Map(base.map((s) => [s.type, s]));
     const ordered: StreamingSource[] = [];
     sourceConfig.forEach((entry, index) => {
       const src = byType.get(entry.key);
       if (src) {
-        ordered.push({ ...src, name: `Source ${index + 1}`, tag: entry.tag });
+        ordered.push({
+          ...src,
+          name: `Source ${index + 1}`,
+          tag: entry.tag,
+          quality: (SOURCE_TAG_LABELS[entry.tag] as any) || src.quality,
+        });
       }
     });
     base.forEach((s) => {
@@ -71,16 +92,34 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     return ordered;
   }, [movieId, sourceConfig]);
 
-  const [activeSource, setActiveSource] = useState<StreamingSource>(sources[0] || {
-    url: `https://vidsrc.me/embed/movie?tmdb=${movieId}`,
-    name: "Source 1",
-    type: "vidsrc",
-    quality: "Stable",
+  const [activeSource, setActiveSource] = useState<StreamingSource>(() => {
+    const base = getStreamingSources("movie", movieId);
+    return base[0] || {
+      url: `https://vidsrc.me/embed/movie?tmdb=${movieId}`,
+      name: "Source 1",
+      type: "vidsrc",
+      quality: "Stable",
+    };
   });
 
   useEffect(() => {
-    if (sources.length > 0) {
-      setActiveSource(sources[0]);
+    if (typeof window !== "undefined" && sources.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sourceParam = urlParams.get("source");
+      const savedSource = sessionStorage.getItem("cinestream_movie_source");
+      const preferred = sourceParam || savedSource;
+
+      const foundPreferred = preferred ? sources.find((s) => s.type === preferred) : null;
+      if (foundPreferred) {
+        setActiveSource(foundPreferred);
+        return;
+      }
+      const existing = sources.find((s) => s.type === activeSource.type);
+      if (existing) {
+        setActiveSource(existing);
+      } else {
+        setActiveSource(sources[0]);
+      }
     }
   }, [sources]);
 
@@ -178,10 +217,21 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
         }}
         onSelectServer={(srv) => {
           const found = sources.find((s) => s.type === srv.key || s.name === srv.name);
-          if (found) setActiveSource(found);
+          if (found) {
+            setActiveSource(found);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("cinestream_movie_source", found.type);
+              try {
+                const url = new URL(window.location.href);
+                url.searchParams.set("source", found.type);
+                window.history.replaceState(null, "", url.toString());
+              } catch {}
+            }
+          }
         }}
       >
         <NativeHlsPlayer
+          key={`${movieId}-${activeSource.type}`}
           mediaType="movie"
           mediaId={movieId}
           fallbackIframeUrl={activeSource.url}

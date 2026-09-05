@@ -8,7 +8,7 @@ import { CinemaPlayer, type CinemaPlayerMetadata } from "@/components/player/Cin
 import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { DrawerSeason } from "@/components/player/EpisodeDrawer";
 import { getStreamingSources, StreamingSource } from "@/lib/streaming-fetch";
-import { fetchSourceConfig, type SourceTag } from "@/lib/streaming-config";
+import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceTag, type SourceConfigEntry, type SourceCategory } from "@/lib/streaming-config";
 import { fetchJson } from "@/lib/utils";
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
 
@@ -82,23 +82,44 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [sourceConfig, setSourceConfig] = useState<{ key: string; tag: SourceTag }[] | null>(null);
+  const [sourceConfig, setSourceConfig] = useState<SourceConfigEntry[] | null>(null);
 
   useEffect(() => {
     fetchSourceConfig().then((cfg) => {
       if (cfg?.movie) setSourceConfig(cfg.movie);
     });
+
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<Record<SourceCategory, SourceConfigEntry[]>>;
+      if (customEvent.detail?.movie) {
+        setSourceConfig(customEvent.detail.movie);
+      } else {
+        fetchSourceConfig(true).then((cfg) => {
+          if (cfg?.movie) setSourceConfig(cfg.movie);
+        });
+      }
+    };
+
+    window.addEventListener("cinestream_streaming_sources_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("cinestream_streaming_sources_updated", handleUpdate);
+    };
   }, []);
 
   const sources = useMemo(() => {
     const base = getStreamingSources("tv", showId, seasonNumber, episodeNumber);
-    if (!sourceConfig) return base;
+    if (!sourceConfig || sourceConfig.length === 0) return base;
     const byType = new Map(base.map((s) => [s.type, s]));
     const ordered: StreamingSource[] = [];
     sourceConfig.forEach((entry, index) => {
       const src = byType.get(entry.key);
       if (src) {
-        ordered.push({ ...src, name: `Source ${index + 1}`, tag: entry.tag });
+        ordered.push({
+          ...src,
+          name: `Source ${index + 1}`,
+          tag: entry.tag,
+          quality: (SOURCE_TAG_LABELS[entry.tag] as any) || src.quality,
+        });
       }
     });
     base.forEach((s) => {
@@ -107,16 +128,34 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     return ordered;
   }, [showId, seasonNumber, episodeNumber, sourceConfig]);
 
-  const [activeSource, setActiveSource] = useState<StreamingSource>(sources[0] || {
-    url: `https://vidsrc.me/embed/tv?tmdb=${showId}&season=${seasonNumber}&episode=${episodeNumber}`,
-    name: "Source 1",
-    type: "vidsrc",
-    quality: "Stable",
+  const [activeSource, setActiveSource] = useState<StreamingSource>(() => {
+    const base = getStreamingSources("tv", showId, seasonNumber, episodeNumber);
+    return base[0] || {
+      url: `https://vidsrc.me/embed/tv?tmdb=${showId}&season=${seasonNumber}&episode=${episodeNumber}`,
+      name: "Source 1",
+      type: "vidsrc",
+      quality: "Stable",
+    };
   });
 
   useEffect(() => {
-    if (sources.length > 0) {
-      setActiveSource(sources[0]);
+    if (typeof window !== "undefined" && sources.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sourceParam = urlParams.get("source");
+      const savedSource = sessionStorage.getItem("cinestream_tv_source");
+      const preferred = sourceParam || savedSource;
+
+      const foundPreferred = preferred ? sources.find((s) => s.type === preferred) : null;
+      if (foundPreferred) {
+        setActiveSource(foundPreferred);
+        return;
+      }
+      const existing = sources.find((s) => s.type === activeSource.type);
+      if (existing) {
+        setActiveSource(existing);
+      } else {
+        setActiveSource(sources[0]);
+      }
     }
   }, [sources]);
 
@@ -321,12 +360,23 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
         }}
         onSelectServer={(srv) => {
           const found = sources.find((s) => s.type === srv.key || s.name === srv.name);
-          if (found) setActiveSource(found);
+          if (found) {
+            setActiveSource(found);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("cinestream_tv_source", found.type);
+              try {
+                const url = new URL(window.location.href);
+                url.searchParams.set("source", found.type);
+                window.history.replaceState(null, "", url.toString());
+              } catch {}
+            }
+          }
         }}
         seasons={allSeasonsData}
         onSelectEpisode={handleSelectEpisode}
       >
         <NativeHlsPlayer
+          key={`${showId}-${seasonNumber}-${episodeNumber}-${activeSource.type}`}
           mediaType="tv"
           mediaId={showId}
           season={seasonNumber}

@@ -106,21 +106,36 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
   const [isClickUnlocked, setIsClickUnlocked] = useState(!isAnimePlaySource);
   const [liveIframeUrl, setLiveIframeUrl] = useState(isAnimePlaySource ? "" : (fallbackIframeUrl || ""));
 
+  const lastSourceKeyRef = useRef(`${server}-${mediaId}-${episode}`);
   useEffect(() => {
-    if (isAnimePlaySource) {
-      setIsClickUnlocked(false);
-      setLiveIframeUrl("");
+    const currentKey = `${server}-${mediaId}-${episode}`;
+    if (lastSourceKeyRef.current !== currentKey) {
+      lastSourceKeyRef.current = currentKey;
+      if (isAnimePlaySource) {
+        setIsClickUnlocked(false);
+        setLiveIframeUrl("");
+      } else {
+        setIsClickUnlocked(true);
+        setLiveIframeUrl(fallbackIframeUrl || "");
+      }
     } else {
-      setIsClickUnlocked(true);
-      setLiveIframeUrl(fallbackIframeUrl || "");
+      if (!isAnimePlaySource || isClickUnlocked) {
+        if (fallbackIframeUrl && liveIframeUrl !== fallbackIframeUrl) {
+          setLiveIframeUrl(fallbackIframeUrl);
+        }
+      }
     }
-  }, [fallbackIframeUrl, server, isAnimePlaySource]);
+  }, [server, mediaId, episode, isAnimePlaySource, isClickUnlocked, fallbackIframeUrl, liveIframeUrl]);
 
-  const handleClickUnlock = useCallback(() => {
+  const handleClickUnlock = useCallback((e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setIsClickUnlocked(true);
-    setTimeout(() => {
-      setLiveIframeUrl(fallbackIframeUrl || "");
-    }, 50);
+    if (fallbackIframeUrl) {
+      setLiveIframeUrl(fallbackIframeUrl);
+    }
   }, [fallbackIframeUrl]);
 
   // ── Step 1: Resolve Direct HLS Stream ──
@@ -323,17 +338,19 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
 
   useEffect(() => {
     if (onModeChange) {
-      onModeChange(useIframeFallback ? "iframe" : "native");
+      onModeChange(mediaType === "anime" || useIframeFallback ? "iframe" : "native");
     }
-  }, [useIframeFallback, onModeChange]);
+  }, [mediaType, useIframeFallback, onModeChange]);
 
   // ── Fallback Iframe Mode ──
   if (useIframeFallback && fallbackIframeUrl) {
     if (isAnimePlaySource && !isClickUnlocked) {
       return (
-        <div
+        <button
+          type="button"
           onClick={handleClickUnlock}
-          className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden select-none cursor-pointer group"
+          aria-label="Start playback"
+          className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden select-none cursor-pointer group border-0 p-0 text-left appearance-none outline-none focus:outline-none touch-manipulation z-20"
         >
           {/* Poster backdrop with blur and dark gradient */}
           {poster && (
@@ -348,7 +365,7 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
           <div className="absolute w-72 h-72 rounded-full bg-primary/25 blur-3xl pointer-events-none animate-pulse" />
 
           {/* Center Play Button & Title */}
-          <div className="relative z-10 flex flex-col items-center justify-center gap-5 p-8 rounded-3xl bg-zinc-950/70 border border-white/10 hover:border-primary/50 backdrop-blur-xl shadow-[0_25px_60px_rgba(0,0,0,0.9)] group-hover:scale-105 active:scale-95 transition-all duration-300">
+          <div className="relative z-10 flex flex-col items-center justify-center gap-5 p-8 rounded-3xl bg-zinc-950/70 border border-white/10 group-hover:border-primary/50 backdrop-blur-xl shadow-[0_25px_60px_rgba(0,0,0,0.9)] group-hover:scale-105 active:scale-95 transition-all duration-300 pointer-events-none">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center shadow-2xl shadow-primary/50 group-hover:shadow-primary/70 group-hover:scale-110 transition-all duration-300 ring-4 ring-white/10">
               <Play className="w-10 h-10 sm:w-12 sm:h-12 text-white fill-white ml-1.5 transition-transform duration-200" />
             </div>
@@ -358,22 +375,26 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
                 Click to Play
               </h3>
               <p className="text-xs text-white/50 font-medium">
-                Source 1 • Tap anywhere to start stream
+                Tap anywhere to start stream
               </p>
             </div>
           </div>
-        </div>
+        </button>
       );
     }
 
+    const effectiveIframeUrl = liveIframeUrl || fallbackIframeUrl;
+
     return (
-      <div className="w-full h-full relative bg-black">
-        {liveIframeUrl ? (
+      <div className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden select-none">
+        {effectiveIframeUrl ? (
           <iframe
-            key={liveIframeUrl}
-            src={liveIframeUrl}
-            className="w-full h-full border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share"
+            key={effectiveIframeUrl}
+            src={effectiveIframeUrl}
+            className="w-full h-full border-0 block"
+            style={{ width: "100%", height: "100%", border: 0 }}
+            scrolling="no"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowFullScreen
             referrerPolicy="no-referrer-when-downgrade"
             title={title || "Video Stream"}

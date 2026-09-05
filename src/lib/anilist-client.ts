@@ -3,7 +3,7 @@ import { cleanAnimeDescription } from "@/lib/anime-fetch";
 import { fetchKitsuClientAnime } from "@/lib/kitsu";
 
 const ANILIST_API = "https://graphql.anilist.co";
-const JIKAN_BASE = "https://api.jikan.moe/v4";
+
 
 const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
   Page(page: $page, perPage: 50) {
@@ -63,25 +63,7 @@ function transformAniList(media: any): AnimeItem | null {
   } as AnimeItem;
 }
 
-function transformJikan(a: any): AnimeItem {
-  return {
-    id: String(a.mal_id),
-    idMal: String(a.mal_id),
-    name: a.title_english || a.title,
-    jname: a.title_japanese || null,
-    poster: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "",
-    type: a.type || "TV",
-    episodes: { sub: a.episodes || null, dub: null },
-    rating: a.score ? String(a.score) : null,
-    description: a.synopsis || "",
-    genres: a.genres?.map((g: any) => g.name) || [],
-    status: a.status || null,
-    season: a.season || null,
-    seasonYear: a.year || null,
-    format: a.type || null,
-    duration: a.duration ? parseInt(a.duration) : null,
-  } as AnimeItem;
-}
+
 
 function deduplicateAnime(items: AnimeItem[]): AnimeItem[] {
   const seen = new Set<string>();
@@ -157,18 +139,13 @@ export function invalidateClientAnimeCache(): void {
   }
 }
 
-// Returns true if ALL items in the list are from the primary sources (AniList/Jikan),
-// not Kitsu. Kitsu items have IDs like "kitsu-12345" or very long slug-style IDs.
+// Returns true if ALL items in the list are from primary sources (AniList),
+// not raw Kitsu.
 function isCacheFromPrimarySources(items: AnimeItem[]): boolean {
   if (!items || items.length === 0) return false;
-  // Accept items as "primary" if ALL of them have:
-  //   - a pure numeric AniList ID  (e.g. "21")
-  //   - a mal-prefixed ID          (e.g. "mal-21" — Jikan items or Kitsu items enriched via MAL)
-  // Reject if ANY item still has an un-enriched "kitsu-" ID, which means
-  // AniList/Jikan both failed and we only got raw Kitsu data.
   return items.every(item => {
     const id = String(item.id || "");
-    return !id.startsWith("kitsu-"); // numeric OR mal- both count as primary/enriched
+    return !id.startsWith("kitsu-");
   });
 }
 
@@ -250,37 +227,9 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
         return result;
       }
     }
-  } catch { /* ignore server proxy error and try Jikan */ }
+  } catch { /* ignore server proxy error and try Kitsu */ }
 
-  // 5) Direct browser fallback (Jikan)
-    try {
-      let url = `${JIKAN_BASE}/top/anime?filter=bypopularity&page=${page}`;
-      if (category === "search" || q) {
-        url = `${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}${genre ? `&genres=${genre}` : ""}`;
-      } else if (category === "airing") {
-        url = `${JIKAN_BASE}/seasons/now?page=${page}`;
-      } else if (category === "trending") {
-        url = `${JIKAN_BASE}/top/anime?filter=airing&page=${page}`;
-      }
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Jikan returned ${res.status}`);
-      const data = await res.json();
-      const items = filterUnreleased(deduplicateAnime((data.data || []).map(transformJikan)));
-      const fallbackResult = { items, hasMore: items.length > 0 };
-      if (items.length > 0) {
-        clientAnimeCache.set(cacheKey, { data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
-        if (typeof window !== "undefined") {
-          try {
-            sessionStorage.setItem(versionedKey, JSON.stringify({ data: fallbackResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
-          } catch {}
-        }
-        return fallbackResult;
-      }
-    } catch (jikanErr) {
-      console.warn("Jikan direct fetch failed, falling back to Kitsu:", jikanErr);
-    }
-
-    // 6) Direct browser Kitsu query fallback (when both AniList and Jikan are down)
+  // 5) Direct browser Kitsu query fallback (when AniList is down)
     const kitsuResult = await fetchKitsuClientAnime(category, page, genre, q);
     if (kitsuResult.items.length > 0) {
       clientAnimeCache.set(cacheKey, { data: kitsuResult, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });

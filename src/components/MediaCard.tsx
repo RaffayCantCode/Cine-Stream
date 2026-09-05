@@ -61,7 +61,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
 
   return (
     <div
-      className="row-item w-full"
+      className="row-item w-full relative hover:z-30 pt-2 -mt-2"
       style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${index * 0.03}s` }}
     >
       <Link

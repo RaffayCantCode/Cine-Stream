@@ -5,11 +5,20 @@ import { useState, useEffect } from "react";
 const logoCache = new Map<string, string | null>();
 const artworkCache = new Map<string, { backdropUrl: string | null; posterUrl: string | null }>();
 
-export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime", title?: string) {
+export function useMediaLogo(
+  id: string | number,
+  type: "movie" | "tv" | "anime",
+  title?: string,
+  initialLogo?: string | null
+) {
   const isAnime = type === "anime";
   const cacheKey = `${id}-${title || ""}`;
 
   const [logoUrl, setLogoUrl] = useState<string | null>(() => {
+    if (initialLogo) {
+      logoCache.set(cacheKey, initialLogo);
+      return initialLogo;
+    }
     if (logoCache.has(cacheKey)) return logoCache.get(cacheKey) || null;
     if (typeof window !== "undefined") {
       try {
@@ -38,9 +47,15 @@ export function useMediaLogo(id: string | number, type: "movie" | "tv" | "anime"
     return { backdropUrl: null, posterUrl: null };
   });
 
-  const [loading, setLoading] = useState(!logoUrl);
+  const [loading, setLoading] = useState(!initialLogo && !logoUrl);
 
   useEffect(() => {
+    if (initialLogo) {
+      setLogoUrl(initialLogo);
+      logoCache.set(cacheKey, initialLogo);
+      setLoading(false);
+      return;
+    }
     if ((!id || id === "undefined" || id === "null") && !title) {
       setLoading(false);
       return;

@@ -391,7 +391,7 @@ export default function MovieClient() {
                   <div className="w-1 h-5 bg-primary rounded-full" />
                   <h2 className="text-base font-bold text-white tracking-wide">More Like This</h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 3xl:grid-cols-8 4xl:grid-cols-10 gap-x-4 gap-y-6 pt-3 -mt-3">
                   {filtered.slice(0, 20).map((item: any, i: number) => {
                     const visibilityClass =
                       i < 4

@@ -21,6 +21,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Globe,
   Server,
   SkipForward,
@@ -84,8 +85,7 @@ export function CinemaPlayer({
   // Popups state (matching screenshots 2 & 3)
   const [showEpisodeCarousel, setShowEpisodeCarousel] = useState(false);
   const [showServerMenu, setShowServerMenu] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [playerMode, setPlayerMode] = useState<"native" | "iframe">("native");
+  const [playerMode, setPlayerMode] = useState<"native" | "iframe">(isAnime ? "iframe" : "native");
 
   // Reload Source state
   const [reloadKey, setReloadKey] = useState(0);
@@ -139,6 +139,7 @@ export function CinemaPlayer({
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [autoPlayNext, setAutoPlayNext] = useState(true);
   const [autoSkipIntro, setAutoSkipIntro] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Auto-hide controls timer
   const resetControlsTimer = useCallback(() => {
@@ -394,12 +395,9 @@ export function CinemaPlayer({
   // Lock body and html scroll so player page perfectly fits screen without overflow
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
-    const originalTouchAction = document.body.style.touchAction;
     document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
     return () => {
       document.body.style.overflow = originalOverflow;
-      document.body.style.touchAction = originalTouchAction;
     };
   }, []);
 
@@ -408,7 +406,7 @@ export function CinemaPlayer({
       ref={containerRef}
       onMouseMove={resetControlsTimer}
       onClick={resetControlsTimer}
-      className="fixed inset-0 w-full h-[100dvh] max-w-full max-h-full bg-black select-none overflow-hidden flex flex-col justify-between z-50 font-sans touch-none overscroll-none"
+      className="fixed inset-0 w-full h-[100dvh] max-w-full max-h-full bg-black select-none overflow-hidden flex flex-col justify-between z-50 font-sans overscroll-none touch-manipulation"
       style={ambientPalette.cssVars as React.CSSProperties}
     >
       {/* ── Background Video Screen ── */}
@@ -425,6 +423,8 @@ export function CinemaPlayer({
           {React.isValidElement(children)
             ? React.cloneElement(children as React.ReactElement<any>, {
                 onModeChange: setPlayerMode,
+                isPlaying,
+                onTogglePlay: setIsPlaying,
                 onProgress: (cur: number, dur: number) => {
                   setCurrentTime(cur);
                   if (dur > 0) setDuration(dur);
@@ -442,16 +442,34 @@ export function CinemaPlayer({
         )}
       </div>
 
-      {/* ── Top Bar Hover Detector (keeps bar active when hovering top 70px) ── */}
+      {/* ── Top Bar Wakeup Detector (mouse hover/move on desktop, tap on mobile) ── */}
       <div
-        onMouseEnter={() => setShowControls(true)}
-        className="fixed top-0 inset-x-0 h-20 z-30 pointer-events-auto"
+        onMouseEnter={resetControlsTimer}
+        onMouseMove={resetControlsTimer}
+        onTouchStart={resetControlsTimer}
+        onClick={resetControlsTimer}
+        className={`fixed top-0 inset-x-0 h-20 z-30 transition-opacity duration-200 ${
+          showControls ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100"
+        }`}
       />
+
+      {/* ── Mobile Floating Controls Reveal Pill ── */}
+      {!showControls && (
+        <button
+          type="button"
+          onClick={resetControlsTimer}
+          onTouchStart={resetControlsTimer}
+          aria-label="Show player controls"
+          className="fixed top-3 right-3 z-40 sm:hidden p-2 rounded-full bg-black/75 hover:bg-black text-white/80 hover:text-white border border-white/20 backdrop-blur-md shadow-xl active:scale-95 cursor-pointer touch-manipulation"
+        >
+          <ChevronDown className="w-4 h-4" />
+        </button>
+      )}
 
       {/* ── Top Cinema Navigation Bar ── */}
       <div
         onMouseEnter={() => setShowControls(true)}
-        className={`fixed top-0 inset-x-0 z-40 h-20 px-4 sm:px-6 md:px-8 flex items-center justify-between bg-gradient-to-b from-black via-black/90 to-transparent backdrop-blur-md pt-2 pb-6 transition-all duration-300 ${
+        className={`fixed top-0 inset-x-0 z-40 h-20 px-3 sm:px-6 md:px-8 flex items-center justify-between bg-gradient-to-b from-black via-black/90 to-transparent backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top))] pb-6 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] transition-all duration-300 ${
           showControls ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-2 pointer-events-none"
         }`}
       >
@@ -547,9 +565,9 @@ export function CinemaPlayer({
         </div>
       </div>
 
-      {/* ── Floating Episode Horizontal Carousel (Screenshot 2) ── */}
+      {/* ── Floating Episode Horizontal Carousel ── */}
       {showEpisodeCarousel && seasons && seasons.length > 0 && (
-        <div className="relative z-40 mx-4 sm:mx-8 mb-2 p-5 rounded-3xl bg-[#18181b]/95 border border-white/10 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] animate-fade-in space-y-3">
+        <div className="fixed top-20 inset-x-0 z-50 mx-2 sm:mx-8 p-4 sm:p-5 rounded-3xl bg-[#18181b]/95 border border-white/10 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] animate-fade-in space-y-3 max-h-[calc(100dvh-6rem)] overflow-y-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 flex-wrap">
               {seasons.length > 1 ? (
@@ -784,7 +802,7 @@ export function CinemaPlayer({
 
       {/* ── Floating Server Selection Popup ── */}
       {showServerMenu && (
-        <div className="absolute right-4 sm:right-12 bottom-24 z-40 w-72 sm:w-80 bg-[#18181b]/95 border border-white/15 rounded-2xl p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-fade-in space-y-3">
+        <div className="fixed top-20 right-3 sm:right-8 z-50 w-72 sm:w-80 max-h-[calc(100dvh-6rem)] overflow-y-auto bg-[#18181b]/95 border border-white/15 rounded-2xl p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-fade-in space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-white/10">
             <div className="flex items-center gap-2">
               <Server className="w-3.5 h-3.5 text-primary" />
@@ -861,7 +879,7 @@ export function CinemaPlayer({
       )}
 
       {/* ── Bottom Cinema Control Bar (ONLY rendered for native HLS player so no duplicate scrubbers on iframes) ── */}
-      {playerMode === "native" && (
+      {playerMode === "native" && !isAnime && (
         <div
           className={`relative z-30 w-full px-6 pb-6 pt-10 bg-gradient-to-t from-black via-black/70 to-transparent transition-opacity duration-300 ${
             showControls ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"

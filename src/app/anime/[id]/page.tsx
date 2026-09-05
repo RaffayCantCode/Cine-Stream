@@ -41,6 +41,38 @@ export async function generateMetadata(
   });
 }
 
-export default function AnimePage() {
-  return <AnimeClient />;
+export default async function AnimePage(
+  props: { params: Promise<{ id: string }> }
+) {
+  const params = await props.params;
+  const id = params?.id || "";
+
+  let initialAnime: any = null;
+  try {
+    const details = await getAnimeDetails(id, 0, true).catch(() => null);
+    if (details?.anime) {
+      initialAnime = {
+        ...details.anime,
+        seasons: details.seasons || [],
+        franchiseNodes: details.franchiseNodes || [],
+        openedSeasonId: details.openedSeasonId,
+        tmdbId: details.tmdbId,
+      };
+    }
+  } catch {}
+
+  const preloadLogo = initialAnime?.logoUrl || null;
+  const preloadBanner = initialAnime?.bannerImage || initialAnime?.backdrop || null;
+
+  return (
+    <>
+      {preloadLogo && (
+        <link rel="preload" as="image" href={preloadLogo} fetchPriority="high" />
+      )}
+      {preloadBanner && (
+        <link rel="preload" as="image" href={preloadBanner} fetchPriority="high" />
+      )}
+      <AnimeClient initialData={initialAnime} />
+    </>
+  );
 }

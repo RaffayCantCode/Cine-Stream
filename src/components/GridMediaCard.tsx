@@ -47,7 +47,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
 
   return (
     <div
-      className="group flex flex-col gap-3 animate-fade-in-up"
+      className="group flex flex-col gap-3 animate-fade-in-up relative hover:z-30 pt-2 -mt-2"
       style={{ animationDelay: `${Math.min(index * 0.02, 0.6)}s` }}
     >
       <Link

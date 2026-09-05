@@ -21,16 +21,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fallback: search by title
+    // Fallback: search by title via AniList GraphQL
     if (title) {
-       const searchRes = await fetch(`https://api.tatakai.me/meta/anilist/advanced-search?query=${encodeURIComponent(title)}`);
-       if (searchRes.ok) {
-         const data = await searchRes.json();
-         const first = data?.results?.[0];
-         if (first && first.id) {
-           return NextResponse.redirect(new URL(`/anime/${first.id}${autoplay ? '?autoplay=1' : ''}`, request.url));
-         }
-       }
+      const searchRes = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          query: `query ($search: String) { Media(search: $search, type: ANIME) { id } }`,
+          variables: { search: title },
+        }),
+      });
+      if (searchRes.ok) {
+        const data = await searchRes.json();
+        const firstId = data?.data?.Media?.id;
+        if (firstId) {
+          return NextResponse.redirect(new URL(`/anime/${firstId}${autoplay ? '?autoplay=1' : ''}`, request.url));
+        }
+      }
     }
   } catch (e) {
     console.error("Redirect error", e);
