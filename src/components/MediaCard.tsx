@@ -51,7 +51,8 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
     link = `/manga/${item.id}`;
   } else if (isAnime) {
     if (!link || !link.startsWith("/anime/")) {
-      const aId = (item as any).anilistId || (link?.startsWith("/tv/") ? `tmdb-${item.id}` : item.id);
+      const rawId = String(item.id);
+      const aId = (item as any).anilistId || (rawId.startsWith("tmdb-") || rawId.startsWith("kitsu-") ? rawId : `tmdb-${rawId}`);
       link = `/anime/${aId}`;
     }
   } else if (!link) {

@@ -14,40 +14,12 @@ export function useMediaLogo(
   const isAnime = type === "anime";
   const cacheKey = `${id}-${title || ""}`;
 
-  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
-    if (initialLogo) {
-      logoCache.set(cacheKey, initialLogo);
-      return initialLogo;
-    }
-    if (logoCache.has(cacheKey)) return logoCache.get(cacheKey) || null;
-    if (typeof window !== "undefined") {
-      try {
-        const saved = sessionStorage.getItem(`logo_v7_${cacheKey}`);
-        if (saved) {
-          logoCache.set(cacheKey, saved);
-          return saved;
-        }
-      } catch {}
-    }
-    return null;
+  const [logoUrl, setLogoUrl] = useState<string | null>(initialLogo || null);
+  const [artwork, setArtwork] = useState<{ backdropUrl: string | null; posterUrl: string | null }>({
+    backdropUrl: null,
+    posterUrl: null,
   });
-
-  const [artwork, setArtwork] = useState<{ backdropUrl: string | null; posterUrl: string | null }>(() => {
-    if (artworkCache.has(cacheKey)) return artworkCache.get(cacheKey)!;
-    if (typeof window !== "undefined") {
-      try {
-        const saved = sessionStorage.getItem(`artwork_v1_${cacheKey}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          artworkCache.set(cacheKey, parsed);
-          return parsed;
-        }
-      } catch {}
-    }
-    return { backdropUrl: null, posterUrl: null };
-  });
-
-  const [loading, setLoading] = useState(!initialLogo && !logoUrl);
+  const [loading, setLoading] = useState(!initialLogo);
 
   useEffect(() => {
     if (initialLogo) {
@@ -66,6 +38,26 @@ export function useMediaLogo(
       setArtwork(artworkCache.get(cacheKey)!);
       setLoading(false);
       return;
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        const savedLogo = sessionStorage.getItem(`logo_v7_${cacheKey}`);
+        const savedArt = sessionStorage.getItem(`artwork_v1_${cacheKey}`);
+        if (savedLogo || savedArt) {
+          if (savedLogo) {
+            logoCache.set(cacheKey, savedLogo);
+            setLogoUrl(savedLogo);
+          }
+          if (savedArt) {
+            const parsed = JSON.parse(savedArt);
+            artworkCache.set(cacheKey, parsed);
+            setArtwork(parsed);
+          }
+          setLoading(false);
+          return;
+        }
+      } catch {}
     }
 
     let cancelled = false;

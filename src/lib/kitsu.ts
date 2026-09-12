@@ -757,7 +757,7 @@ export async function getAnimeDetailsViaKitsu(
       cacheFranchiseNodes(franchiseNodes);
       seasonsList = buildSeasonList(franchiseNodes, anilistId ? parseInt(anilistId, 10) : parseInt(kitsuId, 10));
       seasonsList = seasonsList.map(s => {
-        const sIsMovie = s.seasonLabel.startsWith("Movie") || isMovieFormat;
+        const sIsMovie = (s.seasonLabel || "").startsWith("Movie") || isMovieFormat;
         const isCur = s.isCurrent || String(s.id) === String(effectiveId) || (anilistId && String(s.id) === String(anilistId));
         const tid = sIsMovie ? null : (s.tmdbId || tmdbId || null);
         let sNum = sIsMovie ? null : (s.tmdbSeasonNumber ?? (isCur ? tmdbSeasonNumber : null));

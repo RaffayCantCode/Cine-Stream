@@ -828,6 +828,23 @@ export async function getAnimeDetails(
   ]);
 
   if (!media) {
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        const azTmdb = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
+          signal: AbortSignal.timeout(2500),
+          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+        }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+        if (azTmdb?.mappings?.anilist_id) {
+          const resolved = await getAnimeDetails(String(azTmdb.mappings.anilist_id), epLimit, skipEpisodes);
+          if (resolved) return store(resolved);
+        } else if (azTmdb?.mappings?.kitsu_id) {
+          const resolved = await getAnimeDetailsViaKitsu(`kitsu-${azTmdb.mappings.kitsu_id}`, epLimit, skipEpisodes);
+          if (resolved) return store(resolved);
+        }
+      } catch {}
+    }
+
     return store(await getAnimeDetailsViaKitsu(String(numId), epLimit, skipEpisodes));
   }
 
@@ -888,7 +905,7 @@ export async function getAnimeDetails(
   const tmdbSeasonMap: Record<string, number> = {};
 
   const mappedSeasons: SeasonInfo[] = baseSeasons.map(s => {
-    const sIsMovie = s.seasonLabel.startsWith("Movie") || isMovie;
+    const sIsMovie = (s.seasonLabel || "").startsWith("Movie") || isMovie;
     const isCurrentSeason = String(s.id) === String(numId);
     const tid = sIsMovie ? null : (s.tmdbId || tmdbId || null);
     let sNum: number | null = sIsMovie ? null : (s.tmdbSeasonNumber ?? null);

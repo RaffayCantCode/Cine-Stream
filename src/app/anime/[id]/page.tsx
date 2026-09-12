@@ -42,10 +42,17 @@ export async function generateMetadata(
 }
 
 export default async function AnimePage(
-  props: { params: Promise<{ id: string }> }
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
 ) {
-  const params = await props.params;
+  const [params, searchParams] = await Promise.all([
+    props.params,
+    props.searchParams ? props.searchParams.catch(() => ({} as any)) : Promise.resolve({} as any),
+  ]);
   const id = params?.id || "";
+  const seasonId = typeof searchParams?.seasonId === "string" ? searchParams.seasonId : undefined;
 
   let initialAnime: any = null;
   try {
@@ -55,8 +62,9 @@ export default async function AnimePage(
         ...details.anime,
         seasons: details.seasons || [],
         franchiseNodes: details.franchiseNodes || [],
-        openedSeasonId: details.openedSeasonId,
+        openedSeasonId: seasonId || details.openedSeasonId,
         tmdbId: details.tmdbId,
+        tmdbSeasonMap: details.tmdbSeasonMap,
       };
     }
   } catch {}

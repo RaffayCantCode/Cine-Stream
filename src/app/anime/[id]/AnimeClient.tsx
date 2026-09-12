@@ -133,26 +133,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // ── Core state ───────────────────────────────────────────────────────────
   const [anime, setAnime] = useState<AnimeDetail | null>(() => {
     if (initialData?.id) return initialData as AnimeDetail;
-    if (typeof window !== "undefined") {
-      try {
-        const seed = sessionStorage.getItem(`cs_anime_seed_${id}`) || sessionStorage.getItem(`cinestream_anime_${id}`);
-        if (seed) {
-          const p = JSON.parse(seed);
-          if (p && String(p.id) === String(id)) return p as AnimeDetail;
-        }
-      } catch {}
-    }
     return null;
   });
 
   const [isLoading, setIsLoading] = useState(() => {
     if (initialData?.id) return false;
-    if (typeof window !== "undefined") {
-      try {
-        const seed = sessionStorage.getItem(`cs_anime_seed_${id}`);
-        if (seed) { const p = JSON.parse(seed); if (p && String(p.id) === String(id)) return false; }
-      } catch {}
-    }
     return true;
   });
 
@@ -165,8 +150,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [descExpanded, setDescExpanded] = useState(false);
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>(() => {
     if (initialData?.franchiseNodes?.length > 1) return initialData.franchiseNodes;
-    const mem = FRANCHISE_CACHE.get(String(id));
-    if (mem && mem.length > 1) return mem;
     return [];
   });
   const [currentSeasonId, setCurrentSeasonId] = useState<string>(() => {
@@ -203,7 +186,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     );
     if (fromSeason) return fromSeason;
 
-    const fromNodes = franchiseNodes.find(n =>
+    const fromNodes = (franchiseNodes || []).find(n =>
       String(n.id) === target ||
       (cleanTarget && String(n.id).replace(/\D/g, "") === cleanTarget) ||
       (n.idMal && cleanTarget && String(n.idMal) === cleanTarget)
@@ -218,7 +201,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     (currentSeasonInfo as any)?.bannerImage ||
     (anime as any)?.bannerImage ||
     (initialData as any)?.bannerImage ||
-    (anime?.backdrop ? (anime.backdrop.startsWith("http") ? anime.backdrop : `https://image.tmdb.org/t/p/original${anime.backdrop}`) : null) ||
+    (typeof anime?.backdrop === "string" ? (anime.backdrop.startsWith("http") ? anime.backdrop : `https://image.tmdb.org/t/p/original${anime.backdrop}`) : null) ||
     mediaBackdropUrl ||
     anime?.poster || "";
   const displayTitle = (currentSeasonInfo as any)?.title || (currentSeasonInfo as any)?.name || currentSeason?.name || anime?.name || "";
@@ -226,7 +209,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const displayFormat = (currentSeasonInfo as any)?.format || (currentSeasonInfo as any)?.type || anime?.format || anime?.type || "Anime";
   const displayStatus = currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "";
 
-  const isPageReady = Boolean((!isLoading && Boolean(anime)) || error || (anime as any)?.isHidden);
+  const isPageReady = Boolean(!isLoading || error || (anime as any)?.isHidden);
   usePageContentReady(isPageReady);
 
   // ── Episodes for current season ───────────────────────────────────────────
@@ -340,8 +323,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       } catch {}
     }
+
     try {
-      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || franchiseNodes?.find(n => String(n.id) === String(seasonId));
+      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || (initialData?.seasons || []).find((s: any) => String(s.id) === String(seasonId)) || franchiseNodes?.find(n => String(n.id) === String(seasonId));
       const sName = (matchingSeason as any)?.name || (matchingSeason as any)?.title || anime?.name || "";
       const sTot = (matchingSeason as any)?.totalEpisodes || (matchingSeason as any)?.episodes || anime?.totalEpisodes || 0;
       const effectiveTmdbId = tmdbId ?? (matchingSeason as any)?.tmdbId ?? anime?.tmdbId ?? null;
@@ -396,7 +380,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     }
 
     // Fallback: generate placeholder episodes
-    const matchSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || franchiseNodes.find(n => String(n.id) === String(seasonId));
+    const matchSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || (franchiseNodes || []).find(n => String(n.id) === String(seasonId));
     const isMov = ((matchSeason as any)?.seasonLabel || "").startsWith("Movie") || (matchSeason as any)?.format === "MOVIE" || anime?.format === "MOVIE";
     const count = isMov ? 1 : Math.max((matchSeason as any)?.totalEpisodes || (matchSeason as any)?.episodes || 1, 1);
     const fallback: Episode[] = Array.from({ length: count }, (_, i) => ({
@@ -428,13 +412,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
     // On first mount with valid initial data — skip meta fetch, just load episodes
     if (isFirstMount && initialData) {
-      // anime is already set from useState initializer
       animeStatusRef.current = initialData.status || null;
-      if (initialData.franchiseNodes?.length > 1) {
-        setFranchiseNodes(initialData.franchiseNodes);
-        for (const n of initialData.franchiseNodes) {
-          FRANCHISE_CACHE.set(String(n.id), initialData.franchiseNodes);
-          if ((n as any).idMal) FRANCHISE_CACHE.set(String((n as any).idMal), initialData.franchiseNodes);
+      const cachedNodes = FRANCHISE_CACHE.get(String(id));
+      const effectiveNodes = (initialData.franchiseNodes && initialData.franchiseNodes.length > 1)
+        ? initialData.franchiseNodes
+        : (cachedNodes && cachedNodes.length > 1 ? cachedNodes : []);
+      if (effectiveNodes.length > 1) {
+        setFranchiseNodes(effectiveNodes);
+        for (const n of effectiveNodes) {
+          FRANCHISE_CACHE.set(String(n.id), effectiveNodes);
+          if ((n as any).idMal) FRANCHISE_CACHE.set(String((n as any).idMal), effectiveNodes);
         }
       }
       const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
@@ -638,9 +625,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setRecsLoading(true);
 
     const targetId = anime.id || id;
-    const excludeIds = new Set([String(id), String(anime.id || ""), ...franchiseNodes.map(n => String(n.id))]);
-    const genres = anime.genres || [];
+    const excludeIds = new Set([String(id), String(anime.id || ""), ...(franchiseNodes || []).map(n => String(n.id))]);
+    const genres = Array.isArray(anime.genres) ? anime.genres : [];
     const title = anime.name || (anime as any)?.title || "";
+
+    const safeSourceGenres = genres
+      .filter(Boolean)
+      .map((g: any) => (typeof g === "string" ? g.charCodeAt(0) : Number(g?.id || g) || 0));
+
+    const getSafeTargetGenres = (targetG: any) =>
+      (Array.isArray(targetG) ? targetG : [])
+        .filter(Boolean)
+        .map((g: any) => (typeof g === "string" ? g.charCodeAt(0) : Number(g?.id || g) || 0));
 
     const RECS_KEY = `cs_recs_v3_${targetId}`;
     try {
@@ -648,7 +644,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       if (cached) {
         const p = JSON.parse(cached);
         if (Array.isArray(p) && p.length > 0) {
-          const withReasons = p.map((item: any) => ({ ...item, reason: getRecommendationReason(genres.map((g: string) => g.charCodeAt(0)), item.genres?.map((g: string) => g.charCodeAt(0)) || []) }));
+          const withReasons = p.map((item: any) => ({
+            ...item,
+            reason: getRecommendationReason(safeSourceGenres, getSafeTargetGenres(item.genres)),
+          }));
           setRecommendations(withReasons);
           setRecsLoading(false);
           return;
@@ -659,13 +658,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const t = setTimeout(async () => {
       try {
         const excludeParam = [...excludeIds].filter(Boolean).join(",");
-        const res = await fetch(`/api/anime/recommendations/${encodeURIComponent(targetId)}?title=${encodeURIComponent(title)}&genres=${encodeURIComponent(genres.join(","))}&format=${encodeURIComponent(displayFormat || "")}&excludeIds=${encodeURIComponent(excludeParam)}`);
+        const genresParam = genres
+          .filter(Boolean)
+          .map(g => (typeof g === "string" ? g : (g as any)?.name || ""))
+          .filter(Boolean)
+          .join(",");
+        const res = await fetch(`/api/anime/recommendations/${encodeURIComponent(targetId)}?title=${encodeURIComponent(title)}&genres=${encodeURIComponent(genresParam)}&format=${encodeURIComponent(displayFormat || "")}&excludeIds=${encodeURIComponent(excludeParam)}`);
         if (!active) return;
         if (res.ok) {
           const data = await res.json();
           const items = data?.items || [];
           if (items.length > 0) {
-            const withReasons = items.map((item: any) => ({ ...item, reason: getRecommendationReason(genres.map((g: string) => g.charCodeAt(0)), item.genres?.map((g: string) => g.charCodeAt(0)) || []) }));
+            const withReasons = items.map((item: any) => ({
+              ...item,
+              reason: getRecommendationReason(safeSourceGenres, getSafeTargetGenres(item.genres)),
+            }));
             setRecommendations(withReasons);
             try { sessionStorage.setItem(RECS_KEY, JSON.stringify(items)); } catch {}
           }
@@ -757,7 +764,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     return map[theme] || "bg-[#07080d]";
   }, [theme]);
 
-  const animeScore = (() => { const r = Number(anime?.rating || anime?.score || 0); return r > 10 ? r / 10 : r; })();
+  const animeScore = (() => {
+    const r = parseFloat(String(anime?.rating || (anime as any)?.score || "0"));
+    return !isNaN(r) && r > 0 ? (r > 10 ? r / 10 : r) : 0;
+  })();
   const animeDescription = seasonOverview || (currentSeasonInfo as any)?.description || (currentSeason as any)?.description || anime?.description || "";
   const isLongDescription = animeDescription.length > 200;
   const animeBackdropUrl = displayBanner || displayPoster || null;
@@ -773,18 +783,20 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       <main className="relative z-10 w-full pt-0 bleed-header select-none">
         {!isPageReady ? (
-          <div className="min-h-screen w-full" />
-        ) : (error || (anime as any)?.isHidden) ? (
+          <div className="min-h-screen w-full flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-[#7288AE] animate-spin" />
+          </div>
+        ) : (error || !anime || (anime as any)?.isHidden) ? (
           <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl max-w-lg mx-auto space-y-3">
               <div className="text-xl font-bold text-white mb-2">Title Unavailable</div>
-              <div className="text-sm text-white/50 mb-4">This anime is currently not available to view. Please check back later or explore other anime.</div>
-              <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4B5694] hover:bg-[#4B5694] text-white rounded-xl text-sm font-bold transition-all">
+              <div className="text-sm text-white/50 mb-4">{error || "This anime is currently not available to view. Please check back later or explore other anime."}</div>
+              <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4B5694] hover:bg-[#5a67ad] text-white rounded-xl text-sm font-bold transition-all">
                 <ArrowLeft className="w-4 h-4" /> Back to Anime
               </Link>
             </div>
           </div>
-        ) : anime ? (
+        ) : (
           <>
             {/* Hero */}
             <CinematicHero backdropPath={displayBanner} trailerId={anime.trailerId} title={displayTitle} theme="anime">
@@ -836,9 +848,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       })()}
                       <span className="px-3 py-1 bg-white/[0.08] border border-white/15 rounded-xl text-xs sm:text-sm font-extrabold text-white shadow-sm">{displayFormat}</span>
                       <div className="flex flex-wrap gap-2 ml-0.5">
-                        {anime.genres?.slice(0, 5).map(g => (
-                          <span key={g} className="px-3.5 py-1 bg-fuchsia-500/15 border border-fuchsia-400/30 rounded-full text-xs sm:text-sm font-extrabold text-fuchsia-200 shadow-sm">{g}</span>
-                        ))}
+                        {(Array.isArray(anime.genres) ? anime.genres : []).slice(0, 5).map((g: any, i: number) => {
+                          const label = typeof g === "string" ? g : (g?.name || "");
+                          if (!label) return null;
+                          return (
+                            <span key={typeof g === "string" ? g : (g?.id || i)} className="px-3.5 py-1 bg-fuchsia-500/15 border border-fuchsia-400/30 rounded-full text-xs sm:text-sm font-extrabold text-fuchsia-200 shadow-sm">{label}</span>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -1095,7 +1111,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               )}
             </div>
           </>
-        ) : null}
+        )}
       </main>
     </div>
   );

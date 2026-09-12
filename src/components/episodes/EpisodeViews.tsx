@@ -220,9 +220,9 @@ export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: E
             </span>
           )}
           {dateLabel && <span>• {dateLabel}</span>}
-          {item.hasRating && item.rating != null && (
+          {item.hasRating && item.rating != null && !isNaN(Number(item.rating)) && (
             <span className="flex items-center gap-1 text-amber-300 font-bold bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-md text-[11px] ml-1">
-              <Star className="w-3 h-3 fill-current" /> {item.rating.toFixed(1)}
+              <Star className="w-3 h-3 fill-current" /> {Number(item.rating).toFixed(1)}
             </span>
           )}
         </div>

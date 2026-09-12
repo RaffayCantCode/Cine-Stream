@@ -77,15 +77,15 @@ export function AnimeSeasonSelector({
         ? currentSeasons.map(s => ({
             id: String(s.id),
             idMal: s.idMal,
-            title: s.name || s.seasonLabel,
+            title: s.name || s.seasonLabel || "Season",
             episodes: s.totalEpisodes,
             totalEpisodes: s.totalEpisodes,
-            format: s.seasonLabel.startsWith("Movie") ? "MOVIE" : s.seasonLabel.startsWith("OVA") ? "OVA" : "TV",
+            format: (s.seasonLabel || "").startsWith("Movie") ? "MOVIE" : (s.seasonLabel || "").startsWith("OVA") ? "OVA" : "TV",
             seasonYear: s.seasonYear,
-            seasonLabel: s.seasonLabel,
+            seasonLabel: s.seasonLabel || null,
             coverImage: s.coverImage,
           }))
-        : franchiseNodes;
+        : (franchiseNodes || []);
 
     const combined: FranchiseNodeItem[] = [];
     const seenIds = new Set<string>();
@@ -336,12 +336,13 @@ export function AnimeSeasonSelector({
   const numCurrentId = parseInt(cleanCurrentId.replace(/\D/g, ""), 10) || 0;
 
   const isItemActive = (item: FranchiseNodeItem) => {
+    if (!item?.id) return false;
     const sId = String(item.id).trim().toLowerCase();
     if (sId === cleanCurrentId || sId === cleanSeasonId) return true;
     if (item.idMal && String(item.idMal).toLowerCase() === cleanCurrentId) return true;
     const itemNum = parseInt(sId.replace(/\D/g, ""), 10);
     if (numCurrentId > 0 && itemNum > 0 && itemNum === numCurrentId) return true;
-    if (item.matchingSeason && String(item.matchingSeason.id).toLowerCase() === cleanSeasonId) return true;
+    if (item.matchingSeason?.id && String(item.matchingSeason.id).toLowerCase() === cleanSeasonId) return true;
     return false;
   };
 

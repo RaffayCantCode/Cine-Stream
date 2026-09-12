@@ -373,10 +373,10 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
                           {ep.runtime}m
                         </span>
                       ) : null}
-                      {ep.vote_average ? (
+                      {ep.vote_average && !isNaN(Number(ep.vote_average)) ? (
                         <span className="text-[10px] text-amber-400 font-bold flex items-center gap-0.5">
                           <Star className="w-2.5 h-2.5 fill-current" />
-                          {ep.vote_average.toFixed(1)}
+                          {Number(ep.vote_average).toFixed(1)}
                         </span>
                       ) : null}
                     </div>
