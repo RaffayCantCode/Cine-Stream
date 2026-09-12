@@ -759,10 +759,20 @@ export async function getAnimeDetailsViaKitsu(
       seasonsList = seasonsList.map(s => {
         const sIsMovie = s.seasonLabel.startsWith("Movie") || isMovieFormat;
         const isCur = s.isCurrent || String(s.id) === String(effectiveId) || (anilistId && String(s.id) === String(anilistId));
-        const tid = sIsMovie ? null : (s.tmdbId || (isCur ? tmdbId : null));
+        const tid = sIsMovie ? null : (s.tmdbId || tmdbId || null);
         let sNum = sIsMovie ? null : (s.tmdbSeasonNumber ?? (isCur ? tmdbSeasonNumber : null));
         const off = sIsMovie ? 0 : (s.episodeOffset || (isCur ? episodeOffset : 0));
-        if (!sIsMovie && sNum === null && isCur) sNum = 1;
+        if (!sIsMovie && sNum === null) {
+          const parsed = parseSeasonNumberFromTitle(s.name);
+          if (parsed) {
+            sNum = parsed;
+          } else if (s.seasonLabel) {
+            const parsedLabel = parseSeasonNumberFromTitle(s.seasonLabel);
+            if (parsedLabel) sNum = parsedLabel;
+          } else if (isCur) {
+            sNum = 1;
+          }
+        }
         return {
           ...s,
           tmdbId: tid,
@@ -936,7 +946,14 @@ export async function getAnimeDetailsViaKitsu(
     });
   }
 
-  const tmdbSeasonMap = tmdbId && tmdbSeasonNumber != null && !isMovieFormat ? { [effectiveId]: tmdbSeasonNumber } : undefined;
+  const tmdbSeasonMap: Record<string, number> = {};
+  if (tmdbId && !isMovieFormat) {
+    for (const s of seasonsList) {
+      if (s.tmdbSeasonNumber != null) {
+        tmdbSeasonMap[s.id] = s.tmdbSeasonNumber;
+      }
+    }
+  }
 
   return {
     anime: animeItem,

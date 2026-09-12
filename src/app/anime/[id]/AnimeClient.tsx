@@ -66,6 +66,7 @@ interface Episode {
   seasonId?: string;
   seasonName?: string;
   seasonMalId?: number | null;
+  isPlaceholder?: boolean;
 }
 
 interface FranchiseNode {
@@ -234,18 +235,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if (episodesLoading) return [];
 
     const target = String(currentSeasonId || id || "").trim();
+    const clean = target.replace(/\D/g, "");
+
     // 1. Try direct match
     const direct = episodes.filter(e => String(e.seasonId) === target);
     if (direct.length) return direct.sort((a, b) => a.episodeNum - b.episodeNum);
 
-    // 2. Numeric match fallback
-    const clean = target.replace(/\D/g, "");
-    if (clean) {
-      const numeric = episodes.filter(e => String(e.seasonId || "").replace(/\D/g, "") === clean);
-      if (numeric.length) return numeric.sort((a, b) => a.episodeNum - b.episodeNum);
-    }
-
-    // 3. Season object lookup fallback
+    // 2. Season object lookup fallback
     const activeSeason = seasons.find(s =>
       String(s.id) === target ||
       (clean && String(s.id).replace(/\D/g, "") === clean) ||
@@ -255,24 +251,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if (activeSeason) {
       const byId = episodes.filter(e =>
         String(e.seasonId) === String(activeSeason.id) ||
-        (activeSeason.idMal && String(e.seasonId) === String(activeSeason.idMal)) ||
-        (clean && String(e.seasonId).replace(/\D/g, "") === String(activeSeason.id).replace(/\D/g, ""))
+        (activeSeason.idMal && String(e.seasonId) === String(activeSeason.idMal))
       );
       if (byId.length) return byId.sort((a, b) => a.episodeNum - b.episodeNum);
     }
 
-    // 4. Anime ID or openedSeasonId match fallback (only when target matches root anime or openedSeasonId)
-    if (anime?.id && String(target) === String(anime.id)) {
-      const byAnimeId = episodes.filter(e => String(e.seasonId) === String(anime.id));
-      if (byAnimeId.length) return byAnimeId.sort((a, b) => a.episodeNum - b.episodeNum);
-    }
-    if ((anime as any)?.openedSeasonId && String(target) === String((anime as any).openedSeasonId)) {
-      const byOpened = episodes.filter(e => String(e.seasonId) === String((anime as any).openedSeasonId));
-      if (byOpened.length) return byOpened.sort((a, b) => a.episodeNum - b.episodeNum);
+    // 3. Numeric match fallback only if clean target is active season
+    if (clean && activeSeason && String(activeSeason.id).replace(/\D/g, "") === clean) {
+      const numeric = episodes.filter(e => String(e.seasonId || "").replace(/\D/g, "") === clean);
+      if (numeric.length) return numeric.sort((a, b) => a.episodeNum - b.episodeNum);
     }
 
     return [];
-  }, [episodes, currentSeasonId, id, seasons, anime, episodesLoading]);
+  }, [episodes, currentSeasonId, id, seasons, episodesLoading]);
 
 
   // Deduplicate
@@ -329,7 +320,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         const cached = sessionStorage.getItem(EP_KEY);
         if (cached) {
           const p = JSON.parse(cached);
-          if (p?.episodes?.length && p._cachedAt) {
+          const hasRealData = p?.episodes?.some((e: any) => !e.isPlaceholder && (e.title !== `Episode ${e.episodeNum}` || e.thumbnail));
+          if (p?.episodes?.length && p._cachedAt && hasRealData) {
             const age = Date.now() - p._cachedAt;
             const maxAge = (p.status || "").toUpperCase().includes("RELEASING") ? 2 * 60 * 1000 : 5 * 60 * 1000;
             if (age < maxAge) {
@@ -349,12 +341,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       } catch {}
     }
     try {
-      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId));
-      const sName = matchingSeason?.name || anime?.name || "";
-      const sTot = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 0;
-      const tmdbQ = tmdbId != null ? `&tmdbId=${tmdbId}` : "";
-      const tsQ = tmdbSeason != null ? `&tmdbSeason=${tmdbSeason}` : "";
-      const offQ = episodeOffset != null ? `&episodeOffset=${episodeOffset}` : "";
+      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || franchiseNodes?.find(n => String(n.id) === String(seasonId));
+      const sName = (matchingSeason as any)?.name || (matchingSeason as any)?.title || anime?.name || "";
+      const sTot = (matchingSeason as any)?.totalEpisodes || (matchingSeason as any)?.episodes || anime?.totalEpisodes || 0;
+      const effectiveTmdbId = tmdbId ?? (matchingSeason as any)?.tmdbId ?? anime?.tmdbId ?? null;
+      const effectiveTmdbSeason = tmdbSeason ?? (matchingSeason as any)?.tmdbSeasonNumber ?? null;
+      const effectiveOffset = episodeOffset ?? (matchingSeason as any)?.episodeOffset ?? 0;
+      const tmdbQ = effectiveTmdbId != null ? `&tmdbId=${effectiveTmdbId}` : "";
+      const tsQ = effectiveTmdbSeason != null ? `&tmdbSeason=${effectiveTmdbSeason}` : "";
+      const offQ = effectiveOffset != null ? `&episodeOffset=${effectiveOffset}` : "";
       const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
       const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
       const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean } }>(
@@ -388,9 +383,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         setSeasonOverview(data.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
         setEpisodesLoading(false);
-        try {
-          sessionStorage.setItem(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
-        } catch {}
+        const hasRealData = sorted.some(ep => !ep.isPlaceholder && (ep.title !== `Episode ${ep.episodeNum}` || ep.thumbnail));
+        if (hasRealData) {
+          try {
+            sessionStorage.setItem(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
+          } catch {}
+        }
         return;
       }
     } catch (err) {

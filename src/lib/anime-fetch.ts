@@ -389,13 +389,23 @@ export function parseSeasonNumberFromTitle(title: string): number | null {
   const lower = (title || "").toLowerCase();
   const m = lower.match(/season\s*([0-9]+)/);
   if (m) return parseInt(m[1], 10);
+  const ordMatch = lower.match(/([0-9]+)(?:st|nd|rd|th)\s+season/);
+  if (ordMatch) return parseInt(ordMatch[1], 10);
   const ordinals: Record<string, number> = {
-    "second": 2, "2nd": 2, "third": 3, "3rd": 3,
-    "fourth": 4, "4th": 4, "fifth": 5, "5th": 5,
+    "first": 1, "1st": 1,
+    "second": 2, "2nd": 2,
+    "third": 3, "3rd": 3,
+    "fourth": 4, "4th": 4,
+    "fifth": 5, "5th": 5,
+    "sixth": 6, "6th": 6,
+    "seventh": 7, "7th": 7,
+    "eighth": 8, "8th": 8,
     "final season": 4,
   };
-  for (const [k, v] of Object.entries(ordinals)) if (lower.includes(k)) return v;
-  const endNum = lower.match(/\s+([2-9])$/);
+  for (const [k, v] of Object.entries(ordinals)) {
+    if (new RegExp(`\\b${k}\\b`, "i").test(lower)) return v;
+  }
+  const endNum = lower.match(/(?:\s+|:)([2-9])$/);
   if (endNum) return parseInt(endNum[1], 10);
   return null;
 }
@@ -880,7 +890,7 @@ export async function getAnimeDetails(
   const mappedSeasons: SeasonInfo[] = baseSeasons.map(s => {
     const sIsMovie = s.seasonLabel.startsWith("Movie") || isMovie;
     const isCurrentSeason = String(s.id) === String(numId);
-    const tid = sIsMovie ? null : (s.tmdbId || (isCurrentSeason ? tmdbId : null));
+    const tid = sIsMovie ? null : (s.tmdbId || tmdbId || null);
     let sNum: number | null = sIsMovie ? null : (s.tmdbSeasonNumber ?? null);
     let offset = sIsMovie ? 0 : (s.episodeOffset || 0);
 
@@ -889,11 +899,13 @@ export async function getAnimeDetails(
       if (ep1.seasonNumber !== undefined && sNum === null) sNum = ep1.seasonNumber;
       if (ep1.episodeNumber !== undefined && offset === 0) offset = Math.max(ep1.episodeNumber - 1, 0);
     }
-    // Only parse season number from actual anime title (e.g. "Attack on Titan Season 2"), NEVER from synthetic seasonLabel (like "Season 2" for Shippuden)
     if (!sIsMovie && sNum === null) {
       const parsed = parseSeasonNumberFromTitle(s.name);
       if (parsed) {
         sNum = parsed;
+      } else if (s.seasonLabel) {
+        const parsedLabel = parseSeasonNumberFromTitle(s.seasonLabel);
+        if (parsedLabel) sNum = parsedLabel;
       } else if (isCurrentSeason) {
         sNum = 1;
       } else {
@@ -1054,7 +1066,16 @@ export async function resolveTmdbMappingFromAniZip(anilistId: string): Promise<{
     const tmdbId = parseInt(String(az?.mappings?.themoviedb_id || ""), 10);
     if (isNaN(tmdbId)) return null;
     const ep1 = az?.episodes?.["1"];
-    return { tmdbId, tmdbSeason: ep1?.seasonNumber ?? 1, episodeOffset: ep1?.episodeNumber ? Math.max(ep1.episodeNumber - 1, 0) : 0 };
+    let seasonNum = ep1?.seasonNumber;
+    if (seasonNum === undefined && az?.episodes) {
+      for (const k of Object.keys(az.episodes)) {
+        if (az.episodes[k]?.seasonNumber !== undefined) {
+          seasonNum = az.episodes[k].seasonNumber;
+          break;
+        }
+      }
+    }
+    return { tmdbId, tmdbSeason: seasonNum ?? 1, episodeOffset: ep1?.episodeNumber ? Math.max(ep1.episodeNumber - 1, 0) : 0 };
   } catch { return null; }
 }
 
