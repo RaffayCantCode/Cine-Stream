@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
+import { shouldAttemptPrimary, recordPrimarySuccess, recordPrimaryFailure } from "@/lib/anime-health";
 
 const ANILIST_API = "https://graphql.anilist.co";
 
@@ -224,7 +225,7 @@ export async function GET(
     };
 
     // ── STEP 1: AniList Community Recommendations (voted by fans) ───────────
-    if (anilistId && !isNaN(anilistId)) {
+    if (anilistId && !isNaN(anilistId) && shouldAttemptPrimary()) {
       try {
         const alRes = await fetch(ANILIST_API, {
           method: "POST",
@@ -237,6 +238,7 @@ export async function GET(
           signal: AbortSignal.timeout(1800),
         });
         if (alRes.ok) {
+          recordPrimarySuccess();
           const data = await alRes.json();
           const nodes = data?.data?.Media?.recommendations?.nodes || [];
           for (const node of nodes) {
@@ -248,152 +250,159 @@ export async function GET(
               }
             }
           }
+        } else {
+          recordPrimaryFailure();
         }
-      } catch {}
+      } catch {
+        recordPrimaryFailure();
+      }
     }
 
-    // ── STEP 2: Kitsu Specific Subcategories & Semantic High-Affinity Tags ───
+    // ── STEP 2 & 3: Run Kitsu and TMDB in Parallel if more recommendations needed ───
     let specificCategories: string[] = [];
-    const searchTarget = kitsuId ? `filter[id]=${kitsuId}` : `filter[text]=${encodeURIComponent(currentTitle || id)}`;
-
-    try {
-      const kCatRes = await fetch(`https://kitsu.io/api/edge/anime?${searchTarget}&include=categories&page[limit]=1`, {
-        headers: { Accept: "application/vnd.api+json", "User-Agent": "CineStream/1.0" },
-        signal: AbortSignal.timeout(2000),
-      });
-      if (kCatRes.ok) {
-        const kCatData = await kCatRes.json();
-        const inc = kCatData.included || [];
-        const cats = inc
-          .filter((x: any) => x.type === "categories")
-          .map((x: any) => x.attributes?.slug || x.attributes?.title?.toLowerCase().replace(/\s+/g, "-"))
-          .filter(Boolean);
-        specificCategories = cats.filter((c: string) => !GENERIC_CATS.has(c));
-      }
-    } catch {}
-
     const targetSubtype = isMovieReq ? "movie" : "TV";
 
-    // Query Kitsu by top 2 high-affinity categories
-    if (specificCategories.length > 0 && candidates.length < 24) {
-      const primaryPair = specificCategories.slice(0, 2);
-      try {
-        const catQuery = `filter[categories]=${encodeURIComponent(primaryPair.join(","))}&filter[subtype]=${targetSubtype}&sort=-userCount&page[limit]=15&include=categories`;
-        const kRes = await fetch(`https://kitsu.io/api/edge/anime?${catQuery}`, {
-          headers: { Accept: "application/vnd.api+json", "User-Agent": "CineStream/1.0" },
-          signal: AbortSignal.timeout(2500),
-        });
-        if (kRes.ok) {
-          const kData = await kRes.json();
-          const categoriesMap = new Map<string, string>();
-          for (const inc of kData.included || []) {
-            if (inc.type === "categories" && inc.attributes?.title) {
-              categoriesMap.set(inc.id, inc.attributes.title);
-            }
-          }
-          for (const kItem of kData.data || []) {
-            const attr = kItem.attributes || {};
-            const titleEnglish = attr.titles?.en || null;
-            const titleRomaji = attr.canonicalTitle || attr.titles?.en_jp || "Anime";
-            const catIds = kItem.relationships?.categories?.data?.map((c: any) => c.id) || [];
-            const kGenres = catIds.map((cid: string) => categoriesMap.get(cid)).filter(Boolean) as string[];
-
-            tryAddCandidate({
-              id: `kitsu-${kItem.id}`,
-              name: titleEnglish || titleRomaji,
-              jname: attr.titles?.ja_jp || null,
-              poster: attr.posterImage?.large || attr.posterImage?.original || "",
-              bannerImage: attr.coverImage?.large || attr.coverImage?.original || null,
-              type: (attr.subtype || "TV").toUpperCase(),
-              episodes: { sub: attr.episodeCount || null, dub: null },
-              rating: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
-              description: attr.synopsis?.replace(/<[^>]*>/g, "") || "",
-              genres: kGenres.length > 0 ? kGenres : fallbackGenres,
-              status: attr.status === "current" ? "RELEASING" : "FINISHED",
-              seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
-              format: (attr.subtype || "TV").toUpperCase(),
-            }, 20);
-          }
-        }
-      } catch {}
-    }
-
-    // ── STEP 3: TMDB Anime-Only Recommendations (Strictly Japanese Animation) ─
-    if (tmdbId && candidates.length < 24) {
-      try {
-        const endpoint = isMovieReq
-          ? `/movie/${tmdbId}/recommendations`
-          : `/tv/${tmdbId}/recommendations`;
-
-        const tmdbData = (await tmdbFetch(endpoint).catch(() => null)) as any;
-        if (tmdbData?.results && Array.isArray(tmdbData.results)) {
-          // STRICT FILTER: Japanese origin AND Animation genre (ID 16 in TMDB)
-          const animeResults = (tmdbData.results || []).filter((r: any) => {
-            const isJapanese = r.original_language === "ja" || (r.origin_country && r.origin_country.includes("JP"));
-            const isAnimation = r.genre_ids?.includes(16) || (r.genres && r.genres.some((g: any) => g.id === 16));
-            return isJapanese && isAnimation;
+    if (candidates.length < 16) {
+      const kitsuTask = (async () => {
+        const searchTarget = kitsuId ? `filter[id]=${kitsuId}` : `filter[text]=${encodeURIComponent(currentTitle || id)}`;
+        try {
+          const kCatRes = await fetch(`https://kitsu.io/api/edge/anime?${searchTarget}&include=categories&page[limit]=1`, {
+            headers: { Accept: "application/vnd.api+json", "User-Agent": "CineStream/1.0" },
+            signal: AbortSignal.timeout(1800),
           });
+          if (kCatRes.ok) {
+            const kCatData = await kCatRes.json();
+            const inc = kCatData.included || [];
+            const cats = inc
+              .filter((x: any) => x.type === "categories")
+              .map((x: any) => x.attributes?.slug || x.attributes?.title?.toLowerCase().replace(/\s+/g, "-"))
+              .filter(Boolean);
+            specificCategories = cats.filter((c: string) => !GENERIC_CATS.has(c));
+          }
+        } catch {}
 
-          const resolvedPromises = animeResults.slice(0, 10).map(async (r: any) => {
-            const itemTitle = r.name || r.title || r.original_name || r.original_title;
-            if (!itemTitle) return null;
-
-            let resolvedId: string | null = null;
-            try {
-              const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${r.id}`, {
-                signal: AbortSignal.timeout(1800),
-                headers: { "User-Agent": "CineStream/1.0" },
-              });
-              if (azRes.ok) {
-                const az = await azRes.json();
-                if (az?.mappings?.anilist_id) {
-                  resolvedId = String(az.mappings.anilist_id);
-                } else if (az?.mappings?.kitsu_id) {
-                  resolvedId = `kitsu-${az.mappings.kitsu_id}`;
+        if (specificCategories.length > 0 && candidates.length < 24) {
+          const primaryPair = specificCategories.slice(0, 2);
+          try {
+            const catQuery = `filter[categories]=${encodeURIComponent(primaryPair.join(","))}&filter[subtype]=${targetSubtype}&sort=-userCount&page[limit]=12&include=categories`;
+            const kRes = await fetch(`https://kitsu.io/api/edge/anime?${catQuery}`, {
+              headers: { Accept: "application/vnd.api+json", "User-Agent": "CineStream/1.0" },
+              signal: AbortSignal.timeout(2000),
+            });
+            if (kRes.ok) {
+              const kData = await kRes.json();
+              const categoriesMap = new Map<string, string>();
+              for (const inc of kData.included || []) {
+                if (inc.type === "categories" && inc.attributes?.title) {
+                  categoriesMap.set(inc.id, inc.attributes.title);
                 }
               }
-            } catch {}
+              for (const kItem of kData.data || []) {
+                const attr = kItem.attributes || {};
+                const titleEnglish = attr.titles?.en || null;
+                const titleRomaji = attr.canonicalTitle || attr.titles?.en_jp || "Anime";
+                const catIds = kItem.relationships?.categories?.data?.map((c: any) => c.id) || [];
+                const kGenres = catIds.map((cid: string) => categoriesMap.get(cid)).filter(Boolean) as string[];
 
-            if (!resolvedId) {
+                tryAddCandidate({
+                  id: `kitsu-${kItem.id}`,
+                  name: titleEnglish || titleRomaji,
+                  jname: attr.titles?.ja_jp || null,
+                  poster: attr.posterImage?.large || attr.posterImage?.original || "",
+                  bannerImage: attr.coverImage?.large || attr.coverImage?.original || null,
+                  type: (attr.subtype || "TV").toUpperCase(),
+                  episodes: { sub: attr.episodeCount || null, dub: null },
+                  rating: attr.averageRating ? String((parseFloat(attr.averageRating) / 10).toFixed(1)) : null,
+                  description: attr.synopsis?.replace(/<[^>]*>/g, "") || "",
+                  genres: kGenres.length > 0 ? kGenres : fallbackGenres,
+                  status: attr.status === "current" ? "RELEASING" : "FINISHED",
+                  seasonYear: attr.startDate ? new Date(attr.startDate).getFullYear() : null,
+                  format: (attr.subtype || "TV").toUpperCase(),
+                }, 20);
+              }
+            }
+          } catch {}
+        }
+      })();
+
+      const tmdbTask = (async () => {
+        if (!tmdbId || candidates.length >= 24) return;
+        try {
+          const endpoint = isMovieReq
+            ? `/movie/${tmdbId}/recommendations`
+            : `/tv/${tmdbId}/recommendations`;
+
+          const tmdbData = (await tmdbFetch(endpoint).catch(() => null)) as any;
+          if (tmdbData?.results && Array.isArray(tmdbData.results)) {
+            const animeResults = (tmdbData.results || []).filter((r: any) => {
+              const isJapanese = r.original_language === "ja" || (r.origin_country && r.origin_country.includes("JP"));
+              const isAnimation = r.genre_ids?.includes(16) || (r.genres && r.genres.some((g: any) => g.id === 16));
+              return isJapanese && isAnimation;
+            });
+
+            const resolvedPromises = animeResults.slice(0, 6).map(async (r: any) => {
+              const itemTitle = r.name || r.title || r.original_name || r.original_title;
+              if (!itemTitle) return null;
+
+              let resolvedId: string | null = null;
               try {
-                const kSearch = await fetch(`https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(itemTitle)}&filter[subtype]=${targetSubtype}&sort=-userCount&page[limit]=1`, {
-                  signal: AbortSignal.timeout(1800),
-                  headers: { Accept: "application/vnd.api+json", "User-Agent": "CineStream/1.0" },
+                const azRes = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${r.id}`, {
+                  signal: AbortSignal.timeout(1500),
+                  headers: { "User-Agent": "CineStream/1.0" },
                 });
-                if (kSearch.ok) {
-                  const kData = await kSearch.json();
-                  if (kData?.data?.[0]?.id) {
-                    resolvedId = `kitsu-${kData.data[0].id}`;
+                if (azRes.ok) {
+                  const az = await azRes.json();
+                  if (az?.mappings?.anilist_id) {
+                    resolvedId = String(az.mappings.anilist_id);
+                  } else if (az?.mappings?.kitsu_id) {
+                    resolvedId = `kitsu-${az.mappings.kitsu_id}`;
                   }
                 }
               } catch {}
+
+              if (!resolvedId) {
+                try {
+                  const kSearch = await fetch(`https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(itemTitle)}&filter[subtype]=${targetSubtype}&sort=-userCount&page[limit]=1`, {
+                    signal: AbortSignal.timeout(1500),
+                    headers: { Accept: "application/vnd.api+json", "User-Agent": "CineStream/1.0" },
+                  });
+                  if (kSearch.ok) {
+                    const kData = await kSearch.json();
+                    if (kData?.data?.[0]?.id) {
+                      resolvedId = `kitsu-${kData.data[0].id}`;
+                    }
+                  }
+                } catch {}
+              }
+
+              if (!resolvedId) return null;
+
+              return {
+                id: resolvedId,
+                name: itemTitle,
+                jname: r.original_name || r.original_title || null,
+                poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : "",
+                bannerImage: r.backdrop_path ? `https://image.tmdb.org/t/p/original${r.backdrop_path}` : null,
+                type: isMovieReq ? "MOVIE" : "TV",
+                episodes: { sub: null, dub: null },
+                rating: r.vote_average ? String(r.vote_average.toFixed(1)) : null,
+                description: r.overview || "",
+                genres: fallbackGenres,
+                status: "FINISHED",
+                seasonYear: (r.release_date || r.first_air_date) ? new Date(r.release_date || r.first_air_date).getFullYear() : null,
+                format: isMovieReq ? "MOVIE" : "TV",
+              };
+            });
+
+            const resolvedCandidates = (await Promise.all(resolvedPromises)).filter(Boolean);
+            for (const cand of resolvedCandidates) {
+              if (cand) tryAddCandidate(cand, 18);
             }
-
-            if (!resolvedId) return null;
-
-            return {
-              id: resolvedId,
-              name: itemTitle,
-              jname: r.original_name || r.original_title || null,
-              poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : "",
-              bannerImage: r.backdrop_path ? `https://image.tmdb.org/t/p/original${r.backdrop_path}` : null,
-              type: isMovieReq ? "MOVIE" : "TV",
-              episodes: { sub: null, dub: null },
-              rating: r.vote_average ? String(r.vote_average.toFixed(1)) : null,
-              description: r.overview || "",
-              genres: fallbackGenres,
-              status: "FINISHED",
-              seasonYear: (r.release_date || r.first_air_date) ? new Date(r.release_date || r.first_air_date).getFullYear() : null,
-              format: isMovieReq ? "MOVIE" : "TV",
-            };
-          });
-
-          const resolvedCandidates = (await Promise.all(resolvedPromises)).filter(Boolean);
-          for (const cand of resolvedCandidates) {
-            if (cand) tryAddCandidate(cand, 18);
           }
-        }
-      } catch {}
+        } catch {}
+      })();
+
+      await Promise.allSettled([kitsuTask, tmdbTask]);
     }
 
     // ── STEP 4: Secondary High-Affinity Category Fallback ────────────────────

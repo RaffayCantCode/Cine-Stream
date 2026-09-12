@@ -278,6 +278,17 @@ export function filterExcludeAnime<T extends { original_language?: string; genre
   return items.filter((item) => !isTmdbAnime(item));
 }
 
+/**
+ * Strips news broadcasts and news channels (TMDB genre 10763) from TV listings.
+ */
+export function filterExcludeNews<T extends { genre_ids?: number[] }>(
+  items: T[]
+): T[] {
+  return items.filter(
+    (item) => !Array.isArray(item.genre_ids) || !item.genre_ids.includes(10763)
+  );
+}
+
 export function filterReleasedSafeContent<T extends {
   id?: number;
   adult?: boolean;

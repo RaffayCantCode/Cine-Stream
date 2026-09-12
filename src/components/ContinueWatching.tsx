@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Play, X, Tv, Film } from "lucide-react";
+import { Play, X, Tv, Film, ExternalLink, Info } from "lucide-react";
 import useSWR, { mutate } from "swr";
 import useEmblaCarousel from "embla-carousel-react";
 import { useEffect, useState } from "react";
@@ -136,6 +136,17 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     }
   };
 
+  const handleOpenPage = (item: WatchHistoryItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (item.mediaType === "movie") {
+      router.push(`/movie/${item.mediaId}`);
+    } else if (item.mediaType === "anime") {
+      router.push(`/anime/${item.mediaId}`);
+    } else {
+      router.push(`/tv/${item.mediaId}`);
+    }
+  };
+
   return (
     <section className="w-full px-3 md:px-6 lg:px-8 xl:px-10 pt-4 pb-2 animate-fade-in">
       <div className="w-full">
@@ -190,10 +201,31 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                       {item.mediaType === "movie" ? "Movie" : item.mediaType === "tv" ? "TV" : "JP Sub Anime"}
                     </div>
 
-                    <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                      <div className="w-11 h-11 rounded-full bg-black/65 border border-white/30 text-white flex items-center justify-center translate-y-2 group-hover:translate-y-0 transition-all duration-300 group-hover:scale-110 shadow-[0_10px_25px_rgba(0,0,0,0.8)] group-hover:bg-white group-hover:text-black group-hover:border-white">
-                        <Play className="w-4 h-4 fill-current ml-0.5 transition-colors" />
-                      </div>
+                    <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-2 p-2 z-20">
+                      {/* Resume Button: opens in player */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePlay(item);
+                        }}
+                        className="w-full max-w-[108px] flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white hover:bg-white/90 text-black text-[11px] font-extrabold shadow-lg transition-transform duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer"
+                        title="Resume playback"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                        <span>Resume</span>
+                      </button>
+
+                      {/* Open Page Button: opens details page */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenPage(item, e)}
+                        className="w-full max-w-[108px] flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/20 text-[10px] font-bold shadow-md transition-transform duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer"
+                        title="Open details page"
+                      >
+                        <Info className="w-3 h-3 text-zinc-300" />
+                        <span>Open Page</span>
+                      </button>
                     </div>
 
                     {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (

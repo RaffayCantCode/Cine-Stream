@@ -1,4 +1,4 @@
-﻿import { drizzle, DrizzleD1Database } from "drizzle-orm/d1";
+import { drizzle, DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
 export type AppDatabase = DrizzleD1Database<typeof schema>;
@@ -38,8 +38,16 @@ export function getDb(): AppDatabase {
 function createBuildProxy(): AppDatabase {
   const handler: ProxyHandler<any> = {
     get: (_target: any, prop: string) => {
-      if (prop === "query" || prop === "select" || prop === "insert" || prop === "update" || prop === "delete") {
+      if (prop === "select" || prop === "insert" || prop === "update" || prop === "delete") {
         return () => { throw new Error("Database not available - Cloudflare D1 DB binding not configured"); };
+      }
+      if (prop === "query") {
+        return new Proxy({}, {
+          get: () => ({
+            findFirst: async () => null,
+            findMany: async () => [],
+          })
+        });
       }
       return createBuildProxy();
     },

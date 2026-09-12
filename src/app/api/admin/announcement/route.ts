@@ -5,6 +5,43 @@ import { verifyAdminSession } from "@/lib/auth/admin";
 import { siteAnnouncements } from "@/lib/db/schema";
 import { supabase } from "@/lib/supabase";
 
+// GET - Retrieve real-time announcement directly from DB for Admin Panel (bypasses public cache)
+export async function GET() {
+  try {
+    const authResult = await verifyAdminSession();
+    if (authResult.error || !authResult.user || !authResult.db) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
+    }
+
+    const db = authResult.db;
+    const announcement = await db.query.siteAnnouncements.findFirst({
+      where: (table, { eq }) => eq(table.id, "current"),
+    });
+
+    return Response.json(
+      {
+        success: true,
+        data: {
+          message: announcement?.message?.trim() ? announcement.message.trim() : null,
+          updatedAt: announcement?.updatedAt ? announcement.updatedAt.toISOString() : null,
+          updatedBy: announcement?.updatedBy || null,
+        },
+      },
+      {
+        headers: {
+          "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("[Admin Announcement] Error fetching announcement:", error);
+    return Response.json(
+      { error: "Failed to fetch announcement" },
+      { status: 500 }
+    );
+  }
+}
+
 // POST - Save or update announcement
 export async function POST(request: Request) {
   try {

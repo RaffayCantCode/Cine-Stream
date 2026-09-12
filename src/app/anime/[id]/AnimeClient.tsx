@@ -349,16 +349,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       } catch {}
     }
-
     try {
+      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId));
+      const sName = matchingSeason?.name || anime?.name || "";
+      const sTot = matchingSeason?.totalEpisodes || anime?.totalEpisodes || 0;
       const tmdbQ = tmdbId != null ? `&tmdbId=${tmdbId}` : "";
       const tsQ = tmdbSeason != null ? `&tmdbSeason=${tmdbSeason}` : "";
       const offQ = episodeOffset != null ? `&episodeOffset=${episodeOffset}` : "";
+      const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
+      const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
       const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}&v=${ANIME_API_VERSION}`
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`
       );
-
-      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId));
       const isUpcoming = Boolean((anime as any)?.isUpcoming || (matchingSeason as any)?.isUpcoming || data.data?.isUpcoming);
       const isUnavailable = Boolean((anime as any)?.isUnavailable || (matchingSeason as any)?.isUnavailable || data.data?.isUnavailable);
 

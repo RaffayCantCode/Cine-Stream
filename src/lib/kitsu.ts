@@ -756,6 +756,20 @@ export async function getAnimeDetailsViaKitsu(
     if (franchiseNodes.length > 1) {
       cacheFranchiseNodes(franchiseNodes);
       seasonsList = buildSeasonList(franchiseNodes, anilistId ? parseInt(anilistId, 10) : parseInt(kitsuId, 10));
+      seasonsList = seasonsList.map(s => {
+        const sIsMovie = s.seasonLabel.startsWith("Movie") || isMovieFormat;
+        const isCur = s.isCurrent || String(s.id) === String(effectiveId) || (anilistId && String(s.id) === String(anilistId));
+        const tid = sIsMovie ? null : (s.tmdbId || (isCur ? tmdbId : null));
+        let sNum = sIsMovie ? null : (s.tmdbSeasonNumber ?? (isCur ? tmdbSeasonNumber : null));
+        const off = sIsMovie ? 0 : (s.episodeOffset || (isCur ? episodeOffset : 0));
+        if (!sIsMovie && sNum === null && isCur) sNum = 1;
+        return {
+          ...s,
+          tmdbId: tid,
+          tmdbSeasonNumber: sNum,
+          episodeOffset: off,
+        };
+      });
     } else {
       const isMovie = subtype === "MOVIE";
       const isSpecialFormat = ["MOVIE", "OVA", "SPECIAL"].includes(subtype);
@@ -787,13 +801,19 @@ export async function getAnimeDetailsViaKitsu(
   const activeSeason = seasonsList.find(s => s.isCurrent) || seasonsList[0];
   const isMovieActive = subtype === "MOVIE" || activeSeason?.seasonLabel?.startsWith("Movie");
   const isSpecialFormat = ["Movie", "OVA", "Special"].some(t => activeSeason?.seasonLabel?.startsWith(t)) || isMovieActive;
-  const rawTotal = (activeSeason?.totalEpisodes && activeSeason.totalEpisodes > 0)
+  const rawTotal = (activeSeason?.totalEpisodes && activeSeason.totalEpisodes > 1)
     ? activeSeason.totalEpisodes
     : (knownAniZipTotal || attr.episodeCount || (status === "RELEASING" ? 1500 : 12));
   const totalEps = isMovieActive ? 1 : (isSpecialFormat ? Math.max(rawTotal, 1) : Math.max(rawTotal, 1));
 
   if (activeSeason) {
     activeSeason.totalEpisodes = totalEps;
+  }
+
+  const activeNode = franchiseNodes.find(n => String(n.id) === String(effectiveId) || (anilistId && String(n.id) === String(anilistId)));
+  if (activeNode && (!activeNode.episodes || activeNode.episodes <= 1) && !isMovieActive) {
+    activeNode.episodes = totalEps;
+    activeNode.totalEpisodes = totalEps;
   }
 
   // Step 6: Generate or fetch episodes

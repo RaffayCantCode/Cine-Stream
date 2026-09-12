@@ -41,8 +41,16 @@ export async function GET(request: NextRequest) {
   params.without_keywords = "210024";
   params.without_original_language = "ja";
 
+  // Exclude news channels / broadcasts (TMDB genre 10763)
+  params.without_genres = "10763";
+
   try {
-    const data = await tmdbFetch("/discover/tv", params, { noCache: false });
+    const data = await tmdbFetch("/discover/tv", params, { noCache: false }) as any;
+    if (data?.results && Array.isArray(data.results)) {
+      data.results = data.results.filter(
+        (item: any) => !Array.isArray(item.genre_ids) || !item.genre_ids.includes(10763)
+      );
+    }
     return Response.json(data, { headers: cacheHeaders(3600) });
   } catch (error) {
     return Response.json({ error: "Failed to discover TV shows" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });

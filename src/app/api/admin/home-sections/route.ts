@@ -5,6 +5,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/auth/admin";
 import { customHomeSections } from "@/lib/db/schema";
 import { asc, eq } from "drizzle-orm";
+import { isTmdbAnime } from "@/lib/utils";
+
+function sanitizeHomeSectionItems(items: any[]): any[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((it) => {
+    if (!it || typeof it !== "object") return it;
+    const isAnime =
+      it.media_type === "anime" ||
+      it.isTmdbAnime ||
+      Boolean(it.anilistId) ||
+      String(it.targetUrl || it.target_url || "").includes("/anime/") ||
+      isTmdbAnime(it);
+    if (isAnime) {
+      const animeId = it.anilistId || (String(it.id).startsWith("kitsu-") || String(it.id).startsWith("tmdb-") ? it.id : (String(it.targetUrl || it.target_url || "").startsWith("/tv/") ? `tmdb-${it.id}` : it.id));
+      return {
+        ...it,
+        id: String(animeId),
+        anilistId: String(animeId),
+        media_type: "anime",
+        isTmdbAnime: true,
+        targetUrl: `/anime/${animeId}`,
+        target_url: `/anime/${animeId}`,
+      };
+    }
+    return it;
+  });
+}
 
 export async function GET() {
   const auth = await verifyAdminSession();
@@ -18,9 +45,14 @@ export async function GET() {
       orderBy: [asc(customHomeSections.orderIndex), asc(customHomeSections.createdAt)],
     });
 
+    const mapped = sections.map((s) => ({
+      ...s,
+      items: sanitizeHomeSectionItems(s.items as any[]),
+    }));
+
     return NextResponse.json({
       success: true,
-      sections,
+      sections: mapped,
     });
   } catch (error) {
     console.error("[Admin Home Sections API] GET Error:", error);
@@ -49,7 +81,7 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         subtitle: subtitle && typeof subtitle === "string" ? subtitle.trim() : null,
         icon: icon && typeof icon === "string" ? icon.trim() : null,
-        items: Array.isArray(items) ? items : [],
+        items: sanitizeHomeSectionItems(items),
         enabled: Boolean(enabled),
         orderIndex: Number(orderIndex) || 0,
       })
@@ -108,7 +140,7 @@ export async function PUT(request: NextRequest) {
     const finalSubtitle = subtitle !== undefined ? subtitle : description;
     if (finalSubtitle !== undefined) updates.subtitle = finalSubtitle ? String(finalSubtitle).trim() : null;
     if (icon !== undefined) updates.icon = icon ? String(icon).trim() : null;
-    if (Array.isArray(items)) updates.items = items;
+    if (Array.isArray(items)) updates.items = sanitizeHomeSectionItems(items);
     if (enabled !== undefined) updates.enabled = Boolean(enabled);
     if (orderIndex !== undefined) updates.orderIndex = Number(orderIndex);
 

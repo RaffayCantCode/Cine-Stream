@@ -6,6 +6,7 @@ import { getDb } from "@/lib/db";
 import { customHomeSections } from "@/lib/db/schema";
 import { asc, eq } from "drizzle-orm";
 import { getCachedHomeSections, setCachedHomeSections } from "@/lib/server-cache";
+import { isTmdbAnime } from "@/lib/utils";
 
 export async function GET() {
   const cached = getCachedHomeSections();
@@ -38,12 +39,20 @@ export async function GET() {
       subtitle: s.subtitle,
       icon: s.icon,
       items: (Array.isArray(s.items) ? s.items : []).map((it: any) => {
-        const isAnime = it.media_type === "anime" || it.isTmdbAnime || Boolean(it.anilistId) || String(it.targetUrl || it.target_url || "").includes("/anime/");
+        const isAnime =
+          it.media_type === "anime" ||
+          it.isTmdbAnime ||
+          Boolean(it.anilistId) ||
+          String(it.targetUrl || it.target_url || "").includes("/anime/") ||
+          isTmdbAnime(it);
         if (isAnime) {
-          const animeId = it.anilistId || it.id;
+          const animeId = it.anilistId || (String(it.id).startsWith("kitsu-") || String(it.id).startsWith("tmdb-") ? it.id : (String(it.targetUrl || it.target_url || "").startsWith("/tv/") ? `tmdb-${it.id}` : it.id));
           return {
             ...it,
+            id: String(animeId),
+            anilistId: String(animeId),
             media_type: "anime",
+            isTmdbAnime: true,
             targetUrl: `/anime/${animeId}`,
             target_url: `/anime/${animeId}`,
           };

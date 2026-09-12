@@ -51,12 +51,13 @@ import {
   Filter,
   Tag,
   Globe,
+  Info,
 } from "lucide-react";
 import { useAnnouncement } from "@/hooks/useAnnouncement";
 import { useTheme } from "@/context/ThemeContext";
 import { harmonizeAccentToCineStreamTheme, ArchetypeStyle } from "@/lib/themes";
 import { SOURCE_TAGS, SOURCE_TAG_LABELS, clearSourceConfigCache, setSourceConfigCache } from "@/lib/streaming-config";
-import { clearAllClientCaches } from "@/lib/utils";
+import { clearAllClientCaches, isTmdbAnime } from "@/lib/utils";
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -85,6 +86,8 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   const { message: currentAnnouncement, updatedAt: annUpdatedAt, saveAnnouncement, clearAnnouncement } = useAnnouncement();
   const [annInputText, setAnnInputText] = useState("");
   const [annSaving, setAnnSaving] = useState(false);
+  const [adminAnnouncement, setAdminAnnouncement] = useState<{ message: string | null; updatedAt: string | null } | null>(null);
+  const [annLoading, setAnnLoading] = useState(false);
 
   // ── Dashboard Stats State ──
   const [stats, setStats] = useState<any>(null);
@@ -207,12 +210,42 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
     }
   };
 
-  // Sync announcement on open
+  // Fetch real-time announcement directly from database for Admin Panel (bypasses public edge cache)
+  const loadAdminAnnouncement = useCallback(async () => {
+    setAnnLoading(true);
+    try {
+      const res = await fetch("/api/admin/announcement", {
+        headers: { "Cache-Control": "no-cache" },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setAdminAnnouncement({
+            message: json.data.message || null,
+            updatedAt: json.data.updatedAt || null,
+          });
+          setAnnInputText(json.data.message || "");
+        }
+      }
+    } catch (err) {
+      console.warn("[AdminPanelModal] Failed to load real-time announcement:", err);
+    } finally {
+      setAnnLoading(false);
+    }
+  }, []);
+
+  // Sync announcement on open and when switching to announcements tab
   useEffect(() => {
     if (isOpen) {
-      setAnnInputText(currentAnnouncement || "");
+      loadAdminAnnouncement();
     }
-  }, [isOpen, currentAnnouncement]);
+  }, [isOpen, loadAdminAnnouncement]);
+
+  useEffect(() => {
+    if (isOpen && activeTab === "announcements") {
+      loadAdminAnnouncement();
+    }
+  }, [isOpen, activeTab, loadAdminAnnouncement]);
 
   // Load Dashboard Stats
   const loadStats = useCallback(async () => {
@@ -801,100 +834,128 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
   // ─────────────────────────────────────────────────────────────────────────────
   // TAB 2: ANNOUNCEMENTS
   // ─────────────────────────────────────────────────────────────────────────────
-  const renderAnnouncementsTab = () => (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
-        <div className="flex items-center gap-2.5">
-          <div className={`w-2.5 h-2.5 rounded-full ${currentAnnouncement ? "bg-emerald-400" : "bg-zinc-600"}`} />
-          <div>
-            <p className="text-xs sm:text-sm font-semibold text-white">
-              Status: {currentAnnouncement ? <span className="text-emerald-400">Active on Hero</span> : <span className="text-zinc-400">No Active Announcement</span>}
-            </p>
-            {annUpdatedAt && (
-              <p className="text-[10px] text-zinc-500">
-                Last updated: {new Date(annUpdatedAt).toLocaleString()}
+  const renderAnnouncementsTab = () => {
+    const effectiveAnnouncement = adminAnnouncement !== null ? adminAnnouncement.message : currentAnnouncement;
+    const effectiveUpdatedAt = adminAnnouncement !== null ? adminAnnouncement.updatedAt : annUpdatedAt;
+
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-2.5 h-2.5 rounded-full ${effectiveAnnouncement ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
+            <div>
+              <p className="text-xs sm:text-sm font-semibold text-white">
+                Status: {effectiveAnnouncement ? (
+                  <span className="text-emerald-400">Active in Database (Hero Announcement)</span>
+                ) : (
+                  <span className="text-zinc-400">No Active Announcement</span>
+                )}
               </p>
-            )}
+              {effectiveUpdatedAt && (
+                <p className="text-[10px] text-zinc-500">
+                  Last updated in DB: {new Date(effectiveUpdatedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {effectiveAnnouncement && (
+            <button
+              type="button"
+              onClick={async () => {
+                setAnnSaving(true);
+                const res = await clearAnnouncement();
+                setAnnSaving(false);
+                if (res.success) {
+                  setAnnInputText("");
+                  setAdminAnnouncement({
+                    message: null,
+                    updatedAt: new Date().toISOString(),
+                  });
+                  showToast("success", "Cleared from database! (~1h public cache).");
+                } else {
+                  showToast("error", res.error || "Failed to clear.");
+                }
+              }}
+              disabled={annSaving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 rounded-lg border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Clear Announcement</span>
+            </button>
+          )}
+        </div>
+
+        {/* Real-time DB vs Public Cache Notice */}
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs">
+          <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <p className="font-semibold text-sky-200">Real-Time Database Sync & Public Cache</p>
+            <p className="text-[11px] leading-relaxed text-sky-300/80">
+              This panel reflects the saved database state in real time. Saving or clearing updates the database immediately, while public visitors receive changes via the standard edge cache (~1 hour).
+            </p>
           </div>
         </div>
 
-        {currentAnnouncement && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label htmlFor="ann-input" className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Announcement Text
+            </label>
+            <span className={`text-[11px] font-mono ${annInputText.length > 250 ? "text-amber-400" : "text-zinc-500"}`}>
+              {annInputText.length} / 300
+            </span>
+          </div>
+          <textarea
+            id="ann-input"
+            rows={3}
+            value={annInputText}
+            onChange={(e) => setAnnInputText(e.target.value)}
+            placeholder="e.g. Welcome to CineStream! New season anime & 4K movies are now streaming live."
+            maxLength={300}
+            className="w-full px-4 py-3 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs sm:text-sm focus:outline-none focus:border-primary transition-colors resize-none"
+          />
+        </div>
+
+        <div className="flex items-center justify-between pt-2">
+          <button
+            type="button"
+            onClick={() => setAnnInputText("Welcome to CineStream! New season anime & 4K movies are now streaming live.")}
+            className="text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+          >
+            Use Template
+          </button>
+
           <button
             type="button"
             onClick={async () => {
+              if (!annInputText.trim()) {
+                showToast("error", "Please enter an announcement message.");
+                return;
+              }
               setAnnSaving(true);
-              const res = await clearAnnouncement();
+              const res = await saveAnnouncement(annInputText.trim());
               setAnnSaving(false);
               if (res.success) {
-                setAnnInputText("");
-                showToast("success", "Announcement cleared.");
+                setAdminAnnouncement({
+                  message: annInputText.trim(),
+                  updatedAt: new Date().toISOString(),
+                });
+                showToast("success", "Saved to database! Active in DB (~1h public cache).");
               } else {
-                showToast("error", res.error || "Failed to clear.");
+                showToast("error", res.error || "Failed to save.");
               }
             }}
             disabled={annSaving}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 rounded-lg border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow transition-colors cursor-pointer disabled:opacity-50"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear Announcement</span>
+            {annSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>Publish to Database</span>
           </button>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label htmlFor="ann-input" className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-            Announcement Text
-          </label>
-          <span className={`text-[11px] font-mono ${annInputText.length > 250 ? "text-amber-400" : "text-zinc-500"}`}>
-            {annInputText.length} / 300
-          </span>
         </div>
-        <textarea
-          id="ann-input"
-          rows={3}
-          value={annInputText}
-          onChange={(e) => setAnnInputText(e.target.value)}
-          placeholder="e.g. Welcome to CineStream! New season anime & 4K movies are now streaming live."
-          maxLength={300}
-          className="w-full px-4 py-3 rounded-xl bg-black/50 border border-zinc-800 text-white text-xs sm:text-sm focus:outline-none focus:border-primary transition-colors resize-none"
-        />
       </div>
-
-      <div className="flex items-center justify-between pt-2">
-        <button
-          type="button"
-          onClick={() => setAnnInputText("Welcome to CineStream! New season anime & 4K movies are now streaming live.")}
-          className="text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
-        >
-          Use Template
-        </button>
-
-        <button
-          type="button"
-          onClick={async () => {
-            if (!annInputText.trim()) {
-              showToast("error", "Please enter an announcement message.");
-              return;
-            }
-            setAnnSaving(true);
-            const res = await saveAnnouncement(annInputText.trim());
-            setAnnSaving(false);
-            if (res.success) {
-              showToast("success", "Announcement published live!");
-            } else {
-              showToast("error", res.error || "Failed to save.");
-            }
-          }}
-          disabled={annSaving}
-          className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow transition-colors cursor-pointer disabled:opacity-50"
-        >
-          {annSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          <span>Publish Live</span>
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // TAB 3: CUSTOM HOMEPAGE SECTIONS
@@ -1214,7 +1275,13 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 {pickerResults.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 rounded-xl bg-black/50 border border-zinc-800/80 custom-scrollbar">
                     {pickerResults.map((item) => {
-                      const isItemAnime = item.media_type === "anime" || item.isTmdbAnime || Boolean(item.anilistId);
+                      const isItemAnime =
+                        item.media_type === "anime" ||
+                        item.isTmdbAnime ||
+                        Boolean(item.anilistId) ||
+                        String(item.targetUrl || item.target_url || "").includes("/anime/") ||
+                        pickerMediaType === "anime" ||
+                        isTmdbAnime(item);
                       const cleanType = isItemAnime ? "anime" : (item.media_type || (item.first_air_date ? "tv" : "movie"));
                       return (
                         <div
@@ -1225,22 +1292,27 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                             {item.poster_path && <img src={item.poster_path} alt="" className="w-6 h-8 object-cover rounded shrink-0 bg-zinc-800" />}
                             <div className="min-w-0 flex flex-col">
                               <p className="text-[11px] font-semibold text-zinc-200 truncate">{item.title || item.name}</p>
-                              <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded w-fit ${
-                                cleanType === "anime"
-                                  ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                                  : cleanType === "tv"
-                                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                  : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                              }`}>
-                                {cleanType === "anime" ? "Anime" : cleanType === "tv" ? "TV" : "Movie"}
-                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded w-fit ${
+                                  cleanType === "anime"
+                                    ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                                    : cleanType === "tv"
+                                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                    : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                }`}>
+                                  {cleanType === "anime" ? "Anime Section" : cleanType === "tv" ? "TV" : "Movie"}
+                                </span>
+                                {cleanType === "anime" && (
+                                  <span className="text-[8px] text-purple-400/70 font-mono">/anime/...</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => {
                               const current = Array.isArray(editingSection.items) ? editingSection.items : [];
-                              const animeId = item.anilistId || item.id;
+                              const animeId = item.anilistId || (String(item.id).startsWith("kitsu-") || String(item.id).startsWith("tmdb-") ? item.id : (isItemAnime ? `tmdb-${item.id}` : item.id));
                               const cleanTargetUrl = cleanType === "anime"
                                 ? `/anime/${animeId}`
                                 : `/${cleanType}/${item.id}`;
@@ -1249,11 +1321,12 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                                 id: cleanType === "anime" ? String(animeId) : (Number(item.id) || item.id),
                                 anilistId: cleanType === "anime" ? String(animeId) : undefined,
                                 media_type: cleanType,
+                                isTmdbAnime: isItemAnime,
                                 targetUrl: cleanTargetUrl,
                                 target_url: cleanTargetUrl,
                               };
                               setEditingSection({ ...editingSection, items: [...current, fullItem] });
-                              showToast("success", `Added ${item.title || item.name} (${cleanType.toUpperCase()})`);
+                              showToast("success", `Added ${item.title || item.name} (${cleanType === "anime" ? "ANIME SECTION" : cleanType.toUpperCase()})`);
                             }}
                             className="p-1.5 sm:p-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer shrink-0"
                             title="Add to row"
@@ -1280,7 +1353,12 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {editingSection.items?.map((it: any, itemIdx: number) => {
-                      const isItemAnime = it.media_type === "anime" || it.isTmdbAnime || Boolean(it.anilistId) || String(it.targetUrl || it.target_url || "").includes("/anime/");
+                      const isItemAnime =
+                        it.media_type === "anime" ||
+                        it.isTmdbAnime ||
+                        Boolean(it.anilistId) ||
+                        String(it.targetUrl || it.target_url || "").includes("/anime/") ||
+                        isTmdbAnime(it);
                       const itType = isItemAnime ? "anime" : it.media_type === "tv" ? "tv" : "movie";
                       return (
                         <div
@@ -1313,15 +1391,20 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                             )}
                             <div className="min-w-0 flex flex-col">
                               <span className="text-xs font-semibold text-zinc-200 truncate">{it.title || it.name}</span>
-                              <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded w-fit ${
-                                itType === "anime"
-                                  ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                                  : itType === "tv"
-                                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                  : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                              }`}>
-                                {itType === "anime" ? "Anime" : itType === "tv" ? "TV" : "Movie"}
-                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded w-fit ${
+                                  itType === "anime"
+                                    ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                                    : itType === "tv"
+                                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                    : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                }`}>
+                                  {itType === "anime" ? "Anime Section" : itType === "tv" ? "TV" : "Movie"}
+                                </span>
+                                {itType === "anime" && (
+                                  <span className="text-[8px] text-purple-400/70 font-mono">/anime/...</span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -1394,20 +1477,42 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                   }
                   const isEditing = Boolean(editingSection.id);
                   const method = isEditing ? "PUT" : "POST";
+                  const sanitizedItems = (editingSection.items || []).map((it: any) => {
+                    const isAnime =
+                      it.media_type === "anime" ||
+                      it.isTmdbAnime ||
+                      Boolean(it.anilistId) ||
+                      String(it.targetUrl || it.target_url || "").includes("/anime/") ||
+                      isTmdbAnime(it);
+                    if (isAnime) {
+                      const aId = it.anilistId || (String(it.id).startsWith("kitsu-") || String(it.id).startsWith("tmdb-") ? it.id : (String(it.targetUrl || it.target_url || "").startsWith("/tv/") ? `tmdb-${it.id}` : it.id));
+                      return {
+                        ...it,
+                        id: String(aId),
+                        anilistId: String(aId),
+                        media_type: "anime",
+                        isTmdbAnime: true,
+                        targetUrl: `/anime/${aId}`,
+                        target_url: `/anime/${aId}`,
+                      };
+                    }
+                    return it;
+                  });
+
                   const payload = isEditing
                     ? {
                         id: editingSection.id,
                         title: editingSection.title,
                         subtitle: editingSection.description || editingSection.subtitle || "",
                         icon: editingSection.icon || "Film",
-                        items: editingSection.items || [],
+                        items: sanitizedItems,
                         enabled: editingSection.enabled ?? true,
                       }
                     : {
                         title: editingSection.title,
                         subtitle: editingSection.description || editingSection.subtitle || "",
                         icon: editingSection.icon || "Film",
-                        items: editingSection.items || [],
+                        items: sanitizedItems,
                         enabled: true,
                       };
 
@@ -1498,9 +1603,16 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                   type="button"
                   onClick={() => {
                     const cleanTitle = item.title || item.name || "Featured Title";
-                    const cleanType = item.media_type || "movie";
+                    const isItemAnime =
+                      item.media_type === "anime" ||
+                      item.isTmdbAnime ||
+                      Boolean(item.anilistId) ||
+                      String(item.targetUrl || item.target_url || "").includes("/anime/") ||
+                      isTmdbAnime(item);
+                    const cleanType = isItemAnime ? "anime" : (item.media_type || "movie");
+                    const animeId = item.anilistId || (String(item.id).startsWith("kitsu-") || String(item.id).startsWith("tmdb-") ? item.id : (isItemAnime ? `tmdb-${item.id}` : item.id));
                     const cleanTargetUrl = cleanType === "anime" 
-                      ? `/anime/${item.anilistId || item.id}` 
+                      ? `/anime/${animeId}` 
                       : `/${cleanType}/${item.id}`;
                     const cleanBackdrop = item.backdrop_path 
                       ? (item.backdrop_path.startsWith("http") ? item.backdrop_path : `https://image.tmdb.org/t/p/original${item.backdrop_path}`)
@@ -1517,7 +1629,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
                     });
                     setPickerResults([]);
                     setPickerSearchQuery("");
-                    showToast("success", `Selected "${cleanTitle}" for Spotlight!`);
+                    showToast("success", `Selected "${cleanTitle}" for Spotlight (${cleanType === "anime" ? "ANIME SECTION" : cleanType.toUpperCase()})!`);
                   }}
                   className="flex items-center gap-2 p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 transition-colors text-left group cursor-pointer"
                 >
@@ -4032,7 +4144,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
             <div className="w-full md:w-56 lg:w-60 bg-zinc-950/60 border-b md:border-b-0 md:border-r border-zinc-800 p-2 sm:p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto shrink-0 custom-scrollbar flex-nowrap scroll-smooth touch-pan-x">
               {[
                 { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-                { id: "announcements", label: "Announcements", icon: Megaphone, badge: currentAnnouncement ? "Live" : null },
+                { id: "announcements", label: "Announcements", icon: Megaphone, badge: (adminAnnouncement !== null ? adminAnnouncement.message : currentAnnouncement) ? "Live" : null },
                 { id: "sections", label: "Custom Rows", icon: Film },
                 { id: "spotlight", label: "Spotlight Hero", icon: Star },
                 { id: "users", label: "User Accounts", icon: Users },

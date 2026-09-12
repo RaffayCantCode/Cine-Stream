@@ -164,14 +164,14 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/21459-yeVkolGKdGUV.jpg",
     poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg",
     items: [
-      { id: 21459, media_type: "anime", anilist_id: 21459, tmdb_id: 65930, episodes: 13, title: "My Hero Academia (Season 1)", release_date: "2016-04-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg" },
-      { id: 21856, media_type: "anime", anilist_id: 21856, tmdb_id: 65930, episodes: 25, title: "My Hero Academia (Season 2)", release_date: "2017-03-25", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21856-gutauxhWAwn6.png" },
-      { id: 100166, media_type: "anime", anilist_id: 100166, tmdb_id: 65930, episodes: 25, title: "My Hero Academia (Season 3)", release_date: "2018-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100166-jUCZYbzn2XLw.jpg" },
-      { id: 104276, media_type: "anime", anilist_id: 104276, tmdb_id: 65930, episodes: 25, title: "My Hero Academia (Season 4)", release_date: "2019-10-12", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104276-SnEowMvesWIE.png" },
-      { id: 117193, media_type: "anime", anilist_id: 117193, tmdb_id: 65930, episodes: 25, title: "My Hero Academia (Season 5)", release_date: "2021-03-27", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx117193-E75BlZmDh1aB.jpg" },
-      { id: 139630, media_type: "anime", anilist_id: 139630, tmdb_id: 65930, episodes: 25, title: "My Hero Academia (Season 6)", release_date: "2022-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx139630-3v4gxWtNZxLV.jpg" },
-      { id: 163139, media_type: "anime", anilist_id: 163139, tmdb_id: 65930, episodes: 21, title: "My Hero Academia (Season 7)", release_date: "2024-05-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx163139-JchZhUFlNTWU.jpg" },
-      { id: 182896, media_type: "anime", anilist_id: 182896, tmdb_id: 65930, episodes: 25, title: "My Hero Academia Final Season", release_date: "2025-10-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx182896-mvxTVHGdDB4q.jpg" },
+      { id: 21459, media_type: "anime", anilist_id: 21459, tmdb_id: 65930, tmdb_season_number: 1, season_label: "Season 1", episodes: 13, title: "My Hero Academia (Season 1)", release_date: "2016-04-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-nYh85uj2Fuwr.jpg" },
+      { id: 21856, media_type: "anime", anilist_id: 21856, tmdb_id: 65930, tmdb_season_number: 2, season_label: "Season 2", episodes: 25, title: "My Hero Academia (Season 2)", release_date: "2017-03-25", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21856-gutauxhWAwn6.png" },
+      { id: 100166, media_type: "anime", anilist_id: 100166, tmdb_id: 65930, tmdb_season_number: 3, season_label: "Season 3", episodes: 25, title: "My Hero Academia (Season 3)", release_date: "2018-04-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100166-jUCZYbzn2XLw.jpg" },
+      { id: 104276, media_type: "anime", anilist_id: 104276, tmdb_id: 65930, tmdb_season_number: 4, season_label: "Season 4", episodes: 25, title: "My Hero Academia (Season 4)", release_date: "2019-10-12", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx104276-SnEowMvesWIE.png" },
+      { id: 117193, media_type: "anime", anilist_id: 117193, tmdb_id: 65930, tmdb_season_number: 5, season_label: "Season 5", episodes: 25, title: "My Hero Academia (Season 5)", release_date: "2021-03-27", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx117193-E75BlZmDh1aB.jpg" },
+      { id: 139630, media_type: "anime", anilist_id: 139630, tmdb_id: 65930, tmdb_season_number: 6, season_label: "Season 6", episodes: 25, title: "My Hero Academia (Season 6)", release_date: "2022-10-01", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx139630-3v4gxWtNZxLV.jpg" },
+      { id: 163139, media_type: "anime", anilist_id: 163139, tmdb_id: 65930, tmdb_season_number: 7, season_label: "Season 7", episodes: 21, title: "My Hero Academia (Season 7)", release_date: "2024-05-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx163139-JchZhUFlNTWU.jpg" },
+      { id: 182896, media_type: "anime", anilist_id: 182896, tmdb_id: 65930, tmdb_season_number: 8, season_label: "Final Season", episodes: 25, title: "My Hero Academia Final Season", release_date: "2025-10-04", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx182896-mvxTVHGdDB4q.jpg" },
     ]
   },
   {
@@ -238,9 +238,9 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/5F0HVEgkgP99fEWDjPyikGt9jQi.jpg",
     poster_path: "/xppeysfvDKVx775MFuH8Z9BlpMk.jpg",
     items: [
-      { id: 20, media_type: "anime", anilist_id: 20, title: "Naruto", episodes: 220, release_date: "2002-10-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-dE6UHbFFg1A5.jpg", tmdb_id: 46260 },
-      { id: 1735, media_type: "anime", anilist_id: 1735, title: "Naruto: Shippuden", episodes: 500, release_date: "2007-02-15", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1735-kGfVm0YqCPcu.png", tmdb_id: 31910 },
-      { id: 97938, media_type: "anime", anilist_id: 97938, title: "Boruto: Naruto Next Generations", episodes: 293, release_date: "2017-04-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97938-BnF6M5yTaNB1.jpg", tmdb_id: 70881 },
+      { id: 20, media_type: "anime", anilist_id: 20, title: "Naruto", episodes: 220, release_date: "2002-10-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-dE6UHbFFg1A5.jpg", tmdb_id: 46260, tmdb_season_number: 1, season_label: "Naruto" },
+      { id: 1735, media_type: "anime", anilist_id: 1735, title: "Naruto: Shippuden", episodes: 500, release_date: "2007-02-15", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1735-kGfVm0YqCPcu.png", tmdb_id: 31910, tmdb_season_number: 1, season_label: "Shippuden" },
+      { id: 97938, media_type: "anime", anilist_id: 97938, title: "Boruto: Naruto Next Generations", episodes: 293, release_date: "2017-04-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97938-BnF6M5yTaNB1.jpg", tmdb_id: 70881, tmdb_season_number: 1, season_label: "Boruto" },
     ],
   },
   {
@@ -250,13 +250,13 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/21175-bXEDZ4sk6jTJ.png",
     poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg",
     items: [
-      { id: 223, media_type: "anime", anilist_id: 223, title: "Dragon Ball", episodes: 153, release_date: "1986-02-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx223-scE5uJfXqqj8.png", tmdb_id: 12609 },
-      { id: 813, media_type: "anime", anilist_id: 813, title: "Dragon Ball Z", episodes: 291, release_date: "1989-04-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx813-ZhnFNOeCU5dQ.png", tmdb_id: 12971 },
-      { id: 225, media_type: "anime", anilist_id: 225, title: "Dragon Ball GT", episodes: 64, release_date: "1996-02-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx225-pzkDUVy7tKxH.png", tmdb_id: 12697 },
-      { id: 21175, media_type: "anime", anilist_id: 21175, title: "Dragon Ball Super", episodes: 131, release_date: "2015-07-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg", tmdb_id: 62715 },
-      { id: 101302, media_type: "anime", tmdb_type: "movie", anilist_id: 101302, title: "Dragon Ball Super: Broly (Movie)", episodes: 1, release_date: "2018-12-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101302-7L0lcwYeFQQM.jpg", tmdb_id: 503314 },
-      { id: 133898, media_type: "anime", tmdb_type: "movie", anilist_id: 133898, title: "Dragon Ball Super: Super Hero (Movie)", episodes: 1, release_date: "2022-06-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx133898-KdQ7fWTG06n4.png", tmdb_id: 610150 },
-      { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", episodes: 20, release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png", tmdb_id: 236994 },
+      { id: 223, media_type: "anime", anilist_id: 223, title: "Dragon Ball", episodes: 153, release_date: "1986-02-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx223-scE5uJfXqqj8.png", tmdb_id: 12609, season_label: "Dragon Ball" },
+      { id: 813, media_type: "anime", anilist_id: 813, title: "Dragon Ball Z", episodes: 291, release_date: "1989-04-26", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx813-ZhnFNOeCU5dQ.png", tmdb_id: 12971, season_label: "Dragon Ball Z" },
+      { id: 225, media_type: "anime", anilist_id: 225, title: "Dragon Ball GT", episodes: 64, release_date: "1996-02-07", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx225-pzkDUVy7tKxH.png", tmdb_id: 12697, season_label: "Dragon Ball GT" },
+      { id: 21175, media_type: "anime", anilist_id: 21175, title: "Dragon Ball Super", episodes: 131, release_date: "2015-07-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21175-EH06qlfF8TnB.jpg", tmdb_id: 62715, season_label: "Dragon Ball Super" },
+      { id: 101302, media_type: "anime", tmdb_type: "movie", anilist_id: 101302, title: "Dragon Ball Super: Broly (Movie)", episodes: 1, release_date: "2018-12-14", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101302-7L0lcwYeFQQM.jpg", tmdb_id: 503314, season_label: "Broly (Movie)" },
+      { id: 133898, media_type: "anime", tmdb_type: "movie", anilist_id: 133898, title: "Dragon Ball Super: Super Hero (Movie)", episodes: 1, release_date: "2022-06-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx133898-KdQ7fWTG06n4.png", tmdb_id: 610150, season_label: "Super Hero (Movie)" },
+      { id: 170083, media_type: "anime", anilist_id: 170083, title: "Dragon Ball Daima", episodes: 20, release_date: "2024-10-11", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170083-GTwRrhTApcLR.png", tmdb_id: 236994, season_label: "Dragon Ball Daima" },
     ]
   },
   {
@@ -931,6 +931,21 @@ export function getFranchiseAnimeItem(idOrTmdbId: number | string): FranchiseIte
   return null;
 }
 
+function parseSeasonNumber(title: string): number | null {
+  const lower = (title || "").toLowerCase();
+  const m = lower.match(/season\s*([0-9]+)/);
+  if (m) return parseInt(m[1], 10);
+  const ordinals: Record<string, number> = {
+    "second": 2, "2nd": 2, "third": 3, "3rd": 3,
+    "fourth": 4, "4th": 4, "fifth": 5, "5th": 5,
+    "final season": 4,
+  };
+  for (const [k, v] of Object.entries(ordinals)) if (lower.includes(k)) return v;
+  const endNum = lower.match(/\s+([2-9])$/);
+  if (endNum) return parseInt(endNum[1], 10);
+  return null;
+}
+
 export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string): any[] | null {
   const normTitle = (title || "").toLowerCase();
   
@@ -978,7 +993,9 @@ export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string)
           format: format,
           status: item.status || "FINISHED",
           tmdbId: item.tmdb_id || item.id,
-          tmdbSeasonNumber: item.tmdb_season_number || null,
+          tmdbSeasonNumber: item.tmdb_season_number !== undefined
+            ? item.tmdb_season_number
+            : (!isMovie && !isSpecial ? (parseSeasonNumber(item.title || "") ?? null) : null),
           episodeOffset: item.episode_offset || 0,
           seasonLabel: item.season_label || null,
           coverImage: poster,

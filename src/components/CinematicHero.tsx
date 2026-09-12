@@ -482,8 +482,8 @@ export function CinematicHero({
       <div 
         className="absolute inset-0 overflow-hidden z-0 pointer-events-none"
         style={{
-          maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0.7) 65%, rgba(0,0,0,0.2) 88%, rgba(0,0,0,0) 100%)",
-          WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0.7) 65%, rgba(0,0,0,0.2) 88%, rgba(0,0,0,0) 100%)",
+          maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.85) 75%, rgba(0,0,0,0.35) 90%, rgba(0,0,0,0) 100%)",
+          WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.85) 75%, rgba(0,0,0,0.35) 90%, rgba(0,0,0,0) 100%)",
         }}
       >
         {/* Backdrop image — visible when trailer is not visible */}
@@ -526,18 +526,18 @@ export function CinematicHero({
         {/* Gradient overlays — In global theme, translucent for ambient backdrop glow. In non-global themes, blends into theme background color */}
         {heroThemeStyles ? (
           <>
-            <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-t ${heroThemeStyles.bottom} z-10`} />
+            <div className={`absolute inset-x-0 bottom-0 h-[50%] transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-t ${heroThemeStyles.bottom} z-10`} />
             <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-r ${heroThemeStyles.side} z-10`} />
-            <div className={`absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t ${heroThemeStyles.bottom} z-10`} />
+            <div className={`absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t ${heroThemeStyles.bottom} z-10`} />
           </>
         ) : (
           <>
-            <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-t from-[#07080d]/80 via-transparent to-transparent z-10`} />
+            <div className={`absolute inset-x-0 bottom-0 h-[45%] transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-t from-[#07080d]/75 via-[#07080d]/25 to-transparent z-10`} />
             <div className={`absolute inset-0 transition-opacity duration-1000 ${trailerVisible && !isMobile ? "opacity-0" : "opacity-100"} bg-gradient-to-r from-[#07080d]/85 via-[#07080d]/35 to-transparent z-10`} />
-            <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#07080d]/60 via-[#07080d]/20 to-transparent z-10" />
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#07080d]/50 to-transparent z-10" />
           </>
         )}
-        <div className="absolute top-0 inset-x-0 h-28 bg-gradient-to-b from-black/50 to-transparent z-10" />
+        <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-black/50 to-transparent z-10" />
       </div>
 
       {/* ── Fullscreen Video Modal for Mobile / Direct Trailer Click ───── */}

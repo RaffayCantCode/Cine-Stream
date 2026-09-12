@@ -385,7 +385,7 @@ export function sortFranchiseNodes(nodes: FranchiseNode[]): FranchiseNode[] {
   });
 }
 
-export function parseSeasonNumberFromTitle(title: string): number {
+export function parseSeasonNumberFromTitle(title: string): number | null {
   const lower = (title || "").toLowerCase();
   const m = lower.match(/season\s*([0-9]+)/);
   if (m) return parseInt(m[1], 10);
@@ -397,7 +397,7 @@ export function parseSeasonNumberFromTitle(title: string): number {
   for (const [k, v] of Object.entries(ordinals)) if (lower.includes(k)) return v;
   const endNum = lower.match(/\s+([2-9])$/);
   if (endNum) return parseInt(endNum[1], 10);
-  return 1;
+  return null;
 }
 
 export function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[] {
@@ -463,7 +463,7 @@ export function buildSeasonList(nodes: FranchiseNode[], currentId: number): Seas
       id: String(node.id),
       name: node.title,
       seasonLabel: label,
-      totalEpisodes: isMovie ? 1 : Math.max((node as any).totalEpisodes || node.episodes || 1, 1),
+      totalEpisodes: isMovie ? 1 : Math.max((node as any).totalEpisodes || node.episodes || (node.status === "RELEASING" ? 1500 : 1), 1),
       isCurrent: Number(node.id) === Number(currentId),
       idMal: node.idMal,
       seasonYear: node.seasonYear,
@@ -478,8 +478,7 @@ export function buildSeasonList(nodes: FranchiseNode[], currentId: number): Seas
 
   const filtered = seasons.filter(s =>
     s.isCurrent ||
-    s.seasonLabel.startsWith("Season") ||
-    s.seasonLabel.startsWith("Movie") ||
+    Boolean(s.seasonLabel) ||
     ["final", "part", "chapter", "season", "arc", "prologue", "epilogue"].some(kw => s.name.toLowerCase().includes(kw))
   );
 
@@ -841,6 +840,22 @@ export async function getAnimeDetails(
     } catch { tmdbId = null; }
   }
 
+  let aniZipEpisodeCount: number | null = null;
+  if (aniZip?.episodes) {
+    const keys = Object.keys(aniZip.episodes).map(Number).filter(k => !isNaN(k));
+    if (keys.length) aniZipEpisodeCount = Math.max(...keys);
+  }
+
+  const resolvedMediaEpisodes = isMovie ? 1 : (
+    (typeof media.episodes === "number" && media.episodes > 0 ? media.episodes : null) ||
+    aniZipEpisodeCount ||
+    (media.nextAiringEpisode?.episode ? media.nextAiringEpisode.episode - 1 : null) ||
+    (anime.episodes?.sub && anime.episodes.sub > 0 ? anime.episodes.sub : null) ||
+    (anime.status === "RELEASING" ? 1500 : 12)
+  );
+
+  anime.episodes = { sub: resolvedMediaEpisodes, dub: null };
+
   // Build franchise nodes + seasons
   let franchiseNodes = getFastFranchiseNodes(numId, media);
   const EXCLUDED = new Set([6922, 19165, 12565]);
@@ -848,11 +863,14 @@ export async function getAnimeDetails(
   if (!franchiseNodes.length) {
     const n = toNode(media);
     if (n) {
-      if (aniZip?.episodes) {
-        const keys = Object.keys(aniZip.episodes).map(Number).filter(k => !isNaN(k));
-        if (keys.length) n.episodes = Math.max(...keys);
-      }
+      if (resolvedMediaEpisodes) n.episodes = resolvedMediaEpisodes;
       franchiseNodes = [n];
+    }
+  } else {
+    const currentMediaNode = franchiseNodes.find(n => Number(n.id) === numId || String(n.id) === String(numId));
+    if (currentMediaNode && (!currentMediaNode.episodes || currentMediaNode.episodes <= 1) && !isMovie) {
+      currentMediaNode.episodes = resolvedMediaEpisodes;
+      currentMediaNode.totalEpisodes = resolvedMediaEpisodes;
     }
   }
 
@@ -861,16 +879,27 @@ export async function getAnimeDetails(
 
   const mappedSeasons: SeasonInfo[] = baseSeasons.map(s => {
     const sIsMovie = s.seasonLabel.startsWith("Movie") || isMovie;
-    const tid = sIsMovie ? null : (s.tmdbId || tmdbId);
+    const isCurrentSeason = String(s.id) === String(numId);
+    const tid = sIsMovie ? null : (s.tmdbId || (isCurrentSeason ? tmdbId : null));
     let sNum: number | null = sIsMovie ? null : (s.tmdbSeasonNumber ?? null);
     let offset = sIsMovie ? 0 : (s.episodeOffset || 0);
 
-    if (String(s.id) === String(numId) && aniZip?.episodes?.["1"]) {
+    if (isCurrentSeason && aniZip?.episodes?.["1"]) {
       const ep1 = aniZip.episodes["1"];
       if (ep1.seasonNumber !== undefined && sNum === null) sNum = ep1.seasonNumber;
       if (ep1.episodeNumber !== undefined && offset === 0) offset = Math.max(ep1.episodeNumber - 1, 0);
     }
-    if (!sIsMovie && sNum === null) sNum = parseSeasonNumberFromTitle(s.seasonLabel) || parseSeasonNumberFromTitle(s.name) || 1;
+    // Only parse season number from actual anime title (e.g. "Attack on Titan Season 2"), NEVER from synthetic seasonLabel (like "Season 2" for Shippuden)
+    if (!sIsMovie && sNum === null) {
+      const parsed = parseSeasonNumberFromTitle(s.name);
+      if (parsed) {
+        sNum = parsed;
+      } else if (isCurrentSeason) {
+        sNum = 1;
+      } else {
+        sNum = null;
+      }
+    }
     if (tid && sNum !== null) tmdbSeasonMap[s.id] = sNum;
 
     return { ...s, tmdbId: tid, tmdbSeasonNumber: sNum, episodeOffset: offset, coverImage: s.coverImage || anime.poster, bannerImage: s.bannerImage || anime.bannerImage };
@@ -947,6 +976,34 @@ export async function getAnimeDetails(
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. EPISODE FETCHING UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
+const ANIZIP_CACHE = new Map<string, { data: any; timestamp: number }>();
+const ANIZIP_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+async function getRawAniZipData(param: string): Promise<any | null> {
+  const cached = ANIZIP_CACHE.get(param);
+  if (cached && Date.now() - cached.timestamp < ANIZIP_TTL) {
+    return cached.data;
+  }
+  try {
+    const res = await fetch(`https://api.ani.zip/mappings?${param}`, {
+      signal: AbortSignal.timeout(6000),
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+      next: { revalidate: 86400 } as any,
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json) {
+      if (ANIZIP_CACHE.size > 500) {
+        const first = ANIZIP_CACHE.keys().next().value;
+        if (first !== undefined) ANIZIP_CACHE.delete(first);
+      }
+      ANIZIP_CACHE.set(param, { data: json, timestamp: Date.now() });
+    }
+    return json;
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchEpisodesFromAniZip(anilistId: string, seasonCap: number): Promise<EpisodeDetail[] | null> {
   try {
@@ -956,17 +1013,11 @@ export async function fetchEpisodesFromAniZip(anilistId: string, seasonCap: numb
       : isNaN(Number(cleanId)) ? `kitsu_id=${cleanId}`
       : `anilist_id=${cleanId}`;
 
-    const res = await fetch(`https://api.ani.zip/mappings?${param}`, {
-      signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-      next: { revalidate: 86400 } as any,
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    if (!json.episodes) return null;
+    const json = await getRawAniZipData(param);
+    if (!json?.episodes) return null;
 
-    const isMovie = (json.mappings?.type || "").toUpperCase() === "MOVIE" || seasonCap === 1;
-    const maxEp = isMovie ? 1 : (seasonCap > 1 ? seasonCap : 1500);
+    const isMovie = (json.mappings?.type || "").toUpperCase() === "MOVIE";
+    const maxEp = isMovie ? 1 : (seasonCap && seasonCap > 1 ? seasonCap : 1500);
     const eps: EpisodeDetail[] = [];
 
     for (const key of Object.keys(json.episodes)) {
@@ -999,9 +1050,7 @@ export async function resolveTmdbMappingFromAniZip(anilistId: string): Promise<{
       : isNaN(Number(cleanId)) ? `kitsu_id=${cleanId}`
       : `anilist_id=${cleanId}`;
 
-    const res = await fetch(`https://api.ani.zip/mappings?${param}`, { signal: AbortSignal.timeout(8000), headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT }, next: { revalidate: 86400 } as any });
-    if (!res.ok) return null;
-    const az = await res.json();
+    const az = await getRawAniZipData(param);
     const tmdbId = parseInt(String(az?.mappings?.themoviedb_id || ""), 10);
     if (isNaN(tmdbId)) return null;
     const ep1 = az?.episodes?.["1"];

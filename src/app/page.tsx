@@ -705,7 +705,7 @@ export default function Home() {
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home?v=3", { cacheTtlMs: 3600000 }).catch(() => null);
+        }>("/api/tmdb/home?v=4", { cacheTtlMs: 3600000 }).catch(() => null);
 
         // Fetch both trending and all-time popular anime
         const trendingAnimePromise = fetchClientAnime("trending", 1).catch(() => ({ items: [] }));
@@ -827,11 +827,15 @@ export default function Home() {
             }
           }
 
+          const shuffleSalt = Math.floor(Date.now() / 900000);
+          const shuffledMovies = sessionShuffle(topRatedMovieSafe, `alltime-movies-${shuffleSalt}`).slice(0, 24);
+          const shuffledTv = sessionShuffle(heroTopSafe, `alltime-tv-${shuffleSalt}`).slice(0, 24);
+
           setTrending(trendingSafe);
           setPopular(sessionShuffle(popularSafe, "popular"));
           setTopRated(sessionShuffle(heroTopSafe, "toprated"));
-          setTopRatedMovies(topRatedMovieSafe.slice(0, 10));
-          setTopRatedTv(heroTopSafe.slice(0, 10));
+          setTopRatedMovies(shuffledMovies);
+          setTopRatedTv(shuffledTv);
           setRecent(heroRecentSafe);
           setTrendingMoviesToday(trendingMoviesTodaySafe);
           setTrendingTvToday(trendingTvTodaySafe);
@@ -933,8 +937,8 @@ export default function Home() {
             trending: trendingSafe,
             popular: sessionShuffle(popularSafe, "popular"),
             topRated: sessionShuffle(heroTopSafe, "toprated"),
-            topRatedMovies: topRatedMovieSafe.slice(0, 10),
-            topRatedTv: heroTopSafe.slice(0, 10),
+            topRatedMovies: shuffledMovies,
+            topRatedTv: shuffledTv,
             recent: heroRecentSafe,
             trendingMoviesToday: trendingMoviesTodaySafe,
             trendingTvToday: trendingTvTodaySafe,
@@ -1375,26 +1379,26 @@ export default function Home() {
 
 
 
-          {/* ─── 2. TOP RATED MOVIES ─── */}
+          {/* ─── 2. ALL-TIME POPULAR MOVIES ─── */}
           <LazySection show={revealedSections >= 2} placeholderHeight={360}>
             <MediaRow
-              title="Top Rated Movies"
+              title="All-Time Popular Movies"
               items={topRatedMovies}
               isLoading={isLoading}
               largeTitle={true}
-              seeAllHref="/browse/movies/top-rated"
+              seeAllHref="/browse/movies/popular"
               accentIcon={<Star className="w-5 h-5 text-amber-400 fill-amber-400" />}
             />
           </LazySection>
 
-          {/* ─── 3. TOP RATED TV ─── */}
+          {/* ─── 3. ALL-TIME POPULAR TV SHOWS ─── */}
           <LazySection show={revealedSections >= 3} placeholderHeight={360}>
             <MediaRow
-              title="Top Rated TV"
+              title="All-Time Popular TV Shows"
               items={topRatedTv}
               isLoading={isLoading}
               largeTitle={true}
-              seeAllHref="/browse/tv/top-rated"
+              seeAllHref="/browse/tv/popular"
               accentIcon={<Star className="w-5 h-5 text-amber-400 fill-amber-400" />}
             />
           </LazySection>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Star, Play } from "lucide-react";
+import { isTmdbAnime } from "@/lib/utils";
 
 interface MediaItem {
   id: number;
@@ -33,16 +34,26 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
 
 export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = false }: MediaCardProps) {
   const isPerson = item.media_type === "person";
+  const isManga = item.media_type === "manga" || item.media_type === "manhwa";
   const rawTargetUrl = (item as any).targetUrl || (item as any).target_url;
-  const isAnime = item.media_type === "anime" || (item as any).isTmdbAnime || Boolean((item as any).anilistId) || String(rawTargetUrl || "").includes("/anime/");
-  const isTv = item.media_type === "tv" || (!isPerson && !isAnime && !!item.first_air_date && !item.release_date);
-  const isMovie = item.media_type === "movie" || (!isPerson && !isAnime && !isTv);
+  const isAnime =
+    item.media_type === "anime" ||
+    (item as any).isTmdbAnime ||
+    Boolean((item as any).anilistId) ||
+    String(rawTargetUrl || "").includes("/anime/") ||
+    isTmdbAnime(item);
+  const isTv = !isAnime && (item.media_type === "tv" || (!isPerson && !isManga && !!item.first_air_date && !item.release_date));
+  const isMovie = !isAnime && (item.media_type === "movie" || (!isPerson && !isTv && !isManga));
 
   const title = item.title || item.name || "";
   let link = rawTargetUrl;
-  if (isAnime && (!link || !link.startsWith("/anime/"))) {
-    const aId = (item as any).anilistId || item.id;
-    link = `/anime/${aId}`;
+  if (isManga && (!link || !link.startsWith("/manga/"))) {
+    link = `/manga/${item.id}`;
+  } else if (isAnime) {
+    if (!link || !link.startsWith("/anime/")) {
+      const aId = (item as any).anilistId || (link?.startsWith("/tv/") ? `tmdb-${item.id}` : item.id);
+      link = `/anime/${aId}`;
+    }
   } else if (!link) {
     link = isPerson
       ? `/person/${item.id}`
@@ -199,7 +210,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
               </span>
             )}
             <span className="text-white/70 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-              {isPerson ? "Person" : isAnime ? "Anime" : isMovie ? "Movie" : "TV"}
+              {isPerson ? "Person" : isManga ? (item.media_type === "manhwa" ? "Manhwa" : "Manga") : isAnime ? "Anime" : isMovie ? "Movie" : "TV"}
             </span>
           </div>
         </div>

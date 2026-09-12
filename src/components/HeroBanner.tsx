@@ -350,8 +350,8 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
         <div 
           className="absolute inset-0 overflow-hidden pointer-events-none"
           style={{
-            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.15) 85%, rgba(0,0,0,0) 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.15) 85%, rgba(0,0,0,0) 100%)",
+            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.85) 75%, rgba(0,0,0,0.35) 90%, rgba(0,0,0,0) 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.85) 75%, rgba(0,0,0,0.35) 90%, rgba(0,0,0,0) 100%)",
           }}
         >
           {/* Fast baseline backdrop for instant first render */}
@@ -393,7 +393,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           {/* In non-global themes, blend hero seamlessly into the theme background */}
           {heroThemeStyles ? (
             <>
-              <div className={`absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t ${heroThemeStyles.bottom} pointer-events-none z-10`} />
+              <div className={`absolute inset-x-0 bottom-0 h-48 sm:h-52 bg-gradient-to-t ${heroThemeStyles.bottom} pointer-events-none z-10`} />
               <div className={`hidden md:block absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r ${heroThemeStyles.side} pointer-events-none z-10`} />
               <div className={`md:hidden absolute inset-0 bg-gradient-to-t ${heroThemeStyles.mobile} pointer-events-none z-10`} />
             </>
@@ -410,8 +410,8 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
         <div 
           className="absolute inset-0 overflow-hidden"
           style={{
-            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%)",
+            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.5) 85%, rgba(0,0,0,0) 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 60%, rgba(0,0,0,0.5) 85%, rgba(0,0,0,0) 100%)",
           }}
         >
           {showPosterCard && posterUrl && (

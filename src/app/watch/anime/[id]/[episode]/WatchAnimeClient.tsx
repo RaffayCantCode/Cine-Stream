@@ -19,7 +19,8 @@ function buildAnimeIframeUrl(
   tmdbId?: number | null,
   tmdbSeason?: number | null,
   isMovie?: boolean,
-  episodeOffset?: number | null
+  episodeOffset?: number | null,
+  tmdbEpisode?: number | null
 ): string {
   const cleanNumeric = (id: string | null | undefined): string | null => {
     if (!id) return null;
@@ -27,7 +28,8 @@ function buildAnimeIframeUrl(
     return digits || null;
   };
   const primaryId = cleanNumeric(animeId) || cleanNumeric(malId) || "";
-  const effectiveTmdbEpisode = (episode || 1) + (episodeOffset || 0);
+  const effectiveTmdbSeason = tmdbSeason || 1;
+  const effectiveTmdbEpisode = tmdbEpisode != null ? tmdbEpisode : ((episode || 1) + (episodeOffset || 0));
 
   switch (provider) {
     case "animeplay":
@@ -39,7 +41,7 @@ function buildAnimeIframeUrl(
       if (tmdbId) {
         return isMovie
           ? `https://embedmaster.link/movie/${tmdbId}`
-          : `https://embedmaster.link/tv/${tmdbId}/${tmdbSeason || 1}/${effectiveTmdbEpisode}`;
+          : `https://embedmaster.link/tv/${tmdbId}/${effectiveTmdbSeason}/${effectiveTmdbEpisode}`;
       }
       return primaryId ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub` : "";
     case "animepahe":
@@ -51,7 +53,7 @@ function buildAnimeIframeUrl(
       if (tmdbId) {
         return isMovie
           ? `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`
-          : `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${tmdbSeason || 1}&episode=${effectiveTmdbEpisode}`;
+          : `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${effectiveTmdbSeason}&episode=${effectiveTmdbEpisode}`;
       }
       return primaryId ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub` : "";
     default:
@@ -307,7 +309,9 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   useEffect(() => {
     if (!animeId) return;
     const tmdbQuery = anime?.tmdbId ? `&tmdbId=${anime.tmdbId}&tmdbSeason=${anime.tmdbSeason || 1}` : "";
-    fetch(`/api/anime/${animeId}/episodes?seasonId=${encodeURIComponent(animeId)}${tmdbQuery}`)
+    const nameQuery = anime?.name ? `&seasonName=${encodeURIComponent(anime.name)}` : "";
+    const totQuery = anime?.totalEpisodes ? `&totalEpisodes=${anime.totalEpisodes}` : "";
+    fetch(`/api/anime/${animeId}/episodes?seasonId=${encodeURIComponent(animeId)}${tmdbQuery}${nameQuery}${totQuery}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         if (json?.success && Array.isArray(json?.data?.episodes)) {
@@ -315,7 +319,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         }
       })
       .catch(() => {});
-  }, [animeId, anime?.tmdbId, anime?.tmdbSeason]);
+  }, [animeId, anime?.tmdbId, anime?.tmdbSeason, anime?.name, anime?.totalEpisodes]);
 
   const cappedEpisodes = useMemo(() => {
     const maxEp = anime?.totalEpisodes && anime.totalEpisodes > 0 ? anime.totalEpisodes : null;
@@ -483,11 +487,12 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       anime?.idMal,
       episodeNumber,
       anime?.tmdbId,
-      anime?.tmdbSeason,
+      currentEpDetail?.tmdbSeasonNumber ?? anime?.tmdbSeason,
       anime?.format === "MOVIE",
-      anime?.episodeOffset
+      anime?.episodeOffset,
+      currentEpDetail?.tmdbEpisodeNumber
     );
-  }, [forcedSource, animeId, anime, episodeNumber]);
+  }, [forcedSource, animeId, anime, episodeNumber, currentEpDetail]);
 
   if (isLoading) {
     return (

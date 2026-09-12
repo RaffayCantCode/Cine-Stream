@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
-import { cn, fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
+import { cn, fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime, filterExcludeNews } from "@/lib/utils";
 import { usePageContentReady } from "@/lib/pageLoad";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
@@ -73,7 +73,7 @@ export default function BrowseTvPage() {
       params.append("sortBy", sortBy);
       params.append("page", rng.toString());
       const data = await fetchJson<{ results: TvShow[] }>(`/api/tmdb/discover/tv?${params}`);
-      setShows(shuffleArray(filterExcludeAnime(filterReleasedSafeContent(data.results || []))));
+      setShows(shuffleArray(filterExcludeNews(filterExcludeAnime(filterReleasedSafeContent(data.results || [])))));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to shuffle");
     } finally {
@@ -141,7 +141,7 @@ export default function BrowseTvPage() {
           })
         );
 
-        const allItems = results.flatMap((r) => filterExcludeAnime(filterReleasedSafeContent(r.results || [], !!debouncedSearch.trim())));
+        const allItems = results.flatMap((r) => filterExcludeNews(filterExcludeAnime(filterReleasedSafeContent(r.results || [], !!debouncedSearch.trim()))));
         setShows((prev) => {
           const combined = initialLoad.current ? shuffleArray(allItems) : [...prev, ...allItems];
           const seenIds = new Set();

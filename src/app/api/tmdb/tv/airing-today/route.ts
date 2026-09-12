@@ -4,10 +4,12 @@ import { NextRequest } from "next/server";
 import { tmdbFetch } from "@/lib/tmdb";
 
 // TMDB list endpoints don't support without_keywords/without_original_language.
-// We post-filter server-side to strip Japanese animated content (anime).
-function excludeAnime(results: any[]): any[] {
+// We post-filter server-side to strip Japanese animated content (anime) and news broadcasts (genre 10763).
+function cleanTvResults(results: any[]): any[] {
   return results.filter(
-    (item) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
+    (item) =>
+      !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16)) &&
+      (!Array.isArray(item.genre_ids) || !item.genre_ids.includes(10763))
   );
 }
 
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const data = await tmdbFetch("/tv/airing_today", { page }) as any;
-    if (data?.results) data.results = excludeAnime(data.results);
+    if (data?.results) data.results = cleanTvResults(data.results);
     return Response.json(data);
   } catch (error) {
     return Response.json({ error: "Failed to fetch airing today" }, { status: 500 });

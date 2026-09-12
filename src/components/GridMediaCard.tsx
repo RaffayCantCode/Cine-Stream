@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Star } from "lucide-react";
+import { isTmdbAnime } from "@/lib/utils";
 
 interface MediaItem {
   id: number | string;
@@ -22,19 +23,26 @@ interface GridMediaCardProps {
 
 export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
   const isManga = item.media_type === "manga" || item.media_type === "manhwa";
-  const isAnime = item.media_type === "anime";
-  const isTv = item.media_type === "tv" || (!!item.first_air_date && !item.release_date);
-  const isMovie = item.media_type === "movie" || (!isAnime && !isTv && !isManga);
+  const rawTargetUrl = (item as any).targetUrl || (item as any).target_url;
+  const isAnime =
+    item.media_type === "anime" ||
+    (item as any).isTmdbAnime ||
+    Boolean((item as any).anilistId) ||
+    String(rawTargetUrl || "").includes("/anime/") ||
+    isTmdbAnime(item as any);
+  const isTv = !isAnime && (item.media_type === "tv" || (!!item.first_air_date && !item.release_date));
+  const isMovie = !isAnime && (item.media_type === "movie" || (!isTv && !isManga));
 
-  let link = (item as any).targetUrl || (item as any).target_url;
-  if (!link) {
-    link = isManga
-      ? `/manga/${item.id}`
-      : isAnime
-      ? `/anime/${item.id}`
-      : isTv
-      ? `/tv/${item.id}`
-      : `/movie/${item.id}`;
+  let link = rawTargetUrl;
+  if (isManga && (!link || !link.startsWith("/manga/"))) {
+    link = `/manga/${item.id}`;
+  } else if (isAnime) {
+    if (!link || !link.startsWith("/anime/")) {
+      const aId = (item as any).anilistId || (link?.startsWith("/tv/") ? `tmdb-${item.id}` : item.id);
+      link = `/anime/${aId}`;
+    }
+  } else if (!link) {
+    link = isTv ? `/tv/${item.id}` : `/movie/${item.id}`;
   }
   const title = item.title || item.name || "";
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
@@ -105,7 +113,15 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
         <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium">
           {year && <span>{year}</span>}
           {year && <span>•</span>}
-          <span>{isAnime ? "Anime" : isMovie ? "Movie" : "TV"}</span>
+          <span>
+            {isManga
+              ? (item.media_type === "manhwa" ? "Manhwa" : "Manga")
+              : isAnime
+              ? "Anime"
+              : isMovie
+              ? "Movie"
+              : "TV"}
+          </span>
         </div>
       </div>
     </div>
