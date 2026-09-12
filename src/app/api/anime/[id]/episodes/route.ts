@@ -235,13 +235,15 @@ async function getEnrichedEpisodesList(
   let seasonEps: any[] = [];
   const cleanSeasonName = seasonName.replace(/\s*\([^)]*\)\s*/g, "").trim() || seasonName;
 
-  // 1. AniZip (primary for anime episode list mapping)
-  try {
-    const az = await fetchEpisodesFromAniZip(seasonId, totalEpisodes).catch(() => null);
-    if (az && az.length > 0) {
-      seasonEps = az;
-    }
-  } catch {}
+  // 1. AniZip + AFL in parallel
+  const [az, fillerLookup] = await Promise.all([
+    fetchEpisodesFromAniZip(seasonId, totalEpisodes).catch(() => null),
+    fetchFillerLookupFromAnimeFillerList(cleanSeasonName).catch(() => null),
+  ]);
+
+  if (az && az.length > 0) {
+    seasonEps = az;
+  }
 
   // 2. Kitsu fallback if AniZip failed
   if (seasonEps.length === 0) {
@@ -253,19 +255,13 @@ async function getEnrichedEpisodesList(
     } catch {}
   }
 
-  // 3. Optional filler data from animefillerlist (short timeout so it never blocks)
-  try {
-    const fillerLookup = await Promise.race([
-      fetchFillerLookupFromAnimeFillerList(cleanSeasonName),
-      new Promise<null>(r => setTimeout(() => r(null), 1000)),
-    ]);
-    if (fillerLookup && fillerLookup.filler.size > 0) {
-      seasonEps = seasonEps.map((ep) => ({
-        ...ep,
-        isFiller: Boolean(ep.isFiller || fillerLookup.filler.has(ep.episodeNum)),
-      }));
-    }
-  } catch {}
+  // 3. Apply filler data (pure fillers only — mixed intentionally excluded)
+  if (fillerLookup && fillerLookup.filler.size > 0 && seasonEps.length > 0) {
+    seasonEps = seasonEps.map((ep) => ({
+      ...ep,
+      isFiller: Boolean(ep.isFiller || fillerLookup.filler.has(ep.episodeNum)),
+    }));
+  }
 
   // 4. Placeholders only if both AniZip and Kitsu failed
   if (!seasonEps || seasonEps.length === 0) {
@@ -290,6 +286,7 @@ async function getEnrichedEpisodesList(
 
   return seasonEps;
 }
+
 
 interface EpisodesCacheEntry {
   data: { episodes: any[]; totalEpisodes: number };
@@ -333,7 +330,8 @@ export async function GET(
       return Response.json({ success: true, data: { episodes: [], totalEpisodes: 0 } }, { headers: animeCacheHeaders });
     }
 
-    const cacheKey = `${id}-${seasonId || "root"}-${page}-${searchParams.toString()}`;
+    const targetSeasonId = seasonId || id;
+    const cacheKey = `${id}-${targetSeasonId}-${page}-${searchParams.toString()}`;
     const cached = EPISODES_CACHE.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < EPISODES_CACHE_TTL) {
       return Response.json({ success: true, data: cached.data }, { headers: animeCacheHeaders });
@@ -344,7 +342,7 @@ export async function GET(
     let seasonNumFromList = 1;
 
     // ── Fetch a specific season's episodes by its AniList ID ───────────────
-    if (seasonId) {
+    if (targetSeasonId) {
       const tmdbIdParam = searchParams.get("tmdbId");
       const tmdbSeasonParam = searchParams.get("tmdbSeason");
       const episodeOffsetParam = searchParams.get("episodeOffset");
@@ -356,7 +354,7 @@ export async function GET(
       let clientTmdbSeasonNum = tmdbSeasonParam != null ? parseInt(tmdbSeasonParam, 10) : null;
       let clientEpisodeOffset = episodeOffsetParam != null ? parseInt(episodeOffsetParam, 10) : 0;
 
-      const tmdbPattern = String(seasonId || id).match(/^tmdb-(\d+)(?:-s(\d+))?$/i);
+      const tmdbPattern = String(targetSeasonId).match(/^tmdb-(\d+)(?:-s(\d+))?$/i);
       if (tmdbPattern) {
         if (!clientTmdbId) clientTmdbId = parseInt(tmdbPattern[1], 10);
         if (!clientTmdbSeasonNum && tmdbPattern[2]) clientTmdbSeasonNum = parseInt(tmdbPattern[2], 10);
@@ -370,7 +368,7 @@ export async function GET(
 
       if (allParamsProvided && seasonNameParam) {
         season = {
-          id: seasonId,
+          id: targetSeasonId,
           name: seasonNameParam,
           seasonLabel: "Episodes",
           totalEpisodes: (clientTotalEpisodes && clientTotalEpisodes > 0) ? clientTotalEpisodes : 12,
@@ -382,14 +380,14 @@ export async function GET(
         };
         seasonNumFromList = !isNaN(seasonNumParam) && seasonNumParam > 0 ? seasonNumParam : 1;
       } else if (allParamsProvided) {
-        meta = await getAnimeDetails(seasonId, 1500, true).catch(() => null);
+        meta = await getAnimeDetails(targetSeasonId, 1500, true).catch(() => null);
         if (!meta) {
           meta = await getAnimeDetails(id, 1500, true).catch(() => null);
         }
 
-        const foundInMeta = meta?.seasons?.find((s: any) => s.id === seasonId);
+        const foundInMeta = meta?.seasons?.find((s: any) => String(s.id) === String(targetSeasonId));
         season = {
-          id: seasonId,
+          id: targetSeasonId,
           name: foundInMeta?.name || meta?.anime?.name || "Unknown",
           seasonLabel: foundInMeta?.seasonLabel || "Episodes",
           totalEpisodes: foundInMeta?.totalEpisodes || meta?.totalEpisodes || 12,
@@ -401,13 +399,13 @@ export async function GET(
         };
 
         if (meta?.seasons) {
-          const idx = meta.seasons.findIndex((s: any) => s.id === seasonId);
+          const idx = meta.seasons.findIndex((s: any) => String(s.id) === String(targetSeasonId));
           seasonNumFromList = idx >= 0 ? idx + 1 : 1;
         }
       } else {
         let directSeasonMeta: any = null;
-        if (seasonId && seasonId !== id) {
-          directSeasonMeta = await getAnimeDetails(seasonId, 1500, true).catch(() => null);
+        if (targetSeasonId && targetSeasonId !== id) {
+          directSeasonMeta = await getAnimeDetails(targetSeasonId, 1500, true).catch(() => null);
         }
 
         meta = directSeasonMeta || await getAnimeDetails(id, 1500, true);
@@ -415,25 +413,39 @@ export async function GET(
           throw new Error("Anime not found");
         }
 
-        season = meta.seasons?.find((s: any) => String(s.id) === String(seasonId));
+        season = meta.seasons?.find((s: any) => String(s.id) === String(targetSeasonId));
         if (!season && directSeasonMeta) {
-          const directSeason = directSeasonMeta.seasons?.find((s: any) => String(s.id) === String(seasonId))
+          const directSeason = directSeasonMeta.seasons?.find((s: any) => String(s.id) === String(targetSeasonId))
             || directSeasonMeta.seasons?.[0];
           if (directSeason) season = directSeason;
         }
 
         if (!season && meta.seasons && meta.seasons.length > 0) {
-          const cleanTarget = String(seasonId).replace(/^(kitsu-|mal-|tmdb-)/, "");
+          const cleanTarget = String(targetSeasonId).replace(/^(kitsu-|mal-|tmdb-)/, "");
           season = meta.seasons.find((s: any) => String(s.id).replace(/^(kitsu-|mal-|tmdb-)/, "") === cleanTarget)
-            || meta.seasons.find((s: any) => s.isCurrent)
-            || meta.seasons[0];
+            || (String(targetSeasonId) === String(id) ? meta.seasons.find((s: any) => s.isCurrent) : null);
+        }
+
+        if (!season && directSeasonMeta?.anime) {
+          const directAnime = directSeasonMeta.anime;
+          season = {
+            id: targetSeasonId,
+            name: directAnime.name || "Season",
+            seasonLabel: (directAnime.format === "MOVIE" || directAnime.type === "MOVIE") ? "Movie 1" : "Episodes",
+            totalEpisodes: directAnime.episodes?.sub || directSeasonMeta.totalEpisodes || 12,
+            isCurrent: true,
+            idMal: directAnime.idMal ? Number(directAnime.idMal) : null,
+            tmdbId: directSeasonMeta.tmdbId || null,
+            tmdbSeasonNumber: directSeasonMeta.tmdbSeasonMap?.[targetSeasonId] ?? null,
+            episodeOffset: 0,
+          };
         }
 
         if (!season) {
           return Response.json({ success: true, data: { episodes: [], totalEpisodes: 0 } }, { headers: animeCacheHeaders });
         }
 
-        const idx = meta.seasons.findIndex((s: any) => String(s.id) === String(season.id));
+        const idx = meta.seasons ? meta.seasons.findIndex((s: any) => String(s.id) === String(season.id)) : -1;
         seasonNumFromList = idx >= 0 ? idx + 1 : 1;
       }
 
@@ -444,7 +456,7 @@ export async function GET(
       // Recover TMDB mapping from AniZip if missing
       if (tmdbId == null || tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) {
         try {
-          const resolved = await resolveTmdbMappingFromAniZip(season.id);
+          const resolved = await resolveTmdbMappingFromAniZip(season.id || targetSeasonId);
           if (resolved) {
             if (tmdbId == null) tmdbId = resolved.tmdbId;
             if (tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) tmdbSeasonNum = resolved.tmdbSeason;
@@ -456,8 +468,13 @@ export async function GET(
       }
 
       // Curated franchise mapping check
-      const curatedNodes = getCuratedAnimeFranchiseNodes(Number(season.id) || Number(id));
-      const curatedItem = curatedNodes?.find((n: any) => String(n.id) === String(season.id) || String(n.anilistId) === String(season.id));
+      const curatedNodes = getCuratedAnimeFranchiseNodes(Number(season.id) || Number(targetSeasonId) || Number(id));
+      const curatedItem = curatedNodes?.find((n: any) =>
+        String(n.id) === String(season.id) ||
+        String(n.anilistId) === String(season.id) ||
+        String(n.id) === String(targetSeasonId) ||
+        String(n.anilistId) === String(targetSeasonId)
+      );
       if (curatedItem) {
         if (!tmdbId && curatedItem.tmdbId) tmdbId = curatedItem.tmdbId;
         if ((tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) && curatedItem.tmdbSeasonNumber != null) tmdbSeasonNum = curatedItem.tmdbSeasonNumber;
@@ -476,12 +493,18 @@ export async function GET(
         } catch {}
       }
 
-      // Season & offset parsing override (ONLY from anime title, e.g. "Attack on Titan Season 2", NEVER from synthetic franchise seasonLabel)
+      // Season & offset parsing override (from anime title or seasonLabel)
       if (!tmdbSeasonNum || tmdbSeasonNum === 1) {
         const parsedName = parseSeasonAndOffsetFromTitle(season.name || meta?.anime?.name || "");
         if (parsedName.tmdbSeason > 1 || parsedName.episodeOffset > 0) {
           tmdbSeasonNum = parsedName.tmdbSeason;
           episodeOffset = parsedName.episodeOffset;
+        } else if (season.seasonLabel && !season.seasonLabel.toLowerCase().startsWith("episodes")) {
+          const parsedLabel = parseSeasonAndOffsetFromTitle(season.seasonLabel);
+          if (parsedLabel.tmdbSeason > 1 || parsedLabel.episodeOffset > 0) {
+            tmdbSeasonNum = parsedLabel.tmdbSeason;
+            episodeOffset = parsedLabel.episodeOffset;
+          }
         }
       }
 
@@ -548,10 +571,8 @@ export async function GET(
         }
         if (neededSeasons.size > 0) {
           try {
-            // For smaller season counts (<= 5), fetch all in parallel.
-            // For massive multi-season shows, fetch the first batch up to 5 seasons to avoid subrequest limits,
-            // while AniZip provides the complete metadata for all remaining episodes.
-            const seasonsToFetch = Array.from(neededSeasons).slice(0, 5);
+            // Fetch up to 25 secondary seasons to cover massive shows like Naruto Shippuden (20 seasons on TMDB)
+            const seasonsToFetch = Array.from(neededSeasons).slice(0, 25);
             const extraEpisodes = await fetchTmdbEpisodeData(tmdbId, seasonsToFetch);
             for (const [k, v] of extraEpisodes.entries()) {
               tmdbEpisodes.set(k, v);

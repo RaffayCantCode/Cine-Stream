@@ -87,7 +87,7 @@ interface FranchiseNode {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ANIME_API_VERSION = "v52-clean-architecture";
+const ANIME_API_VERSION = "v54-season-isolation";
 
 function formatAnimeStatus(raw?: string | null): { label: string; style: "finished" | "airing" | "upcoming" } {
   if (!raw) return { label: "FINISHED", style: "finished" };
@@ -230,6 +230,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   // ── Episodes for current season ───────────────────────────────────────────
   const currentSeasonEps = useMemo(() => {
+    // While loading, always return empty — prevents previous season's episodes from showing
+    if (episodesLoading) return [];
+
     const target = String(currentSeasonId || id || "").trim();
     // 1. Try direct match
     const direct = episodes.filter(e => String(e.seasonId) === target);
@@ -258,23 +261,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       if (byId.length) return byId.sort((a, b) => a.episodeNum - b.episodeNum);
     }
 
-    // 4. Anime ID or openedSeasonId match fallback
-    if (anime?.id) {
+    // 4. Anime ID or openedSeasonId match fallback (only when target matches root anime or openedSeasonId)
+    if (anime?.id && String(target) === String(anime.id)) {
       const byAnimeId = episodes.filter(e => String(e.seasonId) === String(anime.id));
       if (byAnimeId.length) return byAnimeId.sort((a, b) => a.episodeNum - b.episodeNum);
     }
-    if ((anime as any)?.openedSeasonId) {
+    if ((anime as any)?.openedSeasonId && String(target) === String((anime as any).openedSeasonId)) {
       const byOpened = episodes.filter(e => String(e.seasonId) === String((anime as any).openedSeasonId));
       if (byOpened.length) return byOpened.sort((a, b) => a.episodeNum - b.episodeNum);
     }
 
-    // 5. Ultimate fallback: if episodes are loaded, return them rather than empty
-    if (episodes.length > 0) {
-      return [...episodes].sort((a, b) => a.episodeNum - b.episodeNum);
-    }
-
     return [];
-  }, [episodes, currentSeasonId, id, seasons, anime]);
+  }, [episodes, currentSeasonId, id, seasons, anime, episodesLoading]);
+
 
   // Deduplicate
   const dedupedCurrentEps = useMemo(() => {
@@ -379,7 +378,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           const seen = new Set<number>();
           const deduped: Episode[] = [];
           for (const ep of sorted) {
-            if (!seen.has(ep.episodeNum)) { seen.add(ep.episodeNum); deduped.push({ ...ep, seasonId: String(ep.seasonId || seasonId) }); }
+            if (!seen.has(ep.episodeNum)) { seen.add(ep.episodeNum); deduped.push({ ...ep, seasonId: String(seasonId) }); }
           }
           return [...other, ...deduped].sort((a, b) => {
             if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
@@ -390,7 +389,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         loadedSeasonIds.current.add(seasonId);
         setEpisodesLoading(false);
         try {
-          sessionStorage.setItem(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(ep.seasonId || seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
+          sessionStorage.setItem(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
         } catch {}
         return;
       }

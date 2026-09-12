@@ -1058,13 +1058,55 @@ export async function resolveTmdbMappingFromAniZip(anilistId: string): Promise<{
   } catch { return null; }
 }
 
+// In-memory 24h cache for AFL results
+const AFL_CACHE = new Map<string, { result: FillerLookup | null; expires: number }>();
+
+// Canonical slug mapping for known long-running anime
+const AFL_SLUG_MAP: Record<string, string> = {
+  "naruto": "naruto",
+  "naruto-shippuden": "naruto-shippuden",
+  "naruto-shippuuden": "naruto-shippuden",
+  "naruto-shippuden-naruto-shippuden": "naruto-shippuden",
+  "bleach": "bleach",
+  "bleach-thousand-year-blood-war": "bleach",
+  "one-piece": "one-piece",
+  "dragon-ball": "dragon-ball-z",
+  "dragon-ball-z": "dragon-ball-z",
+  "dragon-ball-super": "dragon-ball-super",
+  "hunter-x-hunter-2011": "hunter-x-hunter-2011",
+  "hunter-x-hunter": "hunter-x-hunter-2011",
+  "fairy-tail": "fairy-tail",
+  "attack-on-titan": "attack-on-titan",
+  "shingeki-no-kyojin": "attack-on-titan",
+  "boruto-naruto-next-generations": "boruto-naruto-next-generations",
+  "boruto": "boruto-naruto-next-generations",
+  "black-clover": "black-clover",
+};
+
 export async function fetchFillerLookupFromAnimeFillerList(animeName: string): Promise<FillerLookup | null> {
-  let slug = (animeName || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  let slug = (animeName || "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   slug = slug.replace(/shippuuden/g, "shippuden");
   if (!slug) return null;
+
+  // Apply canonical slug mapping
+  const canonical = AFL_SLUG_MAP[slug] || slug;
+
+  // Check in-memory cache
+  const cached = AFL_CACHE.get(canonical);
+  if (cached && cached.expires > Date.now()) return cached.result;
+
   try {
-    const res = await fetch(`${FILLER_BASE}/${slug}`, { signal: AbortSignal.timeout(4000), headers: { "User-Agent": "CineStream/1.0" }, next: { revalidate: 86400 } as any });
-    if (!res.ok) return null;
+    const res = await fetch(`${FILLER_BASE}/${canonical}`, {
+      signal: AbortSignal.timeout(5000),
+      headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
+      next: { revalidate: 86400 } as any,
+    });
+    if (!res.ok) {
+      AFL_CACHE.set(canonical, { result: null, expires: Date.now() + 3600_000 });
+      return null;
+    }
     const html = await res.text();
     const filler = new Set<number>();
     const mixed = new Set<number>();
@@ -1076,11 +1118,17 @@ export async function fetchFillerLookupFromAnimeFillerList(animeName: string): P
       const numM = m[2]?.match(/<td\b[^>]*>\s*(\d+)\s*<\/td>/i);
       if (numM) {
         const n = parseInt(numM[1], 10);
+        // Only mark as mixed — pure filler rows don't contain "mixed"
         if (cls.includes("mixed")) mixed.add(n); else filler.add(n);
       }
     }
-    return filler.size || mixed.size ? { filler, mixed } : null;
-  } catch { return null; }
+    const result = (filler.size || mixed.size) ? { filler, mixed } : null;
+    AFL_CACHE.set(canonical, { result, expires: Date.now() + 86_400_000 });
+    return result;
+  } catch {
+    AFL_CACHE.set(canonical, { result: null, expires: Date.now() + 3600_000 });
+    return null;
+  }
 }
 
 export async function fetchEpisodeThumbnail(malUrl: string): Promise<string | null> {
