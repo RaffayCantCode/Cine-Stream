@@ -47,20 +47,21 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
     link = isTv ? `/tv/${item.id}` : `/movie/${item.id}`;
   }
   const title = item.title || item.name || "";
-  const initialPosterUrl = item.poster_path
-    ? item.poster_path.startsWith("http")
-      ? item.poster_path
-      : `https://image.tmdb.org/t/p/w780${item.poster_path}`
-    : null;
+  const getTmdbImageUrl = (path?: string | null): string | null => {
+    if (!path) return null;
+    if (path.startsWith("http://") || path.startsWith("https://")) return path;
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return `https://image.tmdb.org/t/p/w780${cleanPath}`;
+  };
+
+  const initialPosterUrl = getTmdbImageUrl(item.poster_path);
 
   const [imgSrc, setImgSrc] = useState<string | null>(initialPosterUrl);
   const [hasError, setHasError] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     setImgSrc(initialPosterUrl);
     setHasError(false);
-    setIsLoaded(false);
   }, [initialPosterUrl]);
 
   const handleImageError = () => {
@@ -76,28 +77,22 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
   return (
     <div
       className="group flex flex-col gap-3 animate-fade-in-up relative hover:z-30 pt-2 -mt-2"
-      style={{ animationDelay: `${Math.min(index * 0.02, 0.6)}s` }}
+      style={{ animationDelay: `${Math.min((index % 20) * 0.025, 0.35)}s` }}
     >
       <Link
         href={link}
         prefetch={false}
-        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out hover:scale-[1.01] hover:-translate-y-2 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] hover:ring-white/40 focus:outline-none sheen-wrapper"
+        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 [isolation:isolate] [transform:translateZ(0)] shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out hover:scale-[1.01] hover:-translate-y-2 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] hover:ring-white/40 focus:outline-none sheen-wrapper"
       >
         {imgSrc && !hasError ? (
-          <>
-            {!isLoaded && (
-              <div className="absolute inset-0 bg-white/[0.04] animate-pulse" />
-            )}
-            <img
-              src={imgSrc}
-              alt={title}
-              className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? "opacity-100" : "opacity-0"}`}
-              loading="eager"
-              decoding="async"
-              onLoad={() => setIsLoaded(true)}
-              onError={handleImageError}
-            />
-          </>
+          <img
+            src={imgSrc}
+            alt={title}
+            className="w-full h-full object-cover"
+            loading="eager"
+            decoding="async"
+            onError={handleImageError}
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
             <span className="text-muted-foreground text-xs font-medium">{title}</span>

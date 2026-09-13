@@ -74,7 +74,8 @@ export default function BrowseTvPage() {
       params.append("sortBy", sortBy);
       params.append("page", rng.toString());
       const data = await fetchJson<{ results: TvShow[] }>(`/api/tmdb/discover/tv?${params}`);
-      setShows(shuffleArray(filterExcludeNews(filterExcludeAnime(filterReleasedSafeContent(data.results || [])))));
+      const validResults = (data.results || []).filter(s => Boolean(s.poster_path));
+      setShows(shuffleArray(filterExcludeNews(filterExcludeAnime(filterReleasedSafeContent(validResults)))));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to shuffle");
     } finally {

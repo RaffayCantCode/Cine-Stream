@@ -545,7 +545,7 @@ export const Sidebar = memo(function Sidebar() {
       </AnimatePresence>
 
       {/* ── Mobile Floating Bottom Dock ── */}
-      <nav className="md:hidden fixed bottom-3 inset-x-4 sm:inset-x-8 h-14 rounded-2xl bg-[#090b10]/90 backdrop-blur-2xl border border-white/15 z-40 flex items-center justify-around px-2 shadow-[0_12px_36px_rgba(0,0,0,0.85)]">
+      <nav className="md:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] inset-x-4 sm:inset-x-8 h-14 rounded-2xl bg-[#090b10]/90 backdrop-blur-2xl border border-white/15 z-40 flex items-center justify-around px-2 shadow-[0_12px_36px_rgba(0,0,0,0.85)]">
         {[
           { href: "/", icon: Home, label: "Home" },
           { href: "/browse/movies", icon: Film, label: "Movies" },

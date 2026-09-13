@@ -29,7 +29,7 @@ interface MediaCardProps {
 }
 
 const CARD_WRAPPER_STYLE: React.CSSProperties = {
-  animation: "fade-in-up 0.35s ease-out both",
+  animation: "fade-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both",
 };
 
 export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = false }: MediaCardProps) {
@@ -63,20 +63,21 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       : `/movie/${item.id}`;
   }
 
-  const initialPosterUrl = item.profile_path 
-    ? (item.profile_path.startsWith("http") ? item.profile_path : `https://image.tmdb.org/t/p/w780${item.profile_path}`)
-    : item.poster_path
-    ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w780${item.poster_path}`)
-    : null;
+  const getTmdbImageUrl = (path?: string | null): string | null => {
+    if (!path) return null;
+    if (path.startsWith("http://") || path.startsWith("https://")) return path;
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return `https://image.tmdb.org/t/p/w780${cleanPath}`;
+  };
+
+  const initialPosterUrl = getTmdbImageUrl(item.profile_path || item.poster_path);
 
   const [imgSrc, setImgSrc] = useState<string | null>(initialPosterUrl);
   const [hasError, setHasError] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     setImgSrc(initialPosterUrl);
     setHasError(false);
-    setIsLoaded(false);
   }, [initialPosterUrl]);
 
   const handleImageError = () => {
@@ -92,7 +93,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
   return (
     <div
       className="row-item w-full relative hover:z-30 pt-2 -mt-2"
-      style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${index * 0.03}s` }}
+      style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${Math.min((index % 20) * 0.025, 0.35)}s` }}
     >
       <Link
         href={link}
@@ -125,26 +126,20 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] group-hover:ring-white/40 sheen-wrapper ${
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 [isolation:isolate] [transform:translateZ(0)] shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] group-hover:ring-white/40 sheen-wrapper ${
             rank ? "ml-6 sm:ml-7 md:ml-8 w-[calc(100%-1.5rem)] sm:w-[calc(100%-1.75rem)] md:w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}
         >
         {imgSrc && !hasError ? (
-          <>
-            {!isLoaded && (
-              <div className="absolute inset-0 bg-white/[0.04] animate-pulse" />
-            )}
-            <img
-              src={imgSrc}
-              alt={title}
-              className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? "opacity-100" : "opacity-0"}`}
-              loading="eager"
-              decoding="async"
-              onLoad={() => setIsLoaded(true)}
-              onError={handleImageError}
-            />
-          </>
+          <img
+            src={imgSrc}
+            alt={title}
+            className="w-full h-full object-cover"
+            loading="eager"
+            decoding="async"
+            onError={handleImageError}
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
             <span className="text-muted-foreground text-xs font-medium">{title}</span>

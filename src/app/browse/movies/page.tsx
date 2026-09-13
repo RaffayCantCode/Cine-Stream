@@ -75,7 +75,8 @@ export default function BrowseMoviesPage() {
       params.append("sortBy", sortBy);
       params.append("page", rng.toString());
       const data = await fetchJson<{ results: Movie[] }>(`/api/tmdb/discover/movies?${params}`);
-      setMovies(shuffleArray(filterExcludeAnime(filterReleasedSafeContent(data.results || []))));
+      const validResults = (data.results || []).filter(m => Boolean(m.poster_path));
+      setMovies(shuffleArray(filterExcludeAnime(filterReleasedSafeContent(validResults))));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to shuffle");
     } finally {
@@ -143,7 +144,10 @@ export default function BrowseMoviesPage() {
           })
         );
 
-        const allItems = results.flatMap((r) => filterExcludeAnime(filterReleasedSafeContent(r.results || [], !!debouncedSearch.trim())));
+        const allItems = results.flatMap((r) => {
+          const raw = (r.results || []).filter((m) => debouncedSearch.trim() ? true : Boolean(m.poster_path));
+          return filterExcludeAnime(filterReleasedSafeContent(raw, !!debouncedSearch.trim()));
+        });
         setMovies((prev) => {
           const combined = initialLoad.current ? shuffleArray(allItems) : [...prev, ...allItems];
           const seenIds = new Set();
