@@ -148,6 +148,18 @@ export default function BrowseMoviesPage() {
           const raw = (r.results || []).filter((m) => debouncedSearch.trim() ? true : Boolean(m.poster_path));
           return filterExcludeAnime(filterReleasedSafeContent(raw, !!debouncedSearch.trim()));
         });
+
+        // Background preloading for the next batch's images (w780 high quality)
+        if (typeof window !== "undefined") {
+          allItems.slice(0, 15).forEach((item) => {
+            if (item.poster_path) {
+              const img = new Image();
+              const p = item.poster_path.startsWith("/") ? item.poster_path : `/${item.poster_path}`;
+              img.src = `https://image.tmdb.org/t/p/w780${p}`;
+            }
+          });
+        }
+
         setMovies((prev) => {
           const combined = initialLoad.current ? shuffleArray(allItems) : [...prev, ...allItems];
           const seenIds = new Set();
@@ -197,7 +209,7 @@ export default function BrowseMoviesPage() {
           check();
         }
       },
-      { rootMargin: "400px" }
+      { rootMargin: "1400px" }
     );
 
     if (sentinelRef.current) {
@@ -211,7 +223,7 @@ export default function BrowseMoviesPage() {
   useEffect(() => {
     if (!sentinelRef.current) return;
     const rect = sentinelRef.current.getBoundingClientRect();
-    if (rect.top <= window.innerHeight + 800) {
+    if (rect.top <= window.innerHeight + 1400) {
       triggerLoadRef.current?.();
     }
   }, [movies.length]);

@@ -394,7 +394,12 @@ function sessionShuffle<T>(array: T[] | null | undefined, salt: string = ""): T[
 
 function LazySection({ children, show, placeholderHeight = 0 }: { children: React.ReactNode; show: boolean; placeholderHeight?: number }) {
   return show ? (
-    <section>
+    <section
+      style={{
+        contentVisibility: "auto",
+        containIntrinsicSize: `auto ${placeholderHeight || 360}px`,
+      }}
+    >
       {children}
     </section>
   ) : (
@@ -1130,11 +1135,11 @@ export default function Home() {
   const activeBackdropUrl = hero?.backdrop_path
     ? hero.backdrop_path.startsWith("http")
       ? hero.backdrop_path
-      : `https://image.tmdb.org/t/p/w1280${hero.backdrop_path}`
+      : `https://image.tmdb.org/t/p/w300${hero.backdrop_path}`
     : hero?.poster_path
     ? hero.poster_path.startsWith("http")
       ? hero.poster_path
-      : `https://image.tmdb.org/t/p/w780${hero.poster_path}`
+      : `https://image.tmdb.org/t/p/w342${hero.poster_path}`
     : null;
 
   // Smooth ambient backdrop & color crossfading
@@ -1225,12 +1230,24 @@ export default function Home() {
     <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}>
       {/* Ambient Hero Backdrop Glow — ONLY active for the "global" theme! */}
       {isGlobalTheme && (ambientBackdrop.current || ambientBackdrop.previous) && (
-        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div
+          className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
+          style={{
+            transform: "translate3d(0, 0, 0)",
+            willChange: "transform",
+            contain: "strict",
+            backfaceVisibility: "hidden",
+          }}
+        >
           {ambientBackdrop.previous && (
             <img
               src={ambientBackdrop.previous}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover blur-[120px] opacity-0 scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none"
+              className="absolute inset-0 w-full h-full object-cover blur-[60px] opacity-0 scale-125 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none"
+              style={{
+                transform: "translate3d(0, 0, 0)",
+                backfaceVisibility: "hidden",
+              }}
               aria-hidden
             />
           )}
@@ -1239,7 +1256,11 @@ export default function Home() {
               key={ambientBackdrop.current}
               src={ambientBackdrop.current}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover blur-[120px] opacity-[0.78] scale-140 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
+              className="absolute inset-0 w-full h-full object-cover blur-[60px] opacity-[0.78] scale-125 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
+              style={{
+                transform: "translate3d(0, 0, 0)",
+                backfaceVisibility: "hidden",
+              }}
               aria-hidden
             />
           )}
@@ -1492,6 +1513,15 @@ export default function Home() {
                             alt={col.name}
                             className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
                             loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              if (target.src.includes("/w780/")) {
+                                target.src = target.src.replace("/w780/", "/w500/");
+                              } else if (target.src.includes("/w500/")) {
+                                target.src = target.src.replace("/w500/", "/w342/");
+                              }
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
                         </>

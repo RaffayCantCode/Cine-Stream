@@ -60,7 +60,7 @@ export default function BrowseFranchisesPage() {
               const posterUrl = col.poster_path
                 ? col.poster_path.startsWith("http")
                   ? col.poster_path
-                  : `https://image.tmdb.org/t/p/w500${col.poster_path}`
+                  : `https://image.tmdb.org/t/p/w780${col.poster_path}`
                 : null;
               return (
                 <Link
@@ -75,6 +75,15 @@ export default function BrowseFranchisesPage() {
                         alt={col.name}
                         className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-transform duration-500 group-hover:scale-105"
                         loading="lazy"
+                        decoding="async"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (target.src.includes("/w780/")) {
+                            target.src = target.src.replace("/w780/", "/w500/");
+                          } else if (target.src.includes("/w500/")) {
+                            target.src = target.src.replace("/w500/", "/w342/");
+                          }
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300" />
                     </>

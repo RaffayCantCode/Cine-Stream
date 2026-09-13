@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Star, Play } from "lucide-react";
 import { isTmdbAnime } from "@/lib/utils";
@@ -74,15 +74,26 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
 
   const [imgSrc, setImgSrc] = useState<string | null>(initialPosterUrl);
   const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     setImgSrc(initialPosterUrl);
     setHasError(false);
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
+    const timer = setTimeout(() => setIsLoaded(true), 350);
+    return () => clearTimeout(timer);
   }, [initialPosterUrl]);
 
   const handleImageError = () => {
     if (imgSrc && imgSrc.includes("/w780/")) {
       setImgSrc(imgSrc.replace("/w780/", "/w500/"));
+    } else if (imgSrc && imgSrc.includes("/w500/")) {
+      setImgSrc(imgSrc.replace("/w500/", "/w342/"));
     } else {
       setHasError(true);
     }
@@ -98,7 +109,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       <Link
         href={link}
         prefetch={false}
-        className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none ${
+        className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none hover:will-change-transform ${
           rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"
         }`}
         style={{ transformOrigin: "center center" }}
@@ -126,20 +137,31 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           </div>
         )}
         <div 
-          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 [isolation:isolate] [transform:translateZ(0)] shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] group-hover:ring-white/40 sheen-wrapper ${
+          className={`relative z-10 w-full h-full overflow-hidden rounded-xl bg-card/80 ring-1 ring-white/10 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] group-hover:ring-white/40 sheen-wrapper ${
             rank ? "ml-6 sm:ml-7 md:ml-8 w-[calc(100%-1.5rem)] sm:w-[calc(100%-1.75rem)] md:w-[calc(100%-2rem)]" : "w-full"
           }`}
           style={{ aspectRatio: "2/3" }}
         >
         {imgSrc && !hasError ? (
-          <img
-            src={imgSrc}
-            alt={title}
-            className="w-full h-full object-cover"
-            loading="eager"
-            decoding="async"
-            onError={handleImageError}
-          />
+          <>
+            <div
+              className={`absolute inset-0 bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent animate-pulse transition-opacity duration-500 pointer-events-none ${
+                isLoaded ? "opacity-0" : "opacity-100"
+              }`}
+            />
+            <img
+              ref={imgRef}
+              src={imgSrc}
+              alt={title}
+              className={`w-full h-full object-cover transition-opacity duration-300 ease-out ${
+                isLoaded ? "opacity-100" : "opacity-0"
+              }`}
+              loading="eager"
+              decoding="async"
+              onLoad={() => setIsLoaded(true)}
+              onError={handleImageError}
+            />
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
             <span className="text-muted-foreground text-xs font-medium">{title}</span>

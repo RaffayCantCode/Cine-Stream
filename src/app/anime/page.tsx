@@ -207,7 +207,7 @@ export default function AnimeBrowsePage() {
           check();
         }
       },
-      { rootMargin: "400px" } // Fixed dead zone: match threshold closely
+      { rootMargin: "1400px" }
     );
 
     if (sentinelRef.current) {
@@ -221,7 +221,7 @@ export default function AnimeBrowsePage() {
   useEffect(() => {
     if (!sentinelRef.current) return;
     const rect = sentinelRef.current.getBoundingClientRect();
-    if (rect.top <= window.innerHeight + 800) {
+    if (rect.top <= window.innerHeight + 1400) {
       triggerLoadRef.current?.();
     }
   }, [items.length]);
