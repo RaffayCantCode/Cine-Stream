@@ -207,7 +207,7 @@ export function BrowseGridPage({ title, description, endpoint, mediaType }: Brow
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
             {items.map((item, idx) => (
               <div key={`${item.media_type ?? "item"}-${item.id}`} className="w-full h-full flex justify-center">
-                <MediaCard item={item} index={idx} showMediaBadge={shouldShowCardBadges} />
+                <MediaCard item={item} index={idx} priority={idx < 10} showMediaBadge={shouldShowCardBadges} />
               </div>
             ))}
             {isLoading && items.length === 0 && Array.from({ length: 12 }).map((_, i) => (

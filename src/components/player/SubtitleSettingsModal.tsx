@@ -94,7 +94,7 @@ export const SubtitleSettingsModal = memo(function SubtitleSettingsModal({
               textShadow: "0 2px 4px rgba(0,0,0,0.9)",
             }}
           >
-            "Cine-Stream High-Definition Subtitles"
+            &ldquo;Cine-Stream High-Definition Subtitles&rdquo;
           </div>
         </div>
 

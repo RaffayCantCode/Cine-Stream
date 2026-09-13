@@ -33,7 +33,8 @@ export default function BrowseTvPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [shows, setShows] = useState<TvShow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  usePageContentReady(!isLoading);
+  const [initialContentReady, setInitialContentReady] = useState(false);
+  usePageContentReady(initialContentReady);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   const [page, setPage] = useState<number | null>(null);
@@ -170,6 +171,7 @@ export default function BrowseTvPage() {
       } finally {
         setIsLoading(false);
         initialLoad.current = false;
+        setInitialContentReady(true);
       }
     };
 
@@ -199,6 +201,15 @@ export default function BrowseTvPage() {
 
     return () => observer.disconnect();
   }, []);
+
+  // Re-check after shows change
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const rect = sentinelRef.current.getBoundingClientRect();
+    if (rect.top <= window.innerHeight + 800) {
+      triggerLoadRef.current?.();
+    }
+  }, [shows.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -307,9 +318,9 @@ export default function BrowseTvPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
-            {shows.map((item) => (
+            {shows.map((item, i) => (
               <div key={item.id} className="w-full h-full flex justify-center">
-                <MediaCard item={{ ...item, media_type: "tv" }} />
+                <MediaCard item={{ ...item, media_type: "tv" }} index={i} priority={i < 10} />
               </div>
             ))}
           </div>
@@ -325,11 +336,16 @@ export default function BrowseTvPage() {
               <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
               <span className="text-sm font-medium text-white/50">Loading more...</span>
             </div>
+          ) : shows.length > 0 && hasMore ? (
+            <button
+              onClick={() => triggerLoadRef.current?.()}
+              className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer"
+            >
+              Load More
+            </button>
           ) : shows.length > 0 && !hasMore ? (
             <span className="text-xs text-white/20">No more results</span>
-          ) : (
-             <div className="h-10 w-full" />
-          )}
+          ) : null}
         </div>
       </div>
       </main>

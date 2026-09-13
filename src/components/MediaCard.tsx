@@ -1,7 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Star, Play } from "lucide-react";
 import { isTmdbAnime } from "@/lib/utils";
 
@@ -63,15 +63,31 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       : `/movie/${item.id}`;
   }
 
-  const year = (item.release_date || item.first_air_date || "").slice(0, 4);
-
-  const posterUrl = item.profile_path 
+  const initialPosterUrl = item.profile_path 
     ? (item.profile_path.startsWith("http") ? item.profile_path : `https://image.tmdb.org/t/p/w780${item.profile_path}`)
     : item.poster_path
     ? (item.poster_path.startsWith("http") ? item.poster_path : `https://image.tmdb.org/t/p/w780${item.poster_path}`)
     : null;
 
-  const isPriority = priority ?? (rank !== undefined && index < 4);
+  const [imgSrc, setImgSrc] = useState<string | null>(initialPosterUrl);
+  const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    setImgSrc(initialPosterUrl);
+    setHasError(false);
+    setIsLoaded(false);
+  }, [initialPosterUrl]);
+
+  const handleImageError = () => {
+    if (imgSrc && imgSrc.includes("/w780/")) {
+      setImgSrc(imgSrc.replace("/w780/", "/w500/"));
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   return (
     <div
@@ -81,7 +97,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       <Link
         href={link}
         prefetch={false}
-        className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none will-change-transform ${
+        className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none ${
           rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"
         }`}
         style={{ transformOrigin: "center center" }}
@@ -114,15 +130,21 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
           }`}
           style={{ aspectRatio: "2/3" }}
         >
-        {posterUrl ? (
-          <Image
-            src={posterUrl}
-            alt={title}
-            fill
-            sizes={rank ? "(max-width: 640px) 160px, (max-width: 768px) 200px, 250px" : "(max-width: 640px) 160px, (max-width: 768px) 200px, 250px"}
-            className="object-cover"
-            priority={isPriority}
-          />
+        {imgSrc && !hasError ? (
+          <>
+            {!isLoaded && (
+              <div className="absolute inset-0 bg-white/[0.04] animate-pulse" />
+            )}
+            <img
+              src={imgSrc}
+              alt={title}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+              loading="eager"
+              decoding="async"
+              onLoad={() => setIsLoaded(true)}
+              onError={handleImageError}
+            />
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
             <span className="text-muted-foreground text-xs font-medium">{title}</span>

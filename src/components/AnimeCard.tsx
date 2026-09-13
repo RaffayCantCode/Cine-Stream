@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Star, Play } from "lucide-react";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 
 export interface AnimeItem {
   id: string;
@@ -40,6 +39,8 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
 };
 
 export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: AnimeCardProps) {
+  const [imageError, setImageError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const subCount = item.episodes?.sub ?? null;
   const dubCount = item.episodes?.dub ?? null;
 
@@ -60,7 +61,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         prefetch={true}
         onMouseEnter={handlePreload}
         onTouchStart={handlePreload}
-        className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none will-change-transform ${
+        className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none ${
           rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"
         }`}
         style={{ transformOrigin: "center center" }}
@@ -93,14 +94,21 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
           }`}
           style={{ aspectRatio: "2/3" }}
         >
-        {item.poster ? (
-          <img
-            src={item.poster}
-            alt={item.name}
-            className="w-full h-full object-cover"
-            loading={rank !== undefined && index < 4 ? "eager" : "lazy"}
-            decoding="async"
-          />
+        {item.poster && !imageError ? (
+          <>
+            {!isLoaded && (
+              <div className="absolute inset-0 bg-white/[0.04] animate-pulse" />
+            )}
+            <img
+              src={item.poster}
+              alt={item.name}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+              loading="eager"
+              decoding="async"
+              onLoad={() => setIsLoaded(true)}
+              onError={() => setImageError(true)}
+            />
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
             <span className="text-muted-foreground text-xs font-medium">{item.name}</span>

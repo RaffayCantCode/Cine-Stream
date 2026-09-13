@@ -33,7 +33,8 @@ export default function BrowseMoviesPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  usePageContentReady(!isLoading);
+  const [initialContentReady, setInitialContentReady] = useState(false);
+  usePageContentReady(initialContentReady);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   const [page, setPage] = useState<number | null>(null);
@@ -171,6 +172,7 @@ export default function BrowseMoviesPage() {
       } finally {
         setIsLoading(false);
         initialLoad.current = false;
+        setInitialContentReady(true);
       }
     };
 
@@ -200,6 +202,15 @@ export default function BrowseMoviesPage() {
 
     return () => observer.disconnect();
   }, []);
+
+  // Re-check after movies change
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const rect = sentinelRef.current.getBoundingClientRect();
+    if (rect.top <= window.innerHeight + 800) {
+      triggerLoadRef.current?.();
+    }
+  }, [movies.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -309,9 +320,9 @@ export default function BrowseMoviesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
-            {movies.map((item) => (
+            {movies.map((item, i) => (
               <div key={item.id} className="w-full h-full flex justify-center">
-                <MediaCard item={{ ...item, media_type: "movie" }} />
+                <MediaCard item={{ ...item, media_type: "movie" }} index={i} priority={i < 10} />
               </div>
             ))}
           </div>
@@ -327,11 +338,16 @@ export default function BrowseMoviesPage() {
               <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
               <span className="text-sm font-medium text-white/50">Loading more...</span>
             </div>
+          ) : movies.length > 0 && hasMore ? (
+            <button
+              onClick={() => triggerLoadRef.current?.()}
+              className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer"
+            >
+              Load More
+            </button>
           ) : movies.length > 0 && !hasMore ? (
             <span className="text-xs text-white/20">No more results</span>
-          ) : (
-             <div className="h-10 w-full" />
-          )}
+          ) : null}
         </div>
       </div>
       </main>

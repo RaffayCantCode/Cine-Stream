@@ -116,7 +116,7 @@ export const AnimeRow = memo(function AnimeRow({ title, items, isLoading, seeAll
       </div>
 
       <div className="relative group/row">
-        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-visible pt-6 pb-8 -mt-3 -mb-3 hide-scrollbar will-change-transform scroll-smooth">
+        <div ref={scrollerRef} className="w-full overflow-x-auto overflow-y-visible pt-6 pb-8 -mt-3 -mb-3 hide-scrollbar scroll-smooth">
           <div className="flex px-3 md:px-6 lg:px-8 xl:px-10 2xl:px-12 3xl:px-16 w-max gap-3.5 md:gap-5">
             {isLoading
               ? Array.from({ length: isTop10 ? 10 : 8 }).map((_, i) => (

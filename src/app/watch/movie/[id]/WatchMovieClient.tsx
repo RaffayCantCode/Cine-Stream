@@ -107,19 +107,42 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
       const urlParams = new URLSearchParams(window.location.search);
       const sourceParam = urlParams.get("source");
       const savedSource = sessionStorage.getItem("cinestream_movie_source");
-      const preferred = sourceParam || savedSource;
 
-      const foundPreferred = preferred ? sources.find((s) => s.type === preferred) : null;
-      if (foundPreferred) {
-        setActiveSource(foundPreferred);
-        return;
+      let selected: StreamingSource | undefined;
+      if (sourceParam) {
+        const num = parseInt(sourceParam, 10);
+        if (!isNaN(num) && num >= 1 && num <= sources.length) {
+          selected = sources[num - 1];
+        } else {
+          selected = sources.find((s) => s.type === sourceParam || s.name.toLowerCase() === sourceParam.toLowerCase());
+        }
       }
-      const existing = sources.find((s) => s.type === activeSource.type);
-      if (existing) {
-        setActiveSource(existing);
-      } else {
-        setActiveSource(sources[0]);
+
+      if (!selected && savedSource) {
+        const num = parseInt(savedSource, 10);
+        if (!isNaN(num) && num >= 1 && num <= sources.length) {
+          selected = sources[num - 1];
+        } else {
+          selected = sources.find((s) => s.type === savedSource);
+        }
       }
+
+      if (!selected) {
+        selected = sources.find((s) => s.type === activeSource.type) || sources[0];
+      }
+
+      setActiveSource(selected);
+
+      // Clean up / normalize URL to show source as a number
+      const selectedIndex = sources.findIndex((s) => s.type === selected.type);
+      const sourceNumber = selectedIndex >= 0 ? selectedIndex + 1 : 1;
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("source") !== String(sourceNumber)) {
+          url.searchParams.set("source", String(sourceNumber));
+          window.history.replaceState(null, "", url.toString());
+        }
+      } catch {}
     }
   }, [sources]);
 
@@ -220,10 +243,12 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
           if (found) {
             setActiveSource(found);
             if (typeof window !== "undefined") {
-              sessionStorage.setItem("cinestream_movie_source", found.type);
+              const sourceIndex = sources.findIndex((s) => s.type === found.type);
+              const sourceNum = sourceIndex >= 0 ? sourceIndex + 1 : 1;
+              sessionStorage.setItem("cinestream_movie_source", String(sourceNum));
               try {
                 const url = new URL(window.location.href);
-                url.searchParams.set("source", found.type);
+                url.searchParams.set("source", String(sourceNum));
                 window.history.replaceState(null, "", url.toString());
               } catch {}
             }

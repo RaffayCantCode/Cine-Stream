@@ -32,7 +32,7 @@ export const MangaCard = memo(function MangaCard({ item, priority = false, showB
         referrerPolicy="no-referrer"
         loading={priority ? "eager" : "lazy"}
         decoding="async"
-        className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
+        className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-108 transition-transform duration-700 ease-out"
       />
 
       {/* Cinematic Gradient Scrim */}

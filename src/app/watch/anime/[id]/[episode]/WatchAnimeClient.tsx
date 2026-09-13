@@ -169,26 +169,58 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       const urlParams = new URLSearchParams(window.location.search);
       const sourceParam = urlParams.get("source");
       const savedSource = sessionStorage.getItem("cinestream_anime_source");
-      const targetSource = sourceParam || savedSource;
-      if (targetSource && servers.some((s) => s.key === targetSource)) {
-        setForcedSource(targetSource);
-      } else if (!servers.some((s) => s.key === forcedSource)) {
-        setForcedSource(servers[0].key);
+
+      let resolvedKey: string | undefined;
+
+      if (sourceParam) {
+        const num = parseInt(sourceParam, 10);
+        if (!isNaN(num) && num >= 1 && num <= servers.length) {
+          resolvedKey = servers[num - 1].key;
+        } else {
+          const match = servers.find((s) => s.key === sourceParam || s.type === sourceParam || s.name.toLowerCase() === sourceParam.toLowerCase());
+          if (match) resolvedKey = match.key;
+        }
       }
+
+      if (!resolvedKey && savedSource) {
+        const num = parseInt(savedSource, 10);
+        if (!isNaN(num) && num >= 1 && num <= servers.length) {
+          resolvedKey = servers[num - 1].key;
+        } else {
+          const match = servers.find((s) => s.key === savedSource || s.type === savedSource);
+          if (match) resolvedKey = match.key;
+        }
+      }
+
+      const activeKey = resolvedKey || (servers.some((s) => s.key === forcedSource) ? forcedSource : servers[0].key);
+      setForcedSource(activeKey);
+
+      // Clean up / normalize URL to show source as a number
+      const serverIdx = servers.findIndex((s) => s.key === activeKey);
+      const sourceNum = serverIdx >= 0 ? serverIdx + 1 : 1;
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("source") !== String(sourceNum)) {
+          url.searchParams.set("source", String(sourceNum));
+          window.history.replaceState(null, "", url.toString());
+        }
+      } catch {}
     }
   }, [servers, forcedSource]);
 
   const handleSelectServer = useCallback((srvKey: string) => {
     setForcedSource(srvKey);
     if (typeof window !== "undefined") {
-      sessionStorage.setItem("cinestream_anime_source", srvKey);
+      const serverIdx = servers.findIndex((s) => s.key === srvKey);
+      const sourceNum = serverIdx >= 0 ? serverIdx + 1 : 1;
+      sessionStorage.setItem("cinestream_anime_source", String(sourceNum));
       try {
         const url = new URL(window.location.href);
-        url.searchParams.set("source", srvKey);
+        url.searchParams.set("source", String(sourceNum));
         window.history.replaceState(null, "", url.toString());
       } catch {}
     }
-  }, []);
+  }, [servers]);
 
   useEffect(() => {
     const loadAnime = async () => {
@@ -418,9 +450,11 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
           }));
         } catch {}
       }
-      router.push(`/watch/anime/${animeId}/${newEp}?source=${forcedSource}`);
+      const serverIdx = servers.findIndex((s) => s.key === forcedSource);
+      const sourceNum = serverIdx >= 0 ? serverIdx + 1 : 1;
+      router.push(`/watch/anime/${animeId}/${newEp}?source=${sourceNum}`);
     },
-    [router, animeId, anime, forcedSource]
+    [router, animeId, anime, forcedSource, servers]
   );
 
   const handleAutoNext = useCallback(() => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { isTmdbAnime } from "@/lib/utils";
@@ -46,13 +47,31 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
     link = isTv ? `/tv/${item.id}` : `/movie/${item.id}`;
   }
   const title = item.title || item.name || "";
-  const year = (item.release_date || item.first_air_date || "").slice(0, 4);
-
-  const posterUrl = item.poster_path
+  const initialPosterUrl = item.poster_path
     ? item.poster_path.startsWith("http")
       ? item.poster_path
       : `https://image.tmdb.org/t/p/w780${item.poster_path}`
     : null;
+
+  const [imgSrc, setImgSrc] = useState<string | null>(initialPosterUrl);
+  const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    setImgSrc(initialPosterUrl);
+    setHasError(false);
+    setIsLoaded(false);
+  }, [initialPosterUrl]);
+
+  const handleImageError = () => {
+    if (imgSrc && imgSrc.includes("/w780/")) {
+      setImgSrc(imgSrc.replace("/w780/", "/w500/"));
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const year = (item.release_date || item.first_air_date || "").slice(0, 4);
 
   return (
     <div
@@ -62,16 +81,23 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
       <Link
         href={link}
         prefetch={false}
-        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out hover:scale-[1.01] hover:-translate-y-2 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] hover:ring-white/40 focus:outline-none sheen-wrapper will-change-transform"
+        className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-card/80 ring-1 ring-white/10 shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out hover:scale-[1.01] hover:-translate-y-2 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] hover:ring-white/40 focus:outline-none sheen-wrapper"
       >
-        {posterUrl ? (
-          <img
-            src={posterUrl}
-            alt={title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-            decoding="async"
-          />
+        {imgSrc && !hasError ? (
+          <>
+            {!isLoaded && (
+              <div className="absolute inset-0 bg-white/[0.04] animate-pulse" />
+            )}
+            <img
+              src={imgSrc}
+              alt={title}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+              loading="eager"
+              decoding="async"
+              onLoad={() => setIsLoaded(true)}
+              onError={handleImageError}
+            />
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
             <span className="text-muted-foreground text-xs font-medium">{title}</span>
