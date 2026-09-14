@@ -55,6 +55,83 @@ interface CinemaPlayerProps {
   children: ReactNode;
 }
 
+const CarouselThumbnail = React.memo(function CarouselThumbnail({
+  thumbUrl,
+  title,
+  episodeNumber,
+  isUpcoming,
+}: {
+  thumbUrl: string | null;
+  title: string;
+  episodeNumber: number;
+  isUpcoming?: boolean;
+}) {
+  const [imgSrc, setImgSrc] = useState<string | null>(thumbUrl);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setImgSrc(thumbUrl);
+    setHasError(false);
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
+  }, [thumbUrl]);
+
+  // Network adaptive fallback on slow connection (>5s)
+  useEffect(() => {
+    if (isLoaded || hasError || !imgSrc) return;
+    const timer = setTimeout(() => {
+      if (!isLoaded && !hasError && imgSrc.includes("/w300/")) {
+        setImgSrc((prev) => (prev ? prev.replace("/w300/", "/w185/") : null));
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [imgSrc, isLoaded, hasError]);
+
+  const handleImageError = () => {
+    if (imgSrc && imgSrc.includes("/w300/")) {
+      setImgSrc(imgSrc.replace("/w300/", "/w185/"));
+    } else if (imgSrc && imgSrc.includes("/w185/")) {
+      setImgSrc(imgSrc.replace("/w185/", "/original/"));
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const showImg = imgSrc && !hasError;
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-black/60">
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-transparent animate-pulse pointer-events-none" />
+      )}
+      {showImg ? (
+        <img
+          ref={imgRef}
+          src={imgSrc}
+          alt={title}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setIsLoaded(true)}
+          onError={handleImageError}
+          className={`w-full h-full object-cover transition-opacity duration-500 ease-out ${
+            isLoaded ? "opacity-100" : "opacity-0"
+          } ${isUpcoming ? "" : "group-hover/card:scale-105"}`}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#262E36]/90 to-[#12161B] text-white/30 font-bold text-xs select-none p-1">
+          <Play className="w-5 h-5 text-white/20 mb-1" />
+          <span>EP {episodeNumber}</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
 export function CinemaPlayer({
   metadata,
   servers,
@@ -1234,19 +1311,12 @@ export function CinemaPlayer({
                   >
                     {/* Thumbnail with S1E1 or EP Badge */}
                     <div className="relative w-full aspect-video bg-black/60 overflow-hidden">
-                      {thumbUrl ? (
-                        <img
-                          src={thumbUrl}
-                          alt={ep.name}
-                          className={`w-full h-full object-cover transition-transform duration-300 ${
-                            isUpcoming ? "" : "group-hover/card:scale-105"
-                          }`}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-white/30 font-bold text-xs">
-                          EP {ep.episode_number}
-                        </div>
-                      )}
+                      <CarouselThumbnail
+                        thumbUrl={thumbUrl}
+                        title={ep.name}
+                        episodeNumber={ep.episode_number}
+                        isUpcoming={isUpcoming}
+                      />
 
                       {/* Upcoming Overlay */}
                       {isUpcoming && (

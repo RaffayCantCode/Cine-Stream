@@ -54,15 +54,26 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
     } else {
       setIsLoaded(false);
     }
-    const timer = setTimeout(() => setIsLoaded(true), 350);
-    return () => clearTimeout(timer);
   }, [item.poster]);
+
+  // Network-adaptive fallback: If high-res w780 takes more than 5s on slow internet, try lighter w500
+  useEffect(() => {
+    if (isLoaded || imageError || !imgSrc) return;
+    const timer = setTimeout(() => {
+      if (!isLoaded && !imageError && imgSrc.includes("/w780/")) {
+        setImgSrc((prev) => prev ? prev.replace("/w780/", "/w500/") : undefined);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [imgSrc, isLoaded, imageError]);
 
   const handleImageError = () => {
     if (imgSrc && imgSrc.includes("/w780/")) {
       setImgSrc(imgSrc.replace("/w780/", "/w500/"));
     } else if (imgSrc && imgSrc.includes("/w500/")) {
       setImgSrc(imgSrc.replace("/w500/", "/w342/"));
+    } else if (imgSrc && imgSrc.includes("/w342/")) {
+      setImgSrc(imgSrc.replace("/w342/", "/w185/"));
     } else {
       setImageError(true);
     }
@@ -121,7 +132,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         {imgSrc && !imageError ? (
           <>
             <div
-              className={`absolute inset-0 bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent animate-pulse transition-opacity duration-500 pointer-events-none ${
+              className={`absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-transparent animate-pulse transition-opacity duration-500 pointer-events-none ${
                 isLoaded ? "opacity-0" : "opacity-100"
               }`}
             />
@@ -129,7 +140,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
               ref={imgRef}
               src={imgSrc}
               alt={item.name}
-              className={`w-full h-full object-cover transition-opacity duration-300 ease-out ${
+              className={`w-full h-full object-cover transition-opacity duration-500 ease-out ${
                 isLoaded ? "opacity-100" : "opacity-0"
               }`}
               loading="eager"
@@ -139,8 +150,11 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
             />
           </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center p-4 text-center bg-card">
-            <span className="text-muted-foreground text-xs font-medium">{item.name}</span>
+          <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-gradient-to-br from-[#262E36] to-[#141A21] select-none">
+            <div className="w-10 h-10 rounded-xl bg-white/[0.05] border border-white/10 flex items-center justify-center mb-2 text-white/30">
+              <Play className="w-5 h-5" />
+            </div>
+            <span className="text-white/70 text-xs font-bold line-clamp-3 leading-tight px-1">{item.name}</span>
           </div>
         )}
 

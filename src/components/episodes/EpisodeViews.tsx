@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, memo, type KeyboardEvent, type ReactNode } from "react";
+import { useState, useEffect, useRef, useMemo, memo, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { List, LayoutGrid, Hash, Play, Lock, Star, Clock } from "lucide-react";
 
@@ -85,6 +85,92 @@ function handleKeyClick(e: KeyboardEvent, onClick: () => void) {
   }
 }
 
+// ── Robust Episode Thumbnail Component with Shimmer & Fallback ───────────────
+const EpisodeThumbnailImage = memo(function EpisodeThumbnailImage({
+  thumbnail,
+  title,
+  number,
+}: {
+  thumbnail?: string | null;
+  title: string;
+  number: number;
+}) {
+  const [imgSrc, setImgSrc] = useState<string | null>(thumbnail || null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setImgSrc(thumbnail || null);
+    setHasError(false);
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
+  }, [thumbnail]);
+
+  // Network-adaptive fallback on slow internet: if high-res still stalls >5s, try w300
+  useEffect(() => {
+    if (isLoaded || hasError || !imgSrc) return;
+    const timer = setTimeout(() => {
+      if (!isLoaded && !hasError && (imgSrc.includes("/w780/") || imgSrc.includes("/original/"))) {
+        setImgSrc((prev) => prev ? prev.replace(/\/w780\/|\/original\//, "/w300/") : null);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [imgSrc, isLoaded, hasError]);
+
+  const handleImageError = () => {
+    if (imgSrc && imgSrc.includes("/w780/")) {
+      setImgSrc(imgSrc.replace("/w780/", "/w300/"));
+    } else if (imgSrc && imgSrc.includes("/w500/")) {
+      setImgSrc(imgSrc.replace("/w500/", "/w300/"));
+    } else if (imgSrc && imgSrc.includes("/w300/")) {
+      setImgSrc(imgSrc.replace("/w300/", "/w185/"));
+    } else if (imgSrc && imgSrc.includes("/w185/")) {
+      setImgSrc(imgSrc.replace("/w185/", "/original/"));
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const showImg = imgSrc && !hasError;
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-white/[0.04]">
+      {/* Ambient glass shimmer skeleton — stays active while downloading on slow internet */}
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-transparent animate-pulse pointer-events-none" />
+      )}
+
+      {showImg ? (
+        <img
+          ref={imgRef}
+          src={imgSrc}
+          alt={title}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setIsLoaded(true)}
+          onError={handleImageError}
+          className={cn(
+            "w-full h-full object-cover transition-opacity duration-500 ease-out group-hover:scale-105",
+            isLoaded ? "opacity-100" : "opacity-0"
+          )}
+        />
+      ) : (
+        /* Polished fallback when thumbnail is unavailable — NEVER a flat black box */
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#262E36]/90 to-[#12161B] p-2 text-center select-none">
+          <Play className="w-6 h-6 sm:w-8 sm:h-8 text-white/20 mb-1" />
+          <span className="text-[10px] sm:text-xs font-black text-white/30 tracking-widest uppercase">
+            EP {formatEpisodeNumber(number)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ── List Card (Netflix-Style Cinematic Row) ───────────────────────────────────
 export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: EpisodeItem }) {
   const isUpcoming = item.isReleased === false;
@@ -125,19 +211,11 @@ export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: E
             : "w-full md:w-56 lg:w-64 xl:w-72 aspect-video"
         )}
       >
-        {item.thumbnail ? (
-          <img
-            src={item.thumbnail}
-            alt={item.title}
-            loading="lazy"
-            decoding="async"
-            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.06] to-transparent">
-            <Play className="w-8 h-8 text-white/20" />
-          </div>
-        )}
+        <EpisodeThumbnailImage
+          thumbnail={item.thumbnail}
+          title={item.title}
+          number={item.number}
+        />
 
         {/* Hover vignette */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -271,19 +349,11 @@ export const EpisodeGridCard = memo(function EpisodeGridCard({ item }: { item: E
           item.isSelected ? "ring-2 ring-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)]" : "group-hover:ring-white/30 group-hover:shadow-[0_12px_28px_-8px_rgba(0,0,0,0.8)]"
         )}
       >
-        {item.thumbnail ? (
-          <img
-            src={item.thumbnail}
-            alt={item.title}
-            loading="lazy"
-            decoding="async"
-            className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.07] to-transparent">
-            <span className="text-2xl font-black text-white/15">{formatEpisodeNumber(item.number)}</span>
-          </div>
-        )}
+        <EpisodeThumbnailImage
+          thumbnail={item.thumbnail}
+          title={item.title}
+          number={item.number}
+        />
 
         {/* Gradient shade */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-60 group-hover:opacity-100 transition-opacity duration-200" />

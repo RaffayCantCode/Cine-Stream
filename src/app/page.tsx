@@ -1,7 +1,7 @@
 "use client";
 export const runtime = 'edge';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Flame, Star, TrendingUp, Clock, Sparkles, Layers, Film, Tv, Heart, Trophy, Bookmark, Play, Clapperboard, Compass, Zap, Award } from "lucide-react";
 import { fetchJson, filterReleasedSafeContent, isTmdbAnime, filterExcludeAnime } from "@/lib/utils";
@@ -448,6 +448,105 @@ function SectionHeading({
     </div>
   );
 }
+
+const FranchiseCard = memo(function FranchiseCard({
+  col,
+  visibilityClass,
+}: {
+  col: any;
+  visibilityClass: string;
+}) {
+  const initialSrc = col.poster_path
+    ? col.poster_path.startsWith("http")
+      ? col.poster_path
+      : `https://image.tmdb.org/t/p/w780${col.poster_path}`
+    : null;
+
+  const [imgSrc, setImgSrc] = useState<string | null>(initialSrc);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setImgSrc(initialSrc);
+    setHasError(false);
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
+  }, [initialSrc]);
+
+  // Network adaptive fallback on slow connection (>5s)
+  useEffect(() => {
+    if (isLoaded || hasError || !imgSrc) return;
+    const timer = setTimeout(() => {
+      if (!isLoaded && !hasError && imgSrc.includes("/w780/")) {
+        setImgSrc((prev) => (prev ? prev.replace("/w780/", "/w500/") : null));
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [imgSrc, isLoaded, hasError]);
+
+  const handleImageError = () => {
+    if (imgSrc && imgSrc.includes("/w780/")) {
+      setImgSrc(imgSrc.replace("/w780/", "/w500/"));
+    } else if (imgSrc && imgSrc.includes("/w500/")) {
+      setImgSrc(imgSrc.replace("/w500/", "/w342/"));
+    } else if (imgSrc && imgSrc.includes("/w342/")) {
+      setImgSrc(imgSrc.replace("/w342/", "/w185/"));
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const showImg = imgSrc && !hasError;
+
+  return (
+    <Link
+      href={`/browse/franchise/${col.id}`}
+      prefetch={false}
+      className={`${visibilityClass} group relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#4B5694]/5 aspect-[2/3] hover:border-white/40 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 focus:outline-none`}
+    >
+      {/* Ambient glass shimmer skeleton while downloading on slow internet */}
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-transparent animate-pulse pointer-events-none" />
+      )}
+
+      {showImg ? (
+        <>
+          <img
+            ref={imgRef}
+            src={imgSrc}
+            alt={col.name}
+            className={`w-full h-full object-cover transition-opacity duration-500 ease-out group-hover:scale-105 ${
+              isLoaded ? "opacity-90 group-hover:opacity-100" : "opacity-0"
+            }`}
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setIsLoaded(true)}
+            onError={handleImageError}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
+        </>
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-gradient-to-br from-[#262E36]/90 to-[#12161B] text-center select-none">
+          <Layers className="w-6 h-6 text-white/20 mb-1.5" />
+          <span className="text-center font-bold text-white/70 text-xs line-clamp-2">{col.name}</span>
+        </div>
+      )}
+
+      <div className="absolute bottom-0 left-0 right-0 p-2.5 sm:p-3 translate-y-1 group-hover:translate-y-0 transition-transform">
+        <h4 className="text-white font-bold text-xs sm:text-[13px] tracking-tight line-clamp-2 drop-shadow-md leading-tight mb-0.5">
+          {col.name}
+        </h4>
+        <span className="text-[9px] uppercase tracking-wider text-white/50 font-black drop-shadow-md">
+          Collection
+        </span>
+      </div>
+    </Link>
+  );
+});
 
 let lastHeroShuffleTime = Date.now();
 
@@ -1478,12 +1577,6 @@ export default function Home() {
               />
               <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-9 3xl:grid-cols-10 gap-2 sm:gap-2.5">
                 {collections.slice(0, 20).map((col, idx) => {
-                  const posterUrl = col.poster_path
-                    ? col.poster_path.startsWith("http")
-                      ? col.poster_path
-                      : `https://image.tmdb.org/t/p/w780${col.poster_path}`
-                    : null;
-
                   const visibilityClass =
                     idx < 8
                       ? "block"
@@ -1500,48 +1593,11 @@ export default function Home() {
                       : "hidden 3xl:block";
 
                   return (
-                    <Link
+                    <FranchiseCard
                       key={col.id}
-                      href={`/browse/franchise/${col.id}`}
-                      prefetch={false}
-                      className={`${visibilityClass} group relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#4B5694]/5 aspect-[2/3] hover:border-white/40 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 focus:outline-none`}
-                    >
-                      {posterUrl ? (
-                        <>
-                          <img
-                            src={posterUrl}
-                            alt={col.name}
-                            className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
-                            loading="lazy"
-                            decoding="async"
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              if (target.src.includes("/w780/")) {
-                                target.src = target.src.replace("/w780/", "/w500/");
-                              } else if (target.src.includes("/w500/")) {
-                                target.src = target.src.replace("/w500/", "/w342/");
-                              }
-                            }}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
-                        </>
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-muted">
-                          <span className="text-center font-bold text-white text-xs">{col.name}</span>
-                        </div>
-                      )}
-
-                      {posterUrl && (
-                        <div className="absolute bottom-0 left-0 right-0 p-2.5 sm:p-3 translate-y-1 group-hover:translate-y-0 transition-transform">
-                          <h4 className="text-white font-bold text-xs sm:text-[13px] tracking-tight line-clamp-2 drop-shadow-md leading-tight mb-0.5">
-                            {col.name}
-                          </h4>
-                          <span className="text-[9px] uppercase tracking-wider text-white/50 font-black drop-shadow-md">
-                            Collection
-                          </span>
-                        </div>
-                      )}
-                    </Link>
+                      col={col}
+                      visibilityClass={visibilityClass}
+                    />
                   );
                 })}
               </div>

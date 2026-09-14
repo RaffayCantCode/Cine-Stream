@@ -36,6 +36,83 @@ interface EpisodeDrawerProps {
   isAnime?: boolean;
 }
 
+const DrawerThumbnail = memo(function DrawerThumbnail({
+  thumbUrl,
+  title,
+  episodeNumber,
+  isUpcoming,
+}: {
+  thumbUrl: string | null;
+  title: string;
+  episodeNumber: number;
+  isUpcoming?: boolean;
+}) {
+  const [imgSrc, setImgSrc] = useState<string | null>(thumbUrl);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setImgSrc(thumbUrl);
+    setHasError(false);
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
+  }, [thumbUrl]);
+
+  // Network adaptive fallback on slow connection (>5s)
+  useEffect(() => {
+    if (isLoaded || hasError || !imgSrc) return;
+    const timer = setTimeout(() => {
+      if (!isLoaded && !hasError && imgSrc.includes("/w300/")) {
+        setImgSrc((prev) => (prev ? prev.replace("/w300/", "/w185/") : null));
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [imgSrc, isLoaded, hasError]);
+
+  const handleImageError = () => {
+    if (imgSrc && imgSrc.includes("/w300/")) {
+      setImgSrc(imgSrc.replace("/w300/", "/w185/"));
+    } else if (imgSrc && imgSrc.includes("/w185/")) {
+      setImgSrc(imgSrc.replace("/w185/", "/original/"));
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const showImg = imgSrc && !hasError;
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-[#18181b]">
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-transparent animate-pulse pointer-events-none" />
+      )}
+      {showImg ? (
+        <img
+          ref={imgRef}
+          src={imgSrc}
+          alt={title}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setIsLoaded(true)}
+          onError={handleImageError}
+          className={`w-full h-full object-cover transition-opacity duration-500 ease-out ${
+            isLoaded ? "opacity-100" : "opacity-0"
+          } ${isUpcoming ? "" : "group-hover:scale-105"}`}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#262E36]/90 to-[#12161B] text-white/30 text-[10px] font-bold select-none p-1">
+          <Play className="w-4 h-4 text-white/20 mb-0.5" />
+          <span>EP {episodeNumber}</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
 export const EpisodeDrawer = memo(function EpisodeDrawer({
   isOpen,
   onClose,
@@ -320,20 +397,12 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
                 >
                   {/* Thumbnail */}
                   <div className="relative w-24 h-16 sm:w-28 sm:h-18 rounded-xl overflow-hidden bg-black/60 shrink-0 border border-white/10">
-                    {thumbUrl ? (
-                      <img
-                        src={thumbUrl}
-                        alt={ep.name}
-                        className={`w-full h-full object-cover transition-transform duration-300 ${
-                          isUpcoming ? "" : "group-hover:scale-105"
-                        }`}
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white/30 text-[10px] font-bold">
-                        EP {ep.episode_number}
-                      </div>
-                    )}
+                    <DrawerThumbnail
+                      thumbUrl={thumbUrl}
+                      title={ep.name}
+                      episodeNumber={ep.episode_number}
+                      isUpcoming={isUpcoming}
+                    />
                     {!isUpcoming && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <Play className="w-5 h-5 text-white fill-current drop-shadow-md" />

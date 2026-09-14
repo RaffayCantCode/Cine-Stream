@@ -5,7 +5,93 @@ import { useRouter } from "next/navigation";
 import { Play, X, Tv, Film, ExternalLink, Info } from "lucide-react";
 import useSWR, { mutate } from "swr";
 import useEmblaCarousel from "embla-carousel-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, memo } from "react";
+
+const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
+  posterPath,
+  mediaType,
+  title,
+  eager,
+}: {
+  posterPath: string | null;
+  mediaType: "movie" | "tv" | "anime";
+  title: string;
+  eager?: boolean;
+}) {
+  const initialSrc = posterPath
+    ? mediaType === "anime"
+      ? posterPath
+      : `https://image.tmdb.org/t/p/w342${posterPath}`
+    : null;
+
+  const [imgSrc, setImgSrc] = useState<string | null>(initialSrc);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setImgSrc(initialSrc);
+    setHasError(false);
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
+  }, [initialSrc]);
+
+  // Network adaptive fallback on slow connection (>5s)
+  useEffect(() => {
+    if (isLoaded || hasError || !imgSrc) return;
+    const timer = setTimeout(() => {
+      if (!isLoaded && !hasError && imgSrc.includes("/w342/")) {
+        setImgSrc((prev) => (prev ? prev.replace("/w342/", "/w185/") : null));
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [imgSrc, isLoaded, hasError]);
+
+  const handleImageError = () => {
+    if (imgSrc && imgSrc.includes("/w342/")) {
+      setImgSrc(imgSrc.replace("/w342/", "/w185/"));
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const showImg = imgSrc && !hasError;
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-card/80">
+      {/* Ambient skeleton while downloading on slow internet */}
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-transparent animate-pulse pointer-events-none" />
+      )}
+      {showImg ? (
+        <img
+          ref={imgRef}
+          src={imgSrc}
+          alt={title}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
+          onLoad={() => setIsLoaded(true)}
+          onError={handleImageError}
+          className={`w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105 ${
+            isLoaded ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center bg-gradient-to-br from-[#262E36]/90 to-[#12161B]">
+          {mediaType === "tv" ? (
+            <Tv className="w-8 h-8 text-white/20 mb-1" />
+          ) : (
+            <Film className="w-8 h-8 text-white/20 mb-1" />
+          )}
+          <span className="text-[10px] font-bold text-white/30 line-clamp-1">{title}</span>
+        </div>
+      )}
+    </div>
+  );
+});
 
 interface WatchHistoryItem {
   id: number;
@@ -173,23 +259,12 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                   className="flex-[0_0_auto] w-[124px] sm:w-[146px] md:w-[158px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.03] first:origin-left hover:z-10"
                 >
                   <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card/80 ring-1 ring-white/10 mb-2.5 relative shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:ring-white/35 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] sheen-wrapper">
-                    {posterUrl ? (
-                      <img
-                        src={posterUrl}
-                        alt={item.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading={idx < 4 ? "eager" : "lazy"}
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-muted">
-                        {item.mediaType === "tv" ? (
-                          <Tv className="w-8 h-8 text-white/20" />
-                        ) : (
-                          <Film className="w-8 h-8 text-white/20" />
-                        )}
-                      </div>
-                    )}
+                    <ContinueWatchingPoster
+                      posterPath={item.posterPath}
+                      mediaType={item.mediaType}
+                      title={item.title}
+                      eager={idx < 4}
+                    />
 
                     <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md tracking-widest uppercase shadow-lg border border-white/10 ${
                       item.mediaType === "movie"
