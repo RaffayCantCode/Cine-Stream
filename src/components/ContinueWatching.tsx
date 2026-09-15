@@ -159,6 +159,27 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     containScroll: "trimSnaps",
   });
 
+  // Keep Continue Watching cache and UI updated in real-time across tabs / page navigations
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const saved = localStorage.getItem(CACHE_KEY);
+        const parsed = saved ? JSON.parse(saved) : null;
+        if (parsed?.items && Array.isArray(parsed.items)) {
+          setCachedItems(parsed.items);
+        }
+      } catch {}
+      mutate("/api/watch-history");
+    };
+
+    window.addEventListener("cinestream_watch_history_updated", handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      window.removeEventListener("cinestream_watch_history_updated", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }, []);
+
   // Continue Watching is strictly for logged-in accounts
   if (status !== "authenticated") {
     return null;
@@ -214,7 +235,8 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
       router.push(`/watch/movie/${item.mediaId}`);
     } else if (item.mediaType === "anime") {
       const episode = item.episode ?? 1;
-      router.push(`/watch/anime/${item.mediaId}/${episode}`);
+      const seasonQuery = item.season && item.season > 1 ? `?season=${item.season}` : "";
+      router.push(`/watch/anime/${item.mediaId}/${episode}${seasonQuery}`);
     } else {
       const season = item.season ?? 1;
       const episode = item.episode ?? 1;
@@ -227,7 +249,8 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     if (item.mediaType === "movie") {
       router.push(`/movie/${item.mediaId}`);
     } else if (item.mediaType === "anime") {
-      router.push(`/anime/${item.mediaId}`);
+      const seasonQuery = item.season && item.season > 1 ? `?season=${item.season}` : "";
+      router.push(`/anime/${item.mediaId}${seasonQuery}`);
     } else {
       router.push(`/tv/${item.mediaId}`);
     }

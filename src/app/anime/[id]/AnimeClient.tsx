@@ -277,6 +277,85 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   useEffect(() => { setDescExpanded(false); }, [currentSeasonId, seasonOverview]);
   useEffect(() => { setEpisodePage(1); setListChunkIndex(0); }, [currentSeasonId]);
 
+  // ── Compute active numeric season number ──────────────────────────────────
+  const currentSeasonNumber = useMemo(() => {
+    const s = currentSeasonInfo || currentSeason;
+    if (!s) return 1;
+    if ((s as any).tmdbSeasonNumber && (s as any).tmdbSeasonNumber > 0) {
+      return (s as any).tmdbSeasonNumber;
+    }
+    const labelMatch = (s as any).seasonLabel?.match(/season\s*(\d+)/i);
+    if (labelMatch) return parseInt(labelMatch[1], 10);
+    const nameMatch = (s as any).name?.match(/season\s*(\d+)/i) || (s as any).title?.match(/season\s*(\d+)/i);
+    if (nameMatch) return parseInt(nameMatch[1], 10);
+    const idx = seasons.findIndex(item => String(item.id) === String(currentSeasonId));
+    if (idx >= 0) return idx + 1;
+    return 1;
+  }, [currentSeasonInfo, currentSeason, seasons, currentSeasonId]);
+
+  // ── Sync active anime season with Continue Watching in real-time ──────────
+  useEffect(() => {
+    if (!anime || typeof window === "undefined") return;
+
+    const allRelatedIds = new Set<string>([
+      String(id),
+      String(anime.id),
+      String(currentSeasonId),
+      ...(anime.seasons || []).map(s => String(s.id)),
+      ...(franchiseNodes || []).map(n => String(n.id)),
+    ]);
+
+    try {
+      const saved = localStorage.getItem("cinestream_cw_cache");
+      const parsed = saved ? JSON.parse(saved) : null;
+      const items: any[] = Array.isArray(parsed?.items) ? parsed.items : [];
+
+      const existingIndex = items.findIndex((it: any) =>
+        it.mediaType === "anime" && (
+          allRelatedIds.has(String(it.mediaId)) ||
+          (it.title && anime.name && it.title.toLowerCase().trim() === anime.name.toLowerCase().trim())
+        )
+      );
+
+      if (existingIndex >= 0) {
+        const existingItem = items[existingIndex];
+        if (existingItem.season !== currentSeasonNumber) {
+          const nextMediaId = parseInt(String(currentSeasonId || anime.id).replace(/\D/g, ""), 10) || existingItem.mediaId;
+          const updatedItem = {
+            ...existingItem,
+            mediaId: nextMediaId,
+            season: currentSeasonNumber,
+            posterPath: displayPoster || existingItem.posterPath,
+            watchedAt: new Date().toISOString(),
+          };
+
+          items.splice(existingIndex, 1);
+          items.unshift(updatedItem);
+
+          localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: items.slice(0, 30) }));
+          window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+
+          if (session?.user?.id) {
+            fetch("/api/watch-history", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mediaId: nextMediaId,
+                mediaType: "anime",
+                title: updatedItem.title,
+                posterPath: updatedItem.posterPath,
+                backdropPath: updatedItem.backdropPath,
+                season: currentSeasonNumber,
+                episode: updatedItem.episode || 1,
+                episodeName: updatedItem.episodeName,
+              }),
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch {}
+  }, [anime, currentSeasonId, currentSeasonNumber, id, franchiseNodes, session?.user?.id, displayPoster]);
+
   // ── Episode page auto-scroll to selected ep ───────────────────────────────
   useEffect(() => {
     if (!selectedEp) return;
@@ -425,10 +504,19 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       }
       const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-      const seasonIdParam = urlParams.get("seasonId") || initialData.openedSeasonId || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent)?.id || initialData.id || id;
-      setCurrentSeasonId(seasonIdParam);
-      const matchSeason = (initialData.seasons || []).find((s: SeasonInfo) => String(s.id) === String(seasonIdParam)) || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent) || initialData.seasons?.[0];
-      loadSeasonEpisodes(matchSeason?.id || seasonIdParam, true, matchSeason?.tmdbId, matchSeason?.tmdbSeasonNumber, matchSeason?.episodeOffset);
+      const urlSeasonNum = Number(urlParams.get("season") || "");
+      let seasonIdParam = urlParams.get("seasonId");
+      if (!seasonIdParam && urlSeasonNum > 0) {
+        const byNum = (initialData.seasons || []).find((s: SeasonInfo) => {
+          const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
+          return sNum === urlSeasonNum;
+        });
+        if (byNum) seasonIdParam = byNum.id;
+      }
+      const effectiveSeasonId = seasonIdParam || initialData.openedSeasonId || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent)?.id || initialData.id || id;
+      setCurrentSeasonId(effectiveSeasonId);
+      const matchSeason = (initialData.seasons || []).find((s: SeasonInfo) => String(s.id) === String(effectiveSeasonId)) || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent) || initialData.seasons?.[0];
+      loadSeasonEpisodes(matchSeason?.id || effectiveSeasonId, true, matchSeason?.tmdbId, matchSeason?.tmdbSeasonNumber, matchSeason?.episodeOffset);
       return;
     }
 
@@ -560,6 +648,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         if (entry) {
           const found = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(entry[0]));
           if (found) targetSeasonId = found.id;
+        } else {
+          const byLabel = availableSeasons.find((s: SeasonInfo) => {
+            const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
+            return sNum === urlSeasonNum;
+          });
+          if (byLabel) targetSeasonId = byLabel.id;
         }
       }
 
@@ -716,6 +810,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("seasonId", season.id);
+      const sNum = season.tmdbSeasonNumber || (season.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
+      if (sNum && sNum > 1) {
+        url.searchParams.set("season", String(sNum));
+      } else {
+        url.searchParams.delete("season");
+      }
       url.searchParams.delete("episode");
       window.history.replaceState({}, "", url.toString());
     }
@@ -725,8 +825,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if (ep.isReleased === false) { setEpisodeNotice(`Episode ${ep.episodeNum} hasn't been released yet.`); return; }
     setEpisodeNotice(null);
     const target = ep.seasonId || currentSeasonId || anime?.id || id;
-    router.push(`/watch/anime/${target}/${ep.episodeNum}`);
-  }, [anime?.id, currentSeasonId, id, router]);
+    const seasonQuery = currentSeasonNumber > 1 ? `?season=${currentSeasonNumber}` : "";
+    router.push(`/watch/anime/${target}/${ep.episodeNum}${seasonQuery}`);
+  }, [anime?.id, currentSeasonId, currentSeasonNumber, id, router]);
 
   const handleViewChange = useCallback((view: EpisodeViewMode) => setEpisodeView(view), []);
 

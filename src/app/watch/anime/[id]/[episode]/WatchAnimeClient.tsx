@@ -10,6 +10,7 @@ import { DrawerSeason } from "@/components/player/EpisodeDrawer";
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceConfigEntry, type SourceTag, type SourceCategory } from "@/lib/streaming-config";
+import type { SeasonInfo } from "@/lib/anime-fetch";
 
 function buildAnimeIframeUrl(
   provider: string,
@@ -78,8 +79,10 @@ interface AnimeInfo {
   totalEpisodes?: number | null;
   tmdbId?: number | null;
   tmdbSeason?: number | null;
+  seasonNumber?: number | null;
   episodeOffset?: number | null;
   countryOfOrigin?: string | null;
+  seasons?: SeasonInfo[];
 }
 
 interface WatchAnimeClientProps {
@@ -226,24 +229,53 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
     const loadAnime = async () => {
       setIsLoading(true);
       try {
+        const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+        const requestedSeasonNum = urlParams ? parseInt(urlParams.get("season") || "", 10) : NaN;
+        const requestedSeasonId = urlParams ? urlParams.get("seasonId") : null;
+
         const res = await fetch(`/api/anime/${encodeURIComponent(animeId)}`);
         if (res.ok) {
           const json = await res.json();
           const a = json?.data?.anime || json?.data;
           if (a) {
             const isChinese = a.countryOfOrigin === "CN" || /[\u4e00-\u9fa5]/.test(a.jname || "") || /[\u4e00-\u9fa5]/.test(a.name || "");
-            const matchingSeason = a.seasons?.find((s: any) => String(s.id) === String(animeId)) || a.seasons?.[0];
+            
+            let matchingSeason = a.seasons?.find((s: any) => String(s.id) === String(animeId));
+            if (!matchingSeason && requestedSeasonId) {
+              matchingSeason = a.seasons?.find((s: any) => String(s.id) === String(requestedSeasonId));
+            }
+            if ((!matchingSeason || String(matchingSeason.id) === String(a.seasons?.[0]?.id)) && !isNaN(requestedSeasonNum) && requestedSeasonNum > 0) {
+              const byNum = a.seasons?.find((s: any) => {
+                const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
+                return sNum === requestedSeasonNum;
+              });
+              if (byNum) matchingSeason = byNum;
+            }
+            if (!matchingSeason) {
+              matchingSeason = a.seasons?.[0];
+            }
+
+            const resolvedSeasonNum =
+              (matchingSeason?.tmdbSeasonNumber && matchingSeason.tmdbSeasonNumber > 0 ? matchingSeason.tmdbSeasonNumber : null) ||
+              (matchingSeason?.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(matchingSeason.seasonLabel.match(/season\s*(\d+)/i)![1], 10) : null) ||
+              (matchingSeason?.name?.match(/season\s*(\d+)/i) ? parseInt(matchingSeason.name.match(/season\s*(\d+)/i)![1], 10) : null) ||
+              (!isNaN(requestedSeasonNum) && requestedSeasonNum > 0 ? requestedSeasonNum : null) ||
+              (a.seasons ? Math.max(a.seasons.findIndex((s: any) => String(s.id) === String(matchingSeason?.id || animeId)) + 1, 1) : 1) ||
+              1;
+
             const trueEpCount = matchingSeason?.totalEpisodes || a.anime?.totalEpisodes || a.totalEpisodes || a.episodes?.sub || (Array.isArray(a.episodes) ? a.episodes.length : null);
             setAnime({
               ...a,
               name: a.name || a.title?.english || a.title?.romaji || a.title,
-              poster: a.poster || a.coverImage?.extraLarge || a.coverImage?.large,
-              bannerImage: a.bannerImage || a.backdrop,
+              poster: matchingSeason?.coverImage || a.poster || a.coverImage?.extraLarge || a.coverImage?.large,
+              bannerImage: matchingSeason?.bannerImage || a.bannerImage || a.backdrop,
               totalEpisodes: trueEpCount,
               tmdbId: matchingSeason?.tmdbId || a.tmdbId || null,
-              tmdbSeason: matchingSeason?.tmdbSeasonNumber || a.tmdbSeason || 1,
+              tmdbSeason: matchingSeason?.tmdbSeasonNumber || a.tmdbSeason || resolvedSeasonNum || 1,
+              seasonNumber: resolvedSeasonNum,
               episodeOffset: matchingSeason?.episodeOffset || 0,
               countryOfOrigin: a.countryOfOrigin || (isChinese ? "CN" : null),
+              seasons: a.seasons,
             });
             return;
           }
@@ -281,6 +313,14 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
           const media = alJson?.data?.Media;
           if (media) {
             const isChinese = media.countryOfOrigin === "CN" || /[\u4e00-\u9fa5]/.test(media.title?.native || "");
+            const rawTitle = media.title?.english || media.title?.romaji || media.title?.native || "";
+            const titleSeasonMatch = rawTitle.match(/season\s*(\d+)/i) || rawTitle.match(/(\d+)(?:st|nd|rd|th)\s+season/i);
+            const resolvedSeasonNum = !isNaN(requestedSeasonNum) && requestedSeasonNum > 0
+              ? requestedSeasonNum
+              : titleSeasonMatch
+              ? parseInt(titleSeasonMatch[1], 10)
+              : 1;
+
             setAnime({
               id: String(media.id),
               idMal: media.idMal ? String(media.idMal) : null,
@@ -290,6 +330,8 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
               bannerImage: media.bannerImage,
               format: media.format,
               seasonYear: media.seasonYear,
+              seasonNumber: resolvedSeasonNum,
+              tmdbSeason: resolvedSeasonNum,
               status: media.status,
               rating: media.averageScore ? (media.averageScore / 10).toFixed(1) : undefined,
               genres: media.genres,
@@ -367,6 +409,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   useEffect(() => {
     if (!anime || !animeId) return;
 
+    const currentSeasonNum = anime.seasonNumber || 1;
     const numericId = Number(anime.id) || (anime.tmdbId ? Number(anime.tmdbId) : parseInt(animeId, 10) || 0);
 
     const payload = {
@@ -375,7 +418,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       title: anime.name,
       posterPath: anime.poster ?? null,
       backdropPath: anime.bannerImage ?? null,
-      season: 1,
+      season: currentSeasonNum,
       episode: episodeNumber,
       episodeName: currentEpDetail?.title || `Episode ${episodeNumber}`,
     };
@@ -400,7 +443,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         title: anime.name,
         posterPath: anime.poster ?? null,
         backdropPath: anime.bannerImage ?? null,
-        season: 1,
+        season: currentSeasonNum,
         episode: episodeNumber,
         episodeName: currentEpDetail?.title || `Episode ${episodeNumber}`,
         watchedAt: new Date().toISOString(),
@@ -410,9 +453,12 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       filtered.unshift(updatedItem);
       localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
 
+      window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+
       // Also update active anime tracker for the details page
       localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
         id: String(anime.id || animeId),
+        season: currentSeasonNum,
         episodeNum: episodeNumber,
       }));
     } catch {}
@@ -425,6 +471,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
           const saved = localStorage.getItem("cinestream_cw_cache");
           const parsed = saved ? JSON.parse(saved) : { items: [] };
           const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+          const currentSeasonNum = anime.seasonNumber || 1;
           const numericId = Number(anime.id) || (anime.tmdbId ? Number(anime.tmdbId) : parseInt(animeId, 10) || 0);
 
           const updatedItem = {
@@ -434,7 +481,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
             title: anime.name,
             posterPath: anime.poster ?? null,
             backdropPath: anime.bannerImage ?? null,
-            season: 1,
+            season: currentSeasonNum,
             episode: newEp,
             episodeName: `Episode ${newEp}`,
             watchedAt: new Date().toISOString(),
@@ -444,8 +491,11 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
           filtered.unshift(updatedItem);
           localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
 
+          window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+
           localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
             id: String(anime.id || animeId),
+            season: currentSeasonNum,
             episodeNum: newEp,
           }));
         } catch {}
