@@ -123,7 +123,7 @@ const EpisodeThumbnailImage = memo(function EpisodeThumbnailImage({
 
   const handleImageError = () => {
     if (imgSrc && imgSrc.includes("/w780/")) {
-      setImgSrc(imgSrc.replace("/w780/", "/w300/"));
+      setImgSrc(imgSrc.replace("/w780/", "/w500/"));
     } else if (imgSrc && imgSrc.includes("/w500/")) {
       setImgSrc(imgSrc.replace("/w500/", "/w300/"));
     } else if (imgSrc && imgSrc.includes("/w300/")) {

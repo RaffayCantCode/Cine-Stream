@@ -66,15 +66,23 @@ const DrawerThumbnail = memo(function DrawerThumbnail({
   useEffect(() => {
     if (isLoaded || hasError || !imgSrc) return;
     const timer = setTimeout(() => {
-      if (!isLoaded && !hasError && imgSrc.includes("/w300/")) {
-        setImgSrc((prev) => (prev ? prev.replace("/w300/", "/w185/") : null));
+      if (!isLoaded && !hasError) {
+        if (imgSrc.includes("/w780/")) {
+          setImgSrc((prev) => (prev ? prev.replace("/w780/", "/w300/") : null));
+        } else if (imgSrc.includes("/w300/")) {
+          setImgSrc((prev) => (prev ? prev.replace("/w300/", "/w185/") : null));
+        }
       }
     }, 5000);
     return () => clearTimeout(timer);
   }, [imgSrc, isLoaded, hasError]);
 
   const handleImageError = () => {
-    if (imgSrc && imgSrc.includes("/w300/")) {
+    if (imgSrc && imgSrc.includes("/w780/")) {
+      setImgSrc(imgSrc.replace("/w780/", "/w500/"));
+    } else if (imgSrc && imgSrc.includes("/w500/")) {
+      setImgSrc(imgSrc.replace("/w500/", "/w300/"));
+    } else if (imgSrc && imgSrc.includes("/w300/")) {
       setImgSrc(imgSrc.replace("/w300/", "/w185/"));
     } else if (imgSrc && imgSrc.includes("/w185/")) {
       setImgSrc(imgSrc.replace("/w185/", "/original/"));
@@ -373,7 +381,7 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
               const thumbUrl = ep.still_path
                 ? ep.still_path.startsWith("http")
                   ? ep.still_path
-                  : `https://image.tmdb.org/t/p/w300${ep.still_path}`
+                  : `https://image.tmdb.org/t/p/w780${ep.still_path}`
                 : null;
 
               return (

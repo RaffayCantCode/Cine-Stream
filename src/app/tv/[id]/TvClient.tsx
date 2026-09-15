@@ -508,7 +508,7 @@ export default function TvClient() {
       number: episode.episode_number,
       title: episode.name,
       description: episode.overview || null,
-      thumbnail: episode.still_path ? `https://image.tmdb.org/t/p/w300${episode.still_path}` : null,
+      thumbnail: episode.still_path ? `https://image.tmdb.org/t/p/w780${episode.still_path}` : null,
       airDate: episode.air_date || null,
       runtime: episode.runtime || null,
       rating: episode.vote_average || null,
