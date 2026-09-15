@@ -235,7 +235,43 @@ export default function MangaDetailsClient({
     return chapters.find((c) => c.id === progress.chapterId) || null;
   }, [progress, chapters]);
 
-  const mangaBackdropUrl = manga?.bannerImage || manga?.coverImage || (manga as any)?.image || null;
+  const [sessionCover, setSessionCover] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem(`cs_manga_cover_${id}`);
+      if (saved && !saved.includes("icon-512.png")) {
+        setSessionCover(saved);
+      }
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (manga?.coverImage && !manga.coverImage.includes("icon-512.png")) {
+      try {
+        sessionStorage.setItem(`cs_manga_cover_${id}`, manga.coverImage);
+      } catch {}
+    }
+  }, [id, manga?.coverImage]);
+
+  const effectiveCover = useMemo(() => {
+    if (manga?.coverImage && !manga.coverImage.includes("icon-512.png")) {
+      return manga.coverImage;
+    }
+    if (sessionCover) {
+      return sessionCover;
+    }
+    return manga?.coverImage || "/icon-512.png";
+  }, [manga?.coverImage, sessionCover]);
+
+  const effectiveBanner = useMemo(() => {
+    if (manga?.bannerImage && !manga.bannerImage.includes("icon-512.png")) {
+      return manga.bannerImage;
+    }
+    return effectiveCover;
+  }, [manga?.bannerImage, effectiveCover]);
+
+  const mangaBackdropUrl = effectiveBanner || effectiveCover || null;
 
   const { theme } = useTheme();
   const isGlobalTheme = theme === "global";
@@ -310,7 +346,7 @@ export default function MangaDetailsClient({
             {/* Background Blur Backdrop */}
             <div
               className="absolute inset-0 bg-cover bg-center opacity-10 blur-3xl scale-125 pointer-events-none"
-              style={{ backgroundImage: `url(${manga.coverImage})` }}
+              style={{ backgroundImage: `url(${effectiveCover})` }}
             />
 
             <div className="relative w-full px-5 sm:px-8 md:px-12">
@@ -319,8 +355,18 @@ export default function MangaDetailsClient({
                 {/* Poster Cover */}
                 <div className="w-48 sm:w-60 md:w-72 aspect-[2/3] shrink-0 rounded-3xl overflow-hidden shadow-2xl border border-white/10 relative group mx-auto md:mx-0">
                   <img
-                    src={manga.coverImage}
+                    src={effectiveCover}
                     alt={manga.title}
+                    referrerPolicy="no-referrer"
+                    decoding="async"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (sessionCover && target.src !== sessionCover) {
+                        target.src = sessionCover;
+                      } else if (!target.src.includes("icon-512.png")) {
+                        target.src = "/icon-512.png";
+                      }
+                    }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-black/80 backdrop-blur-md text-primary border border-primary/30 shadow-lg">
@@ -437,7 +483,7 @@ export default function MangaDetailsClient({
                           mediaId: manga.id,
                           mediaType: manga.type || "manga",
                           title: manga.title,
-                          posterPath: manga.coverImage,
+                          posterPath: effectiveCover,
                         });
                       }}
                       className={`flex items-center gap-2 px-6 py-3.5 sm:py-4 rounded-2xl font-extrabold text-xs sm:text-sm border transition-all duration-300 active:scale-95 cursor-pointer touch-manipulation ${

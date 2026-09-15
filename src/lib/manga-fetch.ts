@@ -51,7 +51,7 @@ const WEEBCENTRAL_BASE = "https://weebcentral.com";
 const ASURA_API = "https://api.asurascans.com/api";
 
 // Bump this whenever fetch logic or data shape changes to instantly drop stale in-memory cache
-const CACHE_VERSION = "v11";
+const CACHE_VERSION = "v12";
 
 const BLOCKED_TAGS = new Set([
   "smut",
@@ -326,8 +326,8 @@ async function getAsuraPopularSeries(limit = 32): Promise<MangaItem[]> {
       description:
         decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) ||
         `Read ${s.title} on CineStream.`,
-      coverImage: s.cover || s.cover_url || s.thumbnail_url || "/icon-512.png",
-      bannerImage: s.banner || s.cover || "/icon-512.png",
+      coverImage: s.cover || s.cover_url || s.thumbnail || s.thumbnail_url || s.image || "/icon-512.png",
+      bannerImage: s.banner || s.banner_url || s.cover || s.cover_url || "/icon-512.png",
       type: "manhwa" as const,
       status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
       releaseYear: s.release_year || null,
@@ -628,21 +628,27 @@ async function searchAsura(query: string): Promise<MangaItem[]> {
     const data = await res.json();
     const seriesList = data.data || [];
 
-    return seriesList.map((s: any) => ({
-      id: `asura-${s.slug}`,
-      title: decodeHtmlEntities(s.title || s.slug),
-      altTitles: s.alt_titles || [],
-      description: decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) || `Read ${s.title} on CineStream.`,
-      coverImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
-      bannerImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
-      type: "manhwa" as const,
-      status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
-      releaseYear: s.release_year || null,
-      tags: ["Action", "Manhwa", "Fantasy"],
-      contentRating: "safe" as const,
-      originalLanguage: "ko",
-      source: "asura" as const,
-    }));
+    return seriesList.map((s: any) => {
+      const cover = s.cover || s.cover_url || s.thumbnail || s.thumbnail_url || s.image || "/icon-512.png";
+      const banner = s.banner || s.cover || s.cover_url || "/icon-512.png";
+      return {
+        id: `asura-${s.slug}`,
+        title: decodeHtmlEntities(s.title || s.slug),
+        altTitles: s.alt_titles || s.alternative_titles || [],
+        description: decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) || `Read ${s.title} on CineStream.`,
+        coverImage: cover,
+        bannerImage: banner,
+        type: "manhwa" as const,
+        status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
+        releaseYear: s.release_year || null,
+        tags: Array.isArray(s.genres)
+          ? s.genres.map((g: any) => (typeof g === "string" ? g : g.name || "Action"))
+          : ["Action", "Manhwa", "Fantasy"],
+        contentRating: "safe" as const,
+        originalLanguage: "ko",
+        source: "asura" as const,
+      };
+    });
   } catch (err) {
     console.warn("[MangaFetch] Asura search fallback failed:", err);
     return [];
@@ -832,14 +838,16 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
         if (res.ok) {
           const data = await res.json();
           const s = data.series || data.data || data;
+          const cover = s.cover || s.cover_url || s.thumbnail || s.thumbnail_url || s.image || "/icon-512.png";
+          const banner = s.banner || s.cover || s.cover_url || cover;
           const item: MangaItem = {
             id: `asura-${slug}`,
             title: decodeHtmlEntities(s.title || slug),
-            altTitles: s.alt_titles || [],
+            altTitles: s.alt_titles || s.alternative_titles || [],
             description: decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) || `Read ${s.title || slug} on CineStream.`,
-            coverImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
-            bannerImage: s.cover_url || s.thumbnail_url || "/icon-512.png",
-            type: "manhwa",
+            coverImage: cover,
+            bannerImage: banner,
+            type: (s.type?.toLowerCase() === "manhwa" || s.type?.toLowerCase() === "manhua" || s.type?.toLowerCase() === "manga") ? s.type.toLowerCase() : "manhwa",
             status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
             releaseYear: s.release_year || null,
             tags: (s.genres || ["Action", "Manhwa", "Fantasy"]).map((g: any) => typeof g === "string" ? g : g.name || "Action"),
@@ -875,8 +883,14 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
           ? descMatch[1].replace(/<[^>]+>/g, "").trim()
           : `Read ${title} on CineStream.`;
         const description = decodeHtmlEntities(rawDescription);
-        const coverMatch = html.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/i);
-        const coverImage = coverMatch ? coverMatch[0] : "/icon-512.png";
+        const coverMatch =
+          html.match(/<img[^>]*alt="[^"]*cover"[^>]*src="([^"]+)"/i) ||
+          html.match(/<img[^>]*src="([^"]+)"[^>]*alt="[^"]*cover"/i) ||
+          html.match(new RegExp(`https:\\/\\/temp\\.compsci88\\.com\\/cover\\/(?:fallback\\/)?${rawId}[^"'\s]*`, "i")) ||
+          html.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/i) ||
+          html.match(/srcset="(https:\/\/[^"\s]+\.(?:webp|jpg|jpeg|png))"/i) ||
+          html.match(/(https:\/\/(?:temp\.compsci88\.com|weebcentral\.com|cdn\.[^"'\s]+)\/[^\s"']+)/i);
+        const coverImage = coverMatch ? coverMatch[1] || coverMatch[0] : `https://temp.compsci88.com/cover/fallback/${rawId}.jpg`;
 
         const yearMatch = html.match(/<strong>Year:<\/strong>\s*<span>(\d+)<\/span>/i);
         const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : null;
