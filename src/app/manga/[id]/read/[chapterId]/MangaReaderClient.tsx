@@ -33,6 +33,7 @@ import {
   Check,
 } from "lucide-react";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { MangaPageItem } from "@/components/manga/MangaPageItem";
 
 export interface MangaReaderClientProps {
   mangaId: string;
@@ -83,19 +84,30 @@ export default function MangaReaderClient({
   useEffect(() => {
     try {
       const isMobile = window.innerWidth < 768;
-      const defaultZoom = isMobile ? 100 : 50;
-      const savedZoom = localStorage.getItem("cinestream.manga_zoom_level");
-      if (savedZoom) {
-        const parsed = parseInt(savedZoom, 10);
-        if (!isNaN(parsed) && parsed >= 20 && parsed <= 200) {
-          const cleanZoom = Math.round(parsed / 10) * 10;
-          setZoomLevel(cleanZoom);
-        } else {
-          setZoomLevel(defaultZoom);
-        }
+      if (isMobile) {
+        setZoomLevel(100);
       } else {
-        setZoomLevel(defaultZoom);
+        const savedZoom = localStorage.getItem("cinestream.manga_zoom_level");
+        if (savedZoom) {
+          const parsed = parseInt(savedZoom, 10);
+          if (!isNaN(parsed) && parsed >= 20 && parsed <= 200) {
+            const cleanZoom = Math.round(parsed / 10) * 10;
+            setZoomLevel(cleanZoom);
+          } else {
+            setZoomLevel(50);
+          }
+        } else {
+          setZoomLevel(50);
+        }
       }
+
+      const handleResize = () => {
+        if (window.innerWidth < 768) {
+          setZoomLevel(100);
+        }
+      };
+      window.addEventListener("resize", handleResize);
+
       const savedBrightness = localStorage.getItem("cinestream.manga_brightness");
       if (savedBrightness) {
         const parsed = parseInt(savedBrightness, 10);
@@ -103,6 +115,10 @@ export default function MangaReaderClient({
           setBrightness(parsed);
         }
       }
+
+      return () => {
+        window.removeEventListener("resize", handleResize);
+      };
     } catch {}
   }, []);
 
@@ -704,8 +720,8 @@ export default function MangaReaderClient({
         {/* Right: Zoom Controls, Fullscreen & Next Chapter Button */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           
-          {/* Zoom In / Out Controls (Bold & Prominent) */}
-          <div className="flex items-center bg-[#141622] border-2 border-primary/40 hover:border-primary/80 rounded-2xl p-1 shadow-lg shadow-black/50 transition-all">
+          {/* Zoom In / Out Controls (Bold & Prominent) - Hidden on Mobile */}
+          <div className="hidden sm:flex items-center bg-[#141622] border-2 border-primary/40 hover:border-primary/80 rounded-2xl p-1 shadow-lg shadow-black/50 transition-all">
             <button
               onClick={handleZoomOut}
               disabled={zoomLevel <= 20}
@@ -856,56 +872,27 @@ export default function MangaReaderClient({
             const pageNum = idx + 1;
             const dataSaverUrl = pagesData.dataSaverUrls?.[idx] || "";
             return (
-              <div
+              <MangaPageItem
                 key={pageNum}
-                data-page={pageNum}
-                ref={(el) => {
+                pageNum={pageNum}
+                totalPages={totalPages}
+                url={url}
+                dataSaverUrl={dataSaverUrl}
+                brightness={brightness}
+                onPageRef={(el) => {
                   if (el) pageRefs.current.set(pageNum, el);
                   else pageRefs.current.delete(pageNum);
                 }}
-                className="relative w-full flex justify-center bg-black min-h-[400px] sm:min-h-[600px] overflow-hidden"
-              >
-                <img
-                  src={url}
-                  alt={`Page ${pageNum}`}
-                  referrerPolicy="no-referrer"
-                  loading={pageNum <= 4 ? "eager" : "lazy"}
-                  decoding="async"
-                  style={{
-                    filter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
-                    WebkitFilter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
-                  }}
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    const retryCount = parseInt(target.dataset.retryCount || "0", 10);
-                    if (retryCount < 3) {
-                      target.dataset.retryCount = String(retryCount + 1);
-                      // Retry 1 & 2: same URL with cache-bust after a small delay
-                      // Retry 3: fall back to data-saver URL if available
-                      const delay = retryCount < 2 ? 800 : 2000;
-                      setTimeout(() => {
-                        if (retryCount === 2 && dataSaverUrl) {
-                          target.src = dataSaverUrl;
-                        } else {
-                          target.src = `${url}${url.includes("?") ? "&" : "?"}_r=${retryCount + 1}_${Date.now()}`;
-                        }
-                      }, delay);
-                    }
-                  }}
-                  className="w-full h-auto object-contain block select-none transition-[filter] duration-150"
-                />
-                {/* Hardware-accelerated dimmer overlay for mobile when brightness < 100 */}
-                {brightness < 100 && (
-                  <div
-                    className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-150 z-10"
-                    style={{ opacity: Math.max(0, (100 - brightness) / 100 * 0.75) }}
-                  />
-                )}
-                {/* Subtle Page Watermark */}
-                <span className="absolute bottom-2 right-3 px-2 py-0.5 rounded-md bg-black/70 text-[9px] text-white/60 backdrop-blur-md pointer-events-none font-bold z-20">
-                  {pageNum} / {totalPages}
-                </span>
-              </div>
+                onTap={() => {
+                  if (chapterPickerOpen || brightnessPickerOpen || mobileNavOpen) {
+                    setChapterPickerOpen(false);
+                    setBrightnessPickerOpen(false);
+                    setMobileNavOpen(false);
+                  } else {
+                    setShowControls((prev) => !prev);
+                  }
+                }}
+              />
             );
           })}
 
