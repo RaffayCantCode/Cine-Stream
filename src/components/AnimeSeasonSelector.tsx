@@ -382,7 +382,7 @@ export function AnimeSeasonSelector({
           >
             <span>{s.shortLabel}</span>
             {s.seasonYear && (
-              <span className={cn("text-[10px] font-semibold opacity-60 hidden md:inline", active ? "text-primary-foreground/80" : "text-white/40")}>
+              <span className={cn("text-[10px] font-bold tracking-tight inline", active ? "text-primary-foreground/95" : "text-white/80")}>
                 {s.seasonYear}
               </span>
             )}
@@ -440,8 +440,8 @@ export function AnimeSeasonSelector({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="font-bold truncate group-hover:text-white">{getSafeTitle(m.title)}</div>
-                      <div className="text-[10px] text-white/40 mt-0.5 flex items-center gap-2">
-                        {m.seasonYear && <span>{m.seasonYear}</span>}
+                      <div className="text-[10px] text-white/70 mt-0.5 flex items-center gap-2">
+                        {m.seasonYear && <span className="text-white/90 font-medium">{m.seasonYear}</span>}
                         <span>Movie</span>
                       </div>
                     </div>
@@ -500,9 +500,9 @@ export function AnimeSeasonSelector({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="font-bold truncate group-hover:text-white">{getSafeTitle(sp.title)}</div>
-                      <div className="text-[10px] text-white/40 mt-0.5 flex items-center gap-2">
-                        {sp.seasonYear && <span>{sp.seasonYear}</span>}
-                        <span className={isOva ? "text-amber-300" : "text-white/60"}>
+                      <div className="text-[10px] text-white/70 mt-0.5 flex items-center gap-2">
+                        {sp.seasonYear && <span className="text-white/90 font-medium">{sp.seasonYear}</span>}
+                        <span className={isOva ? "text-amber-300" : "text-white/70"}>
                           {isOva ? "OVA" : "Special"}
                         </span>
                         {(sp.totalEpisodes || sp.episodes) && (

@@ -1325,10 +1325,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               <div className="mt-2 text-sm sm:text-base font-black text-white/90 tracking-wide drop-shadow-md">
                                 {displayTitle}
                               </div>
-                            ) : currentSeason?.seasonLabel && !currentSeason.seasonLabel.toLowerCase().includes("season 1") ? (
-                              <div className="mt-1.5 inline-block px-2.5 py-0.5 rounded-lg bg-primary/30 border border-primary/40 text-xs sm:text-sm font-bold text-white shadow">
-                                {currentSeason.seasonLabel}
-                              </div>
                             ) : null}
                           </div>
                         ) : !logoLoading ? (
