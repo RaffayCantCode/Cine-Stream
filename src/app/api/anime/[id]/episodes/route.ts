@@ -944,13 +944,35 @@ export async function GET(
       }, { headers: animeCacheHeaders });
     }
 
-    // ── Default: fetch ALL seasons' episodes ───────────────────────────────
-    if (!meta) meta = await getAnimeDetails(id, 100, true);
-    if (!meta) throw new Error("Anime not found");
+    // ── Default: fetch primary season's episodes (capped subrequests) ──────
+    if (!meta) meta = await getAnimeDetails(id, 100, true).catch(() => null);
+    if (!meta || !meta.seasons?.length) {
+      const epCount = 12;
+      const fallbackEps = Array.from({ length: epCount }, (_, i) => ({
+        episodeId: `${id}-${i + 1}`,
+        episodeNum: i + 1,
+        title: `Episode ${i + 1}`,
+        description: null,
+        thumbnail: null,
+        malUrl: null,
+        isFiller: false,
+        releasedDate: null,
+        seasonNum: 1,
+        seasonId: String(id),
+        seasonName: "Season 1",
+        seasonMalId: null,
+      }));
+      return Response.json({
+        success: true,
+        data: { episodes: fallbackEps, totalEpisodes: epCount },
+      }, { headers: animeCacheHeaders });
+    }
 
     let episodes: any[] = [];
+    const targetSeason = meta.seasons.find((s: any) => s.isCurrent) || meta.seasons[0];
+    const seasonsToProcess = targetSeason ? [targetSeason] : [];
 
-    for (const season of meta.seasons) {
+    for (const season of seasonsToProcess) {
       const tmdbId = (season as any).tmdbId;
       const tmdbSeasonNum = season.tmdbSeasonNumber;
       const episodeOffset = (season as any).episodeOffset || 0;

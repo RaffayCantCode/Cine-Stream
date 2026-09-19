@@ -20,12 +20,19 @@ export function Providers({ children }: ProvidersProps) {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
     let refreshing = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
+    const onControllerChange = () => {
+      if (refreshing) return;
+      try {
+        const hasReloaded = sessionStorage.getItem("cs_sw_reloaded");
+        if (hasReloaded) return;
+        if (document.visibilityState === "visible") {
+          refreshing = true;
+          sessionStorage.setItem("cs_sw_reloaded", "1");
+          window.location.reload();
+        }
+      } catch {}
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
 
     let handleVisibilityChange: (() => void) | null = null;
 
@@ -59,6 +66,7 @@ export function Providers({ children }: ProvidersProps) {
       .catch((err) => console.warn("[PWA] Service Worker registration failed:", err));
 
     return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
       if (handleVisibilityChange) {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
       }

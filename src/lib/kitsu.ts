@@ -484,6 +484,16 @@ export async function getAnimeDetailsViaKitsu(
     } catch {}
   }
 
+  // Step 2.5: If still no kitsuId and numId is numeric, test if numId is a direct Kitsu ID
+  if (!kitsuId && !isNaN(numId) && numId > 0) {
+    try {
+      const directKitsu = await kitsuFetchJson<any>(`${KITSU_BASE}/anime/${numId}?fields[anime]=canonicalTitle`);
+      if (directKitsu?.data?.id) {
+        kitsuId = String(directKitsu.data.id);
+      }
+    } catch {}
+  }
+
   // Step 3: If still no kitsuId and id is a title string (NOT a numeric ID), search Kitsu by title
   if (!kitsuId && isNaN(numId) && !isKitsuInput && !isMalInput) {
     try {

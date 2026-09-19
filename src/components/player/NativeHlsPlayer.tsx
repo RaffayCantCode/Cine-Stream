@@ -96,6 +96,16 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  // Unconditionally destroy Hls and its Web Worker thread upon unmounting
+  useEffect(() => {
+    return () => {
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy(); } catch {}
+        hlsRef.current = null;
+      }
+    };
+  }, []);
+
   // Source 1 (AnimePlay/Megaplay) Click-to-Play protection
   const isAnimePlaySource =
     mediaType === "anime" &&
@@ -203,13 +213,20 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
   // ── Step 2: Initialize HLS.js or Native Playback ──
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || useIframeFallback || !streamUrl) return;
+    if (useIframeFallback || !streamUrl) {
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy(); } catch {}
+        hlsRef.current = null;
+      }
+      return;
+    }
+    if (!video) return;
 
     setIsLoading(true);
     setError(null);
 
     if (hlsRef.current) {
-      hlsRef.current.destroy();
+      try { hlsRef.current.destroy(); } catch {}
       hlsRef.current = null;
     }
 

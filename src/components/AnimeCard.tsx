@@ -43,8 +43,14 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
   const [imageError, setImageError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const subCount = item.episodes?.sub ?? null;
+  const subCount = typeof (item as any).episodes === "number" ? (item as any).episodes : (item.episodes?.sub ?? null);
   const dubCount = item.episodes?.dub ?? null;
+
+  const displayName = typeof item.name === "string"
+    ? item.name
+    : (item.name && typeof item.name === "object"
+      ? ((item.name as any).english || (item.name as any).romaji || (item.name as any).native || "")
+      : String(item.name || ""));
 
   useEffect(() => {
     setImgSrc(item.poster);
@@ -209,7 +215,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         <div className="absolute bottom-0 inset-x-0 z-30 p-3 pointer-events-none flex flex-col justify-end">
           <div className="transform transition-transform duration-300 group-hover:-translate-y-4">
             <h3 className="text-white font-extrabold text-xs sm:text-sm leading-snug line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,1)] tracking-tight">
-              {item.name}
+              {displayName}
             </h3>
           </div>
 

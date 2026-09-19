@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { Component, ReactNode, useEffect } from "react";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { RefreshCcw, Home, ArrowLeft, Film } from "lucide-react";
+
+class SafeSidebarBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err: any) {
+    console.warn("[SafeSidebarBoundary] Sidebar failed to render in error boundary:", err);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 
 export default function AnimeDetailError({
   error,
@@ -18,7 +30,9 @@ export default function AnimeDetailError({
 
   return (
     <div className="min-h-screen bg-[#07080d] text-foreground flex">
-      <Sidebar />
+      <SafeSidebarBoundary>
+        <Sidebar />
+      </SafeSidebarBoundary>
       <main className="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
         {/* Anime Brand Glow Effect */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#4B5694]/15 rounded-full blur-[140px] pointer-events-none" />

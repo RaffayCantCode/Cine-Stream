@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import React, { Component, type ReactNode, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -88,7 +88,42 @@ interface FranchiseNode {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ANIME_API_VERSION = "v54-season-isolation";
+const ANIME_API_VERSION = "v55-resilient";
+
+export function getSafeAnimeTitle(raw: any): string {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "object") {
+    return raw.english || raw.romaji || raw.native || raw.name || raw.title || "";
+  }
+  return String(raw);
+}
+
+export function getSafeAnimeDescription(raw: any): string {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw.replace(/<[^>]*>/g, "").trim();
+  if (typeof raw === "object") {
+    return getSafeAnimeTitle(raw);
+  }
+  return String(raw);
+}
+
+function safeSessionSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && (k.startsWith("cs_anime_") || k.startsWith("cs_recs_") || k.startsWith("logo_") || k.startsWith("artwork_"))) {
+          sessionStorage.removeItem(k);
+        }
+      }
+      sessionStorage.setItem(key, value);
+    } catch {}
+  }
+}
 
 function formatAnimeStatus(raw?: string | null): { label: string; style: "finished" | "airing" | "upcoming" } {
   if (!raw) return { label: "FINISHED", style: "finished" };
@@ -98,6 +133,309 @@ function formatAnimeStatus(raw?: string | null): { label: string; style: "finish
   return { label: "FINISHED", style: "finished" };
 }
 
+// Direct browser fallback from residential IP when server API is blocked or unreachable
+async function clientFetchAnimeFallback(
+  rawId: string,
+  signal?: AbortSignal
+): Promise<{ anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } | null> {
+  const idStr = String(rawId || "").trim();
+  const isKitsu = idStr.startsWith("kitsu-");
+  const numOnly = parseInt(idStr.replace(/\D/g, ""), 10);
+
+  // 1. Direct AniList GraphQL query from browser (residential IP)
+  if (!isKitsu && !isNaN(numOnly) && numOnly > 0) {
+    try {
+      const q = `query ($id: Int) {
+        Media(id: $id, type: ANIME, isAdult: false) {
+          id
+          idMal
+          title { romaji english native }
+          coverImage { large extraLarge }
+          bannerImage
+          format
+          season
+          seasonYear
+          status
+          averageScore
+          genres
+          description
+          episodes
+          duration
+          trailer { id site }
+          nextAiringEpisode { episode airingAt timeUntilAiring }
+          relations {
+            edges {
+              relationType
+              node {
+                id
+                idMal
+                title { romaji english native }
+                episodes
+                status
+                season
+                seasonYear
+                format
+                duration
+                bannerImage
+                coverImage { large extraLarge }
+              }
+            }
+          }
+        }
+      }`;
+
+      const res = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ query: q, variables: { id: numOnly } }),
+        signal: signal || AbortSignal.timeout(6000),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const media = json?.data?.Media;
+        if (media) {
+          const title = getSafeAnimeTitle(media.title?.english || media.title?.romaji || media.title?.native || "Anime");
+          const poster = media.coverImage?.extraLarge || media.coverImage?.large || "";
+          const banner = media.bannerImage || null;
+          const isMovie = media.format === "MOVIE";
+          const eps = isMovie ? 1 : (media.episodes || 12);
+          const score = media.averageScore ? (media.averageScore / 10).toFixed(1) : null;
+          const desc = getSafeAnimeDescription(media.description);
+
+          const nodes: FranchiseNode[] = [{
+            id: String(media.id),
+            idMal: media.idMal ? Number(media.idMal) : null,
+            title,
+            episodes: eps,
+            totalEpisodes: eps,
+            format: media.format || "TV",
+            seasonYear: media.seasonYear || null,
+            coverImage: poster,
+            bannerImage: banner,
+          }];
+
+          if (Array.isArray(media.relations?.edges)) {
+            for (const edge of media.relations.edges) {
+              const rel = edge.relationType;
+              if (["SEQUEL", "PREQUEL", "ALTERNATIVE", "SIDE_STORY", "SPIN_OFF"].includes(rel) && edge.node?.id) {
+                const n = edge.node;
+                nodes.push({
+                  id: String(n.id),
+                  idMal: n.idMal ? Number(n.idMal) : null,
+                  title: getSafeAnimeTitle(n.title?.english || n.title?.romaji || n.title?.native || "Season"),
+                  episodes: n.episodes || null,
+                  totalEpisodes: n.episodes || null,
+                  format: n.format || "TV",
+                  seasonYear: n.seasonYear || null,
+                  coverImage: n.coverImage?.extraLarge || n.coverImage?.large || null,
+                  bannerImage: n.bannerImage || null,
+                });
+              }
+            }
+          }
+
+          const seasons: SeasonInfo[] = nodes.map((node, idx) => ({
+            id: String(node.id),
+            name: node.title,
+            seasonLabel: node.format === "MOVIE" ? `Movie ${idx + 1}` : (nodes.length > 1 ? `Season ${idx + 1}` : "Season 1"),
+            totalEpisodes: node.totalEpisodes || node.episodes || eps,
+            isCurrent: String(node.id) === String(media.id),
+            idMal: node.idMal,
+            seasonYear: node.seasonYear,
+            status: media.status,
+            coverImage: node.coverImage || poster,
+            bannerImage: node.bannerImage || banner,
+          }));
+
+          const anime: AnimeDetail = {
+            id: String(media.id),
+            idMal: media.idMal ? String(media.idMal) : null,
+            name: title,
+            jname: media.title?.native || null,
+            poster,
+            bannerImage: banner,
+            description: desc,
+            type: media.format || "TV",
+            format: media.format || "TV",
+            rating: score,
+            score,
+            status: media.status || null,
+            genres: media.genres || [],
+            totalEpisodes: eps,
+            seasons,
+            season: media.season || null,
+            seasonYear: media.seasonYear || null,
+            openedSeasonId: String(media.id),
+            trailerId: media.trailer?.site === "youtube" ? media.trailer.id : null,
+            duration: media.duration || null,
+            nextAiringEpisode: media.nextAiringEpisode || null,
+          };
+
+          return { anime, franchiseNodes: nodes };
+        }
+      }
+    } catch (err) {
+      console.warn("[AnimeClient] AniList direct client query failed:", err);
+    }
+  }
+
+  // 2. Direct Kitsu API query from browser
+  try {
+    const cleanKitsuId = idStr.replace(/^kitsu-/, "").trim();
+    const kRes = await fetch(`https://kitsu.io/api/edge/anime/${encodeURIComponent(cleanKitsuId)}?include=categories`, {
+      headers: { "Accept": "application/vnd.api+json" },
+      signal: signal || AbortSignal.timeout(6000),
+    });
+
+    if (kRes.ok) {
+      const kJson = await kRes.json();
+      const kData = kJson?.data;
+      if (kData) {
+        const attr = kData.attributes || {};
+        const title = getSafeAnimeTitle(attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Anime");
+        const poster = attr.posterImage?.large || attr.posterImage?.original || "";
+        const banner = attr.coverImage?.large || attr.coverImage?.original || null;
+        const eps = attr.episodeCount || 1;
+        const score = attr.averageRating ? (parseFloat(attr.averageRating) / 10).toFixed(1) : null;
+        const desc = getSafeAnimeDescription(attr.synopsis || attr.description);
+
+        const seasonInfo: SeasonInfo = {
+          id: `kitsu-${kData.id}`,
+          name: title,
+          seasonLabel: "Season 1",
+          totalEpisodes: eps,
+          isCurrent: true,
+          coverImage: poster,
+          bannerImage: banner,
+        };
+
+        const anime: AnimeDetail = {
+          id: `kitsu-${kData.id}`,
+          name: title,
+          jname: attr.titles?.ja_jp || null,
+          poster,
+          bannerImage: banner,
+          description: desc,
+          type: (attr.subtype || "TV").toUpperCase(),
+          format: (attr.subtype || "TV").toUpperCase(),
+          rating: score,
+          score,
+          status: attr.status === "current" ? "RELEASING" : (attr.status === "finished" ? "FINISHED" : "NOT_YET_RELEASED"),
+          genres: [],
+          totalEpisodes: eps,
+          seasons: [seasonInfo],
+          openedSeasonId: `kitsu-${kData.id}`,
+        };
+
+        return { anime, franchiseNodes: [] };
+      }
+    }
+  } catch (err) {
+    console.warn("[AnimeClient] Kitsu direct client query failed:", err);
+  }
+
+  // 3. Direct AniZip mappings query from browser
+  try {
+    const param = isKitsu
+      ? `kitsu_id=${idStr.replace("kitsu-", "")}`
+      : !isNaN(numOnly) && numOnly > 0
+      ? `anilist_id=${numOnly}`
+      : null;
+
+    if (param) {
+      const azRes = await fetch(`https://api.ani.zip/mappings?${param}`, {
+        signal: signal || AbortSignal.timeout(4000),
+      });
+      if (azRes.ok) {
+        const az = await azRes.json();
+        const titles = az?.titles || {};
+        const title = getSafeAnimeTitle(titles.en || titles["x-jat"] || titles.ja || az?.mappings?.canonicalTitle || "Anime");
+        const poster = az?.images?.[0]?.url || "";
+        const eps = az?.episodes ? Object.keys(az.episodes).length : 12;
+
+        const seasonInfo: SeasonInfo = {
+          id: idStr,
+          name: title,
+          seasonLabel: "Season 1",
+          totalEpisodes: eps,
+          isCurrent: true,
+          coverImage: poster,
+          bannerImage: null,
+        };
+
+        const anime: AnimeDetail = {
+          id: idStr,
+          name: title,
+          jname: titles.ja || null,
+          poster,
+          bannerImage: null,
+          description: "Anime details loaded from secondary metadata service.",
+          type: (az?.mappings?.type || "TV").toUpperCase(),
+          format: (az?.mappings?.type || "TV").toUpperCase(),
+          rating: null,
+          score: null,
+          status: "FINISHED",
+          genres: [],
+          totalEpisodes: eps,
+          seasons: [seasonInfo],
+          openedSeasonId: idStr,
+        };
+
+        return { anime, franchiseNodes: [] };
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+class AnimeContentErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[AnimeContentErrorBoundary] Caught exception in anime content:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) return this.props.fallback;
+      return (
+        <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl max-w-lg mx-auto space-y-4">
+            <div className="w-12 h-12 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center mx-auto text-xl font-bold">
+              !
+            </div>
+            <div className="text-xl font-black text-white">Something went wrong displaying this anime</div>
+            <div className="text-sm text-white/60">An unexpected rendering issue occurred. You can retry or head back to the anime directory.</div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="px-5 py-2.5 rounded-xl bg-white text-black text-sm font-bold hover:bg-white/90 transition-all active:scale-95 shadow-md"
+              >
+                Retry
+              </button>
+              <Link
+                href="/anime"
+                className="px-5 py-2.5 rounded-xl bg-[#4B5694] hover:bg-[#5a67ad] text-white text-sm font-bold transition-all active:scale-95 shadow-md"
+              >
+                Back to Anime
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const FRANCHISE_CACHE = new Map<string, FranchiseNode[]>();
 
@@ -168,7 +506,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const animeStatusRef = useRef<string | null>(null);
 
   // ── Derived: logo, banner, title ─────────────────────────────────────────
-  const animeTitle = anime?.name || (anime as any)?.title || "";
+  const animeTitle = getSafeAnimeTitle(anime?.name || (anime as any)?.title || "");
   const effectiveInitialLogo = (initialData as any)?.logoUrl || (anime as any)?.logoUrl || null;
   const { logoUrl, backdropUrl: mediaBackdropUrl, loading: logoLoading } = useMediaLogo(id, "anime", animeTitle, effectiveInitialLogo);
   const effectiveLogo = (anime as any)?.logoUrl || (initialData as any)?.logoUrl || logoUrl;
@@ -204,10 +542,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     (typeof anime?.backdrop === "string" ? (anime.backdrop.startsWith("http") ? anime.backdrop : `https://image.tmdb.org/t/p/original${anime.backdrop}`) : null) ||
     mediaBackdropUrl ||
     anime?.poster || "";
-  const displayTitle = (currentSeasonInfo as any)?.title || (currentSeasonInfo as any)?.name || currentSeason?.name || anime?.name || "";
+  const displayTitle = getSafeAnimeTitle((currentSeasonInfo as any)?.title || (currentSeasonInfo as any)?.name || currentSeason?.name || anime?.name || "");
   const displayYear = (currentSeasonInfo as any)?.seasonYear || currentSeason?.seasonYear || anime?.seasonYear || null;
-  const displayFormat = (currentSeasonInfo as any)?.format || (currentSeasonInfo as any)?.type || anime?.format || anime?.type || "Anime";
-  const displayStatus = currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "";
+  const displayFormat = getSafeAnimeTitle((currentSeasonInfo as any)?.format || (currentSeasonInfo as any)?.type || anime?.format || anime?.type || "Anime");
+  const displayStatus = getSafeAnimeTitle(currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "");
 
   const isPageReady = Boolean(!isLoading || error || (anime as any)?.isHidden);
   usePageContentReady(isPageReady);
@@ -284,9 +622,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if ((s as any).tmdbSeasonNumber && (s as any).tmdbSeasonNumber > 0) {
       return (s as any).tmdbSeasonNumber;
     }
-    const labelMatch = (s as any).seasonLabel?.match(/season\s*(\d+)/i);
+    const sLabel = getSafeAnimeTitle((s as any).seasonLabel);
+    const labelMatch = sLabel.match(/season\s*(\d+)/i);
     if (labelMatch) return parseInt(labelMatch[1], 10);
-    const nameMatch = (s as any).name?.match(/season\s*(\d+)/i) || (s as any).title?.match(/season\s*(\d+)/i);
+    const sName = getSafeAnimeTitle((s as any).name || (s as any).title);
+    const nameMatch = sName.match(/season\s*(\d+)/i);
     if (nameMatch) return parseInt(nameMatch[1], 10);
     const idx = seasons.findIndex(item => String(item.id) === String(currentSeasonId));
     if (idx >= 0) return idx + 1;
@@ -310,10 +650,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const parsed = saved ? JSON.parse(saved) : null;
       const items: any[] = Array.isArray(parsed?.items) ? parsed.items : [];
 
+      const currentAnimeSafeName = getSafeAnimeTitle(anime.name).toLowerCase().trim();
+
       const existingIndex = items.findIndex((it: any) =>
         it.mediaType === "anime" && (
           allRelatedIds.has(String(it.mediaId)) ||
-          (it.title && anime.name && it.title.toLowerCase().trim() === anime.name.toLowerCase().trim())
+          (it.title && currentAnimeSafeName && getSafeAnimeTitle(it.title).toLowerCase().trim() === currentAnimeSafeName)
         )
       );
 
@@ -405,7 +747,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
     try {
       const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || (initialData?.seasons || []).find((s: any) => String(s.id) === String(seasonId)) || franchiseNodes?.find(n => String(n.id) === String(seasonId));
-      const sName = (matchingSeason as any)?.name || (matchingSeason as any)?.title || anime?.name || "";
+      const sName = getSafeAnimeTitle((matchingSeason as any)?.name || (matchingSeason as any)?.title || anime?.name || "");
       const sTot = (matchingSeason as any)?.totalEpisodes || (matchingSeason as any)?.episodes || anime?.totalEpisodes || 0;
       const effectiveTmdbId = tmdbId ?? (matchingSeason as any)?.tmdbId ?? anime?.tmdbId ?? null;
       const effectiveTmdbSeason = tmdbSeason ?? (matchingSeason as any)?.tmdbSeasonNumber ?? null;
@@ -416,7 +758,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
       const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
       const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`,
+        { signal: AbortSignal.timeout(8000) }
       );
       const isUpcoming = Boolean((anime as any)?.isUpcoming || (matchingSeason as any)?.isUpcoming || data.data?.isUpcoming);
       const isUnavailable = Boolean((anime as any)?.isUnavailable || (matchingSeason as any)?.isUnavailable || data.data?.isUnavailable);
@@ -448,15 +791,56 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         setEpisodesLoading(false);
         const hasRealData = sorted.some(ep => !ep.isPlaceholder && (ep.title !== `Episode ${ep.episodeNum}` || ep.thumbnail));
         if (hasRealData) {
-          try {
-            sessionStorage.setItem(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
-          } catch {}
+          safeSessionSet(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
         }
         return;
       }
     } catch (err) {
       console.warn(`[AnimeClient] Episode API failed for ${seasonId}:`, err);
     }
+
+    // Try browser-direct AniZip mappings before synthetic fallback
+    try {
+      const cleanSeasonNum = String(seasonId).replace(/\D/g, "");
+      if (cleanSeasonNum) {
+        const isKitsuSeason = String(seasonId).startsWith("kitsu");
+        const azUrl = `https://api.ani.zip/mappings?${isKitsuSeason ? "kitsu_id=" : "anilist_id="}${cleanSeasonNum}`;
+        const azRes = await fetch(azUrl, { signal: AbortSignal.timeout(4000) });
+        if (azRes.ok) {
+          const azJson = await azRes.json();
+          if (azJson?.episodes && Object.keys(azJson.episodes).length > 0) {
+            const azEpisodes: Episode[] = Object.entries(azJson.episodes)
+              .map(([numStr, ep]: [string, any]) => {
+                const n = parseInt(numStr, 10);
+                return {
+                  episodeId: `${seasonId}-${n}`,
+                  episodeNum: n,
+                  title: ep.title?.en || ep.title?.["x-jat"] || ep.title?.ja || `Episode ${n}`,
+                  thumbnail: ep.image || null,
+                  description: ep.overview || ep.summary || null,
+                  releasedDate: ep.airdate || null,
+                  isFiller: Boolean(ep.is_filler),
+                  isReleased: true,
+                  seasonId: String(seasonId),
+                  seasonNum: 1,
+                };
+              })
+              .filter(e => !isNaN(e.episodeNum))
+              .sort((a, b) => a.episodeNum - b.episodeNum);
+
+            if (azEpisodes.length > 0) {
+              setEpisodes(prev => {
+                const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
+                return [...other, ...azEpisodes];
+              });
+              loadedSeasonIds.current.add(seasonId);
+              setEpisodesLoading(false);
+              return;
+            }
+          }
+        }
+      }
+    } catch {}
 
     // Fallback: generate placeholder episodes
     const matchSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || (franchiseNodes || []).find(n => String(n.id) === String(seasonId));
@@ -465,8 +849,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const fallback: Episode[] = Array.from({ length: count }, (_, i) => ({
       episodeId: `${seasonId}-${i + 1}`,
       episodeNum: i + 1,
-      title: isMov ? ((matchSeason as any)?.name || (matchSeason as any)?.title || anime?.name || "Complete Movie") : `Episode ${i + 1}`,
-      description: isMov ? anime?.description : undefined,
+      title: isMov ? getSafeAnimeTitle((matchSeason as any)?.name || (matchSeason as any)?.title || anime?.name || "Complete Movie") : `Episode ${i + 1}`,
+      description: isMov ? getSafeAnimeDescription(anime?.description) : undefined,
       thumbnail: isMov ? ((matchSeason as any)?.coverImage || anime?.poster) : undefined,
       isReleased: true,
       seasonId: String(seasonId),
@@ -478,7 +862,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     });
     loadedSeasonIds.current.add(seasonId);
     setEpisodesLoading(false);
-  }, [id, anime, franchiseNodes]);
+  }, [id, anime, franchiseNodes, initialData]);
 
   // ── MAIN DATA LOADING EFFECT ─────────────────────────────────────────────
   // One clean sequential effect: meta → episodes → background extras
@@ -536,6 +920,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     }
 
     let cancelled = false;
+    const abortController = new AbortController();
 
     const run = async () => {
       // 1) If there's a session seed, use it immediately and start episodes right away
@@ -580,17 +965,38 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         try {
           metaData = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
             `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
-            { signal: AbortSignal.timeout(10000) }
+            { signal: abortController.signal }
           );
           if (metaData?.success && metaData?.data?.anime) {
-            try { sessionStorage.setItem(META_KEY, JSON.stringify({ ...metaData, _cachedAt: Date.now() })); } catch {}
+            safeSessionSet(META_KEY, JSON.stringify({ ...metaData, _cachedAt: Date.now() }));
           }
         } catch {
           // Try direct anime API as fallback
           try {
-            const direct = await fetchJson<{ success: boolean; data: AnimeDetail }>(`/api/anime/${id}`);
+            const direct = await fetchJson<{ success: boolean; data: AnimeDetail }>(`/api/anime/${id}`, { signal: abortController.signal });
             if (direct?.success && direct.data) metaData = { success: true, data: { anime: direct.data } };
           } catch {}
+        }
+      }
+
+      // 2.5) Direct residential browser fallback when server edge APIs fail or are blocked
+      if (!metaData?.success || !metaData?.data?.anime) {
+        try {
+          const directFallback = await clientFetchAnimeFallback(id, abortController.signal);
+          if (directFallback?.anime) {
+            metaData = {
+              success: true,
+              data: {
+                anime: directFallback.anime,
+                franchiseNodes: directFallback.franchiseNodes,
+                tmdbSeasonMap: directFallback.tmdbSeasonMap,
+              },
+            };
+            safeSessionSet(META_KEY, JSON.stringify({ ...metaData, _cachedAt: Date.now() }));
+            safeSessionSet(`cs_anime_seed_${id}`, JSON.stringify(directFallback.anime));
+          }
+        } catch (e) {
+          console.warn("[AnimeClient] Direct client fallback failed:", e);
         }
       }
 
@@ -677,7 +1083,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -721,7 +1130,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const targetId = anime.id || id;
     const excludeIds = new Set([String(id), String(anime.id || ""), ...(franchiseNodes || []).map(n => String(n.id))]);
     const genres = Array.isArray(anime.genres) ? anime.genres : [];
-    const title = anime.name || (anime as any)?.title || "";
+    const title = getSafeAnimeTitle(anime.name || (anime as any)?.title || "");
 
     const safeSourceGenres = genres
       .filter(Boolean)
@@ -768,7 +1177,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               reason: getRecommendationReason(safeSourceGenres, getSafeTargetGenres(item.genres)),
             }));
             setRecommendations(withReasons);
-            try { sessionStorage.setItem(RECS_KEY, JSON.stringify(items)); } catch {}
+            safeSessionSet(RECS_KEY, JSON.stringify(items));
           }
         }
       } catch {}
@@ -882,52 +1291,53 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       {isPageReady && Boolean(anime) && <AmbientBackdropGlow backdropUrl={animeBackdropUrl} />}
       <Sidebar />
 
-      <main className="relative z-10 w-full pt-0 bleed-header select-none">
-        {!isPageReady ? (
-          <div className="min-h-screen w-full flex items-center justify-center">
-            <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-[#7288AE] animate-spin" />
-          </div>
-        ) : (error || !anime || (anime as any)?.isHidden) ? (
-          <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl max-w-lg mx-auto space-y-3">
-              <div className="text-xl font-bold text-white mb-2">Title Unavailable</div>
-              <div className="text-sm text-white/50 mb-4">{error || "This anime is currently not available to view. Please check back later or explore other anime."}</div>
-              <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4B5694] hover:bg-[#5a67ad] text-white rounded-xl text-sm font-bold transition-all">
-                <ArrowLeft className="w-4 h-4" /> Back to Anime
-              </Link>
+      <AnimeContentErrorBoundary>
+        <main className="relative z-10 w-full pt-0 bleed-header select-none">
+          {!isPageReady ? (
+            <div className="min-h-screen w-full flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-[#7288AE] animate-spin" />
             </div>
-          </div>
-        ) : (
-          <>
-            {/* Hero */}
-            <CinematicHero backdropPath={displayBanner} trailerId={anime.trailerId} title={displayTitle} theme="anime">
-              <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 flex flex-col lg:flex-row lg:items-end justify-between gap-6 w-full">
-                <div className="flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 min-w-0 flex-1">
-                  <div className="shrink-0 w-24 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10">
-                    <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 space-y-2 sm:space-y-3 min-w-0">
-                    <div>
-                      {effectiveLogo ? (
-                        <div className="mb-4 sm:mb-5 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
-                          <img src={effectiveLogo} alt={displayTitle} className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]" />
-                          {displayTitle && anime?.name && displayTitle.toLowerCase() !== anime.name.toLowerCase() ? (
-                            <div className="mt-2 text-sm sm:text-base font-black text-white/90 tracking-wide drop-shadow-md">
-                              {displayTitle}
-                            </div>
-                          ) : currentSeason?.seasonLabel && !currentSeason.seasonLabel.toLowerCase().includes("season 1") ? (
-                            <div className="mt-1.5 inline-block px-2.5 py-0.5 rounded-lg bg-primary/30 border border-primary/40 text-xs sm:text-sm font-bold text-white shadow">
-                              {currentSeason.seasonLabel}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : !logoLoading ? (
-                        <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
-                      ) : (
-                        <div className="h-10 sm:h-14 md:h-16 w-48 sm:w-64 rounded-xl bg-white/5 animate-pulse mb-3" />
-                      )}
-                      {anime.jname && <p className="text-primary/90 font-semibold italic text-xs sm:text-sm md:text-base mt-0.5 sm:mt-1 select-text">{anime.jname}</p>}
+          ) : (error || !anime || (anime as any)?.isHidden) ? (
+            <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl max-w-lg mx-auto space-y-3">
+                <div className="text-xl font-bold text-white mb-2">Title Unavailable</div>
+                <div className="text-sm text-white/50 mb-4">{error || "This anime is currently not available to view. Please check back later or explore other anime."}</div>
+                <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4B5694] hover:bg-[#5a67ad] text-white rounded-xl text-sm font-bold transition-all">
+                  <ArrowLeft className="w-4 h-4" /> Back to Anime
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Hero */}
+              <CinematicHero backdropPath={displayBanner} trailerId={anime.trailerId} title={displayTitle} theme="anime">
+                <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 flex flex-col lg:flex-row lg:items-end justify-between gap-6 w-full">
+                  <div className="flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 min-w-0 flex-1">
+                    <div className="shrink-0 w-24 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10">
+                      <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
                     </div>
+                    <div className="flex-1 space-y-2 sm:space-y-3 min-w-0">
+                      <div>
+                        {effectiveLogo ? (
+                          <div className="mb-4 sm:mb-5 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
+                            <img src={effectiveLogo} alt={displayTitle} className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]" />
+                            {displayTitle && anime?.name && displayTitle.toLowerCase() !== getSafeAnimeTitle(anime.name).toLowerCase() ? (
+                              <div className="mt-2 text-sm sm:text-base font-black text-white/90 tracking-wide drop-shadow-md">
+                                {displayTitle}
+                              </div>
+                            ) : currentSeason?.seasonLabel && !currentSeason.seasonLabel.toLowerCase().includes("season 1") ? (
+                              <div className="mt-1.5 inline-block px-2.5 py-0.5 rounded-lg bg-primary/30 border border-primary/40 text-xs sm:text-sm font-bold text-white shadow">
+                                {currentSeason.seasonLabel}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : !logoLoading ? (
+                          <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
+                        ) : (
+                          <div className="h-10 sm:h-14 md:h-16 w-48 sm:w-64 rounded-xl bg-white/5 animate-pulse mb-3" />
+                        )}
+                        {anime.jname && <p className="text-primary/90 font-semibold italic text-xs sm:text-sm md:text-base mt-0.5 sm:mt-1 select-text">{anime.jname}</p>}
+                      </div>
 
                     <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 text-sm sm:text-base font-extrabold">
                       {animeScore > 0 && (
@@ -977,7 +1387,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
                             <span>This entry is upcoming. Please check back later.</span>
                           </div>
-                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={anime.name} posterPath={anime.poster || null} />
+                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                           <TrailerButton />
                         </div>
                       ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" || (currentSeasonInfo as any)?.isUnavailable ? (
@@ -986,7 +1396,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 shrink-0" />
                             <span>This title is currently unavailable on this site. Please check back later.</span>
                           </div>
-                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={anime.name} posterPath={anime.poster || null} />
+                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                           <TrailerButton />
                         </div>
                       ) : dedupedCurrentEps.length > 0 ? (
@@ -998,7 +1408,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current group-hover:scale-110 transition-transform" />
                             {isMovieFormat ? `Watch ${dedupedCurrentEps.length > 1 ? `Movie ${dedupedCurrentEps[0]?.episodeNum || 1}` : "Movie"}` : `Watch Ep ${selectedEp?.episodeNum || dedupedCurrentEps[0]?.episodeNum || 1}`}
                           </button>
-                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={anime.name} posterPath={anime.poster || null} />
+                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                           <TrailerButton />
                         </div>
                       ) : episodesLoading ? (
@@ -1028,12 +1438,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
                 <div>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-xl sm:text-2xl font-black text-white">{displayTitle || anime.name}</h2>
+                    <h2 className="text-xl sm:text-2xl font-black text-white">{displayTitle || getSafeAnimeTitle(anime.name)}</h2>
                     {isMovieFormat && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Movie</span>}
                     {((anime as any)?.isUpcoming || anime.status === "upcoming") && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Upcoming</span>}
                     {((anime as any)?.isUnavailable || anime.status === "unavailable") && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-zinc-700/40 text-zinc-300 border border-zinc-600/40">Unavailable</span>}
                   </div>
-                  {anime.jname && anime.jname !== anime.name && <p className="text-xs text-white/40 mt-0.5">{anime.jname}</p>}
+                  {anime.jname && anime.jname !== getSafeAnimeTitle(anime.name) && <p className="text-xs text-white/40 mt-0.5">{anime.jname}</p>}
                   {animeScore > 0 && (
                     <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-400 font-bold">
                       <Star className="w-3.5 h-3.5 fill-current" /><span>{animeScore.toFixed(1)}</span>
@@ -1074,7 +1484,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   currentSeasons={seasons}
                   currentAnimeId={id}
                   currentSeasonId={currentSeasonId}
-                  animeTitle={anime.name}
+                  animeTitle={displayTitle || getSafeAnimeTitle(anime.name)}
                 />
 
                 {/* Episodes header */}
@@ -1214,6 +1624,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           </>
         )}
       </main>
+      </AnimeContentErrorBoundary>
     </div>
   );
 }

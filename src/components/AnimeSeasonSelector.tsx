@@ -36,6 +36,15 @@ interface AnimeSeasonSelectorProps {
 const SPECIAL_REGEX = /\b(ova|oav|special|specials|chibi|petit|spin-?off|picture\s+drama|audio\s+drama|recap|summary|digest|omake|bonus|blooper|interlude|side\s+story|lost\s+girls|no\s+regrets|ilse|slime\s+diaries|tensura\s+nikki|coleus\s+no\s+yume|marumaru\s+no\s+mahou|titan\s+junior\s+high|preview|pv|tokubetsu|collab|crossover)\b/i;
 const MOVIE_REGEX = /\b(movie|the\s+movie|film|theatrical|gekijouban|scarlet\s+bond|mugen\s+train|jujutsu\s+kaisen\s+0|two\s+heroes|heroes\s+rising|world\s+heroes|you'?re\s+next)\b/i;
 
+function getSafeTitle(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "object") {
+    return val.english || val.romaji || val.native || val.name || val.title || "";
+  }
+  return String(val);
+}
+
 export function AnimeSeasonSelector({
   franchiseNodes,
   currentSeasons = [],
@@ -71,13 +80,13 @@ export function AnimeSeasonSelector({
   const { seasons, movies, specials } = useMemo(() => {
     // 1. Determine base source: franchiseNodes is the curated multi-part source.
     // currentSeasons is only a fallback when franchiseNodes has 0 or 1 item.
-    const sourceNodes: FranchiseNodeItem[] = (franchiseNodes && franchiseNodes.length > 1)
+    const rawNodes = (franchiseNodes && franchiseNodes.length > 1)
       ? franchiseNodes
       : (currentSeasons && currentSeasons.length > 0)
         ? currentSeasons.map(s => ({
             id: String(s.id),
             idMal: s.idMal,
-            title: s.name || s.seasonLabel || "Season",
+            title: getSafeTitle(s.name || s.seasonLabel || "Season"),
             episodes: s.totalEpisodes,
             totalEpisodes: s.totalEpisodes,
             format: (s.seasonLabel || "").startsWith("Movie") ? "MOVIE" : (s.seasonLabel || "").startsWith("OVA") ? "OVA" : "TV",
@@ -87,6 +96,11 @@ export function AnimeSeasonSelector({
           }))
         : (franchiseNodes || []);
 
+    const sourceNodes: FranchiseNodeItem[] = rawNodes.map(node => ({
+      ...node,
+      title: getSafeTitle(node.title || (node as any).name || (node as any).seasonLabel || "Season"),
+    }));
+
     const combined: FranchiseNodeItem[] = [];
     const seenIds = new Set<string>();
     const seenTitles = new Set<string>();
@@ -94,7 +108,7 @@ export function AnimeSeasonSelector({
     for (const item of sourceNodes) {
       const sId = String(item.id || "").trim().toLowerCase();
       const numId = sId.replace(/\D/g, "");
-      const titleKey = (item.title || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+      const titleKey = getSafeTitle(item.title).toLowerCase().replace(/[^a-z0-9]/g, "").trim();
       const yearKey = item.seasonYear ? String(item.seasonYear) : "";
 
       // Deduplicate by exact ID
@@ -116,7 +130,7 @@ export function AnimeSeasonSelector({
     const rawSeasons: FranchiseNodeItem[] = [];
 
     for (const item of combined) {
-      const title = (item.title || "").trim();
+      const title = getSafeTitle(item.title).trim();
       const fmt = (item.format || "").toUpperCase();
       const label = (item.seasonLabel || "").toLowerCase();
       const eps = item.totalEpisodes || item.episodes || 0;
@@ -200,8 +214,8 @@ export function AnimeSeasonSelector({
       }
 
       // 4. Check explicit season numbers in title
-      const titleA = (a.title || "").toLowerCase();
-      const titleB = (b.title || "").toLowerCase();
+      const titleA = getSafeTitle(a.title).toLowerCase();
+      const titleB = getSafeTitle(b.title).toLowerCase();
       const numA = titleA.match(/season\s*(\d+)/i) || titleA.match(/(\d+)(?:st|nd|rd|th)\s+season/i);
       const numB = titleB.match(/season\s*(\d+)/i) || titleB.match(/(\d+)(?:st|nd|rd|th)\s+season/i);
       if (numA && numB) {
@@ -228,7 +242,7 @@ export function AnimeSeasonSelector({
     let lastMainSeasonNum = 0;
 
     const labeledSeasons = validSeasons.map((item) => {
-      const title = (item.title || "").toLowerCase();
+      const title = getSafeTitle(item.title).toLowerCase();
       const explicitSeason = title.match(/season\s*(\d+)/i) || title.match(/(\d+)(?:st|nd|rd|th)\s+season/i);
       const explicitPart = title.match(/(?:part|cour)\s*(\d+)/i);
       const partNum = explicitPart ? parseInt(explicitPart[1], 10) : null;
@@ -358,7 +372,7 @@ export function AnimeSeasonSelector({
           <Link
             key={`season-pill-${s.id}`}
             href={`/anime/${s.id}`}
-            title={s.title}
+            title={getSafeTitle(s.title)}
             className={cn(
               "px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0",
               active
@@ -425,7 +439,7 @@ export function AnimeSeasonSelector({
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="font-bold truncate group-hover:text-white">{m.title}</div>
+                      <div className="font-bold truncate group-hover:text-white">{getSafeTitle(m.title)}</div>
                       <div className="text-[10px] text-white/40 mt-0.5 flex items-center gap-2">
                         {m.seasonYear && <span>{m.seasonYear}</span>}
                         <span>Movie</span>
@@ -485,7 +499,7 @@ export function AnimeSeasonSelector({
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="font-bold truncate group-hover:text-white">{sp.title}</div>
+                      <div className="font-bold truncate group-hover:text-white">{getSafeTitle(sp.title)}</div>
                       <div className="text-[10px] text-white/40 mt-0.5 flex items-center gap-2">
                         {sp.seasonYear && <span>{sp.seasonYear}</span>}
                         <span className={isOva ? "text-amber-300" : "text-white/60"}>

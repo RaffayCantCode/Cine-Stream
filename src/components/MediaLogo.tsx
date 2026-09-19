@@ -12,7 +12,8 @@ export function useMediaLogo(
   initialLogo?: string | null
 ) {
   const isAnime = type === "anime";
-  const cacheKey = `${id}-${title || ""}`;
+  const safeTitle = typeof title === "string" ? title : (title && typeof title === "object" ? ((title as any).english || (title as any).romaji || (title as any).native || "") : "");
+  const cacheKey = `${id}-${safeTitle}`;
 
   const [logoUrl, setLogoUrl] = useState<string | null>(initialLogo || null);
   const [artwork, setArtwork] = useState<{ backdropUrl: string | null; posterUrl: string | null }>({
@@ -28,7 +29,7 @@ export function useMediaLogo(
       setLoading(false);
       return;
     }
-    if ((!id || id === "undefined" || id === "null") && !title) {
+    if ((!id || id === "undefined" || id === "null") && !safeTitle) {
       setLoading(false);
       return;
     }
@@ -51,8 +52,10 @@ export function useMediaLogo(
           }
           if (savedArt) {
             const parsed = JSON.parse(savedArt);
-            artworkCache.set(cacheKey, parsed);
-            setArtwork(parsed);
+            if (parsed && typeof parsed === "object") {
+              artworkCache.set(cacheKey, parsed);
+              setArtwork(parsed);
+            }
           }
           setLoading(false);
           return;
@@ -62,8 +65,8 @@ export function useMediaLogo(
 
     let cancelled = false;
     const url = isAnime
-      ? `/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(title || "")}&type=anime`
-      : `/api/tmdb/logo?id=${id}&type=${type}${title ? `&title=${encodeURIComponent(title)}` : ""}`;
+      ? `/api/tmdb/logo?id=${encodeURIComponent(id)}&title=${encodeURIComponent(safeTitle)}&type=anime`
+      : `/api/tmdb/logo?id=${id}&type=${type}${safeTitle ? `&title=${encodeURIComponent(safeTitle)}` : ""}`;
 
     fetch(url, { cache: "force-cache" })
       .then((res) => (res.ok ? res.json() : null))
@@ -97,7 +100,7 @@ export function useMediaLogo(
     return () => {
       cancelled = true;
     };
-  }, [id, type, title, cacheKey, isAnime]);
+  }, [id, type, safeTitle, cacheKey, isAnime, initialLogo]);
 
-  return { logoUrl, backdropUrl: artwork.backdropUrl, posterUrl: artwork.posterUrl, loading };
+  return { logoUrl, backdropUrl: artwork?.backdropUrl || null, posterUrl: artwork?.posterUrl || null, loading };
 }
