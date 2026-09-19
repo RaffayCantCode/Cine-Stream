@@ -466,7 +466,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const [playingSeason, setPlayingSeason] = useState<number>(1);
+  const [playingEpisode, setPlayingEpisode] = useState<number>(1);
+  const [hasActiveProgress, setHasActiveProgress] = useState(false);
+  const [isProgressLoaded, setIsProgressLoaded] = useState(false);
 
   // ── Core state ───────────────────────────────────────────────────────────
   const [anime, setAnime] = useState<AnimeDetail | null>(() => {
@@ -601,9 +605,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const isSpecialFormat = isMovieFormat || (currentSeasonInfo as any)?.seasonLabel?.toLowerCase().startsWith("ova") || (currentSeasonInfo as any)?.seasonLabel?.toLowerCase().startsWith("special") || (currentSeasonInfo as any)?.format === "OVA" || (currentSeasonInfo as any)?.format === "SPECIAL";
   const isSingleItem = (dedupedCurrentEps.length <= 1 && isSpecialFormat) || isMovieFormat;
 
-  // ── Scroll to top on id change ────────────────────────────────────────────
+  // ── Scroll to top and reset progress on id change ────────────────────────
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    setHasActiveProgress(false);
+    setIsProgressLoaded(false);
+    setPlayingSeason(1);
+    setPlayingEpisode(1);
+    setSelectedEp(null);
   }, [id]);
 
   useEffect(() => {
@@ -633,78 +642,237 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     return 1;
   }, [currentSeasonInfo, currentSeason, seasons, currentSeasonId]);
 
-  // ── Sync active anime season with Continue Watching in real-time ──────────
-  useEffect(() => {
-    if (!anime || typeof window === "undefined") return;
+  // ── Anime Progress Matcher ────────────────────────────────────────────────
+  const isAnimeMatching = useCallback((targetMediaId: string | number | null | undefined, targetTitle?: string | null) => {
+    if (!targetMediaId && !targetTitle) return false;
+    const strTargetId = String(targetMediaId || "").trim();
+    const cleanTargetId = strTargetId.replace(/\D/g, "");
 
     const allRelatedIds = new Set<string>([
-      String(id),
-      String(anime.id),
-      String(currentSeasonId),
-      ...(anime.seasons || []).map(s => String(s.id)),
-      ...(franchiseNodes || []).map(n => String(n.id)),
+      String(id || "").trim(),
+      String(anime?.id || "").trim(),
+      String(initialData?.id || "").trim(),
+      String(currentSeasonId || "").trim(),
+      String((anime as any)?.tmdbId || "").trim(),
+      String((initialData as any)?.tmdbId || "").trim(),
+      String(anime?.idMal || "").trim(),
+      String(initialData?.idMal || "").trim(),
+      ...(anime?.seasons || []).flatMap((s: any) => [String(s.id || "").trim(), String(s.idMal || "").trim(), String(s.tmdbId || "").trim()]),
+      ...(initialData?.seasons || []).flatMap((s: any) => [String(s.id || "").trim(), String(s.idMal || "").trim(), String(s.tmdbId || "").trim()]),
+      ...(franchiseNodes || []).flatMap((n: any) => [String(n.id || "").trim(), String(n.idMal || "").trim(), String(n.tmdbId || "").trim()]),
     ]);
+    allRelatedIds.delete("");
 
-    try {
-      const saved = localStorage.getItem("cinestream_cw_cache");
-      const parsed = saved ? JSON.parse(saved) : null;
-      const items: any[] = Array.isArray(parsed?.items) ? parsed.items : [];
+    if (strTargetId && allRelatedIds.has(strTargetId)) return true;
+    if (cleanTargetId) {
+      for (const rid of allRelatedIds) {
+        const cleanRid = rid.replace(/\D/g, "");
+        if (cleanRid && cleanRid === cleanTargetId) return true;
+      }
+    }
 
-      const currentAnimeSafeName = getSafeAnimeTitle(anime.name).toLowerCase().trim();
+    if (targetTitle) {
+      const cleanTargetTitle = getSafeAnimeTitle(targetTitle).toLowerCase().trim();
+      const candidates = [
+        anime?.name,
+        (anime as any)?.title,
+        anime?.jname,
+        initialData?.name,
+        (initialData as any)?.title,
+        displayTitle,
+      ].filter(Boolean).map(t => getSafeAnimeTitle(t).toLowerCase().trim());
 
-      const existingIndex = items.findIndex((it: any) =>
-        it.mediaType === "anime" && (
-          allRelatedIds.has(String(it.mediaId)) ||
-          (it.title && currentAnimeSafeName && getSafeAnimeTitle(it.title).toLowerCase().trim() === currentAnimeSafeName)
-        )
-      );
-
-      if (existingIndex >= 0) {
-        const existingItem = items[existingIndex];
-        if (existingItem.season !== currentSeasonNumber) {
-          const nextMediaId = parseInt(String(currentSeasonId || anime.id).replace(/\D/g, ""), 10) || existingItem.mediaId;
-          const updatedItem = {
-            ...existingItem,
-            mediaId: nextMediaId,
-            season: currentSeasonNumber,
-            posterPath: displayPoster || existingItem.posterPath,
-            watchedAt: new Date().toISOString(),
-          };
-
-          items.splice(existingIndex, 1);
-          items.unshift(updatedItem);
-
-          localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: items.slice(0, 30) }));
-          window.dispatchEvent(new Event("cinestream_watch_history_updated"));
-
-          if (session?.user?.id) {
-            fetch("/api/watch-history", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mediaId: nextMediaId,
-                mediaType: "anime",
-                title: updatedItem.title,
-                posterPath: updatedItem.posterPath,
-                backdropPath: updatedItem.backdropPath,
-                season: currentSeasonNumber,
-                episode: updatedItem.episode || 1,
-                episodeName: updatedItem.episodeName,
-              }),
-            }).catch(() => {});
-          }
+      for (const cand of candidates) {
+        if (!cand || !cleanTargetTitle) continue;
+        if (cand === cleanTargetTitle) return true;
+        if (cand.length >= 4 && cleanTargetTitle.length >= 4) {
+          if (cand.replace(/[^a-z0-9]/g, "") === cleanTargetTitle.replace(/[^a-z0-9]/g, "")) return true;
+          if (cand.includes(cleanTargetTitle) || cleanTargetTitle.includes(cand)) return true;
         }
       }
-    } catch {}
-  }, [anime, currentSeasonId, currentSeasonNumber, id, franchiseNodes, session?.user?.id, displayPoster]);
+    }
 
-  // ── Episode page auto-scroll to selected ep ───────────────────────────────
+    return false;
+  }, [id, anime, initialData, currentSeasonId, franchiseNodes, displayTitle]);
+
+  // ── Load active progress from URL, active tracker, CW cache & server ──────
   useEffect(() => {
-    if (!selectedEp) return;
-    const gridSize = dedupedCurrentEps.length > 500 ? 50 : 25;
-    setEpisodePage(Math.floor((selectedEp.episodeNum - 1) / gridSize) + 1);
-    setListChunkIndex(Math.floor((selectedEp.episodeNum - 1) / 10));
-  }, [selectedEp?.episodeId, selectedEp?.episodeNum, dedupedCurrentEps.length]);
+    let initSeason = 1;
+    let initEp = 1;
+    let hasActive = false;
+    let cwCacheFresh = false;
+
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlSeason = searchParams.get("season");
+      const urlEp = searchParams.get("episode");
+      const isAutoPlay = searchParams.get("autoplay") === "1";
+
+      if (isAutoPlay || (urlEp && Number(urlEp) > 0)) {
+        if (urlEp && Number(urlEp) > 0) initEp = Number(urlEp);
+        if (urlSeason && Number(urlSeason) > 0) initSeason = Number(urlSeason);
+        hasActive = true;
+      } else {
+        // 1. Check local active tracker
+        try {
+          const activeShowRaw = localStorage.getItem("cinestream_active_anime_show");
+          if (activeShowRaw) {
+            const activeShow = JSON.parse(activeShowRaw);
+            if (isAnimeMatching(activeShow?.id || activeShow?.mediaId, activeShow?.title)) {
+              if (activeShow?.season && Number(activeShow.season) > 0) initSeason = Number(activeShow.season);
+              const epNum = Number(activeShow?.episodeNum || activeShow?.episode || 0);
+              if (epNum > 0) {
+                initEp = epNum;
+                hasActive = true;
+              }
+            }
+          }
+        } catch {}
+
+        // 2. Check Continue Watching cache
+        if (!hasActive) {
+          try {
+            const cwRaw = localStorage.getItem("cinestream_cw_cache");
+            if (cwRaw) {
+              const cw = JSON.parse(cwRaw);
+              if (cw?.cachedAt && Date.now() - cw.cachedAt < 5 * 60 * 1000) {
+                cwCacheFresh = true;
+              }
+              const found = (cw.items || []).find(
+                (it: any) => it.mediaType === "anime" && isAnimeMatching(it.mediaId, it.title)
+              );
+              if (found && found.episode && Number(found.episode) > 0) {
+                if (found.season && Number(found.season) > 0) initSeason = Number(found.season);
+                initEp = Number(found.episode);
+                hasActive = true;
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+
+    if (hasActive) {
+      setPlayingSeason(initSeason);
+      setPlayingEpisode(initEp);
+      setHasActiveProgress(true);
+    }
+
+    // 3. Query server watch history if authenticated and not found in fresh local cache
+    if (status === "authenticated" && (!hasActive || !cwCacheFresh)) {
+      fetch("/api/watch-history")
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (data?.items && Array.isArray(data.items)) {
+            const found = data.items.find(
+              (it: any) => it.mediaType === "anime" && isAnimeMatching(it.mediaId, it.title)
+            );
+            if (found && found.episode && Number(found.episode) > 0) {
+              const sNum = Number(found.season || 1);
+              const eNum = Number(found.episode);
+              setPlayingSeason(sNum);
+              setPlayingEpisode(eNum);
+              setHasActiveProgress(true);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    setIsProgressLoaded(true);
+  }, [id, anime?.id, anime?.name, isAnimeMatching, status]);
+
+  // ── Real-time sync on watch history update or tab focus ───────────────────
+  useEffect(() => {
+    const handleWatchHistoryUpdate = () => {
+      try {
+        const activeShowRaw = localStorage.getItem("cinestream_active_anime_show");
+        if (activeShowRaw) {
+          const activeShow = JSON.parse(activeShowRaw);
+          if (isAnimeMatching(activeShow?.id || activeShow?.mediaId, activeShow?.title)) {
+            const s = Number(activeShow.season || 1);
+            const e = Number(activeShow.episodeNum || activeShow.episode || 0);
+            if (e > 0) {
+              setPlayingSeason(s);
+              setPlayingEpisode(e);
+              setHasActiveProgress(true);
+              return;
+            }
+          }
+        }
+        const cwRaw = localStorage.getItem("cinestream_cw_cache");
+        if (cwRaw) {
+          const cw = JSON.parse(cwRaw);
+          const found = (cw.items || []).find(
+            (it: any) => it.mediaType === "anime" && isAnimeMatching(it.mediaId, it.title)
+          );
+          if (found && found.episode && Number(found.episode) > 0) {
+            setPlayingSeason(Number(found.season || 1));
+            setPlayingEpisode(Number(found.episode));
+            setHasActiveProgress(true);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener("cinestream_watch_history_updated", handleWatchHistoryUpdate);
+    window.addEventListener("focus", handleWatchHistoryUpdate);
+    return () => {
+      window.removeEventListener("cinestream_watch_history_updated", handleWatchHistoryUpdate);
+      window.removeEventListener("focus", handleWatchHistoryUpdate);
+    };
+  }, [isAnimeMatching]);
+
+  // ── Persist active anime tracker state (matches TvClient.tsx) ────────────
+  useEffect(() => {
+    if (typeof window !== "undefined" && isProgressLoaded && hasActiveProgress && (anime || id)) {
+      try {
+        localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
+          id: String(anime?.id || id),
+          mediaId: anime?.id || id,
+          title: anime?.name || displayTitle,
+          season: playingSeason,
+          episodeNum: playingEpisode,
+        }));
+      } catch {}
+    }
+  }, [id, anime, displayTitle, playingSeason, playingEpisode, isProgressLoaded, hasActiveProgress]);
+
+  // ── Synchronize selected episode with active progress in current season ──
+  useEffect(() => {
+    if (hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) && playingEpisode) {
+      const ep = dedupedCurrentEps.find(e => Number(e.episodeNum) === Number(playingEpisode));
+      if (ep) {
+        setSelectedEp(ep);
+      } else if (dedupedCurrentEps.length > 0) {
+        setSelectedEp({
+          episodeId: `${currentSeasonId}-${playingEpisode}`,
+          episodeNum: playingEpisode,
+          title: `Episode ${playingEpisode}`,
+          isReleased: true,
+          seasonId: String(currentSeasonId),
+          seasonNum: currentSeasonNumber,
+        });
+      }
+    }
+  }, [hasActiveProgress, playingSeason, currentSeasonNumber, playingEpisode, dedupedCurrentEps, currentSeasonId]);
+
+  // ── Synchronize chunk bar and grid pagination to active episode ──────────
+  useEffect(() => {
+    if (hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) && playingEpisode) {
+      const gridSize = dedupedCurrentEps.length > 500 ? 50 : 25;
+      const targetPage = Math.floor((playingEpisode - 1) / gridSize) + 1;
+      setEpisodePage(targetPage);
+      setListChunkIndex(Math.floor((playingEpisode - 1) / 10));
+    } else if (selectedEp) {
+      const gridSize = dedupedCurrentEps.length > 500 ? 50 : 25;
+      setEpisodePage(Math.floor((selectedEp.episodeNum - 1) / gridSize) + 1);
+      setListChunkIndex(Math.floor((selectedEp.episodeNum - 1) / 10));
+    } else {
+      setEpisodePage(1);
+      setListChunkIndex(0);
+    }
+  }, [hasActiveProgress, playingSeason, currentSeasonNumber, playingEpisode, selectedEp, dedupedCurrentEps.length]);
 
   // ── LOAD SEASON EPISODES (called from one place only) ────────────────────
   const loadSeasonEpisodes = useCallback(async (
@@ -888,8 +1056,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       }
       const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-      const urlSeasonNum = Number(urlParams.get("season") || "");
+      let urlSeasonNum = Number(urlParams.get("season") || "");
       let seasonIdParam = urlParams.get("seasonId");
+
+      if (!seasonIdParam && urlSeasonNum <= 0 && typeof window !== "undefined") {
+        try {
+          const act = localStorage.getItem("cinestream_active_anime_show");
+          if (act) {
+            const p = JSON.parse(act);
+            if (p?.season && Number(p.season) > 1 && isAnimeMatching(p?.id || p?.mediaId, p?.title)) {
+              urlSeasonNum = Number(p.season);
+            }
+          }
+          if (urlSeasonNum <= 0) {
+            const cw = localStorage.getItem("cinestream_cw_cache");
+            if (cw) {
+              const p = JSON.parse(cw);
+              const found = (p?.items || []).find((it: any) => it.mediaType === "anime" && isAnimeMatching(it.mediaId, it.title));
+              if (found?.season && Number(found.season) > 1) {
+                urlSeasonNum = Number(found.season);
+              }
+            }
+          }
+        } catch {}
+      }
+
       if (!seasonIdParam && urlSeasonNum > 0) {
         const byNum = (initialData.seasons || []).find((s: SeasonInfo) => {
           const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
@@ -1045,19 +1236,42 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       const defaultSeasonId = metaData.data.openedSeasonId || a.openedSeasonId || (availableSeasons.find((s: SeasonInfo) => s.isCurrent)?.id) || a.id || id;
       let targetSeasonId = defaultSeasonId;
+      let effectiveSeasonNum = urlSeasonNum;
+      if (!urlSeasonId && effectiveSeasonNum <= 0 && typeof window !== "undefined") {
+        try {
+          const act = localStorage.getItem("cinestream_active_anime_show");
+          if (act) {
+            const p = JSON.parse(act);
+            if (p?.season && Number(p.season) > 1 && isAnimeMatching(p?.id || p?.mediaId, p?.title)) {
+              effectiveSeasonNum = Number(p.season);
+            }
+          }
+          if (effectiveSeasonNum <= 0) {
+            const cw = localStorage.getItem("cinestream_cw_cache");
+            if (cw) {
+              const p = JSON.parse(cw);
+              const found = (p?.items || []).find((it: any) => it.mediaType === "anime" && isAnimeMatching(it.mediaId, it.title));
+              if (found?.season && Number(found.season) > 1) {
+                effectiveSeasonNum = Number(found.season);
+              }
+            }
+          }
+        } catch {}
+      }
+
       if (urlSeasonId) {
         const found = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(urlSeasonId));
         if (found) targetSeasonId = found.id;
         else targetSeasonId = urlSeasonId;
-      } else if (urlSeasonNum > 0) {
-        const entry = Object.entries(tmdbSeasonMap).find(([, num]) => num === urlSeasonNum);
+      } else if (effectiveSeasonNum > 0) {
+        const entry = Object.entries(tmdbSeasonMap).find(([, num]) => num === effectiveSeasonNum);
         if (entry) {
           const found = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(entry[0]));
           if (found) targetSeasonId = found.id;
         } else {
           const byLabel = availableSeasons.find((s: SeasonInfo) => {
             const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
-            return sNum === urlSeasonNum;
+            return sNum === effectiveSeasonNum;
           });
           if (byLabel) targetSeasonId = byLabel.id;
         }
@@ -1233,10 +1447,23 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const handleWatchEpisode = useCallback((ep: Episode) => {
     if (ep.isReleased === false) { setEpisodeNotice(`Episode ${ep.episodeNum} hasn't been released yet.`); return; }
     setEpisodeNotice(null);
+    setPlayingSeason(currentSeasonNumber);
+    setPlayingEpisode(ep.episodeNum);
+    setHasActiveProgress(true);
+    setSelectedEp(ep);
+    try {
+      localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
+        id: String(anime?.id || id),
+        mediaId: anime?.id || id,
+        title: anime?.name || displayTitle,
+        season: currentSeasonNumber,
+        episodeNum: ep.episodeNum,
+      }));
+    } catch {}
     const target = ep.seasonId || currentSeasonId || anime?.id || id;
     const seasonQuery = currentSeasonNumber > 1 ? `?season=${currentSeasonNumber}` : "";
     router.push(`/watch/anime/${target}/${ep.episodeNum}${seasonQuery}`);
-  }, [anime?.id, currentSeasonId, currentSeasonNumber, id, router]);
+  }, [anime?.id, anime?.name, currentSeasonId, currentSeasonNumber, displayTitle, id, router]);
 
   const handleViewChange = useCallback((view: EpisodeViewMode) => setEpisodeView(view), []);
 
@@ -1245,7 +1472,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const unreleased = ep.isReleased === false;
     const backdropFallback = (anime as any)?.bannerImage || initialData?.bannerImage || displayPoster || null;
     const thumbSrc = unreleased ? (ep.thumbnail || null) : (ep.thumbnail || (isSingleItem && displayPoster) || backdropFallback);
-    const isSelected = selectedEp?.episodeId === ep.episodeId || Number(selectedEp?.episodeNum) === Number(ep.episodeNum);
+    const isWatching = Boolean(
+      hasActiveProgress &&
+      (Number(playingSeason) === Number(currentSeasonNumber) || !playingSeason) &&
+      Number(playingEpisode) === Number(ep.episodeNum)
+    );
+    const isSelected = isWatching || (Boolean(selectedEp) && (selectedEp?.episodeId === ep.episodeId || Number(selectedEp?.episodeNum) === Number(ep.episodeNum)) && Number(playingSeason) === Number(currentSeasonNumber));
     return {
       key: `${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || "ep"}`,
       number: ep.episodeNum,
@@ -1263,7 +1495,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       portrait: isSingleItem,
       onClick: () => handleWatchEpisode(ep),
     };
-  }, [anime, currentSeasonId, displayPoster, displayTitle, handleWatchEpisode, isPlaying, isSingleItem, selectedEp]);
+  }, [anime, currentSeasonId, currentSeasonNumber, displayPoster, displayTitle, handleWatchEpisode, hasActiveProgress, isPlaying, isSingleItem, playingEpisode, playingSeason, selectedEp]);
 
   const episodeItems = useMemo(() => dedupedCurrentEps.map(episodeToItem), [dedupedCurrentEps, episodeToItem]);
 
@@ -1398,11 +1630,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       ) : dedupedCurrentEps.length > 0 ? (
                         <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
                           <button
-                            onClick={() => { const first = dedupedCurrentEps.find(ep => ep.isReleased !== false) || dedupedCurrentEps[0]; if (first) handleWatchEpisode(first); }}
+                            onClick={() => {
+                              const activeEp = (hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber)
+                                ? dedupedCurrentEps.find(e => Number(e.episodeNum) === Number(playingEpisode))
+                                : null) || selectedEp;
+                              const target = activeEp || dedupedCurrentEps.find(ep => ep.isReleased !== false) || dedupedCurrentEps[0];
+                              if (target) handleWatchEpisode(target);
+                            }}
                             className="group flex items-center gap-2 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm transition-all duration-200 shadow-xl shadow-black/30"
                           >
                             <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current group-hover:scale-110 transition-transform" />
-                            {isMovieFormat ? `Watch ${dedupedCurrentEps.length > 1 ? `Movie ${dedupedCurrentEps[0]?.episodeNum || 1}` : "Movie"}` : `Watch Ep ${selectedEp?.episodeNum || dedupedCurrentEps[0]?.episodeNum || 1}`}
+                            {isMovieFormat
+                              ? `Watch ${dedupedCurrentEps.length > 1 ? `Movie ${dedupedCurrentEps[0]?.episodeNum || 1}` : "Movie"}`
+                              : hasActiveProgress && playingEpisode
+                              ? `Watch Ep ${playingEpisode}`
+                              : `Watch Ep ${selectedEp?.episodeNum || dedupedCurrentEps[0]?.episodeNum || 1}`}
                           </button>
                           <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                           <TrailerButton />
@@ -1574,9 +1816,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
                   return (
                     <div key={`list-${currentSeasonId}-${activeChunk}`}>
-                      {episodeItems.length > CHUNK && <div className="flex justify-end mt-2 mb-6"><EpisodeChunkBar totalEpisodes={episodeItems.length} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={selectedEp?.episodeNum} /></div>}
+                      {episodeItems.length > CHUNK && <div className="flex justify-end mt-2 mb-6"><EpisodeChunkBar totalEpisodes={episodeItems.length} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) ? playingEpisode : selectedEp?.episodeNum} /></div>}
                       <EpisodeListView items={slicedChunk} />
-                      {episodeItems.length > CHUNK && <div className="flex justify-end mt-8 pt-4 border-t border-white/[0.06]"><EpisodeChunkBar totalEpisodes={episodeItems.length} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={selectedEp?.episodeNum} /></div>}
+                      {episodeItems.length > CHUNK && <div className="flex justify-end mt-8 pt-4 border-t border-white/[0.06]"><EpisodeChunkBar totalEpisodes={episodeItems.length} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) ? playingEpisode : selectedEp?.episodeNum} /></div>}
                     </div>
                   );
                 })()}

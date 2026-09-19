@@ -458,6 +458,8 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       // Also update active anime tracker for the details page
       localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
         id: String(anime.id || animeId),
+        mediaId: numericId,
+        title: anime.name,
         season: currentSeasonNum,
         episodeNum: episodeNumber,
       }));
@@ -495,6 +497,8 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
 
           localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
             id: String(anime.id || animeId),
+            mediaId: numericId,
+            title: anime.name,
             season: currentSeasonNum,
             episodeNum: newEp,
           }));
