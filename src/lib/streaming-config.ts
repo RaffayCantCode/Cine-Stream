@@ -47,9 +47,9 @@ export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 // Follows position: 1=recommended, 2=best, 3=best, 4=good, 5=backup.
 export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
   movie: {
-    vidsrc: "recommended",
+    vixsrc: "recommended",
     embedmaster: "best",
-    vixsrc: "best",
+    videasy: "good",
     vidlink: "good",
     autoembed: "backup",
   },

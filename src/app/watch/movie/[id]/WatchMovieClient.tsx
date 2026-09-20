@@ -95,10 +95,10 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   const [activeSource, setActiveSource] = useState<StreamingSource>(() => {
     const base = getStreamingSources("movie", movieId);
     return base[0] || {
-      url: `https://vidsrc.me/embed/movie?tmdb=${movieId}`,
+      url: `https://vixsrc.to/movie/${movieId}`,
       name: "Source 1",
-      type: "vidsrc",
-      quality: "Stable",
+      type: "vixsrc",
+      quality: "Best",
     };
   });
 

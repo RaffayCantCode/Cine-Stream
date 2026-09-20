@@ -103,7 +103,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
 
   return (
     <div
-      className="group flex flex-col gap-3 animate-fade-in-up relative hover:z-30 pt-2 -mt-2"
+      className="group flex flex-col gap-3 animate-fade-in-up relative hover:z-30 pt-2 -mt-2 [content-visibility:auto] [contain-intrinsic-size:180px_320px]"
       style={{ animationDelay: `${Math.min((index % 20) * 0.025, 0.35)}s` }}
     >
       <Link
@@ -125,7 +125,7 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
               className={`w-full h-full object-cover transition-opacity duration-500 ease-out ${
                 isLoaded ? "opacity-100" : "opacity-0"
               }`}
-              loading="eager"
+              loading={index < 8 ? "eager" : "lazy"}
               decoding="async"
               onLoad={() => setIsLoaded(true)}
               onError={handleImageError}

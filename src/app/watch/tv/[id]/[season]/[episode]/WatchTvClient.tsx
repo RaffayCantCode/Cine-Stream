@@ -131,10 +131,10 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
   const [activeSource, setActiveSource] = useState<StreamingSource>(() => {
     const base = getStreamingSources("tv", showId, seasonNumber, episodeNumber);
     return base[0] || {
-      url: `https://vidsrc.me/embed/tv?tmdb=${showId}&season=${seasonNumber}&episode=${episodeNumber}`,
+      url: `https://vixsrc.to/tv/${showId}/${seasonNumber}/${episodeNumber}`,
       name: "Source 1",
-      type: "vidsrc",
-      quality: "Stable",
+      type: "vixsrc",
+      quality: "Best",
     };
   });
 

@@ -144,9 +144,9 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
-      "https://vidsrc.me",
-      "https://embedmaster.link",
       "https://vixsrc.to",
+      "https://embedmaster.link",
+      "https://player.videasy.net",
       "https://vidlink.pro",
       "https://autoembed.co"
     ];
