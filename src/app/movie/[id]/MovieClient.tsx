@@ -142,6 +142,13 @@ export default function MovieClient() {
     }
   }, [movie, id, router, status]);
 
+  // Prefetch watch page route for instantaneous transition
+  useEffect(() => {
+    if (id) {
+      router.prefetch(`/watch/movie/${id}`);
+    }
+  }, [id, router]);
+
   const handleWatch = async () => {
     if (status === "authenticated" && movie) {
       fetch("/api/watch-history", {

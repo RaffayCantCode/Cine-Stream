@@ -458,6 +458,7 @@ export default function ProviderPage() {
                   {heroWatchLink && (
                     <Link
                       href={heroWatchLink}
+                      prefetch={true}
                       className="flex items-center gap-2 text-sm font-bold text-white px-5 py-3 rounded-xl transition-all duration-300 hover:scale-[1.03] active:scale-95"
                       style={{
                         background: `linear-gradient(135deg, ${provider.color}, ${provider.color}cc)`,

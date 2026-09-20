@@ -191,29 +191,26 @@ function isHeroSessionStale(): boolean {
   return true;
 }
 
-// Persist seen hero IDs in localStorage (not sessionStorage) so no repeats across multiple visits.
-// Keeps the last 120 seen IDs with a 30-day expiry.
-const SEEN_HERO_KEY = "sv_seen_hero_v2";
-function loadSeenHeroIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+// Persist seen hero IDs in localStorage as a rolling FIFO queue of the last 80 entries.
+// This prevents repeating the same titles while avoiding a sudden reset when full.
+const SEEN_HERO_KEY = "sv_seen_hero_v3";
+function loadSeenHeroIds(): string[] {
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(SEEN_HERO_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.ids)) {
-        const age = Date.now() - (parsed.ts || 0);
-        if (age < 30 * 24 * 60 * 60 * 1000) {
-          return new Set(parsed.ids.map(String));
-        }
+        return parsed.ids.map(String).slice(-80);
       }
     }
   } catch {}
-  return new Set();
+  return [];
 }
-function saveSeenHeroIds(ids: Set<string>): void {
+function saveSeenHeroIds(ids: string[]): void {
   if (typeof window === "undefined") return;
   try {
-    const arr = Array.from(ids).slice(-120);
+    const arr = ids.slice(-80);
     localStorage.setItem(SEEN_HERO_KEY, JSON.stringify({ ids: arr, ts: Date.now() }));
   } catch {}
 }
@@ -242,7 +239,6 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
   if (validFeed.length === 0) return [];
 
   // ── Movie candidates ──────────────────────────────────────────────────────
-  // Must have explicit media_type=movie OR title-but-no-name. Require ≥200 votes for legitimacy.
   const movieCandidates = Array.from(
     new Map(
       validFeed
@@ -251,7 +247,7 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
             !isTmdbAnime(i) &&
             !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
             (i.media_type === "movie" || (!!i.title && !i.name)) &&
-            (i.vote_count || 0) >= 50
+            (i.vote_count || 0) >= 40
         )
         .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
         .map((m) => [m.id, m])
@@ -267,7 +263,7 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
             !isTmdbAnime(i) &&
             !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
             (i.media_type === "tv" || (!!i.name && !i.title)) &&
-            (i.vote_count || 0) >= 50
+            (i.vote_count || 0) >= 40
         )
         .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
         .map((t) => [t.id, t])
@@ -304,41 +300,64 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     isTmdbAnime: false,
   })) as MediaItem[];
 
+  // Include TMDB anime candidates as well for rich variety
+  const tmdbAnime = validFeed
+    .filter(
+      (i) =>
+        (isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja")) &&
+        (i.vote_count || 0) >= 30
+    )
+    .map((a) => ({
+      ...a,
+      media_type: "anime" as const,
+      isTmdbAnime: true,
+    }));
+
+  const allAnimeCandidates = [...animeCandidates, ...tmdbAnime];
+
   // Deduplicate anime by normalised title
   const uniqueAnimeMap = new Map<string, MediaItem>();
-  for (const c of animeCandidates) {
+  for (const c of allAnimeCandidates) {
     const key = (c.name || c.title || "").toLowerCase().trim();
     if (key && !uniqueAnimeMap.has(key)) uniqueAnimeMap.set(key, c);
   }
   const uniqueAnimeCandidates = Array.from(uniqueAnimeMap.values());
 
-  // ── Seen-ID tracking (localStorage, 30-day TTL) ───────────────────────────
+  // ── Seen-ID tracking (rolling 80-item FIFO queue) ──────────────────────────
   const seenIds = loadSeenHeroIds();
+  const seenSet = new Set(seenIds);
 
-  // Pick from the top quality tier (top 60%) but prefer unseen entries.
-  // When all candidates in a category have been seen, cycle resets for that category.
+  // Pick candidate with 50/50 balance between trending/recent and all-time acclaimed
   const pickBestCandidate = (candidates: MediaItem[]): MediaItem | null => {
     if (candidates.length === 0) return null;
 
-    // Work in the top-quality tier (top 60% by quality score, minimum 6 entries)
-    const tierSize = Math.max(6, Math.ceil(candidates.length * 0.6));
-    const topTier = candidates.slice(0, tierSize);
+    const currentYear = new Date().getFullYear();
+    const trendingOrRecent = candidates.filter((c) => {
+      const year = parseInt((c.release_date || c.first_air_date || "").slice(0, 4), 10);
+      return year >= currentYear - 3;
+    });
 
-    let pool = topTier.filter((c) => !seenIds.has(String(c.id)));
+    const isTrendingTurn = Math.random() < 0.5 && trendingOrRecent.length >= 4;
+    const targetBucket = isTrendingTurn ? trendingOrRecent : candidates;
 
+    // Filter out recently seen IDs
+    let pool = targetBucket.filter((c) => !seenSet.has(String(c.id)));
+
+    // If target bucket is exhausted, fallback to all unseen in candidates
     if (pool.length === 0) {
-      // All top-tier seen — widen to full list for a fresh candidate
-      pool = candidates.filter((c) => !seenIds.has(String(c.id)));
+      pool = candidates.filter((c) => !seenSet.has(String(c.id)));
     }
 
+    // If still exhausted, pick from target bucket or candidates
     if (pool.length === 0) {
-      // Every candidate seen — reset seen for this category and start fresh
-      candidates.forEach((c) => seenIds.delete(String(c.id)));
-      pool = topTier;
+      pool = targetBucket.length > 0 ? targetBucket : candidates;
     }
 
     const picked = pool[Math.floor(Math.random() * pool.length)];
-    if (picked) seenIds.add(String(picked.id));
+    if (picked) {
+      seenIds.push(String(picked.id));
+      seenSet.add(String(picked.id));
+    }
     return picked || null;
   };
 
@@ -914,6 +933,8 @@ export default function Home() {
             ...onTheAirSafe,
             ...animeMovieSafe,
             ...animeTvSafe,
+            ...trendingMoviesTodaySafe,
+            ...trendingTvTodaySafe,
           ];
 
           // Check if existing 5-minute pool in localStorage is still fresh

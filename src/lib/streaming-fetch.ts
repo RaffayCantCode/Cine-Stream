@@ -26,11 +26,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 3",
-    baseUrl: "https://player.videasy.net",
-    type: "videasy",
+    baseUrl: "https://vidnest.fun",
+    type: "vidnest",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://player.videasy.net",
+    healthCheckUrl: "https://vidnest.fun",
   },
   {
     name: "Source 4",
@@ -60,7 +60,7 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "videasy":
+    case "vidnest":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
@@ -99,7 +99,7 @@ export function getStreamingSources(type: "movie" | "tv", id: number, season?: n
   const defaultMovieTags: Record<string, string> = {
     vixsrc: "recommended",
     embedmaster: "best",
-    videasy: "good",
+    vidnest: "good",
     vidlink: "good",
     autoembed: "backup",
   };

@@ -544,6 +544,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           <div className="flex flex-wrap justify-center md:justify-start items-center gap-3">
             <Link
               href={watchLink}
+              prefetch={true}
               className="inline-flex items-center gap-2 bg-white hover:bg-white/90 active:scale-95 text-black font-extrabold px-6 sm:px-7 py-3.5 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-[0_10px_28px_rgba(255,255,255,0.25)] hover:scale-[1.03] cursor-pointer"
             >
               <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" />

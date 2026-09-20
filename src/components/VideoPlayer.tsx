@@ -30,7 +30,6 @@ const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   autoembed:   { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
   "123embed":  { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
   vidnest:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
-  videasy:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -114,7 +113,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   const [retryCount, setRetryCount] = useState(0);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.videasy;
+  const currentStyle = SOURCE_STYLES[currentSource?.type] || SOURCE_STYLES.vidnest;
 
   // Manual fallback: switch to the next source in the list (user initiated)
   const switchToNext = useCallback(() => {
@@ -146,7 +145,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
     const domains = [
       "https://vixsrc.to",
       "https://embedmaster.link",
-      "https://player.videasy.net",
+      "https://vidnest.fun",
       "https://vidlink.pro",
       "https://autoembed.co"
     ];
@@ -382,7 +381,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 rounded-2xl bg-black/70 backdrop-blur-2xl border border-white/10 shadow-2xl">
               {sources.map((source, idx) => {
               const isActive = currentSource?.type === source.type;
-              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.videasy;
+              const sc = SOURCE_STYLES[source.type] || SOURCE_STYLES.vidnest;
               return (
                 <button
                   key={source.type}

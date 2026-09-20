@@ -49,7 +49,7 @@ export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
   movie: {
     vixsrc: "recommended",
     embedmaster: "best",
-    videasy: "good",
+    vidnest: "good",
     vidlink: "good",
     autoembed: "backup",
   },

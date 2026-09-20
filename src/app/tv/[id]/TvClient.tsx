@@ -360,6 +360,13 @@ export default function TvClient() {
     }
   }, [show, id, router, status]);
 
+  // Prefetch watch route for instant page transition
+  useEffect(() => {
+    if (id) {
+      router.prefetch(`/watch/tv/${id}/${playingSeason || 1}/${playingEpisode || 1}`);
+    }
+  }, [id, playingSeason, playingEpisode, router]);
+
   // Persist state
   useEffect(() => {
     if (typeof window !== "undefined" && status !== "loading" && isStateLoaded && hasActiveProgress && show) {

@@ -88,9 +88,9 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
   const [qualities, setQualities] = useState<QualityLevel[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [activeQuality, setActiveQuality] = useState<number>(-1); // -1 = Auto
-  const [useIframeFallback, setUseIframeFallback] = useState(false);
+  const [useIframeFallback, setUseIframeFallback] = useState(!directSrc);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -148,67 +148,19 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
     }
   }, [fallbackIframeUrl]);
 
-  // ── Step 1: Resolve Direct HLS Stream ──
+  // ── Step 1: Immediate Direct / Iframe Source Selection ──
   useEffect(() => {
     if (directSrc) {
       setStreamUrl(directSrc);
       setUseIframeFallback(false);
-      return;
-    }
-
-    if (mediaType === "anime" && fallbackIframeUrl) {
-      setUseIframeFallback(true);
       setIsLoading(false);
       return;
     }
 
-    if (!mediaId) return;
-
-    let isMounted = true;
-    setIsLoading(true);
-    setUseIframeFallback(false);
-
-    const resolveStream = async () => {
-      try {
-        const query = new URLSearchParams({
-          type: mediaType,
-          id: String(mediaId),
-          season: String(season),
-          episode: String(episode),
-          server: server || "auto",
-        });
-
-        const res = await fetch(`/api/stream/resolve?${query.toString()}`);
-        if (!res.ok) throw new Error("Stream resolution failed");
-
-        const data = await res.json();
-        if (!isMounted) return;
-
-        if (data?.success && data?.streamUrl) {
-          setStreamUrl(data.streamUrl);
-          if (Array.isArray(data.subtitles) && data.subtitles.length > 0) {
-            setSubtitles(data.subtitles);
-            if (onSubtitlesLoaded) onSubtitlesLoaded(data.subtitles);
-          }
-          setUseIframeFallback(false);
-        } else {
-          // If no direct HLS source was extracted, fallback to clean sandboxed iframe
-          setUseIframeFallback(true);
-          setIsLoading(false);
-        }
-      } catch {
-        if (!isMounted) return;
-        setUseIframeFallback(true);
-        setIsLoading(false);
-      }
-    };
-
-    resolveStream();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [mediaType, mediaId, season, episode, directSrc, onSubtitlesLoaded]);
+    // Default to clean embed iframe immediately (bypassing slow direct HLS scraping)
+    setUseIframeFallback(true);
+    setIsLoading(false);
+  }, [directSrc]);
 
   // ── Step 2: Initialize HLS.js or Native Playback ──
   useEffect(() => {
@@ -557,7 +509,7 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="w-12 h-12 text-primary animate-spin drop-shadow-xl" />
             <span className="text-xs font-bold text-white/90 tracking-widest uppercase">
-              Initializing Direct HLS Stream...
+              Loading Stream...
             </span>
           </div>
         </div>

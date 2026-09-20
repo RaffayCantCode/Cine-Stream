@@ -303,6 +303,19 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                       {/* Resume Button: opens in player */}
                       <button
                         type="button"
+                        onMouseEnter={() => {
+                          if (item.mediaType === "movie") {
+                            router.prefetch(`/watch/movie/${item.mediaId}`);
+                          } else if (item.mediaType === "anime") {
+                            const ep = item.episode ?? 1;
+                            const sq = item.season && item.season > 1 ? `?season=${item.season}` : "";
+                            router.prefetch(`/watch/anime/${item.mediaId}/${ep}${sq}`);
+                          } else {
+                            const s = item.season ?? 1;
+                            const ep = item.episode ?? 1;
+                            router.prefetch(`/watch/tv/${item.mediaId}/${s}/${ep}`);
+                          }
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           handlePlay(item);

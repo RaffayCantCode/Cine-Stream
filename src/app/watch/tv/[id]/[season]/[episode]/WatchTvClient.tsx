@@ -79,7 +79,6 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     return null;
   });
   const [allSeasonsData, setAllSeasonsData] = useState<DrawerSeason[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [sourceConfig, setSourceConfig] = useState<SourceConfigEntry[] | null>(null);
@@ -217,8 +216,6 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
         if (!show) {
           setError(err instanceof Error ? err.message : "Failed to load TV show");
         }
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -322,40 +319,38 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     [router, show, showId, sources, activeSource.type]
   );
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white space-y-4">
-        <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <span className="text-xs font-bold uppercase tracking-widest text-white/60">Loading Episode Stream...</span>
-      </div>
-    );
-  }
+  // Preconnect embed domains early for lightning-fast iframe startup
+  useEffect(() => {
+    const domains = [
+      "https://vixsrc.to",
+      "https://embedmaster.link",
+      "https://vidnest.fun",
+      "https://vidlink.pro",
+      "https://autoembed.co",
+    ];
+    domains.forEach((href) => {
+      if (!document.querySelector(`link[rel="preconnect"][href="${href}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "preconnect";
+        link.href = href;
+        document.head.appendChild(link);
+      }
+    });
+  }, []);
 
-  if (error || !show) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-white text-center space-y-4">
-        <h2 className="text-2xl font-black">Episode Unavailable</h2>
-        <p className="text-sm text-white/50 max-w-md">{error || "Could not retrieve TV episode details."}</p>
-        <Link href={`/tv/${showId}`} className="px-6 py-3 rounded-2xl bg-primary text-white font-bold text-xs">
-          Return to Show Info
-        </Link>
-      </div>
-    );
-  }
-
-  const posterUrl = show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null;
-  const backdropUrl = show.backdrop_path ? `https://image.tmdb.org/t/p/original${show.backdrop_path}` : null;
-  const year = show.first_air_date ? show.first_air_date.slice(0, 4) : "";
-  const rating = show.vote_average ?? 0;
+  const posterUrl = show?.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null;
+  const backdropUrl = show?.backdrop_path ? `https://image.tmdb.org/t/p/original${show.backdrop_path}` : null;
+  const year = show?.first_air_date ? show.first_air_date.slice(0, 4) : "";
+  const rating = show?.vote_average ?? 0;
 
   const metadata: CinemaPlayerMetadata = {
-    title: show.name,
+    title: show?.name || `TV Series (S${seasonNumber} E${episodeNumber})`,
     episodeTitle: currentEpisodeData?.name,
     season: seasonNumber,
     episode: episodeNumber,
     year,
     rating,
-    overview: currentEpisodeData?.overview || show.overview,
+    overview: currentEpisodeData?.overview || show?.overview || "",
     posterUrl,
     backdropUrl,
     backUrl: `/tv/${showId}`,
@@ -410,7 +405,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
           episode={episodeNumber}
           fallbackIframeUrl={activeSource.url}
           server={activeSource.type}
-          title={`${show.name} S${seasonNumber}E${episodeNumber}`}
+          title={`${show?.name || "TV Series"} S${seasonNumber}E${episodeNumber}`}
           poster={backdropUrl || posterUrl || undefined}
         />
       </CinemaPlayer>

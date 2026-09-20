@@ -35,15 +35,6 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     }
     return null;
   });
-  const [isLoading, setIsLoading] = useState(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const cached = sessionStorage.getItem(`cinestream_movie_${movieId}`);
-        if (cached) return false;
-      } catch {}
-    }
-    return true;
-  });
   const [error, setError] = useState<string | null>(null);
 
   const [sourceConfig, setSourceConfig] = useState<SourceConfigEntry[] | null>(null);
@@ -173,44 +164,40 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
         if (!movie) {
           setError(err instanceof Error ? err.message : "Failed to load movie");
         }
-      } finally {
-        setIsLoading(false);
       }
     };
     fetchMovie();
   }, [movieId, session]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white space-y-4">
-        <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <span className="text-xs font-bold uppercase tracking-widest text-white/60">Loading Movie Stream...</span>
-      </div>
-    );
-  }
+  // Preconnect embed domains early for lightning-fast iframe startup
+  useEffect(() => {
+    const domains = [
+      "https://vixsrc.to",
+      "https://embedmaster.link",
+      "https://vidnest.fun",
+      "https://vidlink.pro",
+      "https://autoembed.co",
+    ];
+    domains.forEach((href) => {
+      if (!document.querySelector(`link[rel="preconnect"][href="${href}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "preconnect";
+        link.href = href;
+        document.head.appendChild(link);
+      }
+    });
+  }, []);
 
-  if (error || !movie) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-white text-center space-y-4">
-        <h2 className="text-2xl font-black">Title Unavailable</h2>
-        <p className="text-sm text-white/50 max-w-md">{error || "Could not retrieve stream details for this movie."}</p>
-        <Link href={`/movie/${movieId}`} className="px-6 py-3 rounded-2xl bg-primary text-white font-bold text-xs">
-          Return to Details
-        </Link>
-      </div>
-    );
-  }
-
-  const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null;
-  const backdropUrl = movie.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : null;
-  const year = movie.release_date ? movie.release_date.slice(0, 4) : "";
-  const rating = movie.vote_average ?? 0;
+  const posterUrl = movie?.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null;
+  const backdropUrl = movie?.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : null;
+  const year = movie?.release_date ? movie.release_date.slice(0, 4) : "";
+  const rating = movie?.vote_average ?? 0;
 
   const metadata: CinemaPlayerMetadata = {
-    title: movie.title,
+    title: movie?.title || "Movie Stream",
     year,
     rating,
-    overview: movie.overview,
+    overview: movie?.overview || "",
     posterUrl,
     backdropUrl,
     backUrl: `/movie/${movieId}`,
@@ -261,7 +248,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
           mediaId={movieId}
           fallbackIframeUrl={activeSource.url}
           server={activeSource.type}
-          title={movie.title}
+          title={movie?.title || "Movie Stream"}
           poster={backdropUrl || posterUrl || undefined}
         />
       </CinemaPlayer>
