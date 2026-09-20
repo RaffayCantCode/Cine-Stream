@@ -113,11 +113,9 @@ export function GridMediaCard({ item, index = 0 }: GridMediaCardProps) {
       >
         {imgSrc && !hasError ? (
           <>
-            <div
-              className={`absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-transparent animate-pulse transition-opacity duration-500 pointer-events-none ${
-                isLoaded ? "opacity-0" : "opacity-100"
-              }`}
-            />
+            {!isLoaded && (
+              <div className="absolute inset-0 bg-card/80" />
+            )}
             <img
               ref={imgRef}
               src={imgSrc}

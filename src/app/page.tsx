@@ -63,6 +63,9 @@ let globalHomeCache: {
   recent: MediaItem[];
   trendingMoviesToday: MediaItem[];
   trendingTvToday: MediaItem[];
+  popularTv?: MediaItem[];
+  trendingAnime?: AnimeItem[];
+  popularAnime?: AnimeItem[];
   heroTrendingFeed: MediaItem[];
   heroPopularFeed: MediaItem[];
   heroTopRatedFeed: MediaItem[];
@@ -223,9 +226,17 @@ function heroQualityScore(item: MediaItem): number {
   return rating * Math.log10(Math.max(votes, 10));
 }
 
-function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] {
-  if (!Array.isArray(feed) || feed.length === 0) return [];
+interface HeroPoolSources {
+  trendingMovies: MediaItem[];
+  popularMovies: MediaItem[];
+  trendingTv: MediaItem[];
+  popularTv: MediaItem[];
+  trendingAnime: AnimeItem[];
+  popularAnime: AnimeItem[];
+  fallbackFeed?: MediaItem[];
+}
 
+function buildHeroPool(sources: HeroPoolSources): MediaItem[] {
   const isValidHeroCandidate = (i: MediaItem) => {
     if (!i || !i.id) return false;
     if ((i as any).adult) return false;
@@ -235,55 +246,30 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     return true;
   };
 
-  const validFeed = feed.filter(isValidHeroCandidate);
-  if (validFeed.length === 0) return [];
+  const cleanMediaList = (list: MediaItem[], filterFn: (m: MediaItem) => boolean): MediaItem[] => {
+    if (!Array.isArray(list)) return [];
+    const map = new Map<string | number, MediaItem>();
+    list
+      .filter(isValidHeroCandidate)
+      .filter(filterFn)
+      .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
+      .forEach((item) => {
+        if (!map.has(item.id)) map.set(item.id, item);
+      });
+    return Array.from(map.values());
+  };
 
-  // ── Movie candidates ──────────────────────────────────────────────────────
-  const movieCandidates = Array.from(
-    new Map(
-      validFeed
-        .filter(
-          (i) =>
-            !isTmdbAnime(i) &&
-            !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
-            (i.media_type === "movie" || (!!i.title && !i.name)) &&
-            (i.vote_count || 0) >= 40
-        )
-        .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
-        .map((m) => [m.id, m])
-    ).values()
-  );
+  const isMovieFilter = (i: MediaItem) =>
+    !isTmdbAnime(i) &&
+    !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
+    (i.media_type === "movie" || (!!i.title && !i.name));
 
-  // ── TV candidates ─────────────────────────────────────────────────────────
-  const tvCandidates = Array.from(
-    new Map(
-      validFeed
-        .filter(
-          (i) =>
-            !isTmdbAnime(i) &&
-            !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
-            (i.media_type === "tv" || (!!i.name && !i.title)) &&
-            (i.vote_count || 0) >= 40
-        )
-        .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
-        .map((t) => [t.id, t])
-    ).values()
-  );
+  const isTvFilter = (i: MediaItem) =>
+    !isTmdbAnime(i) &&
+    !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
+    (i.media_type === "tv" || (!!i.name && !i.title));
 
-  // ── Anime candidates ──────────────────────────────────────────────────────
-  // AniList items dynamically fetched from AniList (trending + popular)
-  const rawAnimePool = (Array.isArray(animeList) && animeList.length > 0)
-    ? animeList
-    : loadCachedAniListItems();
-
-  const validAnime = rawAnimePool.filter(
-    (a) =>
-      a && a.id && a.name &&
-      ((typeof a.poster === "string" && a.poster.startsWith("http")) ||
-        (typeof a.bannerImage === "string" && a.bannerImage.startsWith("http")))
-  );
-
-  const animeCandidates = validAnime.map((a) => ({
+  const mapAnimeToMediaItem = (a: AnimeItem): MediaItem => ({
     id: (Number(a.id) || a.id) as any,
     anilistId: String(a.id),
     title: a.name,
@@ -298,77 +284,88 @@ function buildHeroPool(feed: MediaItem[], animeList?: AnimeItem[]): MediaItem[] 
     original_language: "ja",
     genre_ids: [16],
     isTmdbAnime: false,
-  })) as MediaItem[];
+  } as unknown as MediaItem);
 
-  // Include TMDB anime candidates as well for rich variety
-  const tmdbAnime = validFeed
-    .filter(
-      (i) =>
-        (isTmdbAnime(i) || (i.genre_ids?.includes(16) && i.original_language === "ja")) &&
-        (i.vote_count || 0) >= 30
-    )
-    .map((a) => ({
-      ...a,
-      media_type: "anime" as const,
-      isTmdbAnime: true,
-    }));
+  const filterAnimeList = (list: AnimeItem[]): MediaItem[] => {
+    if (!Array.isArray(list)) return [];
+    const map = new Map<string, MediaItem>();
+    list
+      .filter((a) => a && a.id && a.name && (a.poster || a.bannerImage))
+      .map(mapAnimeToMediaItem)
+      .filter(isValidHeroCandidate)
+      .forEach((item) => {
+        const key = (item.title || item.name || "").toLowerCase().trim();
+        if (key && !map.has(key)) map.set(key, item);
+      });
+    return Array.from(map.values());
+  };
 
-  const allAnimeCandidates = [...animeCandidates, ...tmdbAnime];
+  // Movie lists
+  const trendingMovies = cleanMediaList(sources.trendingMovies, isMovieFilter);
+  const popularMovies = cleanMediaList(sources.popularMovies, isMovieFilter);
 
-  // Deduplicate anime by normalised title
-  const uniqueAnimeMap = new Map<string, MediaItem>();
-  for (const c of allAnimeCandidates) {
-    const key = (c.name || c.title || "").toLowerCase().trim();
-    if (key && !uniqueAnimeMap.has(key)) uniqueAnimeMap.set(key, c);
+  // TV lists
+  const trendingTv = cleanMediaList(sources.trendingTv, isTvFilter);
+  const popularTv = cleanMediaList(sources.popularTv, isTvFilter);
+
+  // Anime lists
+  let trendingAnime = filterAnimeList(sources.trendingAnime);
+  let popularAnime = filterAnimeList(sources.popularAnime);
+
+  // If AniList popular or trending is empty, supplement with TMDB anime fallback
+  if (trendingAnime.length < 2 || popularAnime.length < 2) {
+    const tmdbAnime = cleanMediaList(
+      sources.fallbackFeed || [],
+      (i) => isTmdbAnime(i) || (Boolean(i.genre_ids?.includes(16)) && i.original_language === "ja")
+    );
+    if (trendingAnime.length < 2) trendingAnime = [...trendingAnime, ...tmdbAnime.slice(0, 10)];
+    if (popularAnime.length < 2) popularAnime = [...popularAnime, ...tmdbAnime.slice(10)];
   }
-  const uniqueAnimeCandidates = Array.from(uniqueAnimeMap.values());
 
-  // ── Seen-ID tracking (rolling 80-item FIFO queue) ──────────────────────────
+  // Seen-ID tracking (rolling 80-item FIFO queue)
   const seenIds = loadSeenHeroIds();
   const seenSet = new Set(seenIds);
 
-  // Pick candidate with 50/50 balance between trending/recent and all-time acclaimed
-  const pickBestCandidate = (candidates: MediaItem[]): MediaItem | null => {
-    if (candidates.length === 0) return null;
+  // 50/50 balance picker between trending and popular for any slide
+  const pick5050 = (trendingCandidates: MediaItem[], popularCandidates: MediaItem[]): MediaItem | null => {
+    // Exact 50% chance Trending vs 50% chance Popular
+    const isTrendingTurn = Math.random() < 0.5;
+    const primaryBucket = isTrendingTurn ? trendingCandidates : popularCandidates;
+    const secondaryBucket = isTrendingTurn ? popularCandidates : trendingCandidates;
 
-    const currentYear = new Date().getFullYear();
-    const trendingOrRecent = candidates.filter((c) => {
-      const year = parseInt((c.release_date || c.first_air_date || "").slice(0, 4), 10);
-      return year >= currentYear - 3;
-    });
+    // 1. Try unseen items in primary bucket
+    let pool = primaryBucket.filter((c) => !seenSet.has(String(c.id)));
 
-    const isTrendingTurn = Math.random() < 0.5 && trendingOrRecent.length >= 4;
-    const targetBucket = isTrendingTurn ? trendingOrRecent : candidates;
-
-    // Filter out recently seen IDs
-    let pool = targetBucket.filter((c) => !seenSet.has(String(c.id)));
-
-    // If target bucket is exhausted, fallback to all unseen in candidates
+    // 2. If primary bucket unseen items exhausted, try unseen in secondary bucket
     if (pool.length === 0) {
-      pool = candidates.filter((c) => !seenSet.has(String(c.id)));
+      pool = secondaryBucket.filter((c) => !seenSet.has(String(c.id)));
     }
 
-    // If still exhausted, pick from target bucket or candidates
+    // 3. If all unseen exhausted, fallback to all in primary, then secondary
     if (pool.length === 0) {
-      pool = targetBucket.length > 0 ? targetBucket : candidates;
+      pool = primaryBucket.length > 0 ? primaryBucket : secondaryBucket;
     }
 
-    const picked = pool[Math.floor(Math.random() * pool.length)];
-    if (picked) {
-      seenIds.push(String(picked.id));
-      seenSet.add(String(picked.id));
+    if (pool.length === 0) return null;
+
+    // Pick among top 8 candidates in the pool to ensure quality
+    const topCandidates = pool.slice(0, 8);
+    const chosen = topCandidates[Math.floor(Math.random() * topCandidates.length)] || pool[0];
+
+    if (chosen) {
+      seenIds.push(String(chosen.id));
+      seenSet.add(String(chosen.id));
     }
-    return picked || null;
+    return chosen;
   };
 
-  const movieCard = pickBestCandidate(movieCandidates);
-  const tvCard = pickBestCandidate(tvCandidates);
-  const animeCard = pickBestCandidate(uniqueAnimeCandidates);
+  const movieSlide = pick5050(trendingMovies, popularMovies);
+  const tvSlide = pick5050(trendingTv, popularTv);
+  const animeSlide = pick5050(trendingAnime, popularAnime);
 
   saveSeenHeroIds(seenIds);
 
-  const heroPool = [movieCard, tvCard, animeCard].filter(Boolean) as MediaItem[];
-  return heroPool.slice(0, 3);
+  return [movieSlide, tvSlide, animeSlide].filter(Boolean) as MediaItem[];
 }
 
 // ─── Session-stable shuffle ───────────────────────────────────────────────────
@@ -527,9 +524,8 @@ const FranchiseCard = memo(function FranchiseCard({
       prefetch={false}
       className={`${visibilityClass} group relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#4B5694]/5 aspect-[2/3] hover:border-white/40 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl hover:shadow-black/50 transition-all duration-300 focus:outline-none`}
     >
-      {/* Ambient glass shimmer skeleton while downloading on slow internet */}
       {!isLoaded && (
-        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-transparent animate-pulse pointer-events-none" />
+        <div className="absolute inset-0 bg-[#4B5694]/10" />
       )}
 
       {showImg ? (
@@ -783,7 +779,15 @@ export default function Home() {
       // Only rebuild hero pool when the localStorage TTL has actually expired — same gate
       // used by fresh page loads. This prevents back-navigation from changing the hero mid-session.
       if (isHeroSessionStale() && globalHomeCache.heroFeed && globalHomeCache.heroFeed.length > 0) {
-        const freshPool = buildHeroPool(globalHomeCache.heroFeed, globalHomeCache.animeList || loadCachedAniListItems());
+        const freshPool = buildHeroPool({
+          trendingMovies: [...(globalHomeCache.trendingMoviesToday || []), ...(globalHomeCache.trending || []).filter((i) => i.media_type === "movie")],
+          popularMovies: [...(globalHomeCache.popular || []), ...(globalHomeCache.topRatedMovies || [])],
+          trendingTv: [...(globalHomeCache.trendingTvToday || []), ...(globalHomeCache.trending || []).filter((i) => i.media_type === "tv")],
+          popularTv: [...(globalHomeCache.popularTv || []), ...(globalHomeCache.topRatedTv || [])],
+          trendingAnime: globalHomeCache.trendingAnime || [],
+          popularAnime: globalHomeCache.popularAnime || globalHomeCache.animeList || loadCachedAniListItems(),
+          fallbackFeed: globalHomeCache.heroFeed,
+        });
         if (freshPool.length >= 3) {
           setHeroPool(freshPool);
           saveHeroPoolToSession(freshPool);
@@ -844,8 +848,13 @@ export default function Home() {
               uniqueMap.set(item.id, item);
             }
           });
-          return { items: Array.from(uniqueMap.values()), trending: trendingRes.items || [], hasMore: true };
-        }).catch(() => ({ items: [], trending: [] }));
+          return {
+            items: Array.from(uniqueMap.values()),
+            trending: trendingRes.items || [],
+            popular: popularRes.items || [],
+            hasMore: true
+          };
+        }).catch(() => ({ items: [], trending: [], popular: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
         // Await homeData and dynamic animePromise together in parallel
@@ -945,8 +954,16 @@ export default function Home() {
           if (shouldKeepExisting) {
             chosenHeroPool = existingSaved;
           } else {
-            // Build fresh hero pool with genuine dynamic AniList anime:
-            chosenHeroPool = buildHeroPool(fullHeroFeed, rawDynamicAnime);
+            // Build fresh hero pool with genuine 50/50 balance between trending & popular for all 3 slides:
+            chosenHeroPool = buildHeroPool({
+              trendingMovies: [...trendingMoviesTodaySafe, ...trendingSafe.filter((i) => i.media_type === "movie")],
+              popularMovies: [...popularSafe, ...topRatedMovieSafe],
+              trendingTv: [...trendingTvTodaySafe, ...trendingSafe.filter((i) => i.media_type === "tv")],
+              popularTv: [...popularTvSafe, ...heroTopSafe, ...onTheAirSafe],
+              trendingAnime: (animeResponse as any)?.trending || [],
+              popularAnime: (animeResponse as any)?.popular || (animeResponse as any)?.items || [],
+              fallbackFeed: fullHeroFeed,
+            });
             if (chosenHeroPool.length >= 3) {
               saveHeroPoolToSession(chosenHeroPool);
             }
@@ -971,9 +988,7 @@ export default function Home() {
           setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
           let finalHeroPool = chosenHeroPool;
           setHeroPool((current) => {
-            // CRITICAL FIX: If the user is ALREADY looking at slide 0 (from fastPool or fresh session),
-            // NEVER abruptly swap slide 0 with a completely different movie!
-            if (current && current.length > 0 && current[0]) {
+            if (shouldKeepExisting && current && current.length > 0 && current[0]) {
               const stableFirst = current[0];
               const merged = [
                 stableFirst,
@@ -1067,6 +1082,9 @@ export default function Home() {
             recent: heroRecentSafe,
             trendingMoviesToday: trendingMoviesTodaySafe,
             trendingTvToday: trendingTvTodaySafe,
+            popularTv: popularTvSafe,
+            trendingAnime: ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0) ? (animeResponse as any).trending : [],
+            popularAnime: ((animeResponse as any)?.popular && (animeResponse as any).popular.length > 0) ? (animeResponse as any).popular : [],
             heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
             heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
             heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],

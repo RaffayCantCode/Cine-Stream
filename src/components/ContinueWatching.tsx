@@ -2,57 +2,67 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Play, X, Tv, Film, ExternalLink, Info } from "lucide-react";
+import { Play, X, Tv, Film, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import useSWR, { mutate } from "swr";
 import useEmblaCarousel from "embla-carousel-react";
-import { useEffect, useState, useRef, memo } from "react";
+import { useEffect, useState, useRef, memo, useCallback } from "react";
 
 const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
+  backdropPath,
   posterPath,
   mediaType,
   title,
   eager,
 }: {
+  backdropPath?: string | null;
   posterPath: string | null;
   mediaType: "movie" | "tv" | "anime";
   title: string;
   eager?: boolean;
 }) {
-  const initialSrc = posterPath
-    ? mediaType === "anime"
-      ? posterPath
-      : `https://image.tmdb.org/t/p/w342${posterPath}`
-    : null;
+  const getInitialSrc = useCallback(() => {
+    const rawPath = backdropPath || posterPath;
+    if (!rawPath) return null;
+    if (rawPath.startsWith("http")) return rawPath;
+    const cleanPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+    return `https://image.tmdb.org/t/p/w780${cleanPath}`;
+  }, [backdropPath, posterPath]);
 
-  const [imgSrc, setImgSrc] = useState<string | null>(initialSrc);
+  const [imgSrc, setImgSrc] = useState<string | null>(getInitialSrc);
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    setImgSrc(initialSrc);
+    const nextSrc = getInitialSrc();
+    setImgSrc(nextSrc);
     setHasError(false);
     if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
       setIsLoaded(true);
     } else {
       setIsLoaded(false);
     }
-  }, [initialSrc]);
+  }, [getInitialSrc]);
 
   // Network adaptive fallback on slow connection (>5s)
   useEffect(() => {
     if (isLoaded || hasError || !imgSrc) return;
     const timer = setTimeout(() => {
-      if (!isLoaded && !hasError && imgSrc.includes("/w342/")) {
-        setImgSrc((prev) => (prev ? prev.replace("/w342/", "/w185/") : null));
+      if (!isLoaded && !hasError && imgSrc.includes("/w780/")) {
+        setImgSrc((prev) => (prev ? prev.replace("/w780/", "/w300/") : null));
       }
     }, 5000);
     return () => clearTimeout(timer);
   }, [imgSrc, isLoaded, hasError]);
 
   const handleImageError = () => {
-    if (imgSrc && imgSrc.includes("/w342/")) {
-      setImgSrc(imgSrc.replace("/w342/", "/w185/"));
+    if (imgSrc && imgSrc.includes("/w780/")) {
+      // Fallback to smaller TMDB size
+      setImgSrc(imgSrc.replace("/w780/", "/w300/"));
+    } else if (backdropPath && posterPath && imgSrc && !imgSrc.includes(posterPath)) {
+      // If backdrop failed, try fallback to posterPath
+      const posterClean = posterPath.startsWith("/") ? posterPath : `/${posterPath}`;
+      setImgSrc(posterPath.startsWith("http") ? posterPath : `https://image.tmdb.org/t/p/w500${posterClean}`);
     } else {
       setHasError(true);
     }
@@ -62,9 +72,8 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-card/80">
-      {/* Ambient skeleton while downloading on slow internet */}
       {!isLoaded && (
-        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-transparent animate-pulse pointer-events-none" />
+        <div className="absolute inset-0 bg-card/80" />
       )}
       {showImg ? (
         <img
@@ -80,13 +89,13 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
           }`}
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center bg-gradient-to-br from-[#262E36]/90 to-[#12161B]">
+        <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-gradient-to-br from-[#1b222c] to-[#0d1217]">
           {mediaType === "tv" ? (
             <Tv className="w-8 h-8 text-white/20 mb-1" />
           ) : (
             <Film className="w-8 h-8 text-white/20 mb-1" />
           )}
-          <span className="text-[10px] font-bold text-white/30 line-clamp-1">{title}</span>
+          <span className="text-xs font-bold text-white/40 line-clamp-1">{title}</span>
         </div>
       )}
     </div>
@@ -99,6 +108,7 @@ interface WatchHistoryItem {
   mediaType: "movie" | "tv" | "anime";
   title: string;
   posterPath: string | null;
+  backdropPath?: string | null;
   season?: number;
   episode?: number;
   episodeName?: string;
@@ -154,10 +164,13 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     }
   );
 
-  const [emblaRef] = useEmblaCarousel({
+  const [emblaRef, emblaApi] = useEmblaCarousel({
     dragFree: true,
     containScroll: "trimSnaps",
   });
+
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(false);
 
   // Keep Continue Watching cache and UI updated in real-time across tabs / page navigations
   useEffect(() => {
@@ -180,11 +193,6 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     };
   }, []);
 
-  // Continue Watching is strictly for logged-in accounts
-  if (status !== "authenticated") {
-    return null;
-  }
-
   const rawItems: WatchHistoryItem[] = (data?.items && Array.isArray(data.items)) ? data.items : cachedItems;
 
   const filteredItems = rawItems.filter((item: WatchHistoryItem) => {
@@ -194,6 +202,76 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     if (filterType === "anime") return item.mediaType === "anime";
     return true;
   });
+
+  // Track Embla scroll button states
+  useEffect(() => {
+    if (!emblaApi) return;
+    const updateScrollButtons = () => {
+      setCanScrollPrev(emblaApi.canScrollPrev());
+      setCanScrollNext(emblaApi.canScrollNext());
+    };
+    updateScrollButtons();
+    emblaApi.on("select", updateScrollButtons);
+    emblaApi.on("reInit", updateScrollButtons);
+    return () => {
+      emblaApi.off("select", updateScrollButtons);
+      emblaApi.off("reInit", updateScrollButtons);
+    };
+  }, [emblaApi, filteredItems.length]);
+
+  // Auto-upgrade legacy items that didn't have backdropPath stored
+  useEffect(() => {
+    if (!rawItems || rawItems.length === 0) return;
+    const missingBackdrop = rawItems.filter(
+      (it) => !it.backdropPath && it.mediaType !== "anime" && it.mediaId
+    );
+    if (missingBackdrop.length === 0) return;
+
+    let isMounted = true;
+    Promise.all(
+      missingBackdrop.map(async (item) => {
+        try {
+          const res = await fetch(`/api/tmdb/${item.mediaType}/${item.mediaId}`);
+          if (!res.ok) return null;
+          const json = await res.json();
+          if (json?.backdrop_path) {
+            return {
+              mediaId: item.mediaId,
+              mediaType: item.mediaType,
+              backdropPath: json.backdrop_path as string,
+            };
+          }
+        } catch {}
+        return null;
+      })
+    ).then((updates) => {
+      if (!isMounted) return;
+      const validUpdates = updates.filter(Boolean);
+      if (validUpdates.length > 0) {
+        setCachedItems((prev) => {
+          const next = prev.map((it) => {
+            const up = validUpdates.find(
+              (u) => u?.mediaId === it.mediaId && u?.mediaType === it.mediaType
+            );
+            return up ? { ...it, backdropPath: up.backdropPath } : it;
+          });
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ items: next, cachedAt: Date.now() }));
+          } catch {}
+          return next;
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [rawItems?.length]);
+
+  // Continue Watching is strictly for logged-in accounts
+  if (status !== "authenticated") {
+    return null;
+  }
 
   if (filteredItems.length === 0) {
     return null;
@@ -257,114 +335,160 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
   };
 
   return (
-    <section className="w-full px-3 md:px-6 lg:px-8 xl:px-10 pt-4 pb-2 animate-fade-in">
+    <section className="w-full px-3 md:px-6 lg:px-8 xl:px-10 2xl:px-12 3xl:px-16 pt-4 pb-3 animate-fade-in">
       <div className="w-full">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-1.5 h-5 rounded-full bg-primary shadow-sm" />
-          <h2 className="text-base md:text-xl font-extrabold text-white tracking-tight">
-            Continue Watching
-          </h2>
+        {/* Section Header */}
+        <div className="flex items-center justify-between mb-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-1 bg-gradient-to-b from-primary to-primary/40 rounded-full h-5 shadow-sm" />
+            <h2 className="text-base md:text-xl font-black text-white tracking-tight">
+              Continue Watching
+            </h2>
+          </div>
+
+          {/* Desktop Arrow Controls */}
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => emblaApi?.scrollPrev()}
+              disabled={!canScrollPrev}
+              className={`w-8 h-8 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${
+                canScrollPrev ? "hover:bg-white/15 hover:border-white/30 cursor-pointer" : "opacity-25 cursor-not-allowed"
+              }`}
+              aria-label="Scroll left"
+            >
+              <ChevronLeft className="w-4 h-4 ml-[-1px]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => emblaApi?.scrollNext()}
+              disabled={!canScrollNext}
+              className={`w-8 h-8 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white transition-all duration-200 ${
+                canScrollNext ? "hover:bg-white/15 hover:border-white/30 cursor-pointer" : "opacity-25 cursor-not-allowed"
+              }`}
+              aria-label="Scroll right"
+            >
+              <ChevronRight className="w-4 h-4 mr-[-1px]" />
+            </button>
+          </div>
         </div>
 
-        <div className="overflow-hidden -mx-3 px-3 md:-mx-4 md:px-4 -mt-3 pt-3 pb-6 -mb-3" ref={emblaRef}>
-          <div className="flex gap-3 md:gap-4">
-            {filteredItems.map((item: WatchHistoryItem, idx: number) => {
-              const posterUrl = item.posterPath
-                ? item.mediaType === "anime"
-                  ? item.posterPath
-                  : `https://image.tmdb.org/t/p/w342${item.posterPath}`
-                : null;
+        {/* Embla Carousel Container */}
+        <div className="overflow-hidden -mx-3 px-3 md:-mx-4 md:px-4 -mt-2 pt-2 pb-5 -mb-2" ref={emblaRef}>
+          <div className="flex gap-3.5 sm:gap-4 md:gap-5">
+            {filteredItems.map((item: WatchHistoryItem, idx: number) => (
+              <div
+                key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
+                onClick={() => handlePlay(item)}
+                className="flex-[0_0_auto] w-[230px] xs:w-[250px] sm:w-[275px] md:w-[305px] lg:w-[335px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.02] first:origin-left hover:z-10"
+              >
+                {/* 16:9 Landscape Artwork Card */}
+                <div className="aspect-video w-full rounded-xl sm:rounded-2xl overflow-hidden bg-card/80 ring-1 ring-white/10 relative shadow-[0_6px_20px_-4px_rgba(0,0,0,0.5)] transition-all duration-300 group-hover:ring-white/25 group-hover:shadow-[0_16px_32px_-6px_rgba(0,0,0,0.7)]">
+                  <ContinueWatchingPoster
+                    backdropPath={item.backdropPath}
+                    posterPath={item.posterPath}
+                    mediaType={item.mediaType}
+                    title={item.title}
+                    eager={idx < 4}
+                  />
 
-              return (
-                <div
-                  key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
-                  onClick={() => handlePlay(item)}
-                  className="flex-[0_0_auto] w-[124px] sm:w-[146px] md:w-[158px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.03] first:origin-left hover:z-10"
-                >
-                  <div className="aspect-[2/3] rounded-xl overflow-hidden bg-card/80 ring-1 ring-white/10 mb-2.5 relative shadow-[0_6px_18px_-4px_rgba(0,0,0,0.5),0_2px_6px_-2px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:ring-white/35 group-hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.65),0_8px_16px_-4px_rgba(0,0,0,0.35)] sheen-wrapper">
-                    <ContinueWatchingPoster
-                      posterPath={item.posterPath}
-                      mediaType={item.mediaType}
-                      title={item.title}
-                      eager={idx < 4}
-                    />
+                  {/* Vignette Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
 
-                    <div className={`absolute top-2 left-2 text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md tracking-widest uppercase shadow-lg border border-white/10 ${
+                  {/* Media Type Badge */}
+                  <div
+                    className={`absolute top-2.5 left-2.5 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md tracking-wider uppercase shadow-md backdrop-blur-md border border-white/10 pointer-events-none transition-opacity duration-300 group-hover:opacity-40 ${
                       item.mediaType === "movie"
                         ? "bg-rose-600/85 border-rose-500/30"
                         : item.mediaType === "tv"
                         ? "bg-emerald-600/85 border-emerald-500/30"
-                        : "bg-purple-950/80 border-purple-500/30 text-purple-200"
-                    }`}>
-                      {item.mediaType === "movie" ? "Movie" : item.mediaType === "tv" ? "TV" : "JP Sub Anime"}
-                    </div>
-
-                    <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-2 p-2 z-20">
-                      {/* Resume Button: opens in player */}
-                      <button
-                        type="button"
-                        onMouseEnter={() => {
-                          if (item.mediaType === "movie") {
-                            router.prefetch(`/watch/movie/${item.mediaId}`);
-                          } else if (item.mediaType === "anime") {
-                            const ep = item.episode ?? 1;
-                            const sq = item.season && item.season > 1 ? `?season=${item.season}` : "";
-                            router.prefetch(`/watch/anime/${item.mediaId}/${ep}${sq}`);
-                          } else {
-                            const s = item.season ?? 1;
-                            const ep = item.episode ?? 1;
-                            router.prefetch(`/watch/tv/${item.mediaId}/${s}/${ep}`);
-                          }
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePlay(item);
-                        }}
-                        className="w-full max-w-[108px] flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white hover:bg-white/90 text-black text-[11px] font-extrabold shadow-lg transition-transform duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer"
-                        title="Resume playback"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                        <span>Resume</span>
-                      </button>
-
-                      {/* Open Page Button: opens details page */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenPage(item, e)}
-                        className="w-full max-w-[108px] flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/20 text-[10px] font-bold shadow-md transition-transform duration-200 hover:scale-[1.03] active:scale-95 cursor-pointer"
-                        title="Open details page"
-                      >
-                        <Info className="w-3 h-3 text-zinc-300" />
-                        <span>Open Page</span>
-                      </button>
-                    </div>
-
-                    {(item.mediaType === "tv" || item.mediaType === "anime") && item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-                      <div className="absolute bottom-2 left-2 bg-black/80 rounded-md px-2 py-0.5 text-[11px] sm:text-xs font-black text-white shadow-lg border border-white/10">
-                        S{item.season} E{item.episode}
-                      </div>
-                    )}
-
-                    <button
-                      onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 flex items-center justify-center text-white/80 transition-all duration-300 hover:bg-rose-600 hover:text-white hover:scale-110 z-20 md:opacity-0 md:group-hover:opacity-100 cursor-pointer"
-                      aria-label="Remove"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                        : "bg-purple-900/85 border-purple-500/30 text-purple-200"
+                    }`}
+                  >
+                    {item.mediaType === "movie" ? "Movie" : item.mediaType === "tv" ? "TV" : "Anime"}
                   </div>
 
-                  <h4 className="text-xs font-bold text-white/90 line-clamp-1 leading-tight tracking-tight">
+                  {/* Remove Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
+                    className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/70 hover:bg-rose-600 text-white/80 hover:text-white flex items-center justify-center transition-all duration-200 hover:scale-110 z-30 opacity-0 group-hover:opacity-100 shadow-lg border border-white/15 cursor-pointer"
+                    title="Remove from continue watching"
+                    aria-label="Remove"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Hover Overlay with Resume & Details Actions */}
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-2.5 p-3 z-20">
+                    {/* Resume Button */}
+                    <button
+                      type="button"
+                      onMouseEnter={() => {
+                        if (item.mediaType === "movie") {
+                          router.prefetch(`/watch/movie/${item.mediaId}`);
+                        } else if (item.mediaType === "anime") {
+                          const ep = item.episode ?? 1;
+                          const sq = item.season && item.season > 1 ? `?season=${item.season}` : "";
+                          router.prefetch(`/watch/anime/${item.mediaId}/${ep}${sq}`);
+                        } else {
+                          const s = item.season ?? 1;
+                          const ep = item.episode ?? 1;
+                          router.prefetch(`/watch/tv/${item.mediaId}/${s}/${ep}`);
+                        }
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlay(item);
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl bg-white hover:bg-white/90 text-black text-xs font-black shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+                      title="Resume playback"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                      <span>Resume</span>
+                    </button>
+
+                    {/* Details Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenPage(item, e)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/20 text-xs font-bold shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+                      title="Open details page"
+                    >
+                      <Info className="w-3.5 h-3.5 text-zinc-300" />
+                      <span>Details</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Metadata underneath the card: Title and Episode Info, Strictly NO timestamp or time-left */}
+                <div className="mt-2.5 px-0.5 space-y-0.5">
+                  <h3 className="text-sm font-bold text-white tracking-tight line-clamp-1 group-hover:text-primary transition-colors">
                     {item.title}
-                  </h4>
-                  {(item.mediaType === "tv" || item.mediaType === "anime") && item.episodeName && (
-                    <p className="text-[11px] text-indigo-300/80 font-medium mt-0.5 line-clamp-1">
-                      {item.episodeName}
+                  </h3>
+
+                  {(item.mediaType === "tv" || item.mediaType === "anime") && (
+                    <p className="text-xs text-zinc-400 font-medium line-clamp-1 flex items-center gap-1.5">
+                      {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 ? (
+                        <span className="text-zinc-300 font-semibold">
+                          S{item.season}:E{item.episode}
+                        </span>
+                      ) : item.episode != null && item.episode > 0 ? (
+                        <span className="text-zinc-300 font-semibold">
+                          EP {item.episode}
+                        </span>
+                      ) : null}
+                      {item.episodeName && (
+                        <>
+                          <span className="text-zinc-600">•</span>
+                          <span className="truncate">{item.episodeName}</span>
+                        </>
+                      )}
                     </p>
                   )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       </div>

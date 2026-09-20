@@ -137,11 +137,9 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         >
         {imgSrc && !imageError ? (
           <>
-            <div
-              className={`absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-transparent animate-pulse transition-opacity duration-500 pointer-events-none ${
-                isLoaded ? "opacity-0" : "opacity-100"
-              }`}
-            />
+            {!isLoaded && (
+              <div className="absolute inset-0 bg-card/80" />
+            )}
             <img
               ref={imgRef}
               src={imgSrc}

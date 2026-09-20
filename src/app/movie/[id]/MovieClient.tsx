@@ -162,6 +162,27 @@ export default function MovieClient() {
           backdropPath: movie.backdrop_path ?? null,
         }),
       }).catch(() => {});
+
+      try {
+        const saved = localStorage.getItem("cinestream_cw_cache");
+        const parsed = saved ? JSON.parse(saved) : { items: [] };
+        const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+
+        const updatedItem = {
+          id: movie.id,
+          mediaId: movie.id,
+          mediaType: "movie",
+          title: movie.title,
+          posterPath: movie.poster_path ?? null,
+          backdropPath: movie.backdrop_path ?? null,
+          watchedAt: new Date().toISOString(),
+        };
+
+        const filtered = items.filter((it) => !(it.mediaId === movie.id && it.mediaType === "movie"));
+        filtered.unshift(updatedItem);
+        localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+        window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+      } catch {}
     }
 
     router.push(`/watch/movie/${id}`);

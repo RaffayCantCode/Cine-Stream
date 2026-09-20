@@ -159,6 +159,28 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
               backdropPath: activeMovie.backdrop_path ?? null,
             }),
           }).catch(() => {});
+
+          // Optimistically update localStorage cache for Continue Watching with 0ms delay
+          try {
+            const saved = localStorage.getItem("cinestream_cw_cache");
+            const parsed = saved ? JSON.parse(saved) : { items: [] };
+            const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+
+            const updatedItem = {
+              id: activeMovie.id,
+              mediaId: activeMovie.id,
+              mediaType: "movie",
+              title: activeMovie.title,
+              posterPath: activeMovie.poster_path ?? null,
+              backdropPath: activeMovie.backdrop_path ?? null,
+              watchedAt: new Date().toISOString(),
+            };
+
+            const filtered = items.filter((it) => !(it.mediaId === activeMovie.id && it.mediaType === "movie"));
+            filtered.unshift(updatedItem);
+            localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+            window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+          } catch {}
         }
       } catch (err) {
         if (!movie) {
