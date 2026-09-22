@@ -46,24 +46,11 @@ export default async function MangaReaderPage(
   const params = await props.params;
   const { id, chapterId } = params;
 
-  const [detailsRes, chaptersRes, pagesRes] = await Promise.allSettled([
-    getMangaDetails(id),
-    getMangaChapters(id, { order: "asc", limit: 500 }),
-    getChapterPages(chapterId),
-  ]);
-
-  const initialManga = detailsRes.status === "fulfilled" ? detailsRes.value : null;
-  const initialChapters = chaptersRes.status === "fulfilled" ? chaptersRes.value?.chapters || [] : [];
-  const initialPages = pagesRes.status === "fulfilled" ? pagesRes.value : null;
-
   return (
     <Suspense fallback={null}>
       <MangaReaderClient
         mangaId={id}
         chapterId={chapterId}
-        initialManga={initialManga}
-        initialChapters={initialChapters}
-        initialPages={initialPages}
       />
     </Suspense>
   );

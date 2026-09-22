@@ -718,8 +718,16 @@ const MEDIA_Q = `query ($id: Int) {
 export async function getAnimeDetails(
   id: string,
   epLimit = 100,
-  skipEpisodes = false
+  skipEpisodes = false,
+  depth = 0,
+  visited: Set<string> = new Set<string>()
 ): Promise<AnimeDetailsResult | null> {
+  const cleanId = String(id || "").trim().toLowerCase();
+  if (!cleanId || depth > 1 || visited.has(cleanId)) {
+    return null;
+  }
+  visited.add(cleanId);
+
   const cacheKey = `${id}-${epLimit}-${skipEpisodes}`;
   const cached = detailsCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < DETAILS_TTL) {
@@ -745,7 +753,7 @@ export async function getAnimeDetails(
     // Fallback: If direct Kitsu lookup returned null, check if the numeric part is an AniList or TMDB ID
     const rawClean = id.replace(/^kitsu-/, "").trim();
     const rawNum = parseInt(rawClean, 10);
-    if (!isNaN(rawNum) && rawNum > 0) {
+    if (!isNaN(rawNum) && rawNum > 0 && depth < 1) {
       try {
         const azTmdb = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${rawNum}`, {
           signal: AbortSignal.timeout(3000),
@@ -753,8 +761,11 @@ export async function getAnimeDetails(
         }).then(r => r.ok ? r.json() : null).catch(() => null);
 
         if (azTmdb?.mappings?.anilist_id) {
-          const resolved = await getAnimeDetails(String(azTmdb.mappings.anilist_id), epLimit, skipEpisodes);
-          if (resolved) return store(resolved);
+          const targetId = String(azTmdb.mappings.anilist_id).trim();
+          if (targetId.toLowerCase() !== cleanId && !visited.has(targetId.toLowerCase())) {
+            const resolved = await getAnimeDetails(targetId, epLimit, skipEpisodes, depth + 1, visited);
+            if (resolved) return store(resolved);
+          }
         } else if (azTmdb?.mappings?.kitsu_id) {
           const resolved = await getAnimeDetailsViaKitsu(`kitsu-${azTmdb.mappings.kitsu_id}`, epLimit, skipEpisodes);
           if (resolved) return store(resolved);
@@ -768,8 +779,11 @@ export async function getAnimeDetails(
         }).then(r => r.ok ? r.json() : null).catch(() => null);
 
         if (azAl?.mappings) {
-          const resolved = await getAnimeDetails(String(rawNum), epLimit, skipEpisodes);
-          if (resolved) return store(resolved);
+          const targetId = String(rawNum).trim();
+          if (targetId.toLowerCase() !== cleanId && !visited.has(targetId.toLowerCase())) {
+            const resolved = await getAnimeDetails(targetId, epLimit, skipEpisodes, depth + 1, visited);
+            if (resolved) return store(resolved);
+          }
         }
       } catch {}
     }
@@ -828,7 +842,7 @@ export async function getAnimeDetails(
   ]);
 
   if (!media) {
-    if (!isNaN(numId) && numId > 0) {
+    if (!isNaN(numId) && numId > 0 && depth < 1) {
       try {
         const azTmdb = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
           signal: AbortSignal.timeout(2500),
@@ -836,8 +850,11 @@ export async function getAnimeDetails(
         }).then(r => r.ok ? r.json() : null).catch(() => null);
 
         if (azTmdb?.mappings?.anilist_id) {
-          const resolved = await getAnimeDetails(String(azTmdb.mappings.anilist_id), epLimit, skipEpisodes);
-          if (resolved) return store(resolved);
+          const targetId = String(azTmdb.mappings.anilist_id).trim();
+          if (targetId.toLowerCase() !== cleanId && targetId !== String(numId) && !visited.has(targetId.toLowerCase())) {
+            const resolved = await getAnimeDetails(targetId, epLimit, skipEpisodes, depth + 1, visited);
+            if (resolved) return store(resolved);
+          }
         } else if (azTmdb?.mappings?.kitsu_id) {
           const resolved = await getAnimeDetailsViaKitsu(`kitsu-${azTmdb.mappings.kitsu_id}`, epLimit, skipEpisodes);
           if (resolved) return store(resolved);

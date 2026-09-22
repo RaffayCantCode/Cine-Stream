@@ -1,7 +1,7 @@
 // CineStream Service Worker
 // Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
 // CACHE_VERSION is updated to bust previous worker cache.
-const CACHE_VERSION = 'v33-static-cache-first';
+const CACHE_VERSION = 'v34-static-cache-first';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
@@ -65,10 +65,17 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((response) => {
+        .then(async (response) => {
           if (response && response.status === 200 && response.type === 'basic') {
             const copy = response.clone();
             caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+            return response;
+          }
+          // If server returns Cloudflare 1102 / 503 / 500 / 502 / 504, check if we have a cached shell
+          if (response && response.status >= 500 && response.status <= 504) {
+            const cache = await caches.open(STATIC_CACHE);
+            const matched = await cache.match(request);
+            if (matched) return matched;
           }
           return response;
         })

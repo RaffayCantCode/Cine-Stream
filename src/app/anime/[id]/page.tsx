@@ -1,8 +1,59 @@
 export const runtime = 'edge';
 import type { Metadata } from "next";
-import { getAnimeDetails } from "@/lib/anime-fetch";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import AnimeClient from "./AnimeClient";
+
+async function fetchLightweightAnimeMeta(id: string): Promise<{
+  title: string;
+  overview: string;
+  bannerUrl: string | null;
+  posterUrl: string | null;
+} | null> {
+  const clean = String(id || "").trim();
+  if (clean.startsWith("kitsu-")) {
+    const kid = clean.replace("kitsu-", "");
+    const res = await fetch(`https://kitsu.io/api/edge/anime/${encodeURIComponent(kid)}`, {
+      signal: AbortSignal.timeout(1200),
+      headers: { Accept: "application/vnd.api+json" },
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const attr = res?.data?.attributes;
+    if (attr) {
+      return {
+        title: attr.canonicalTitle || attr.titles?.en || attr.titles?.en_jp || "Anime",
+        overview: (attr.synopsis || attr.description || "").slice(0, 300),
+        bannerUrl: attr.coverImage?.large || attr.coverImage?.original || null,
+        posterUrl: attr.posterImage?.large || attr.posterImage?.medium || null,
+      };
+    }
+    return null;
+  }
+
+  const numId = parseInt(clean.replace(/^mal-/, ""), 10);
+  if (!isNaN(numId) && numId > 0) {
+    const isMal = clean.startsWith("mal-");
+    const query = isMal
+      ? `query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { title { english romaji native } bannerImage coverImage { extraLarge large } description } }`
+      : `query ($id: Int) { Media(id: $id, type: ANIME) { title { english romaji native } bannerImage coverImage { extraLarge large } description } }`;
+    const variables = isMal ? { idMal: numId } : { id: numId };
+    const res = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(1200),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const m = res?.data?.Media;
+    if (m) {
+      return {
+        title: m.title?.english || m.title?.romaji || m.title?.native || "Anime",
+        overview: (m.description || "").replace(/<[^>]*>/g, "").slice(0, 300),
+        bannerUrl: m.bannerImage || m.coverImage?.extraLarge || null,
+        posterUrl: m.coverImage?.extraLarge || m.coverImage?.large || null,
+      };
+    }
+  }
+
+  return null;
+}
 
 export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
@@ -11,22 +62,16 @@ export async function generateMetadata(
   const id = params?.id || "";
 
   try {
-    const details = await getAnimeDetails(id, 0, true).catch(() => null);
-    const anime = details?.anime || null;
-
-    if (anime && !(anime as any).isHidden) {
-      const title = (anime as any).name || (anime as any).title || "Anime";
-      const bannerUrl = (anime as any).bannerImage || (anime as any).backdrop || null;
-      const posterUrl = (anime as any).poster || null;
-
+    const meta = await fetchLightweightAnimeMeta(id).catch(() => null);
+    if (meta) {
       return constructMediaMetadata({
-        title,
-        overview: typeof ((anime as any).description || (anime as any).overview) === "string" ? ((anime as any).description || (anime as any).overview) : "",
-        backdropPath: typeof bannerUrl === "string" ? bannerUrl : null,
-        posterPath: typeof posterUrl === "string" ? posterUrl : null,
+        title: meta.title,
+        overview: meta.overview,
+        backdropPath: meta.bannerUrl,
+        posterPath: meta.posterUrl,
         mediaTypeLabel: "Anime",
         urlPath: `/anime/${id}`,
-        fallbackDescription: `Watch ${title} on CineStream in Full HD with Japanese audio and English subtitles.`,
+        fallbackDescription: `Watch ${meta.title} on CineStream in Full HD with Japanese audio and English subtitles.`,
       });
     }
   } catch (error) {
@@ -41,46 +86,6 @@ export async function generateMetadata(
   });
 }
 
-export default async function AnimePage(
-  props: {
-    params: Promise<{ id: string }>;
-    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
-  }
-) {
-  const [params, searchParams] = await Promise.all([
-    props.params,
-    props.searchParams ? props.searchParams.catch(() => ({} as any)) : Promise.resolve({} as any),
-  ]);
-  const id = params?.id || "";
-  const seasonId = typeof searchParams?.seasonId === "string" ? searchParams.seasonId : undefined;
-
-  let initialAnime: any = null;
-  try {
-    const details = await getAnimeDetails(id, 0, true).catch(() => null);
-    if (details?.anime) {
-      initialAnime = {
-        ...details.anime,
-        seasons: details.seasons || [],
-        franchiseNodes: details.franchiseNodes || [],
-        openedSeasonId: seasonId || details.openedSeasonId,
-        tmdbId: details.tmdbId,
-        tmdbSeasonMap: details.tmdbSeasonMap,
-      };
-    }
-  } catch {}
-
-  const preloadLogo = initialAnime?.logoUrl || null;
-  const preloadBanner = initialAnime?.bannerImage || initialAnime?.backdrop || null;
-
-  return (
-    <>
-      {preloadLogo && (
-        <link rel="preload" as="image" href={preloadLogo} fetchPriority="high" />
-      )}
-      {preloadBanner && (
-        <link rel="preload" as="image" href={preloadBanner} fetchPriority="high" />
-      )}
-      <AnimeClient initialData={initialAnime} />
-    </>
-  );
+export default function AnimePage() {
+  return <AnimeClient />;
 }

@@ -45,19 +45,13 @@ export default async function MangaDetailsPage(props: { params: Promise<{ id: st
   const params = await props.params;
   const id = params?.id || "";
 
-  const [detailsRes, chaptersRes] = await Promise.allSettled([
-    getMangaDetails(id),
-    getMangaChapters(id, { order: "asc", limit: 500 }),
-  ]);
-
-  const initialManga = detailsRes.status === "fulfilled" ? detailsRes.value : null;
-  const initialChapters = chaptersRes.status === "fulfilled" ? chaptersRes.value?.chapters || [] : [];
+  const initialManga = await getMangaDetails(id).catch(() => null);
 
   return (
     <MangaDetailsClient
       id={id}
       initialManga={initialManga}
-      initialChapters={initialChapters}
+      initialChapters={[]}
     />
   );
 }

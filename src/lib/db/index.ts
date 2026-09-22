@@ -9,6 +9,9 @@ export function isDbBuildTime(): boolean {
   return isBuildTime;
 }
 
+let cachedDbInstance: AppDatabase | null = null;
+let lastD1Binding: any = null;
+
 export function getDb(): AppDatabase {
   let d1Binding: any = null;
 
@@ -32,7 +35,13 @@ export function getDb(): AppDatabase {
     return createBuildProxy();
   }
 
-  return drizzle(d1Binding, { schema });
+  if (cachedDbInstance && lastD1Binding === d1Binding) {
+    return cachedDbInstance;
+  }
+
+  lastD1Binding = d1Binding;
+  cachedDbInstance = drizzle(d1Binding, { schema });
+  return cachedDbInstance;
 }
 
 function createBuildProxy(): AppDatabase {
