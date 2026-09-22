@@ -1462,8 +1462,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     } catch {}
     const target = ep.seasonId || currentSeasonId || anime?.id || id;
     const seasonQuery = currentSeasonNumber > 1 ? `?season=${currentSeasonNumber}` : "";
+    try {
+      if (anime) {
+        sessionStorage.setItem(`cinestream_anime_${target}`, JSON.stringify({
+          ...anime,
+          seasonNumber: currentSeasonNumber,
+        }));
+      }
+    } catch {}
     router.push(`/watch/anime/${target}/${ep.episodeNum}${seasonQuery}`);
-  }, [anime?.id, anime?.name, currentSeasonId, currentSeasonNumber, displayTitle, id, router]);
+  }, [anime, currentSeasonId, currentSeasonNumber, displayTitle, id, router]);
 
   const handleViewChange = useCallback((view: EpisodeViewMode) => setEpisodeView(view), []);
 

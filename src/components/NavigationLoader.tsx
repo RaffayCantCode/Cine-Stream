@@ -80,19 +80,21 @@ export function NavigationLoader() {
     setVisible(false);
   }, [clearTimers]);
 
-  /* End the loader, but never before the minimum hold time has elapsed. */
+  /* End the loader, but never before the minimum hold time has elapsed (0ms on watch routes). */
   const requestHide = useCallback(() => {
     if (shownAtRef.current === null) return;
+    const isWatchRoute = pathname.startsWith("/watch/");
+    const minHold = isWatchRoute ? 0 : MIN_HOLD_MS;
     const wait = Math.max(
       0,
-      MIN_HOLD_MS - (Date.now() - shownAtRef.current)
+      minHold - (Date.now() - shownAtRef.current)
     );
     if (wait === 0) {
       hide();
     } else {
       timersRef.current.minHold = window.setTimeout(hide, wait);
     }
-  }, [hide]);
+  }, [hide, pathname]);
 
   /* Link clicks: remember the target of every internal <a> leading to a
      different pathname, so the loader can reveal when it commits. */
@@ -122,12 +124,18 @@ export function NavigationLoader() {
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname) return;
       const targetPath = normalizePath(url.pathname);
+      const currentPath = normalizePath(window.location.pathname);
+
+      // Do NOT trigger loader on episode/media transitions within the media player
+      if (currentPath.startsWith("/watch/") && targetPath.startsWith("/watch/")) {
+        return;
+      }
+
       pendingNavRef.current = targetPath;
 
-      // When navigating to media pages like /anime/ or /watch/, trigger the loader immediately for instant feedback
+      // When navigating to media pages like /anime/ or /movie/, trigger the loader immediately for instant feedback
       if (
         targetPath.startsWith("/anime/") ||
-        targetPath.startsWith("/watch/") ||
         targetPath.startsWith("/movie/") ||
         targetPath.startsWith("/tv/") ||
         targetPath.startsWith("/manga/")
@@ -162,10 +170,16 @@ export function NavigationLoader() {
         if (url.origin !== window.location.origin) return;
         if (url.pathname === window.location.pathname) return;
         const targetPath = normalizePath(url.pathname);
+        const currentPath = normalizePath(window.location.pathname);
+
+        // Do NOT trigger loader on episode/media transitions within the media player
+        if (currentPath.startsWith("/watch/") && targetPath.startsWith("/watch/")) {
+          return;
+        }
+
         pendingNavRef.current = targetPath;
         if (
           targetPath.startsWith("/anime/") ||
-          targetPath.startsWith("/watch/") ||
           targetPath.startsWith("/movie/") ||
           targetPath.startsWith("/tv/") ||
           targetPath.startsWith("/manga/")
@@ -195,7 +209,6 @@ export function NavigationLoader() {
       pendingNavRef.current = currentPath;
       if (
         currentPath.startsWith("/anime/") ||
-        currentPath.startsWith("/watch/") ||
         currentPath.startsWith("/movie/") ||
         currentPath.startsWith("/tv/") ||
         currentPath.startsWith("/manga/")
@@ -262,6 +275,12 @@ export function NavigationLoader() {
     if (!visible) return;
     if (shownAtRef.current === null) {
       shownAtRef.current = Date.now();
+    }
+
+    // Watch routes render viewport and video player immediately - dismiss loader with zero delay
+    if (pathname.startsWith("/watch/")) {
+      hide();
+      return;
     }
 
     const isAwaiting = awaitingContentRef.current || isPageContentLoading();

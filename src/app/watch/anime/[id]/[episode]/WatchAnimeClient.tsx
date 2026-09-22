@@ -8,7 +8,7 @@ import { CinemaPlayer, type CinemaPlayerMetadata } from "@/components/player/Cin
 import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { DrawerSeason } from "@/components/player/EpisodeDrawer";
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
-import { usePageContentReady } from "@/lib/pageLoad";
+import { usePageContentReady, declarePageReady } from "@/lib/pageLoad";
 import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceConfigEntry, type SourceTag, type SourceCategory } from "@/lib/streaming-config";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 
@@ -103,10 +103,31 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   const router = useRouter();
   const { data: session } = useSession();
 
-  const [anime, setAnime] = useState<AnimeInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [anime, setAnime] = useState<AnimeInfo | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`cinestream_anime_${animeId}`);
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`cinestream_anime_${animeId}`);
+        if (cached) return false;
+      } catch {}
+    }
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
   const [sourceConfig, setSourceConfig] = useState<SourceConfigEntry[] | null>(null);
+
+  // Dismiss any incoming navigation loader immediately upon watch page hydration
+  useEffect(() => {
+    declarePageReady();
+  }, []);
 
   // Load and listen to streaming source configuration
   useEffect(() => {
@@ -166,12 +187,16 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
   const [forcedSource, setForcedSource] = useState<string>("animeplay");
   usePageContentReady(!isLoading);
 
-  // Restore current/preferred source from URL query param or sessionStorage
+  // Restore current/preferred source from URL query param or sessionStorage (scoped to animeId)
   useEffect(() => {
     if (typeof window !== "undefined" && servers.length > 0) {
       const urlParams = new URLSearchParams(window.location.search);
       const sourceParam = urlParams.get("source");
-      const savedSource = sessionStorage.getItem("cinestream_anime_source");
+      // Clean up legacy global preference so new entries start fresh on Source 1
+      try {
+        sessionStorage.removeItem("cinestream_anime_source");
+      } catch {}
+      const savedSource = sessionStorage.getItem(`cinestream_anime_source_${animeId}`);
 
       let resolvedKey: string | undefined;
 
@@ -195,7 +220,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         }
       }
 
-      const activeKey = resolvedKey || (servers.some((s) => s.key === forcedSource) ? forcedSource : servers[0].key);
+      const activeKey = resolvedKey || servers[0].key;
       setForcedSource(activeKey);
 
       // Clean up / normalize URL to show source as a number
@@ -209,25 +234,25 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         }
       } catch {}
     }
-  }, [servers, forcedSource]);
+  }, [servers, animeId]);
 
   const handleSelectServer = useCallback((srvKey: string) => {
     setForcedSource(srvKey);
     if (typeof window !== "undefined") {
       const serverIdx = servers.findIndex((s) => s.key === srvKey);
       const sourceNum = serverIdx >= 0 ? serverIdx + 1 : 1;
-      sessionStorage.setItem("cinestream_anime_source", String(sourceNum));
+      sessionStorage.setItem(`cinestream_anime_source_${animeId}`, String(sourceNum));
       try {
         const url = new URL(window.location.href);
         url.searchParams.set("source", String(sourceNum));
         window.history.replaceState(null, "", url.toString());
       } catch {}
     }
-  }, [servers]);
+  }, [servers, animeId]);
 
   useEffect(() => {
     const loadAnime = async () => {
-      setIsLoading(true);
+      if (!anime) setIsLoading(true);
       try {
         const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
         const requestedSeasonNum = urlParams ? parseInt(urlParams.get("season") || "", 10) : NaN;
@@ -582,7 +607,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
     );
   }, [forcedSource, animeId, anime, episodeNumber, currentEpDetail]);
 
-  if (isLoading) {
+  if (isLoading && !anime) {
     return (
       <div className="fixed inset-0 w-full h-[100dvh] bg-black flex flex-col items-center justify-center text-white space-y-4">
         <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />

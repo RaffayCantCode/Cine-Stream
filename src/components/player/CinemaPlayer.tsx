@@ -17,7 +17,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Server,
-  SkipForward,
   Lock,
   Menu,
   ChevronUp,
@@ -205,18 +204,6 @@ export function CinemaPlayer({
       setIsReloading(false);
     }, 750);
   }, [onReloadSource]);
-
-  const handleNextSource = useCallback(() => {
-    if (!servers || servers.length === 0) return;
-    const currentIdx = servers.findIndex(
-      (s) => s.key === activeServer.key || s.name === activeServer.name
-    );
-    const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % servers.length : 0;
-    const nextServer = servers[nextIdx];
-    if (nextServer) {
-      onSelectServer(nextServer);
-    }
-  }, [servers, activeServer, onSelectServer]);
 
   const [selectedSeasonNum, setSelectedSeasonNum] = useState<number>(metadata.season || 1);
 
@@ -911,27 +898,6 @@ export function CinemaPlayer({
               <span className="hidden md:inline">Sources</span>
             </button>
 
-            {/* Next Source Button */}
-            {servers && servers.length > 1 && (
-              <button
-                onClick={handleNextSource}
-                className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md active:scale-95"
-                title="Next Source"
-              >
-                <SkipForward className="w-4 h-4 text-primary" />
-                <span className="hidden sm:inline">Next</span>
-              </button>
-            )}
-
-            {/* Play / Pause Toggle Button */}
-            <button
-              onClick={handleTogglePlay}
-              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md active:scale-95"
-              title={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            </button>
-
             {/* Reload Source Button */}
             <button
               onClick={handleReloadSource}
@@ -1082,38 +1048,6 @@ export function CinemaPlayer({
                 <span className="text-[10px] text-primary font-bold">
                   {activeServer.name || "Source 1"}
                 </span>
-              </button>
-
-              {/* Next Source (if multiple servers available) */}
-              {servers && servers.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleNextSource();
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold transition-all border border-white/10 text-white cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <SkipForward className="w-4 h-4 text-primary" />
-                    <span>Next Source</span>
-                  </div>
-                  <span className="text-[10px] text-white/50">Switch</span>
-                </button>
-              )}
-
-              {/* Play / Pause Toggle */}
-              <button
-                type="button"
-                onClick={() => {
-                  handleTogglePlay();
-                }}
-                className="w-full flex items-center justify-between p-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold transition-all border border-white/10 text-white cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  {isPlaying ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
-                  <span>{isPlaying ? "Pause Video" : "Play Video"}</span>
-                </div>
-                <span className="text-[10px] text-white/50">{isPlaying ? "Playing" : "Paused"}</span>
               </button>
 
               {/* Reload Source */}
@@ -1371,28 +1305,6 @@ export function CinemaPlayer({
                   </button>
                 );
               })}
-
-              {nextEpisodeInfo && (
-                <button
-                  onClick={() => {
-                    if (onSelectEpisode) {
-                      onSelectEpisode(nextEpisodeInfo.season, nextEpisodeInfo.episode);
-                      setShowEpisodeCarousel(false);
-                    }
-                  }}
-                  className="w-[180px] sm:w-[200px] shrink-0 text-left rounded-2xl overflow-hidden border border-dashed border-primary/40 hover:border-primary bg-primary/10 hover:bg-primary/20 transition-all p-5 flex flex-col items-center justify-center gap-2.5 group/next cursor-pointer self-stretch text-center"
-                >
-                  <div className="w-11 h-11 rounded-2xl bg-primary/20 border border-primary/40 flex items-center justify-center text-primary group-hover/next:scale-110 group-hover/next:bg-primary group-hover/next:text-black transition-all shadow-md">
-                    <SkipForward className="w-5 h-5 fill-current" />
-                  </div>
-                  <div>
-                    <span className="block text-xs font-black text-white">Next Episode</span>
-                    <span className="block text-[11px] font-bold text-primary truncate max-w-[160px] mt-0.5">
-                      {isAnime ? `EP ${nextEpisodeInfo.episode}` : `S${nextEpisodeInfo.season}E${nextEpisodeInfo.episode}`}
-                    </span>
-                  </div>
-                </button>
-              )}
             </div>
 
             <button

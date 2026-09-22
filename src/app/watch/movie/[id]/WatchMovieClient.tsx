@@ -8,8 +8,8 @@ import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { getStreamingSources, StreamingSource } from "@/lib/streaming-fetch";
 import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceTag, type SourceConfigEntry, type SourceCategory } from "@/lib/streaming-config";
 import { fetchJson } from "@/lib/utils";
-
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
+import { declarePageReady } from "@/lib/pageLoad";
 
 interface Movie {
   id: number;
@@ -83,6 +83,11 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     return ordered;
   }, [movieId, sourceConfig]);
 
+  // Dismiss any incoming navigation loader immediately upon watch page hydration
+  useEffect(() => {
+    declarePageReady();
+  }, []);
+
   const [activeSource, setActiveSource] = useState<StreamingSource>(() => {
     const base = getStreamingSources("movie", movieId);
     return base[0] || {
@@ -97,7 +102,11 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     if (typeof window !== "undefined" && sources.length > 0) {
       const urlParams = new URLSearchParams(window.location.search);
       const sourceParam = urlParams.get("source");
-      const savedSource = sessionStorage.getItem("cinestream_movie_source");
+      // Clean up legacy global preference so new entries start fresh on Source 1
+      try {
+        sessionStorage.removeItem("cinestream_movie_source");
+      } catch {}
+      const savedSource = sessionStorage.getItem(`cinestream_movie_source_${movieId}`);
 
       let selected: StreamingSource | undefined;
       if (sourceParam) {
@@ -119,7 +128,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
       }
 
       if (!selected) {
-        selected = sources.find((s) => s.type === activeSource.type) || sources[0];
+        selected = sources[0];
       }
 
       setActiveSource(selected);
@@ -135,7 +144,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
         }
       } catch {}
     }
-  }, [sources]);
+  }, [sources, movieId]);
 
   useEffect(() => {
     const fetchMovie = async () => {
@@ -254,7 +263,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
             if (typeof window !== "undefined") {
               const sourceIndex = sources.findIndex((s) => s.type === found.type);
               const sourceNum = sourceIndex >= 0 ? sourceIndex + 1 : 1;
-              sessionStorage.setItem("cinestream_movie_source", String(sourceNum));
+              sessionStorage.setItem(`cinestream_movie_source_${movieId}`, String(sourceNum));
               try {
                 const url = new URL(window.location.href);
                 url.searchParams.set("source", String(sourceNum));
