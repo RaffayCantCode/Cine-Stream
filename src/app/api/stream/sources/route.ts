@@ -45,7 +45,7 @@ export async function GET() {
       anime: forCategory("anime"),
     };
 
-    setCachedStreamingSources(payload, 30 * 60 * 1000);
+    setCachedStreamingSources(payload, 60 * 1000);
 
     return NextResponse.json(
       {

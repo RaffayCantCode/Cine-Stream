@@ -23,6 +23,7 @@ interface VideoPlayerProps {
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
+  vidlove:     { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
   vidcore:     { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
   videasy:     { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
   embedmaster: { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
@@ -147,7 +148,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   useEffect(() => {
     const domains = [
       "https://embedmaster.link",
-      "https://bingr.one",
+      "https://player.vidlove.cc",
       "https://vidlink.pro",
       "https://vidsrc.sh",
       "https://autoembed.co",

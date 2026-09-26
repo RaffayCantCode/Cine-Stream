@@ -18,11 +18,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
-    baseUrl: "https://bingr.one",
-    type: "bingr",
+    baseUrl: "https://player.vidlove.cc",
+    type: "vidlove",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://bingr.one",
+    healthCheckUrl: "https://player.vidlove.cc",
   },
   {
     name: "Source 3",
@@ -55,6 +55,10 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
     case "embedmaster":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "vidlove":
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     case "bingr":
       if (type === "movie") return `${api.baseUrl}/watch/movie/${id}`;
@@ -110,7 +114,7 @@ export function getDefaultMovieOrder(): string[] {
 export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource[] {
   const defaultMovieTags: Record<string, string> = {
     embedmaster: "best",
-    bingr: "good",
+    vidlove: "good",
     vidlink: "good",
     vidsrc: "good",
     autoembed: "backup",

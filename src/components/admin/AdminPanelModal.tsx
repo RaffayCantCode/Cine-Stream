@@ -3932,6 +3932,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
   const renderStreamingTab = () => {
     const SOURCE_LABELS: Record<string, string> = {
+      vidlove: "VidLove",
       vidcore: "VidCore",
       videasy: "Videasy",
       animeplay: "AnimePlay",

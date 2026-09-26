@@ -69,7 +69,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     const byType = new Map(base.map((s) => [s.type, s]));
     const ordered: StreamingSource[] = [];
     sourceConfig.forEach((entry) => {
-      const key = entry.key === "vixsrc" ? "bingr" : entry.key;
+      const key = entry.key === "vixsrc" || entry.key === "bingr" ? "vidlove" : entry.key;
       const src = byType.get(key);
       if (src && !ordered.some((o) => o.type === src.type)) {
         ordered.push({
@@ -82,6 +82,19 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     base.forEach((s) => {
       if (!ordered.some((o) => o.type === s.type)) ordered.push(s);
     });
+
+    // Guarantee EmbedMaster is strictly Source 1 and VidLove is strictly Source 2
+    const emIdx = ordered.findIndex((s) => s.type === "embedmaster");
+    if (emIdx > 0) {
+      const [em] = ordered.splice(emIdx, 1);
+      ordered.unshift(em);
+    }
+    const vlIdx = ordered.findIndex((s) => s.type === "vidlove");
+    if (vlIdx !== -1 && vlIdx !== 1) {
+      const [vl] = ordered.splice(vlIdx, 1);
+      ordered.splice(1, 0, vl);
+    }
+
     return ordered.map((s, index) => ({
       ...s,
       name: `Source ${index + 1}`,
@@ -209,7 +222,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   useEffect(() => {
     const domains = [
       "https://embedmaster.link",
-      "https://bingr.one",
+      "https://player.vidlove.cc",
       "https://vidlink.pro",
       "https://vidsrc.sh",
       "https://autoembed.co",

@@ -48,7 +48,7 @@ export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
   movie: {
     embedmaster: "best",
-    bingr: "good",
+    vidlove: "good",
     vidlink: "good",
     vidsrc: "good",
     autoembed: "backup",
@@ -78,13 +78,22 @@ export function resolveSourceConfig(
   const defaults = DEFAULT_TAGS[category];
 
   const entries = baseKeys.map((key, index) => {
-    const row = byKey.get(key) || (key === "bingr" ? byKey.get("vixsrc") : undefined);
+    const row = byKey.get(key) || (key === "vidlove" ? byKey.get("bingr") || byKey.get("vixsrc") : undefined);
     return {
       key,
       tag: row && isSourceTag(row.tag) ? row.tag : (defaults[key] ?? "good"),
       position: row ? Number(row.position) || 0 : index,
     };
   });
+
+  if (category === "movie") {
+    const emIdx = entries.findIndex((e) => e.key === "embedmaster");
+    const vidloveIdx = entries.findIndex((e) => e.key === "vidlove");
+    if (emIdx !== -1 && vidloveIdx !== -1 && entries[emIdx].position >= entries[vidloveIdx].position) {
+      entries[emIdx].position = 0;
+      entries[vidloveIdx].position = 1;
+    }
+  }
 
   entries.sort((a, b) => a.position - b.position);
   return entries.map(({ key, tag }) => ({ key, tag }));
