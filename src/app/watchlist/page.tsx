@@ -128,24 +128,32 @@ export default function WatchlistPage() {
                   />
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
-                    {filtered.map((item) => (
-                      <div key={`${item.mediaType}-${item.mediaId}`} className="group relative">
-                        <GridMediaCard
-                          item={{
-                            id: item.mediaId,
-                            title: item.title,
-                            media_type: item.mediaType,
-                            poster_path: item.posterPath ?? undefined,
-                          }}
-                        />
-                        <button
-                          onClick={() => remove(item.mediaId, item.mediaType)}
-                          aria-label={`Remove ${item.title} from watchlist`}
-                          className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 backdrop-blur-md text-white shadow-lg ring-1 ring-white/20 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200 hover:bg-rose-600 hover:scale-110 cursor-pointer"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
+                    {filtered.map((item, idx) => (
+                      <GridMediaCard
+                        key={`${item.mediaType}-${item.mediaId}`}
+                        index={idx}
+                        item={{
+                          id: item.mediaId,
+                          title: item.title,
+                          media_type: item.mediaType,
+                          poster_path: item.posterPath ?? undefined,
+                        }}
+                        action={
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              remove(item.mediaId, item.mediaType);
+                            }}
+                            aria-label={`Remove ${item.title} from watchlist`}
+                            title="Remove from watchlist"
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/75 backdrop-blur-md text-white/90 hover:text-white shadow-lg ring-1 ring-white/20 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-all duration-200 hover:bg-rose-600 hover:scale-110 active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                          >
+                            <X className="w-4 h-4 stroke-[2.5]" />
+                          </button>
+                        }
+                      />
                     ))}
                   </div>
                 )}
