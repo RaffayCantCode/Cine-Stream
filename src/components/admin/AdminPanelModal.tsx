@@ -3932,6 +3932,8 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
 
   const renderStreamingTab = () => {
     const SOURCE_LABELS: Record<string, string> = {
+      vidcore: "VidCore",
+      videasy: "Videasy",
       animeplay: "AnimePlay",
       vidnest: "VidNest",
       embedmaster: "EmbedMaster",
@@ -3939,6 +3941,7 @@ export const AdminPanelModal = memo(function AdminPanelModal({ isOpen, onClose, 
       animesub: "AnimeSub",
       vidsrc: "Vidsrc",
       vixsrc: "Vixsrc",
+      bingr: "Bingr",
       vidlink: "Vidlink",
       autoembed: "AutoEmbed",
       "123embed": "123Embed",

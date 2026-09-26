@@ -1335,11 +1335,9 @@ export function CinemaPlayer({
 
           <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
             {servers.map((server, idx) => {
-              const isActive =
-                activeServer.key === server.type ||
-                activeServer.type === server.type ||
-                activeServer.key === server.key ||
-                activeServer.name === server.name;
+              const currentKey = activeServer.key || activeServer.type;
+              const serverKey = server.key || server.type;
+              const isActive = Boolean(currentKey && serverKey && currentKey === serverKey);
 
               const tagKey = (server.tag || (server.quality ? server.quality.toLowerCase() : "")) as SourceTag;
               const tagLabel =

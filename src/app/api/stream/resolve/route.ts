@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
 
   const defaultEmbed =
     type === "movie"
-      ? `https://vidsrc.me/embed/movie?tmdb=${id}`
-      : `https://vidsrc.me/embed/tv?tmdb=${id}&season=${season}&episode=${episode}`;
+      ? `https://embedmaster.link/movie/${id}`
+      : `https://embedmaster.link/tv/${id}/${season}/${episode}`;
 
   // ── Strategy 1: VidLink Stream Resolver ──
   try {

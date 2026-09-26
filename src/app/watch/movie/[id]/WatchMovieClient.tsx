@@ -63,24 +63,29 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
 
   const sources = useMemo(() => {
     const base = getStreamingSources("movie", movieId);
-    if (!sourceConfig || sourceConfig.length === 0) return base;
+    if (!sourceConfig || sourceConfig.length === 0) {
+      return base.map((s, idx) => ({ ...s, name: `Source ${idx + 1}` }));
+    }
     const byType = new Map(base.map((s) => [s.type, s]));
     const ordered: StreamingSource[] = [];
-    sourceConfig.forEach((entry, index) => {
-      const src = byType.get(entry.key);
-      if (src) {
+    sourceConfig.forEach((entry) => {
+      const key = entry.key === "vixsrc" ? "bingr" : entry.key;
+      const src = byType.get(key);
+      if (src && !ordered.some((o) => o.type === src.type)) {
         ordered.push({
           ...src,
-          name: `Source ${index + 1}`,
           tag: entry.tag,
           quality: (SOURCE_TAG_LABELS[entry.tag] as any) || src.quality,
         });
       }
     });
     base.forEach((s) => {
-      if (!ordered.find((o) => o.type === s.type)) ordered.push(s);
+      if (!ordered.some((o) => o.type === s.type)) ordered.push(s);
     });
-    return ordered;
+    return ordered.map((s, index) => ({
+      ...s,
+      name: `Source ${index + 1}`,
+    }));
   }, [movieId, sourceConfig]);
 
   // Dismiss any incoming navigation loader immediately upon watch page hydration
@@ -91,9 +96,9 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   const [activeSource, setActiveSource] = useState<StreamingSource>(() => {
     const base = getStreamingSources("movie", movieId);
     return base[0] || {
-      url: `https://vixsrc.to/movie/${movieId}`,
+      url: `https://embedmaster.link/movie/${movieId}`,
       name: "Source 1",
-      type: "vixsrc",
+      type: "embedmaster",
       quality: "Best",
     };
   });
@@ -203,10 +208,10 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   // Preconnect embed domains early for lightning-fast iframe startup
   useEffect(() => {
     const domains = [
-      "https://vixsrc.to",
       "https://embedmaster.link",
-      "https://vidnest.fun",
+      "https://bingr.one",
       "https://vidlink.pro",
+      "https://vidsrc.sh",
       "https://autoembed.co",
     ];
     domains.forEach((href) => {

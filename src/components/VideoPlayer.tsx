@@ -23,13 +23,16 @@ interface VideoPlayerProps {
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
+  vidcore:     { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
+  videasy:     { bg: "bg-indigo-600", badge: "bg-indigo-500/20 text-indigo-300" },
   embedmaster: { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
-  vixsrc:      { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
-  vidsrc:      { bg: "bg-blue-600",  badge: "bg-blue-500/20 text-blue-300" },
   vidlink:     { bg: "bg-violet-600", badge: "bg-violet-500/20 text-violet-300" },
+  bingr:       { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
+  vixsrc:      { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
   autoembed:   { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
-  "123embed":  { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
   vidnest:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
+  vidsrc:      { bg: "bg-blue-600",  badge: "bg-blue-500/20 text-blue-300" },
+  "123embed":  { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
 };
 
 const QUALITY_STYLES: Record<StreamingSource["quality"], string> = {
@@ -143,11 +146,11 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   // Preconnect to all embed provider domains so iframe DNS + TCP + TLS starts early
   useEffect(() => {
     const domains = [
-      "https://vixsrc.to",
       "https://embedmaster.link",
-      "https://vidnest.fun",
+      "https://bingr.one",
       "https://vidlink.pro",
-      "https://autoembed.co"
+      "https://vidsrc.sh",
+      "https://autoembed.co",
     ];
     const links: HTMLLinkElement[] = [];
     domains.forEach(href => {

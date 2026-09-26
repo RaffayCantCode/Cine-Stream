@@ -404,7 +404,8 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
             src={effectiveIframeUrl}
             className="w-full h-full border-0 block pointer-events-auto"
             style={{ width: "100%", height: "100%", minWidth: "100%", minHeight: "100%", border: 0 }}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
             referrerPolicy="no-referrer-when-downgrade"
             title={title || "Video Stream"}
             onLoad={(e) => {

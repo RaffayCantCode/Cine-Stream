@@ -10,14 +10,6 @@ interface StreamingAPIConfig {
 const STREAMING_APIS: StreamingAPIConfig[] = [
   {
     name: "Source 1",
-    baseUrl: "https://vixsrc.to",
-    type: "vixsrc",
-    quality: "Best",
-    supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vixsrc.to",
-  },
-  {
-    name: "Source 2",
     baseUrl: "https://embedmaster.link",
     type: "embedmaster",
     quality: "Best",
@@ -25,20 +17,28 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     healthCheckUrl: "https://embedmaster.link",
   },
   {
-    name: "Source 3",
-    baseUrl: "https://vidnest.fun",
-    type: "vidnest",
+    name: "Source 2",
+    baseUrl: "https://bingr.one",
+    type: "bingr",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidnest.fun",
+    healthCheckUrl: "https://bingr.one",
   },
   {
-    name: "Source 4",
+    name: "Source 3",
     baseUrl: "https://vidlink.pro",
     type: "vidlink",
     quality: "Good",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://vidlink.pro",
+  },
+  {
+    name: "Source 4",
+    baseUrl: "https://vidsrc.sh",
+    type: "vidsrc",
+    quality: "Good",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidsrc.sh",
   },
   {
     name: "Source 5",
@@ -52,15 +52,15 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
 
 function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): string {
   switch (api.type) {
-    case "vixsrc":
-      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
-      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
-
     case "embedmaster":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "vidnest":
+    case "bingr":
+      if (type === "movie") return `${api.baseUrl}/watch/movie/${id}`;
+      return `${api.baseUrl}/watch/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "vixsrc":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
@@ -68,13 +68,25 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
+    case "vidsrc":
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
     case "autoembed":
       if (type === "movie") return `${api.baseUrl}/movie/tmdb/${id}?color=8B5CF6&lang=en`;
       return `${api.baseUrl}/tv/tmdb/${id}-${season ?? 1}-${episode ?? 1}?color=8B5CF6&lang=en`;
 
-    case "vidsrc":
-      if (type === "movie") return `${api.baseUrl}/embed/movie?tmdb=${id}`;
-      return `${api.baseUrl}/embed/tv?tmdb=${id}&season=${season ?? 1}&episode=${episode ?? 1}`;
+    case "videasy":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}?color=8B5CF6`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}?color=8B5CF6`;
+
+    case "vidcore":
+      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
+      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "vidnest":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     default:
       return "";
@@ -97,10 +109,10 @@ export function getDefaultMovieOrder(): string[] {
 
 export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource[] {
   const defaultMovieTags: Record<string, string> = {
-    vixsrc: "recommended",
     embedmaster: "best",
-    vidnest: "good",
+    bingr: "good",
     vidlink: "good",
+    vidsrc: "good",
     autoembed: "backup",
   };
   return STREAMING_APIS.map((api) => ({
@@ -115,8 +127,8 @@ export function getStreamingSources(type: "movie" | "tv", id: number, season?: n
 
 export function getFallbackEmbedUrl(type: "movie" | "tv", id: number, season?: number, episode?: number): string {
   return type === "movie"
-    ? `https://vixsrc.to/movie/${id}`
-    : `https://vixsrc.to/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+    ? `https://embedmaster.link/movie/${id}`
+    : `https://embedmaster.link/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 }
 
 export async function checkSourceHealth(): Promise<Record<string, { status: "online" | "offline"; latency?: number }>> {

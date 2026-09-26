@@ -78,7 +78,8 @@ export const ServerSelectorModal = memo(function ServerSelectorModal({
         {/* Server Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
           {servers.map((server, idx) => {
-            const isActive = activeServerKey === server.type || activeServerKey === server.key || activeServerKey === server.name;
+            const serverKey = server.key || server.type;
+            const isActive = Boolean(activeServerKey && serverKey && (activeServerKey === serverKey || activeServerKey === server.type || activeServerKey === server.key));
             const tagKey = server.tag as SourceTag;
             const tagLabel = tagKey && SOURCE_TAG_LABELS[tagKey] ? SOURCE_TAG_LABELS[tagKey] : server.quality || "Server";
             const tagStyle = (tagKey && TAG_STYLES[tagKey]) || (server.quality && QUALITY_BADGES[server.quality]) || "bg-white/10 text-white/80 border-white/15";

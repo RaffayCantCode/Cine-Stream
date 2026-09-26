@@ -39,7 +39,7 @@ export interface SourceConfigEntry {
 
 // Default source order for anime (movies/TV order is derived from STREAMING_APIS
 // in streaming-fetch.ts via getDefaultMovieOrder). Keep in sync with the
-export const ANIME_SOURCE_KEYS: string[] = ["animeplay", "vidnest", "embedmaster", "animepahe", "animesub", "vidsrc"];
+export const ANIME_SOURCE_KEYS: string[] = ["animeplay", "vidnest", "animepahe", "embedmaster", "bingr", "vidsrc"];
 
 export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 
@@ -47,18 +47,18 @@ export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 // Follows position: 1=recommended, 2=best, 3=best, 4=good, 5=backup.
 export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
   movie: {
-    vixsrc: "recommended",
     embedmaster: "best",
-    vidnest: "good",
+    bingr: "good",
     vidlink: "good",
+    vidsrc: "good",
     autoembed: "backup",
   },
   anime: {
     animeplay: "recommended",
     vidnest: "best",
-    embedmaster: "best",
     animepahe: "good",
-    animesub: "backup",
+    embedmaster: "good",
+    bingr: "good",
     vidsrc: "backup",
   },
 };
@@ -78,7 +78,7 @@ export function resolveSourceConfig(
   const defaults = DEFAULT_TAGS[category];
 
   const entries = baseKeys.map((key, index) => {
-    const row = byKey.get(key);
+    const row = byKey.get(key) || (key === "bingr" ? byKey.get("vixsrc") : undefined);
     return {
       key,
       tag: row && isSourceTag(row.tag) ? row.tag : (defaults[key] ?? "good"),
@@ -90,8 +90,7 @@ export function resolveSourceConfig(
   return entries.map(({ key, tag }) => ({ key, tag }));
 }
 
-// Client-side fetch with a 30-minute cache to respect API request quotas.
-// Edge and browser caches will store for 30 minutes to 1 hour.
+// Client-side fetch with a short in-memory cache to respect API request quotas.
 let fetchCache: { ts: number; data: Record<SourceCategory, SourceConfigEntry[]> } | null = null;
 
 export function clearSourceConfigCache(): void {
@@ -103,12 +102,12 @@ export function setSourceConfigCache(data: Record<SourceCategory, SourceConfigEn
 }
 
 export async function fetchSourceConfig(forceFresh = false): Promise<Record<SourceCategory, SourceConfigEntry[]>> {
-  if (!forceFresh && fetchCache && Date.now() - fetchCache.ts < 1_800_000) { // 30 minutes
+  if (!forceFresh && fetchCache && Date.now() - fetchCache.ts < 60_000) { // 1 minute client memory cache
     return fetchCache.data;
   }
   try {
-    const url = forceFresh ? `/api/stream/sources?t=${Date.now()}` : "/api/stream/sources";
-    const res = await fetch(url);
+    const url = `/api/stream/sources?t=${Date.now()}`;
+    const res = await fetch(url, { cache: "no-store" });
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.data) {

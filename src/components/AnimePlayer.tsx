@@ -7,7 +7,7 @@ import { fetchSourceConfig, SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from
 
 interface ProviderSource {
   name: string;
-  provider: "animeplay" | "vidnest" | "embedmaster" | "vixsrc" | "smashystream" | "vidlink" | "123embed" | "vidsrc" | "2embed" | "animepahe" | "megaplay" | "autoembed" | "animesub";
+  provider: "animeplay" | "vidnest" | "embedmaster" | "vixsrc" | "bingr" | "smashystream" | "vidlink" | "123embed" | "vidsrc" | "2embed" | "animepahe" | "megaplay" | "autoembed" | "animesub" | "videasy" | "vidcore";
   color: string;
   quality: "best" | "good" | "backup";
   tag?: SourceTag;
@@ -36,9 +36,9 @@ interface AnimePlayerProps {
 const PROVIDERS: ProviderSource[] = [
   { name: "Source 1", provider: "animeplay",   color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
   { name: "Source 2", provider: "vidnest",     color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
-  { name: "Source 3", provider: "embedmaster", color: "from-[#10b981]/30 to-[#34d399]/20", quality: "best" },
-  { name: "Source 4", provider: "animepahe",   color: "from-[#6366f1]/30 to-[#818cf8]/20", quality: "good" },
-  { name: "Source 5", provider: "animesub",    color: "from-[#f59e0b]/30 to-[#fbbf24]/20", quality: "backup" },
+  { name: "Source 3", provider: "animepahe",   color: "from-[#6366f1]/30 to-[#818cf8]/20", quality: "good" },
+  { name: "Source 4", provider: "embedmaster", color: "from-[#10b981]/30 to-[#34d399]/20", quality: "good" },
+  { name: "Source 5", provider: "bingr",       color: "from-[#f59e0b]/30 to-[#fbbf24]/20", quality: "good" },
   { name: "Source 6", provider: "vidsrc",      color: "from-[#8b5cf6]/30 to-[#a78bfa]/20", quality: "backup" },
 ];
 
@@ -152,6 +152,36 @@ function buildProviderUrl(
         return mirrors[attempt % mirrors.length];
       }
       return primaryId ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub` : "";
+    }
+    case "vidcore": {
+      if (tmdbId) {
+        return isMovie
+          ? `https://vidcore.org/embed/movie/${tmdbId}`
+          : `https://vidcore.org/embed/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
+      }
+      return primaryId ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub` : "";
+    }
+    case "videasy": {
+      if (tmdbId) {
+        return isMovie
+          ? `https://player.videasy.net/movie/${tmdbId}?color=8B5CF6`
+          : `https://player.videasy.net/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}?color=8B5CF6`;
+      }
+      return primaryId ? `https://megaplay.buzz/stream/ani/${primaryId}/${episode}/sub` : "";
+    }
+    case "bingr": {
+      if (aniId) {
+        return `https://bingr.one/watch/anime/${aniId}/${episode}`;
+      }
+      if (malId_) {
+        return `https://bingr.one/watch/anime/mal-${malId_}/${episode}`;
+      }
+      if (tmdbId) {
+        return isMovie
+          ? `https://bingr.one/watch/movie/${tmdbId}`
+          : `https://bingr.one/watch/tv/${tmdbId}/${tmdbSeason || 1}/${absEp}`;
+      }
+      return primaryId ? `https://bingr.one/watch/anime/${primaryId}/${episode}` : "";
     }
     case "aniwave":
     case "vidlink":
