@@ -9,7 +9,7 @@ interface ProviderSource {
   name: string;
   provider: "animeplay" | "vidnest" | "embedmaster" | "vixsrc" | "bingr" | "smashystream" | "vidlink" | "123embed" | "vidsrc" | "2embed" | "animepahe" | "megaplay" | "autoembed" | "animesub" | "videasy" | "vidcore";
   color: string;
-  quality: "best" | "good" | "backup";
+  quality: "best" | "good" | "backup" | "recommended" | "stable";
   tag?: SourceTag;
 }
 
@@ -34,18 +34,20 @@ interface AnimePlayerProps {
 }
 
 const PROVIDERS: ProviderSource[] = [
-  { name: "Source 1", provider: "animeplay",   color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "best" },
+  { name: "Source 1", provider: "animeplay",   color: "from-[#4B5694]/30 to-[#7288AE]/20", quality: "recommended" },
   { name: "Source 2", provider: "vidnest",     color: "from-[#e63946]/30 to-[#ff6b6b]/20", quality: "best" },
   { name: "Source 3", provider: "animepahe",   color: "from-[#6366f1]/30 to-[#818cf8]/20", quality: "good" },
   { name: "Source 4", provider: "embedmaster", color: "from-[#10b981]/30 to-[#34d399]/20", quality: "good" },
-  { name: "Source 5", provider: "bingr",       color: "from-[#f59e0b]/30 to-[#fbbf24]/20", quality: "good" },
-  { name: "Source 6", provider: "vidsrc",      color: "from-[#8b5cf6]/30 to-[#a78bfa]/20", quality: "backup" },
+  { name: "Source 5", provider: "vidsrc",      color: "from-[#8b5cf6]/30 to-[#a78bfa]/20", quality: "stable" },
+  { name: "Binge",    provider: "bingr",       color: "from-[#f59e0b]/30 to-[#fbbf24]/20", quality: "backup" },
 ];
 
 const QUALITY_STYLES: Record<string, string> = {
-  best:   "bg-emerald-400/15 text-emerald-300 border-emerald-300/25",
-  good:   "bg-cyan-400/15 text-cyan-300 border-cyan-300/25",
-  backup: "bg-amber-400/15 text-amber-300 border-amber-300/25",
+  recommended: "bg-violet-400/15 text-violet-300 border-violet-300/25",
+  best:        "bg-emerald-400/15 text-emerald-300 border-emerald-300/25",
+  good:        "bg-cyan-400/15 text-cyan-300 border-cyan-300/25",
+  stable:      "bg-violet-400/15 text-violet-300 border-violet-300/25",
+  backup:      "bg-amber-400/15 text-amber-300 border-amber-300/25",
 };
 
 function buildProviderUrl(

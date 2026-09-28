@@ -47,9 +47,13 @@ function buildAnimeIframeUrl(
       return primaryId ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub` : "";
     case "animepahe":
       return primaryId ? `https://vidnest.fun/animepahe/${primaryId}/${episode}/sub` : "";
-    case "animesub":
+    case "bingr": {
       const malClean = cleanNumeric(malId) || primaryId;
-      return malClean ? `https://megaplay.buzz/stream/mal/${malClean}/${episode}/sub` : "";
+      if (primaryId) return `https://bingr.one/watch/anime/${primaryId}/${episode}`;
+      if (malClean) return `https://bingr.one/watch/anime/mal-${malClean}/${episode}`;
+      if (tmdbId) return isMovie ? `https://bingr.one/watch/movie/${tmdbId}` : `https://bingr.one/watch/tv/${tmdbId}/${effectiveTmdbSeason}/${effectiveTmdbEpisode}`;
+      return "";
+    }
     case "vidsrc":
       if (tmdbId) {
         return isMovie
@@ -92,11 +96,11 @@ interface WatchAnimeClientProps {
 
 const DEFAULT_ANIME_SERVERS: ServerOption[] = [
   { key: "animeplay", name: "Source 1", type: "animeplay", quality: "Recommended", tag: "recommended" },
-  { key: "vidnest", name: "Source 2", type: "vidnest", quality: "Best", tag: "best" },
-  { key: "embedmaster", name: "Source 3", type: "embedmaster", quality: "Best", tag: "best" },
-  { key: "animepahe", name: "Source 4", type: "animepahe", quality: "Good", tag: "good" },
-  { key: "animesub", name: "Source 5", type: "animesub", quality: "Backup", tag: "backup" },
-  { key: "vidsrc", name: "Source 6", type: "vidsrc", quality: "Backup", tag: "backup" },
+  { key: "vidnest",   name: "Source 2", type: "vidnest",   quality: "Best",        tag: "best" },
+  { key: "animepahe", name: "Source 3", type: "animepahe", quality: "Good",        tag: "good" },
+  { key: "embedmaster", name: "Source 4", type: "embedmaster", quality: "Good",    tag: "good" },
+  { key: "vidsrc",    name: "Source 5", type: "vidsrc",    quality: "Stable",      tag: "stable" },
+  { key: "bingr",     name: "Binge",    type: "bingr",     quality: "Backup",      tag: "backup" },
 ];
 
 export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeClientProps) {

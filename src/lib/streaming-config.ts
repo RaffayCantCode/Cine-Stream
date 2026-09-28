@@ -4,6 +4,7 @@ export const SOURCE_TAGS = [
   "best",
   "good",
   "recommended",
+  "stable",
   "not_working",
   "backup",
 ] as const;
@@ -18,6 +19,7 @@ export const SOURCE_TAG_LABELS: Record<SourceTag, string> = {
   best: "Best",
   good: "Good",
   recommended: "Recommended",
+  stable: "Stable",
   not_working: "Not Working",
   backup: "Backup",
 };
@@ -26,6 +28,7 @@ export const TAG_STYLES: Record<SourceTag, string> = {
   best: "bg-emerald-400/15 text-emerald-300 border-emerald-300/25",
   good: "bg-sky-400/15 text-sky-300 border-sky-300/25",
   recommended: "bg-violet-400/15 text-violet-300 border-violet-300/25",
+  stable: "bg-violet-400/15 text-violet-300 border-violet-300/25",
   not_working: "bg-rose-400/15 text-rose-300 border-rose-300/25",
   backup: "bg-zinc-400/15 text-zinc-300 border-zinc-300/25",
 };
@@ -39,12 +42,12 @@ export interface SourceConfigEntry {
 
 // Default source order for anime (movies/TV order is derived from STREAMING_APIS
 // in streaming-fetch.ts via getDefaultMovieOrder). Keep in sync with the
-export const ANIME_SOURCE_KEYS: string[] = ["animeplay", "vidnest", "animepahe", "embedmaster", "bingr", "vidsrc"];
+export const ANIME_SOURCE_KEYS: string[] = ["animeplay", "vidnest", "animepahe", "embedmaster", "vidsrc", "bingr"];
 
 export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 
 // Default tag per source when the admin has not overridden it.
-// Follows position: 1=recommended, 2=best, 3=best, 4=good, 5=backup.
+// Follows position: 1=recommended, 2=best, 3=good, 4=good, 5=stable, 6=backup.
 export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
   movie: {
     embedmaster: "best",
@@ -58,8 +61,8 @@ export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
     vidnest: "best",
     animepahe: "good",
     embedmaster: "good",
-    bingr: "good",
-    vidsrc: "backup",
+    vidsrc: "stable",
+    bingr: "backup",
   },
 };
 
