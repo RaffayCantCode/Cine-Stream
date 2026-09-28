@@ -15,11 +15,15 @@ import {
 import { Sidebar } from "@/components/Sidebar";
 import {
   getLocalMangaHistory,
+  saveLocalMangaProgress,
   removeLocalMangaProgress,
   fetchServerMangaHistory,
+  saveServerMangaProgress,
   removeServerMangaProgress,
   MangaReadingProgress,
 } from "@/lib/manga-history";
+import { fetchJson } from "@/lib/utils";
+import { MangaItem } from "@/lib/manga-fetch";
 
 export default function ContinueReadingPage() {
   const { status } = useSession();
@@ -93,6 +97,83 @@ export default function ContinueReadingPage() {
     };
   }, [refreshHistory]);
 
+  // Auto-heal reading history entries (covers and types)
+  const healedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+    const candidates = items.filter(
+      (item) =>
+        !healedRef.current.has(item.mangaId) &&
+        (
+          !item.mangaCover ||
+          item.mangaCover.includes("icon-512.png") ||
+          item.mangaCover.includes("icon.png") ||
+          item.mangaType === "manga"
+        )
+    );
+
+    if (candidates.length === 0) return;
+
+    candidates.forEach((cand) => healedRef.current.add(cand.mangaId));
+
+    (async () => {
+      let hasUpdates = false;
+      const updatedMap = new Map<string, { cover?: string; type?: "manga" | "manhwa" | "manhua" }>();
+
+      await Promise.all(
+        candidates.map(async (item) => {
+          try {
+            const data = await fetchJson<{ success: boolean; item: MangaItem }>(
+              `/api/manga/details/${item.mangaId}`
+            ).catch(() => null);
+
+            if (data?.success && data.item) {
+              const newCover = data.item.coverImage;
+              const newType = data.item.type;
+              const coverChanged = !!newCover && !newCover.includes("icon-512.png") && newCover !== item.mangaCover;
+              const typeChanged = !!newType && newType !== item.mangaType;
+
+              if (coverChanged || typeChanged) {
+                hasUpdates = true;
+                const safeCover = coverChanged ? newCover : item.mangaCover;
+                const safeType = typeChanged ? newType : item.mangaType;
+
+                updatedMap.set(item.mangaId, {
+                  cover: safeCover,
+                  type: safeType,
+                });
+
+                const updatedItem = {
+                  ...item,
+                  mangaCover: safeCover,
+                  mangaType: safeType,
+                };
+                saveLocalMangaProgress(updatedItem);
+                if (status === "authenticated") {
+                  saveServerMangaProgress(updatedItem, true).catch(() => {});
+                }
+              }
+            }
+          } catch {}
+        })
+      );
+
+      if (hasUpdates) {
+        setItems((prev) =>
+          prev.map((item) => {
+            const up = updatedMap.get(item.mangaId);
+            if (!up) return item;
+            return {
+              ...item,
+              mangaCover: up.cover || item.mangaCover,
+              mangaType: up.type || item.mangaType,
+            };
+          })
+        );
+      }
+    })();
+  }, [items, status]);
+
   const sortedItems = useMemo(() => {
     const list = [...items];
     if (sortOrder === "oldest") {
@@ -129,10 +210,10 @@ export default function ContinueReadingPage() {
         className="min-h-screen bg-background text-foreground pb-20"
         style={
           {
-            "--primary": "48 100% 50%",
-            "--primary-foreground": "0 0% 0%",
-            "--ring": "48 100% 50%",
-            "--accent": "48 100% 50%",
+            "--primary": "42 75% 65%",
+            "--primary-foreground": "210 30% 6%",
+            "--ring": "42 75% 65%",
+            "--accent": "42 75% 65%",
           } as React.CSSProperties
         }
       >
@@ -177,10 +258,10 @@ export default function ContinueReadingPage() {
       className="min-h-screen bg-background text-foreground pb-20"
       style={
         {
-          "--primary": "48 100% 50%",
-          "--primary-foreground": "0 0% 0%",
-          "--ring": "48 100% 50%",
-          "--accent": "48 100% 50%",
+          "--primary": "42 75% 65%",
+          "--primary-foreground": "210 30% 6%",
+          "--ring": "42 75% 65%",
+          "--accent": "42 75% 65%",
         } as React.CSSProperties
       }
     >
@@ -269,18 +350,40 @@ export default function ContinueReadingPage() {
 
               <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
                 {sortedItems.map((item) => {
+                  const cleanId = item.mangaId.replace(/^(wc|asura)-/, "");
+                  const isFallbackCover = !item.mangaCover || item.mangaCover.includes("icon-512.png") || item.mangaCover.includes("icon.png");
+                  const effectiveCover = isFallbackCover && item.mangaId.startsWith("wc-")
+                    ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+                    : (item.mangaCover || "/icon-512.png");
+                  const effectiveType = (item.mangaType === "manhwa" || item.mangaType === "manhua")
+                    ? item.mangaType
+                    : (/raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(item.mangaTitle) || item.mangaId.startsWith("asura-")
+                        ? "manhwa"
+                        : item.mangaType || "manga");
+
                   return (
                     <div
                       key={item.mangaId}
-                      className="group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-zinc-950/90 border border-white/[0.08] hover:border-primary/60 hover:shadow-[0_12px_32px_hsl(var(--primary)/0.25)] transition-all duration-300 overflow-hidden"
+                      className="group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-zinc-950/90 border border-white/[0.08] hover:border-primary/45 hover:shadow-[0_12px_28px_hsl(var(--primary)/0.15)] transition-all duration-300 overflow-hidden"
                     >
                       {/* Poster Cover Box (Compact Aspect on Mobile) */}
                       <div className="relative w-full aspect-[4/5] sm:aspect-[3/4] overflow-hidden bg-zinc-900">
                         <img
-                          src={item.mangaCover}
+                          src={effectiveCover}
                           alt={item.mangaTitle}
+                          referrerPolicy="no-referrer"
                           loading="lazy"
                           decoding="async"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (item.mangaId.startsWith("wc-") && target.src.includes("/normal/")) {
+                              target.src = `https://temp.compsci88.com/cover/fallback/${cleanId}.jpg`;
+                              return;
+                            }
+                            if (!target.src.includes("icon-512.png")) {
+                              target.src = "/icon-512.png";
+                            }
+                          }}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
 
@@ -290,7 +393,7 @@ export default function ContinueReadingPage() {
                         {/* Top Floating Badges: Type on left, Discard X on right */}
                         <div className="absolute top-1.5 sm:top-2 inset-x-1.5 sm:inset-x-2 flex items-center justify-between z-20">
                           <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-black/90 text-primary border border-white/20 text-[8px] sm:text-[9px] font-black uppercase tracking-wider backdrop-blur-md">
-                            {item.mangaType}
+                            {effectiveType}
                           </span>
                           <button
                             type="button"
@@ -303,16 +406,12 @@ export default function ContinueReadingPage() {
                           </button>
                         </div>
 
-                        {/* Center Hover Resume Action */}
+                        {/* Poster Click to Resume */}
                         <Link
-                          href={`/manga/${item.mangaId}/read/${item.chapterId}`}
-                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
+                          href={`/manga/${item.mangaId}/read/${item.chapterId}?title=${encodeURIComponent(item.mangaTitle)}&ch=${encodeURIComponent(item.chapterNumber)}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
+                          className="absolute inset-0 z-10"
                           title={`Resume Ch. ${item.chapterNumber}`}
-                        >
-                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/40 scale-90 group-hover:scale-100 transition-transform">
-                            <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current ml-0.5" />
-                          </div>
-                        </Link>
+                        />
 
                         {/* Bottom Chapter Overlay on Poster */}
                         <div className="absolute bottom-2 left-2 z-10">
@@ -334,7 +433,7 @@ export default function ContinueReadingPage() {
 
                         <div className="flex items-center gap-1 sm:gap-1.5 pt-1 border-t border-white/[0.06]">
                           <Link
-                            href={`/manga/${item.mangaId}/read/${item.chapterId}`}
+                            href={`/manga/${item.mangaId}/read/${item.chapterId}?title=${encodeURIComponent(item.mangaTitle)}&ch=${encodeURIComponent(item.chapterNumber)}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
                             className="flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl bg-primary text-primary-foreground text-[10px] sm:text-xs font-black shadow-md shadow-primary/25 flex items-center justify-center gap-1 active:scale-95 transition-all hover:opacity-90 touch-manipulation cursor-pointer"
                             title={`Resume Reading Chapter ${item.chapterNumber}`}
                           >

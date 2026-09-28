@@ -103,6 +103,16 @@ export async function GET(
       if (!item) {
         return NextResponse.json({ success: false, error: "Manga not found" }, { status: 404 });
       }
+      const lowerTags = (item.tags || []).map((t) => t.toLowerCase());
+      if (
+        lowerTags.some((t) => t.includes("manhwa") || t.includes("webtoon") || t.includes("korean")) ||
+        /infinite mage|solo leveling|raeliana|duke's mansion|tower of god|god of high school|lookism/i.test(item.title) ||
+        item.id.startsWith("asura-")
+      ) {
+        item.type = "manhwa";
+      } else if (lowerTags.some((t) => t.includes("manhua") || t.includes("chinese"))) {
+        item.type = "manhua";
+      }
       return jsonWithCache({ success: true, item }, 1800);
     } catch (err: any) {
       console.error("[API/Manga] details error:", err);

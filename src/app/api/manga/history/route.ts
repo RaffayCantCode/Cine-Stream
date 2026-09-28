@@ -36,6 +36,20 @@ export async function GET(request: Request) {
 
     const db = getDb();
 
+    const normalizeRow = (row: any) => {
+      if (!row) return row;
+      const cleanId = (row.mangaId || "").replace(/^(wc|asura)-/, "");
+      const isFallback = !row.mangaCover || row.mangaCover.includes("icon-512.png") || row.mangaCover.includes("icon.png");
+      const mangaCover = isFallback && row.mangaId?.startsWith("wc-")
+        ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+        : row.mangaCover;
+      let mangaType = row.mangaType;
+      if (mangaType === "manga" && (row.mangaId?.startsWith("asura-") || /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(row.mangaTitle || ""))) {
+        mangaType = "manhwa";
+      }
+      return { ...row, mangaCover, mangaType };
+    };
+
     if (mangaId) {
       const rows = await db
         .select()
@@ -48,7 +62,7 @@ export async function GET(request: Request) {
         )
         .limit(1);
 
-      return Response.json({ item: rows[0] || null });
+      return Response.json({ item: normalizeRow(rows[0]) || null });
     }
 
     const rows = await db
@@ -58,7 +72,7 @@ export async function GET(request: Request) {
       .orderBy(desc(mangaReadingHistory.updatedAt))
       .limit(30);
 
-    return Response.json({ items: rows });
+    return Response.json({ items: rows.map(normalizeRow) });
   } catch (err: any) {
     console.warn("[API/manga/history] GET failed:", err);
     return Response.json({ items: [], item: null });
@@ -93,6 +107,17 @@ export async function POST(request: Request) {
       nextChapterNumber,
     } = parsed.data;
 
+    const cleanId = mangaId.replace(/^(wc|asura)-/, "");
+    const isFallbackCover = !mangaCover || mangaCover.includes("icon-512.png") || mangaCover.includes("icon.png");
+    const safeMangaCover = isFallbackCover && mangaId.startsWith("wc-")
+      ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+      : mangaCover;
+
+    let safeMangaType = mangaType;
+    if (safeMangaType === "manga" && (mangaId.startsWith("asura-") || /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(mangaTitle))) {
+      safeMangaType = "manhwa";
+    }
+
     const db = getDb();
 
     try {
@@ -102,8 +127,8 @@ export async function POST(request: Request) {
           userId: session.user.id,
           mangaId,
           mangaTitle,
-          mangaCover,
-          mangaType,
+          mangaCover: safeMangaCover,
+          mangaType: safeMangaType,
           chapterId,
           chapterNumber,
           chapterTitle: chapterTitle ?? null,
@@ -117,8 +142,8 @@ export async function POST(request: Request) {
           target: [mangaReadingHistory.userId, mangaReadingHistory.mangaId],
           set: {
             mangaTitle,
-            mangaCover,
-            mangaType,
+            mangaCover: safeMangaCover,
+            mangaType: safeMangaType,
             chapterId,
             chapterNumber,
             chapterTitle: chapterTitle ?? null,
@@ -147,8 +172,8 @@ export async function POST(request: Request) {
           .update(mangaReadingHistory)
           .set({
             mangaTitle,
-            mangaCover,
-            mangaType,
+            mangaCover: safeMangaCover,
+            mangaType: safeMangaType,
             chapterId,
             chapterNumber,
             chapterTitle: chapterTitle ?? null,
@@ -164,8 +189,8 @@ export async function POST(request: Request) {
           userId: session.user.id,
           mangaId,
           mangaTitle,
-          mangaCover,
-          mangaType,
+          mangaCover: safeMangaCover,
+          mangaType: safeMangaType,
           chapterId,
           chapterNumber,
           chapterTitle: chapterTitle ?? null,

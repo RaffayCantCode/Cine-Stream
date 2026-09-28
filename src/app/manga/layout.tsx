@@ -5,10 +5,10 @@ export default function MangaLayout({ children }: { children: ReactNode }) {
     <div
       style={
         {
-          "--primary": "48 100% 50%",
-          "--primary-foreground": "0 0% 0%",
-          "--ring": "48 100% 50%",
-          "--accent": "48 100% 50%",
+          "--primary": "42 75% 65%",
+          "--primary-foreground": "210 30% 6%",
+          "--ring": "42 75% 65%",
+          "--accent": "42 75% 65%",
         } as React.CSSProperties
       }
     >

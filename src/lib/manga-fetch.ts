@@ -51,7 +51,7 @@ const WEEBCENTRAL_BASE = "https://weebcentral.com";
 const ASURA_API = "https://api.asurascans.com/api";
 
 // Bump this whenever fetch logic or data shape changes to instantly drop stale in-memory cache
-const CACHE_VERSION = "v12";
+const CACHE_VERSION = "v13";
 
 const BLOCKED_TAGS = new Set([
   "smut",
@@ -231,22 +231,34 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
       block.match(/srcset="(https:\/\/[^"\s]+\.(?:webp|jpg|jpeg|png))"/i) ||
       block.match(/src="(https:\/\/[^"\s]+\.(?:webp|jpg|jpeg|png))"/i) ||
       block.match(/(https:\/\/(?:temp\.compsci88\.com|weebcentral\.com|cdn\.[^"'\s]+)\/[^\s"']+)/i);
-    const coverImage = coverMatch ? coverMatch[1] || coverMatch[0] : "/icon-512.png";
+    const coverImage = coverMatch ? coverMatch[1] || coverMatch[0] : `https://temp.compsci88.com/cover/normal/${rawId}.webp`;
 
-    const yearMatch = block.match(/<strong>\s*Year:\s*<\/strong>\s*<span>(\d+)<\/span>/i);
+    const yearMatch =
+      block.match(/<strong>\s*(?:Year|Released):\s*<\/strong>[\s\S]*?(\d{4})/i) ||
+      block.match(/<strong>\s*Year:\s*<\/strong>\s*<span>(\d+)<\/span>/i);
     const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : null;
 
-    const statusMatch = block.match(/<strong>\s*Status:\s*<\/strong>\s*<span>([^<]+)<\/span>/i);
-    const status = (statusMatch ? statusMatch[1].trim().toLowerCase() : "ongoing") as any;
+    const statusMatch =
+      block.match(/<strong>\s*Status:\s*<\/strong>[\s\S]*?(?:<[a-z0-9]+[^>]*>\s*)*([^<\s]+)/i);
+    const rawStatus = statusMatch ? statusMatch[1].trim().toLowerCase() : "";
+    const status = rawStatus.includes("complete")
+      ? "completed"
+      : rawStatus.includes("hiatus")
+      ? "hiatus"
+      : rawStatus.includes("cancel")
+      ? "cancelled"
+      : "ongoing";
 
-    const tagsMatch = block.match(/<strong>\s*Tag\(s\):\s*<\/strong>([\s\S]*?)<\/div>/i);
+    const tagsMatch = block.match(/<strong>\s*Tags?\(s\):\s*<\/strong>([\s\S]*?)<\/div>/i);
     const tags = tagsMatch
-      ? [...tagsMatch[1].matchAll(/<span>\s*([^<,]+),?\s*<\/span>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
+      ? [...tagsMatch[1].matchAll(/<(?:span|a)[^>]*>\s*([^<,]+),?\s*<\/(?:span|a)>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
       : [];
 
     const lowerTags = tags.map((t) => t.toLowerCase());
 
-    const typeMatch = block.match(/<strong>\s*Type:\s*<\/strong>\s*<span>([^<]+)<\/span>/i);
+    const typeMatch =
+      block.match(/<strong>\s*Type:\s*<\/strong>[\s\S]*?(?:<[a-z0-9]+[^>]*>\s*)*([^<\s]+)/i) ||
+      block.match(/included_type=(manhwa|manhua|manga)/i);
     const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "";
     const lowerSlug = slug.toLowerCase();
 
@@ -255,17 +267,15 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
       rawType === "manhwa" ||
       rawType.includes("manhwa") ||
       lowerSlug.includes("manhwa") ||
-      lowerTags.includes("manhwa") ||
-      lowerTags.includes("webtoon") ||
-      lowerTags.includes("korean")
+      lowerTags.some((t) => t.includes("manhwa") || t.includes("webtoon") || t.includes("korean")) ||
+      /infinite mage|solo leveling|raeliana|duke's mansion|tower of god|god of high school|lookism/i.test(title)
     ) {
       type = "manhwa";
     } else if (
       rawType === "manhua" ||
       rawType.includes("manhua") ||
       lowerSlug.includes("manhua") ||
-      lowerTags.includes("manhua") ||
-      lowerTags.includes("chinese")
+      lowerTags.some((t) => t.includes("manhua") || t.includes("chinese"))
     ) {
       type = "manhua";
     } else {
@@ -825,7 +835,19 @@ export async function searchManga(
 export async function getMangaDetails(id: string): Promise<MangaItem | null> {
   const cacheKey = `details_${id}`;
   const cached = getFromCache<MangaItem>(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    const lowerTags = (cached.tags || []).map((t) => t.toLowerCase());
+    if (
+      lowerTags.some((t) => t.includes("manhwa") || t.includes("webtoon") || t.includes("korean")) ||
+      /infinite mage|solo leveling|raeliana|duke's mansion|tower of god|god of high school|lookism/i.test(cached.title) ||
+      id.startsWith("asura-")
+    ) {
+      cached.type = "manhwa";
+    } else if (lowerTags.some((t) => t.includes("manhua") || t.includes("chinese"))) {
+      cached.type = "manhua";
+    }
+    return cached;
+  }
 
   return dedupeRequest(cacheKey, async () => {
     // Asura Scans details
@@ -883,31 +905,74 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
           ? descMatch[1].replace(/<[^>]+>/g, "").trim()
           : `Read ${title} on CineStream.`;
         const description = decodeHtmlEntities(rawDescription);
+        // Cover Image (Prioritize high quality normal webp, then match, then fallback)
         const coverMatch =
+          html.match(new RegExp(`https:\\/\\/temp\\.compsci88\\.com\\/cover\\/normal\\/${rawId}\\.webp`, "i")) ||
+          html.match(/<source[^>]*srcset="([^"]*temp\.compsci88\.com\/cover\/normal\/[^"]+)"/i) ||
           html.match(/<img[^>]*alt="[^"]*cover"[^>]*src="([^"]+)"/i) ||
           html.match(/<img[^>]*src="([^"]+)"[^>]*alt="[^"]*cover"/i) ||
           html.match(new RegExp(`https:\\/\\/temp\\.compsci88\\.com\\/cover\\/(?:fallback\\/)?${rawId}[^"'\s]*`, "i")) ||
           html.match(/https:\/\/temp\.compsci88\.com\/cover\/[^\s"']+/i) ||
+          html.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i) ||
           html.match(/srcset="(https:\/\/[^"\s]+\.(?:webp|jpg|jpeg|png))"/i) ||
           html.match(/(https:\/\/(?:temp\.compsci88\.com|weebcentral\.com|cdn\.[^"'\s]+)\/[^\s"']+)/i);
-        const coverImage = coverMatch ? coverMatch[1] || coverMatch[0] : `https://temp.compsci88.com/cover/fallback/${rawId}.jpg`;
+        const coverImage = coverMatch ? (coverMatch[1] || coverMatch[0]) : `https://temp.compsci88.com/cover/normal/${rawId}.webp`;
 
-        const yearMatch = html.match(/<strong>Year:<\/strong>\s*<span>(\d+)<\/span>/i);
+        // Released Year
+        const yearMatch =
+          html.match(/<strong>\s*(?:Released|Year):\s*<\/strong>[\s\S]*?(\d{4})/i) ||
+          html.match(/<strong>\s*(?:Released|Year):<\/strong>\s*<span>(\d+)<\/span>/i);
         const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : null;
 
-        const statusMatch = html.match(/<strong>Status:<\/strong>\s*<span>([^<]+)<\/span>/i);
-        const status = (statusMatch ? statusMatch[1].trim().toLowerCase() : "ongoing") as any;
+        // Status
+        const statusMatch =
+          html.match(/<strong>\s*Status:\s*<\/strong>[\s\S]*?(?:<[a-z0-9]+[^>]*>\s*)*([^<\s]+)/i);
+        const rawStatus = statusMatch ? statusMatch[1].trim().toLowerCase() : "";
+        const status = rawStatus.includes("complete")
+          ? "completed"
+          : rawStatus.includes("hiatus")
+          ? "hiatus"
+          : rawStatus.includes("cancel")
+          ? "cancelled"
+          : "ongoing";
 
-        const typeMatch = html.match(/<strong>Type:<\/strong>\s*<span>([^<]+)<\/span>/i);
-        const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "manga";
-        let type: "manga" | "manhwa" | "manhua" = "manga";
-        if (rawType.includes("manhwa")) type = "manhwa";
-        else if (rawType.includes("manhua")) type = "manhua";
+        // Type
+        const typeMatch =
+          html.match(/<strong>\s*Type:\s*<\/strong>[\s\S]*?(?:<[a-z0-9]+[^>]*>\s*)*([^<\s]+)/i) ||
+          html.match(/included_type=(manhwa|manhua|manga)/i);
+        const rawType = typeMatch ? typeMatch[1].trim().toLowerCase() : "";
 
-        const tagsMatch = html.match(/<strong>Tag\(s\):<\/strong>([\s\S]*?)<\/div>/i);
+        // Tags
+        const tagsMatch =
+          html.match(/<strong>\s*Tags?\(s\):\s*<\/strong>([\s\S]*?)<\/li>/i) ||
+          html.match(/<strong>\s*Tags?\(s\):\s*<\/strong>([\s\S]*?)<\/div>/i);
         const tags = tagsMatch
-          ? [...tagsMatch[1].matchAll(/<span>([^<,]+),?<\/span>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
-          : ["Action", "Webtoon"];
+          ? [...tagsMatch[1].matchAll(/<(?:span|a)[^>]*>\s*([^<,]+),?\s*<\/(?:span|a)>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
+          : [];
+        const lowerTags = tags.map((t) => t.toLowerCase());
+
+        // Authors
+        const authorMatch = html.match(/<strong>\s*Author\(s\):\s*<\/strong>([\s\S]*?)<\/li>/i);
+        const authors = authorMatch
+          ? [...authorMatch[1].matchAll(/<(?:span|a)[^>]*>\s*([^<,]+),?\s*<\/(?:span|a)>/g)].map((m) => decodeHtmlEntities(m[1].trim()))
+          : [];
+
+        // Final Type Resolution
+        let type: "manga" | "manhwa" | "manhua" = "manga";
+        if (
+          rawType === "manhwa" ||
+          rawType.includes("manhwa") ||
+          lowerTags.some((t) => t.includes("manhwa") || t.includes("webtoon") || t.includes("korean")) ||
+          /infinite mage|solo leveling|raeliana|duke's mansion|tower of god|god of high school|lookism/i.test(title)
+        ) {
+          type = "manhwa";
+        } else if (
+          rawType === "manhua" ||
+          rawType.includes("manhua") ||
+          lowerTags.some((t) => t.includes("manhua") || t.includes("chinese"))
+        ) {
+          type = "manhua";
+        }
 
         const item: MangaItem = {
           id: `wc-${rawId}`,
@@ -918,9 +983,10 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
           type,
           status,
           releaseYear,
-          tags,
+          authors: authors.length > 0 ? authors : undefined,
+          tags: tags.length > 0 ? tags : ["Action"],
           contentRating: "safe",
-          originalLanguage: "en",
+          originalLanguage: type === "manhwa" ? "ko" : type === "manhua" ? "zh" : "ja",
           source: "weebcentral",
         };
 

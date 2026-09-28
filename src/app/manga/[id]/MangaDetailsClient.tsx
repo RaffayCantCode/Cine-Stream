@@ -67,8 +67,47 @@ export default function MangaDetailsClient({
   );
   const [readTick, setReadTick] = useState(0);
 
+  const [sessionCover, setSessionCover] = useState<string | null>(null);
+  const [sessionType, setSessionType] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem(`cs_manga_cover_${id}`);
+      if (saved && !saved.includes("icon-512.png")) {
+        setSessionCover(saved);
+      }
+      const savedType = sessionStorage.getItem(`cs_manga_type_${id}`);
+      if (savedType) {
+        setSessionType(savedType);
+      }
+    }
+  }, [id]);
+
+  const effectiveType = useMemo(() => {
+    const lowerTags = (manga?.tags || []).map((t) => t.toLowerCase());
+    if (lowerTags.some((t) => t.includes("manhwa") || t.includes("webtoon") || t.includes("korean"))) {
+      return "manhwa";
+    }
+    if (lowerTags.some((t) => t.includes("manhua") || t.includes("chinese"))) {
+      return "manhua";
+    }
+    if (sessionType === "manhwa" || sessionType === "manhua") {
+      return sessionType;
+    }
+    if (manga?.type === "manhwa" || manga?.type === "manhua") {
+      return manga.type;
+    }
+    if (id.startsWith("asura-")) {
+      return "manhwa";
+    }
+    if (/infinite mage|solo leveling|raeliana|duke's mansion|tower of god|god of high school|lookism/i.test(manga?.title || "")) {
+      return "manhwa";
+    }
+    return manga?.type || "manga";
+  }, [manga?.type, manga?.tags, manga?.title, id, sessionType]);
+
   const { isSaved, toggle } = useWatchlist();
-  const inWatchlist = manga ? isSaved(manga.id, manga.type || "manga") : false;
+  const inWatchlist = manga ? isSaved(manga.id, effectiveType) : false;
 
   // Check if description text overflows 3 lines
   useEffect(() => {
@@ -235,24 +274,23 @@ export default function MangaDetailsClient({
     return chapters.find((c) => c.id === progress.chapterId) || null;
   }, [progress, chapters]);
 
-  const [sessionCover, setSessionCover] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(`cs_manga_cover_${id}`);
-      if (saved && !saved.includes("icon-512.png")) {
-        setSessionCover(saved);
-      }
-    }
-  }, [id]);
-
   useEffect(() => {
     if (manga?.coverImage && !manga.coverImage.includes("icon-512.png")) {
       try {
         sessionStorage.setItem(`cs_manga_cover_${id}`, manga.coverImage);
       } catch {}
     }
-  }, [id, manga?.coverImage]);
+    if (effectiveType) {
+      try {
+        sessionStorage.setItem(`cs_manga_type_${id}`, effectiveType);
+      } catch {}
+    }
+    if (manga?.title) {
+      try {
+        sessionStorage.setItem(`cs_manga_title_${id}`, manga.title);
+      } catch {}
+    }
+  }, [id, manga?.coverImage, effectiveType, manga?.title]);
 
   const effectiveCover = useMemo(() => {
     if (manga?.coverImage && !manga.coverImage.includes("icon-512.png")) {
@@ -300,10 +338,10 @@ export default function MangaDetailsClient({
       className={`relative min-h-screen ${pageBgClass} text-foreground pb-24 select-none overflow-x-clip transition-colors duration-500`}
       style={
         {
-          "--primary": "48 100% 50%",
-          "--primary-foreground": "0 0% 0%",
-          "--ring": "48 100% 50%",
-          "--accent": "48 100% 50%",
+          "--primary": "42 75% 65%",
+          "--primary-foreground": "210 30% 6%",
+          "--ring": "42 75% 65%",
+          "--accent": "42 75% 65%",
         } as React.CSSProperties
       }
     >
@@ -370,7 +408,7 @@ export default function MangaDetailsClient({
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-black/80 backdrop-blur-md text-primary border border-primary/30 shadow-lg">
-                    {manga.type}
+                    {effectiveType}
                   </div>
                 </div>
 
@@ -381,7 +419,7 @@ export default function MangaDetailsClient({
                     className="inline-flex items-center gap-2 text-xs font-bold text-zinc-400 hover:text-primary transition-colors mb-2"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>All Manga</span>
+                    <span>{effectiveType === "manhwa" ? "All Manhwa" : effectiveType === "manhua" ? "All Manhua" : "All Manga"}</span>
                   </Link>
 
                   <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
@@ -454,7 +492,7 @@ export default function MangaDetailsClient({
                   <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2">
                     {resumeChapter ? (
                       <Link
-                        href={`/manga/${manga.id}/read/${resumeChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(progress?.chapterNumber || "")}`}
+                        href={`/manga/${manga.id}/read/${resumeChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(progress?.chapterNumber || "")}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
                         className="inline-flex items-center gap-2.5 bg-[#E5E5E5] hover:bg-white text-[#090F15] font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation"
                       >
                         <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 text-[#090F15]" />
@@ -462,7 +500,7 @@ export default function MangaDetailsClient({
                       </Link>
                     ) : firstChapter ? (
                       <Link
-                        href={`/manga/${manga.id}/read/${firstChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(firstChapter.chapterNumber)}`}
+                        href={`/manga/${manga.id}/read/${firstChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(firstChapter.chapterNumber)}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
                         className="inline-flex items-center gap-2.5 bg-[#E5E5E5] hover:bg-white text-[#090F15] font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation"
                       >
                         <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 text-[#090F15]" />
@@ -481,7 +519,7 @@ export default function MangaDetailsClient({
                         if (!manga) return;
                         toggle({
                           mediaId: manga.id,
-                          mediaType: manga.type || "manga",
+                          mediaType: effectiveType,
                           title: manga.title,
                           posterPath: effectiveCover,
                         });
@@ -555,7 +593,7 @@ export default function MangaDetailsClient({
                 return (
                   <Link
                     key={ch.id}
-                    href={`/manga/${manga?.id || id}/read/${ch.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(ch.chapterNumber)}`}
+                    href={`/manga/${manga?.id || id}/read/${ch.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(ch.chapterNumber)}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
                     className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-200 cursor-pointer touch-manipulation active:scale-[0.99] ${
                       isCurrentRead
                         ? "bg-primary/15 border-primary/50 text-primary shadow-md shadow-primary/10"

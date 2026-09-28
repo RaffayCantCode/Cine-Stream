@@ -58,6 +58,20 @@ export default function MangaReaderClient({
 
   const queryTitle = searchParams.get("title") || "";
   const queryCh = searchParams.get("ch") || "";
+  const queryCover = searchParams.get("cover") || "";
+  const queryType = searchParams.get("type") || "";
+
+  const [sessionCover, setSessionCover] = useState<string | null>(null);
+  const [sessionType, setSessionType] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sc = sessionStorage.getItem(`cs_manga_cover_${mangaId}`);
+      if (sc && !sc.includes("icon-512.png")) setSessionCover(sc);
+      const st = sessionStorage.getItem(`cs_manga_type_${mangaId}`);
+      if (st) setSessionType(st);
+    }
+  }, [mangaId]);
 
   const [manga, setManga] = useState<MangaItem | null>(initialManga);
   const [chapters, setChapters] = useState<MangaChapter[]>(initialChapters);
@@ -175,7 +189,7 @@ export default function MangaReaderClient({
       const titleParam = queryTitle ? `?title=${encodeURIComponent(queryTitle)}&ch=${encodeURIComponent(queryCh)}` : "";
 
       const fetches: Promise<any>[] = [];
-      if (!manga) fetches.push(fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${mangaId}`));
+      if (!manga) fetches.push(fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${mangaId}`).catch(() => ({ success: false, item: null })));
       else fetches.push(Promise.resolve({ success: true, item: manga }));
 
       if (chapters.length === 0) fetches.push(fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${mangaId}?order=asc&limit=500`));
@@ -189,8 +203,18 @@ export default function MangaReaderClient({
 
       const [detailsData, chaptersData, pagesRes] = await Promise.all(fetches);
 
-      if (detailsData.success && detailsData.item) {
+      if (detailsData?.success && detailsData?.item) {
         setManga(detailsData.item);
+        if (typeof window !== "undefined") {
+          try {
+            if (detailsData.item.coverImage && !detailsData.item.coverImage.includes("icon-512.png")) {
+              sessionStorage.setItem(`cs_manga_cover_${mangaId}`, detailsData.item.coverImage);
+            }
+            if (detailsData.item.type) {
+              sessionStorage.setItem(`cs_manga_type_${mangaId}`, detailsData.item.type);
+            }
+          } catch {}
+        }
       }
 
       if (chaptersData.success && chaptersData.chapters) {
@@ -272,10 +296,25 @@ export default function MangaReaderClient({
 
   // Persist Chapter Reading Progress (1 request per chapter opened)
   const persistChapterProgress = useCallback(() => {
+    const cleanId = mangaId.replace(/^(wc|asura)-/, "");
     const resolvedTitle = manga?.title || initialManga?.title || queryTitle || "Manga";
-    const resolvedCover = manga?.coverImage || initialManga?.coverImage || "/icon-512.png";
-    const rawType = manga?.type || initialManga?.type;
-    const resolvedType = (rawType === "manhwa" || rawType === "manhua") ? rawType : "manga";
+    const rawCover = manga?.coverImage || initialManga?.coverImage || queryCover || sessionCover;
+    const isFallbackCover = !rawCover || rawCover.includes("icon-512.png") || rawCover.includes("icon.png");
+    const resolvedCover = isFallbackCover
+      ? (mangaId.startsWith("wc-") ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp` : "/icon-512.png")
+      : rawCover;
+
+    const rawType = manga?.type || initialManga?.type || queryType || sessionType;
+    let resolvedType: "manga" | "manhwa" | "manhua" = "manga";
+    if (rawType === "manhwa" || rawType === "manhua") {
+      resolvedType = rawType;
+    } else if (
+      mangaId.startsWith("asura-") ||
+      /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(resolvedTitle)
+    ) {
+      resolvedType = "manhwa";
+    }
+
     const resolvedChapterNumber = currentChapter?.chapterNumber || queryCh || "1";
     const resolvedChapterTitle = currentChapter?.title || null;
     const resolvedTotalPages = totalPages > 0 ? totalPages : 1;
@@ -284,7 +323,7 @@ export default function MangaReaderClient({
       mangaId,
       mangaTitle: resolvedTitle,
       mangaCover: resolvedCover,
-      mangaType: resolvedType as "manga" | "manhwa" | "manhua",
+      mangaType: resolvedType,
       chapterId,
       chapterNumber: resolvedChapterNumber,
       chapterTitle: resolvedChapterTitle,
@@ -300,8 +339,32 @@ export default function MangaReaderClient({
       saveLocalMangaProgress(payload);
     }
 
+    if (typeof window !== "undefined") {
+      try {
+        if (!resolvedCover.includes("icon-512.png")) {
+          sessionStorage.setItem(`cs_manga_cover_${mangaId}`, resolvedCover);
+        }
+        sessionStorage.setItem(`cs_manga_type_${mangaId}`, resolvedType);
+      } catch {}
+    }
+
     markChapterAsRead(mangaId, chapterId, resolvedChapterNumber);
-  }, [isAuthed, manga, initialManga, queryTitle, currentChapter, queryCh, totalPages, mangaId, chapterId, nextChapter]);
+  }, [
+    isAuthed,
+    manga,
+    initialManga,
+    queryTitle,
+    queryCover,
+    queryType,
+    sessionCover,
+    sessionType,
+    currentChapter,
+    queryCh,
+    totalPages,
+    mangaId,
+    chapterId,
+    nextChapter,
+  ]);
 
   // Save chapter progress once when entering the chapter
   useEffect(() => {
@@ -497,10 +560,10 @@ export default function MangaReaderClient({
       className="min-h-screen w-full bg-black text-white flex flex-col justify-start select-none relative overflow-x-hidden"
       style={
         {
-          "--primary": "48 100% 50%",
-          "--primary-foreground": "0 0% 0%",
-          "--ring": "48 100% 50%",
-          "--accent": "48 100% 50%",
+          "--primary": "42 75% 65%",
+          "--primary-foreground": "210 30% 6%",
+          "--ring": "42 75% 65%",
+          "--accent": "42 75% 65%",
         } as React.CSSProperties
       }
     >

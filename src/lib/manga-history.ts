@@ -52,7 +52,32 @@ export function getLocalMangaHistory(): MangaReadingProgress[] {
       if (raw) {
         const parsed: MangaReadingProgress[] = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.sort((a, b) => b.updatedAt - a.updatedAt);
+          return parsed
+            .map((item) => {
+              const cleanId = (item.mangaId || "").replace(/^(wc|asura)-/, "");
+              const isFallbackCover = !item.mangaCover || item.mangaCover.includes("icon-512.png") || item.mangaCover.includes("icon.png");
+              const mangaCover = isFallbackCover && item.mangaId?.startsWith("wc-")
+                ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+                : item.mangaCover || "/icon-512.png";
+
+              const rawType = (item.mangaType || "").toLowerCase();
+              let mangaType: "manga" | "manhwa" | "manhua" = "manga";
+              if (rawType === "manhwa" || rawType === "manhua") {
+                mangaType = rawType;
+              } else if (
+                item.mangaId?.startsWith("asura-") ||
+                /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(item.mangaTitle || "")
+              ) {
+                mangaType = "manhwa";
+              }
+
+              return {
+                ...item,
+                mangaCover,
+                mangaType,
+              };
+            })
+            .sort((a, b) => b.updatedAt - a.updatedAt);
         }
       }
     }
@@ -86,9 +111,37 @@ export function saveLocalMangaProgress(progress: Omit<MangaReadingProgress, "upd
         item.mangaId === progress.mangaId ||
         item.mangaId.replace(/^wc-/, "") === progress.mangaId.replace(/^wc-/, "")
     );
+    const existing = existingIndex >= 0 ? history[existingIndex] : null;
+
+    const cleanId = progress.mangaId.replace(/^(wc|asura)-/, "");
+    const isIncomingFallback = !progress.mangaCover || progress.mangaCover.includes("icon-512.png") || progress.mangaCover.includes("icon.png");
+    const existingValid = existing?.mangaCover && !existing.mangaCover.includes("icon-512.png") && !existing.mangaCover.includes("icon.png");
+
+    let safeCover = progress.mangaCover;
+    if (isIncomingFallback) {
+      if (existingValid) {
+        safeCover = existing.mangaCover;
+      } else if (progress.mangaId.startsWith("wc-")) {
+        safeCover = `https://temp.compsci88.com/cover/normal/${cleanId}.webp`;
+      }
+    }
+
+    let safeType = progress.mangaType;
+    if (safeType === "manga") {
+      if (existing?.mangaType === "manhwa") {
+        safeType = "manhwa";
+      } else if (
+        progress.mangaId.startsWith("asura-") ||
+        /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(progress.mangaTitle)
+      ) {
+        safeType = "manhwa";
+      }
+    }
 
     const updatedItem: MangaReadingProgress = {
       ...progress,
+      mangaCover: safeCover,
+      mangaType: safeType,
       updatedAt: Date.now(),
     };
 
@@ -158,11 +211,28 @@ export function invalidateServerMangaHistoryCache(): void {
 }
 
 function mapDbRowToProgress(row: any): MangaReadingProgress {
+  const cleanId = (row.mangaId || "").replace(/^(wc|asura)-/, "");
+  const isFallbackCover = !row.mangaCover || row.mangaCover.includes("icon-512.png") || row.mangaCover.includes("icon.png");
+  const mangaCover = isFallbackCover && row.mangaId?.startsWith("wc-")
+    ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+    : row.mangaCover || "/icon-512.png";
+
+  const rawType = (row.mangaType || "").toLowerCase();
+  let mangaType: "manga" | "manhwa" | "manhua" = "manga";
+  if (rawType === "manhwa" || rawType === "manhua") {
+    mangaType = rawType;
+  } else if (
+    row.mangaId?.startsWith("asura-") ||
+    /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(row.mangaTitle || "")
+  ) {
+    mangaType = "manhwa";
+  }
+
   return {
     mangaId: row.mangaId,
     mangaTitle: row.mangaTitle,
-    mangaCover: row.mangaCover,
-    mangaType: row.mangaType === "manhwa" || row.mangaType === "manhua" ? row.mangaType : "manga",
+    mangaCover,
+    mangaType,
     chapterId: row.chapterId,
     chapterNumber: String(row.chapterNumber),
     chapterTitle: row.chapterTitle ?? null,
@@ -243,14 +313,31 @@ export async function fetchServerMangaProgress(mangaId: string, force = false): 
 
 async function executeServerSave(progress: Omit<MangaReadingProgress, "updatedAt">): Promise<boolean> {
   try {
+    const cleanId = progress.mangaId.replace(/^(wc|asura)-/, "");
+    const isFallback = !progress.mangaCover || progress.mangaCover.includes("icon-512.png") || progress.mangaCover.includes("icon.png");
+    const safeCover = isFallback && progress.mangaId.startsWith("wc-")
+      ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+      : progress.mangaCover;
+
+    let safeType = progress.mangaType;
+    if (safeType === "manga" && (progress.mangaId.startsWith("asura-") || /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(progress.mangaTitle))) {
+      safeType = "manhwa";
+    }
+
+    const payload = {
+      ...progress,
+      mangaCover: safeCover,
+      mangaType: safeType,
+    };
+
     const res = await fetch("/api/manga/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(progress),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       // Update local memory cache with latest save
-      const fullItem: MangaReadingProgress = { ...progress, updatedAt: Date.now() };
+      const fullItem: MangaReadingProgress = { ...payload, updatedAt: Date.now() };
       serverProgressCache.set(progress.mangaId, { data: fullItem, timestamp: Date.now() });
 
       if (serverHistoryCache) {

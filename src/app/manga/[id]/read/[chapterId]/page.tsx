@@ -46,11 +46,14 @@ export default async function MangaReaderPage(
   const params = await props.params;
   const { id, chapterId } = params;
 
+  const initialManga = await getMangaDetails(id).catch(() => null);
+
   return (
     <Suspense fallback={null}>
       <MangaReaderClient
         mangaId={id}
         chapterId={chapterId}
+        initialManga={initialManga}
       />
     </Suspense>
   );

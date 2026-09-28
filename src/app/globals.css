@@ -74,13 +74,13 @@
     --ring: 278 85% 56%;
   }
 
-  /* Manga Mode: Midnight slate with vibrant electric Mint/Teal accents (#0be3bb) */
+  /* Manga Mode: Midnight slate with soft, soothing light warm gold accents */
   .mode-manga.dark {
     --background: 210 30% 5.5%;
     --card: 210 17% 17%;
-    --primary: 169 91% 47%;
+    --primary: 42 75% 65%;
     --primary-foreground: 210 30% 6%;
-    --ring: 169 91% 47%;
+    --ring: 42 75% 65%;
   }
 }
 
@@ -316,9 +316,9 @@
   }
   html.theme-glass.mode-manga.dark {
     --background: 240 16% 8%;
-    --primary: 169 91% 47%;
+    --primary: 42 75% 65%;
     --primary-foreground: 210 30% 6%;
-    --ring: 169 91% 47%;
+    --ring: 42 75% 65%;
   }
 }
 
@@ -475,9 +475,9 @@
   html.theme-cinema.mode-manga.dark {
     --background: 348 34% 12%;
     --card: 348 30% 18%;
-    --primary: 169 91% 47%;
+    --primary: 42 75% 65%;
     --primary-foreground: 210 30% 6%;
-    --ring: 169 91% 47%;
+    --ring: 42 75% 65%;
   }
 }
 
@@ -578,9 +578,9 @@
   html.theme-wisteria.mode-manga.dark {
     --background: 265 40% 10%;
     --card: 268 35% 15%;
-    --primary: 169 91% 47%;
+    --primary: 42 75% 65%;
     --primary-foreground: 210 30% 6%;
-    --ring: 169 91% 47%;
+    --ring: 42 75% 65%;
   }
 }
 
@@ -681,9 +681,9 @@
   html.theme-solaris.mode-manga.dark {
     --background: 55 25% 7%;
     --card: 55 22% 13%;
-    --primary: 169 91% 47%;
+    --primary: 42 75% 65%;
     --primary-foreground: 210 30% 6%;
-    --ring: 169 91% 47%;
+    --ring: 42 75% 65%;
   }
 }
 
