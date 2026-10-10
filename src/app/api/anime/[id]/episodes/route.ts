@@ -221,7 +221,7 @@ function cleanAndCapSeasonEpisodes(episodes: any[], season: any, meta?: any): an
 
   if (knownEpisodeCount && knownEpisodeCount > 1) {
     result = result.filter((ep: any) => ep.episodeNum <= knownEpisodeCount);
-  } else if (isSpecial) {
+  } else if (isSpecial && season?.totalEpisodes === 1) {
     result = result.filter((ep: any) => ep.episodeNum <= 1);
   }
 

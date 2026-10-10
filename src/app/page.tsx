@@ -123,6 +123,46 @@ function loadSpotlightFromSession(): { fetched: boolean; spotlight: any | null }
   return null;
 }
 
+const SESSION_HOME_FEED_KEY = "sv_home_feed_v5";
+
+function saveHomeFeedToStorage(feed: Partial<NonNullable<typeof globalHomeCache>>): void {
+  if (typeof window === "undefined" || !feed) return;
+  try {
+    const serialized = {
+      trending: (feed.trending || []).slice(0, 20),
+      popular: (feed.popular || []).slice(0, 20),
+      topRated: (feed.topRated || []).slice(0, 20),
+      topRatedMovies: (feed.topRatedMovies || []).slice(0, 20),
+      topRatedTv: (feed.topRatedTv || []).slice(0, 20),
+      recent: (feed.recent || []).slice(0, 20),
+      trendingMoviesToday: (feed.trendingMoviesToday || []).slice(0, 20),
+      trendingTvToday: (feed.trendingTvToday || []).slice(0, 20),
+      popularTv: (feed.popularTv || []).slice(0, 20),
+      trendingAnime: (feed.trendingAnime || []).slice(0, 20),
+      popularAnime: (feed.popularAnime || []).slice(0, 20),
+      animeList: (feed.animeList || []).slice(0, 20),
+      genres: (feed.genres || []).slice(0, 18),
+      heroPool: (feed.heroPool || []).slice(0, 3),
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(SESSION_HOME_FEED_KEY, JSON.stringify(serialized));
+  } catch {}
+}
+
+function loadHomeFeedFromStorage(): Partial<NonNullable<typeof globalHomeCache>> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SESSION_HOME_FEED_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.trending) && parsed.trending.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v4";
 const HERO_CACHE_TTL = 5 * 60 * 1000; // 5-minute TTL: instant load from cache, fresh entries after 5 minutes
 const ANILIST_CACHE_KEY = "sv_home_anilist_items_v2";
@@ -590,14 +630,14 @@ export default function Home() {
   }, [theme]);
 
   const [heroIndex, setHeroIndex] = useState(0);
-  const [trending, setTrending] = useState<MediaItem[]>(() => globalHomeCache?.trending || []);
-  const [popular, setPopular] = useState<MediaItem[]>(() => globalHomeCache?.popular || []);
-  const [topRated, setTopRated] = useState<MediaItem[]>(() => globalHomeCache?.topRated || []);
-  const [topRatedMovies, setTopRatedMovies] = useState<MediaItem[]>(() => globalHomeCache?.topRatedMovies || []);
-  const [topRatedTv, setTopRatedTv] = useState<MediaItem[]>(() => globalHomeCache?.topRatedTv || []);
-  const [recent, setRecent] = useState<MediaItem[]>(() => globalHomeCache?.recent || []);
-  const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingMoviesToday || []);
-  const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingTvToday || []);
+  const [trending, setTrending] = useState<MediaItem[]>(() => globalHomeCache?.trending || loadHomeFeedFromStorage()?.trending || []);
+  const [popular, setPopular] = useState<MediaItem[]>(() => globalHomeCache?.popular || loadHomeFeedFromStorage()?.popular || []);
+  const [topRated, setTopRated] = useState<MediaItem[]>(() => globalHomeCache?.topRated || loadHomeFeedFromStorage()?.topRated || []);
+  const [topRatedMovies, setTopRatedMovies] = useState<MediaItem[]>(() => globalHomeCache?.topRatedMovies || loadHomeFeedFromStorage()?.topRatedMovies || []);
+  const [topRatedTv, setTopRatedTv] = useState<MediaItem[]>(() => globalHomeCache?.topRatedTv || loadHomeFeedFromStorage()?.topRatedTv || []);
+  const [recent, setRecent] = useState<MediaItem[]>(() => globalHomeCache?.recent || loadHomeFeedFromStorage()?.recent || []);
+  const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingMoviesToday || loadHomeFeedFromStorage()?.trendingMoviesToday || []);
+  const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingTvToday || loadHomeFeedFromStorage()?.trendingTvToday || []);
   const [heroTrendingFeed, setHeroTrendingFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTrendingFeed || []);
   const [heroPopularFeed, setHeroPopularFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroPopularFeed || []);
   const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTopRatedFeed || []);
@@ -607,31 +647,43 @@ export default function Home() {
     if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) {
       return globalHomeCache.heroPool;
     }
-    // 2. sessionStorage: fresh cache (≤5 min) → instant load on hard refresh with no extra requests
-    if (!isHeroSessionStale()) {
-      return loadHeroPoolFromSession();
+    // 2. sessionStorage / localStorage hero pool
+    const sessionPool = loadHeroPoolFromSession();
+    if (sessionPool.length > 0) {
+      return sessionPool;
     }
-    // 3. Stale or empty → will fetch fresh entries
+    // 3. Persistent home feed storage
+    const storageFeed = loadHomeFeedFromStorage();
+    if (storageFeed?.heroPool && storageFeed.heroPool.length > 0) {
+      return storageFeed.heroPool;
+    }
     return [];
   });
-  const [recommended, setRecommended] = useState<MediaItem[]>(() => globalHomeCache?.recommended || []);
-  const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || []);
+  const [recommended, setRecommended] = useState<MediaItem[]>(() => globalHomeCache?.recommended || loadHomeFeedFromStorage()?.recommended || []);
+  const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || loadHomeFeedFromStorage()?.genres || []);
   const [isLoading, setIsLoading] = useState(() => {
-    // No skeleton if we have a valid cached pool (either in-memory or fresh session)
+    // Zero skeleton if we have a valid cached pool or feed (in-memory or persistent)
     if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) return false;
-    if (!isHeroSessionStale() && loadHeroPoolFromSession().length > 0) return false;
+    if (loadHeroPoolFromSession().length > 0) return false;
+    const storageFeed = loadHomeFeedFromStorage();
+    if (storageFeed?.heroPool && storageFeed.heroPool.length > 0) return false;
     return true;
   });
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [animeList, setAnimeList] = useState<AnimeItem[]>(() => globalHomeCache?.animeList || []);
+  const [animeList, setAnimeList] = useState<AnimeItem[]>(() => globalHomeCache?.animeList || loadHomeFeedFromStorage()?.animeList || loadCachedAniListItems());
   const [collections, setCollections] = useState<any[]>(() =>
     (globalHomeCache?.collections && globalHomeCache.collections.length > 0)
       ? globalHomeCache.collections
       : INITIAL_COLLECTIONS
   );
-  const [animeLoading, setAnimeLoading] = useState(() => !globalHomeCache);
-  const [heroArtworkReady, setHeroArtworkReady] = useState(false);
-  const [revealedSections, setRevealedSections] = useState(1);
+  const [animeLoading, setAnimeLoading] = useState(() => {
+    if (globalHomeCache?.animeList && globalHomeCache.animeList.length > 0) return false;
+    if (loadHomeFeedFromStorage()?.animeList?.length) return false;
+    if (loadCachedAniListItems().length > 0) return false;
+    return true;
+  });
+  const [heroArtworkReady, setHeroArtworkReady] = useState(true);
+  const [revealedSections, setRevealedSections] = useState(2);
   const [moodSeed, setMoodSeed] = useState("");
   const [customSections, setCustomSections] = useState<any[]>(() => {
     if (globalCustomSectionsCache !== null) {
@@ -857,8 +909,35 @@ export default function Home() {
         }).catch(() => ({ items: [], trending: [], popular: [] }));
         const collectionsPromise = fetchJson<{ collections: any[] }>("/api/tmdb/collections", { cacheTtlMs: 86400000 }).catch(() => ({ collections: [] }));
 
-        // Await homeData and dynamic animePromise together in parallel
-        const [homeData, animeResponse] = await Promise.all([homePromise, animePromise]);
+        // Attach background handler for anime so slow AniList queries never block TMDB home rows
+        animePromise.then((animeResponse) => {
+          if (cancelled) return;
+          const rawDynamicAnime = ((animeResponse as any)?.items && (animeResponse as any).items.length > 0)
+            ? (animeResponse as any).items
+            : ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
+              ? (animeResponse as any).trending
+              : loadCachedAniListItems();
+
+          if (rawDynamicAnime.length > 0) {
+            saveCachedAniListItems(rawDynamicAnime);
+          }
+
+          const finalAnimeList = rawDynamicAnime.slice(0, 18);
+          setAnimeList(finalAnimeList);
+          setAnimeLoading(false);
+
+          if (globalHomeCache) {
+            globalHomeCache.animeList = finalAnimeList;
+            globalHomeCache.trendingAnime = (animeResponse as any)?.trending || [];
+            globalHomeCache.popularAnime = (animeResponse as any)?.popular || [];
+            saveHomeFeedToStorage(globalHomeCache);
+          }
+        }).catch(() => {
+          if (!cancelled) setAnimeLoading(false);
+        });
+
+        // Await homeData directly so movies, TV, and hero banner render without AniList GraphQL latency
+        const homeData = await homePromise;
         if (cancelled) return;
 
         if (homeData) {
@@ -914,20 +993,13 @@ export default function Home() {
             ).filter((i) => !EXCLUDED_LANGS.has(i.original_language || "") && i.original_language !== "ja")
           );
 
-          // Dynamic AniList anime (trending & popular)
-          const rawDynamicAnime = ((animeResponse as any)?.items && (animeResponse as any).items.length > 0)
-            ? (animeResponse as any).items
-            : ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
-              ? (animeResponse as any).trending
-              : loadCachedAniListItems();
-
-          if (rawDynamicAnime.length > 0) {
-            saveCachedAniListItems(rawDynamicAnime);
+          // Dynamic AniList anime fallback from cache while background query resolves
+          const cachedAnime = loadCachedAniListItems();
+          const initialAnimeList = (cachedAnime && cachedAnime.length > 0) ? cachedAnime.slice(0, 18) : (globalHomeCache?.animeList || []);
+          if (initialAnimeList.length > 0) {
+            setAnimeList(initialAnimeList);
+            setAnimeLoading(false);
           }
-
-          const finalAnimeList = rawDynamicAnime.slice(0, 18);
-          setAnimeList(finalAnimeList);
-          setAnimeLoading(false);
 
           const recPool = filterExcludeAnime([...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe]);
           const daySalt = Math.floor(Date.now() / 86400000).toString();
@@ -960,8 +1032,8 @@ export default function Home() {
               popularMovies: [...popularSafe, ...topRatedMovieSafe],
               trendingTv: [...trendingTvTodaySafe, ...trendingSafe.filter((i) => i.media_type === "tv")],
               popularTv: [...popularTvSafe, ...heroTopSafe, ...onTheAirSafe],
-              trendingAnime: (animeResponse as any)?.trending || [],
-              popularAnime: (animeResponse as any)?.popular || (animeResponse as any)?.items || [],
+              trendingAnime: (globalHomeCache?.trendingAnime && globalHomeCache.trendingAnime.length > 0) ? globalHomeCache.trendingAnime : cachedAnime,
+              popularAnime: (globalHomeCache?.popularAnime && globalHomeCache.popularAnime.length > 0) ? globalHomeCache.popularAnime : cachedAnime,
               fallbackFeed: fullHeroFeed,
             });
             if (chosenHeroPool.length >= 3) {
@@ -1082,9 +1154,8 @@ export default function Home() {
             recent: heroRecentSafe,
             trendingMoviesToday: trendingMoviesTodaySafe,
             trendingTvToday: trendingTvTodaySafe,
-            popularTv: popularTvSafe,
-            trendingAnime: ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0) ? (animeResponse as any).trending : [],
-            popularAnime: ((animeResponse as any)?.popular && (animeResponse as any).popular.length > 0) ? (animeResponse as any).popular : [],
+            trendingAnime: globalHomeCache?.trendingAnime || cachedAnime,
+            popularAnime: globalHomeCache?.popularAnime || cachedAnime,
             heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
             heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
             heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
@@ -1092,11 +1163,12 @@ export default function Home() {
             heroPool: chosenHeroPool,
             recommended: recPool,
             genres: (homeData.genres?.genres || []).slice(0, 18),
-            animeList: finalAnimeList,
+            animeList: initialAnimeList.length > 0 ? initialAnimeList : (globalHomeCache?.animeList || []),
             collections: INITIAL_COLLECTIONS,
             spotlightBanner: globalSpotlightCache?.spotlight ?? spotlightBanner ?? null,
             customSections: globalCustomSectionsCache ?? (customSections.length > 0 ? customSections : undefined),
           };
+          saveHomeFeedToStorage(globalHomeCache);
         } else {
           setIsLoading(false);
           setAnimeLoading(false);
@@ -1177,12 +1249,6 @@ export default function Home() {
           img.fetchPriority = "high";
         }
         img.src = fastUrl;
-
-        if (!path.startsWith("http")) {
-          const highResUrl = `https://image.tmdb.org/t/p/original${path}`;
-          const origImg = new Image();
-          origImg.src = highResUrl;
-        }
       }
 
       // Preload logo artwork
@@ -1351,15 +1417,13 @@ export default function Home() {
   // ── Modular Progressive Hydration of Sections Below the Hero ─────────
   useEffect(() => {
     if (heroArtworkReady) {
-      const t1 = setTimeout(() => setRevealedSections(2), 150);
-      const t2 = setTimeout(() => setRevealedSections(3), 350);
-      const t3 = setTimeout(() => setRevealedSections(5), 600);
-      const t4 = setTimeout(() => setRevealedSections(8), 900);
+      const t1 = setTimeout(() => setRevealedSections(4), 50);
+      const t2 = setTimeout(() => setRevealedSections(6), 150);
+      const t3 = setTimeout(() => setRevealedSections(8), 300);
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
-        clearTimeout(t4);
       };
     }
   }, [heroArtworkReady]);

@@ -15,7 +15,7 @@ import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
-import { AnimeSeasonSelector } from "@/components/AnimeSeasonSelector";
+import { AnimeSeasonSelector, type FranchiseNodeItem } from "@/components/AnimeSeasonSelector";
 import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, Film } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -519,21 +519,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const currentSeason = useMemo(() => seasons.find(s => String(s.id) === String(currentSeasonId)) || null, [seasons, currentSeasonId]);
   const currentSeasonInfo = useMemo(() => {
     const target = String(currentSeasonId || "").trim();
-    const cleanTarget = target.replace(/\D/g, "");
+    if (!target) return null;
 
-    const fromSeason = seasons.find(s =>
-      String(s.id) === target ||
-      (cleanTarget && String(s.id).replace(/\D/g, "") === cleanTarget) ||
-      (s.idMal && cleanTarget && String(s.idMal) === cleanTarget)
-    );
-    if (fromSeason) return fromSeason;
+    // 1. Direct ID match first
+    const fromSeasonDirect = seasons.find(s => String(s.id) === target);
+    if (fromSeasonDirect) return fromSeasonDirect;
 
-    const fromNodes = (franchiseNodes || []).find(n =>
-      String(n.id) === target ||
-      (cleanTarget && String(n.id).replace(/\D/g, "") === cleanTarget) ||
-      (n.idMal && cleanTarget && String(n.idMal) === cleanTarget)
-    );
-    if (fromNodes) return fromNodes;
+    const fromNodesDirect = (franchiseNodes || []).find(n => String(n.id) === target);
+    if (fromNodesDirect) return fromNodesDirect;
+
+    // 2. MAL ID match
+    const fromSeasonMal = seasons.find(s => s.idMal && String(s.idMal) === target);
+    if (fromSeasonMal) return fromSeasonMal;
+
+    const fromNodesMal = (franchiseNodes || []).find(n => n.idMal && String(n.idMal) === target);
+    if (fromNodesMal) return fromNodesMal;
 
     return null;
   }, [seasons, franchiseNodes, currentSeasonId]);
@@ -1234,10 +1234,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const availableSeasons = a.seasons || [];
       const tmdbSeasonMap = metaData.data.tmdbSeasonMap || {};
 
-      const defaultSeasonId = metaData.data.openedSeasonId || a.openedSeasonId || (availableSeasons.find((s: SeasonInfo) => s.isCurrent)?.id) || a.id || id;
+      const isExplicitRouteNode = availableSeasons.some((s: SeasonInfo) => String(s.id) === String(id));
+      const defaultSeasonId = isExplicitRouteNode ? String(id) : (metaData.data.openedSeasonId || a.openedSeasonId || (availableSeasons.find((s: SeasonInfo) => s.isCurrent)?.id) || a.id || id);
       let targetSeasonId = defaultSeasonId;
       let effectiveSeasonNum = urlSeasonNum;
-      if (!urlSeasonId && effectiveSeasonNum <= 0 && typeof window !== "undefined") {
+
+      if (!urlSeasonId && !isExplicitRouteNode && effectiveSeasonNum <= 0 && typeof window !== "undefined") {
         try {
           const act = localStorage.getItem("cinestream_active_anime_show");
           if (act) {
@@ -1263,13 +1265,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         const found = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(urlSeasonId));
         if (found) targetSeasonId = found.id;
         else targetSeasonId = urlSeasonId;
-      } else if (effectiveSeasonNum > 0) {
+      } else if (!isExplicitRouteNode && effectiveSeasonNum > 0) {
+        // Strictly filter to TV series seasons only — NEVER match specials, OVAs or movies
+        const tvOnlySeasons = availableSeasons.filter((s: SeasonInfo) => {
+          const lbl = (s.seasonLabel || "").toLowerCase();
+          return !lbl.includes("special") && !lbl.includes("ova") && !lbl.includes("movie");
+        });
         const entry = Object.entries(tmdbSeasonMap).find(([, num]) => num === effectiveSeasonNum);
         if (entry) {
-          const found = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(entry[0]));
+          const found = tvOnlySeasons.find((s: SeasonInfo) => String(s.id) === String(entry[0]));
           if (found) targetSeasonId = found.id;
         } else {
-          const byLabel = availableSeasons.find((s: SeasonInfo) => {
+          const byLabel = tvOnlySeasons.find((s: SeasonInfo) => {
             const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
             return sNum === effectiveSeasonNum;
           });
@@ -1421,19 +1428,20 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }, [episodes, id]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  const handleSeasonClick = useCallback((season: SeasonInfo) => {
-    if (String(season.id) === String(currentSeasonId)) return;
-    setCurrentSeasonId(season.id);
+  const handleSeasonClick = useCallback((season: SeasonInfo | FranchiseNodeItem) => {
+    const sId = String(season.id);
+    if (sId === String(currentSeasonId)) return;
+    setCurrentSeasonId(sId);
     setEpisodesLoading(true);
     setIsPlaying(false);
     setSelectedEp(null);
     setEpisodeNotice(null);
     setSeasonOverview(null);
-    loadSeasonEpisodes(season.id, true, (season as any).tmdbId, season.tmdbSeasonNumber, (season as any).episodeOffset);
+    loadSeasonEpisodes(sId, true, (season as any).tmdbId, (season as any).tmdbSeasonNumber, (season as any).episodeOffset);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
-      url.searchParams.set("seasonId", season.id);
-      const sNum = season.tmdbSeasonNumber || (season.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
+      url.searchParams.set("seasonId", sId);
+      const sNum = (season as any).tmdbSeasonNumber || (season.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
       if (sNum && sNum > 1) {
         url.searchParams.set("season", String(sNum));
       } else {
@@ -1731,6 +1739,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   currentAnimeId={id}
                   currentSeasonId={currentSeasonId}
                   animeTitle={displayTitle || getSafeAnimeTitle(anime.name)}
+                  onSelectSeason={handleSeasonClick}
                 />
 
                 {/* Episodes header */}

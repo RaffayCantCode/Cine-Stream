@@ -31,6 +31,7 @@ interface AnimeSeasonSelectorProps {
   currentAnimeId: string;
   currentSeasonId?: string;
   animeTitle?: string;
+  onSelectSeason?: (season: SeasonInfo | FranchiseNodeItem) => void;
 }
 
 const SPECIAL_REGEX = /\b(ova|oav|special|specials|chibi|petit|spin-?off|picture\s+drama|audio\s+drama|recap|summary|digest|omake|bonus|blooper|interlude|side\s+story|lost\s+girls|no\s+regrets|ilse|slime\s+diaries|tensura\s+nikki|coleus\s+no\s+yume|marumaru\s+no\s+mahou|titan\s+junior\s+high|preview|pv|tokubetsu|collab|crossover)\b/i;
@@ -51,6 +52,7 @@ export function AnimeSeasonSelector({
   currentAnimeId,
   currentSeasonId,
   animeTitle,
+  onSelectSeason,
 }: AnimeSeasonSelectorProps) {
   const [moviesOpen, setMoviesOpen] = useState(false);
   const [specialsOpen, setSpecialsOpen] = useState(false);
@@ -151,7 +153,7 @@ export function AnimeSeasonSelector({
       const isShortSpecial = eps > 0 && eps <= 2 && duration > 0 && duration <= 25 && fmt !== "MOVIE";
       const isCollabTitle = /\b(collab|crossover|\bx\b)\b/i.test(title);
 
-      const isClassedSpecial = !isAuthoritativeTv && !isCurrentActive && (isSpecialFmt || isSpecialLabel || isSpecialTitle || isShortOna || isShortSpecial || isCollabTitle || isChibiOrMini);
+      const isClassedSpecial = !isAuthoritativeTv && (isSpecialFmt || isSpecialLabel || isSpecialTitle || isShortOna || isShortSpecial || isCollabTitle || isChibiOrMini);
 
       if (isClassedSpecial) {
         specialsList.push(item);
@@ -347,17 +349,39 @@ export function AnimeSeasonSelector({
 
   const cleanCurrentId = String(currentAnimeId || "").trim().toLowerCase();
   const cleanSeasonId = String(currentSeasonId || "").trim().toLowerCase();
-  const numCurrentId = parseInt(cleanCurrentId.replace(/\D/g, ""), 10) || 0;
+
+  // Exactly ONE entry in the entire selector must be active at any given moment.
+  const activeItemId = useMemo(() => {
+    const allItems = [...seasons, ...movies, ...specials];
+    if (allItems.length === 0) return "";
+
+    // 1. If cleanSeasonId is set and matches an item directly
+    if (cleanSeasonId) {
+      const match = allItems.find((it) => String(it.id).trim().toLowerCase() === cleanSeasonId);
+      if (match) return String(match.id);
+      const malMatch = allItems.find(
+        (it) => it.idMal && String(it.idMal).trim().toLowerCase() === cleanSeasonId
+      );
+      if (malMatch) return String(malMatch.id);
+    }
+
+    // 2. Otherwise match currentAnimeId
+    if (cleanCurrentId) {
+      const match = allItems.find((it) => String(it.id).trim().toLowerCase() === cleanCurrentId);
+      if (match) return String(match.id);
+      const malMatch = allItems.find(
+        (it) => it.idMal && String(it.idMal).trim().toLowerCase() === cleanCurrentId
+      );
+      if (malMatch) return String(malMatch.id);
+    }
+
+    // 3. Fallback: first TV season, or first overall item
+    return seasons[0]?.id ? String(seasons[0].id) : (allItems[0]?.id ? String(allItems[0].id) : "");
+  }, [seasons, movies, specials, cleanSeasonId, cleanCurrentId]);
 
   const isItemActive = (item: FranchiseNodeItem) => {
-    if (!item?.id) return false;
-    const sId = String(item.id).trim().toLowerCase();
-    if (sId === cleanCurrentId || sId === cleanSeasonId) return true;
-    if (item.idMal && String(item.idMal).toLowerCase() === cleanCurrentId) return true;
-    const itemNum = parseInt(sId.replace(/\D/g, ""), 10);
-    if (numCurrentId > 0 && itemNum > 0 && itemNum === numCurrentId) return true;
-    if (item.matchingSeason?.id && String(item.matchingSeason.id).toLowerCase() === cleanSeasonId) return true;
-    return false;
+    if (!item?.id || !activeItemId) return false;
+    return String(item.id) === activeItemId;
   };
 
   const isAnyMovieActive = movies.some(isItemActive);
@@ -368,11 +392,18 @@ export function AnimeSeasonSelector({
       {/* Main TV Seasons */}
       {seasons.map((s) => {
         const active = isItemActive(s);
+        const isCurrentShow = String(s.id).trim().toLowerCase() === cleanCurrentId;
         return (
           <Link
             key={`season-pill-${s.id}`}
             href={`/anime/${s.id}`}
             title={getSafeTitle(s.title)}
+            onClick={(e) => {
+              if (isCurrentShow && onSelectSeason) {
+                e.preventDefault();
+                onSelectSeason(s);
+              }
+            }}
             className={cn(
               "px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-200 flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0",
               active

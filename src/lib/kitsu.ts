@@ -768,15 +768,20 @@ export async function getAnimeDetailsViaKitsu(
       seasonsList = buildSeasonList(franchiseNodes, anilistId ? parseInt(anilistId, 10) : parseInt(kitsuId, 10));
       seasonsList = seasonsList.map(s => {
         const sIsMovie = (s.seasonLabel || "").startsWith("Movie") || isMovieFormat;
+        const sIsSpecial =
+          (s.seasonLabel || "").toLowerCase().startsWith("special") ||
+          (s.seasonLabel || "").toLowerCase().startsWith("ova") ||
+          (s as any).format === "SPECIAL" ||
+          (s as any).format === "OVA";
         const isCur = s.isCurrent || String(s.id) === String(effectiveId) || (anilistId && String(s.id) === String(anilistId));
-        const tid = sIsMovie ? null : (s.tmdbId || tmdbId || null);
-        let sNum = sIsMovie ? null : (s.tmdbSeasonNumber ?? (isCur ? tmdbSeasonNumber : null));
-        const off = sIsMovie ? 0 : (s.episodeOffset || (isCur ? episodeOffset : 0));
-        if (!sIsMovie && sNum === null) {
+        const tid = (sIsMovie || sIsSpecial) ? null : (s.tmdbId || tmdbId || null);
+        let sNum = (sIsMovie || sIsSpecial) ? null : (s.tmdbSeasonNumber ?? (isCur ? tmdbSeasonNumber : null));
+        const off = (sIsMovie || sIsSpecial) ? 0 : (s.episodeOffset || (isCur ? episodeOffset : 0));
+        if (!sIsMovie && !sIsSpecial && sNum === null) {
           const parsed = parseSeasonNumberFromTitle(s.name);
           if (parsed) {
             sNum = parsed;
-          } else if (s.seasonLabel) {
+          } else if (s.seasonLabel && !s.seasonLabel.toLowerCase().includes("special") && !s.seasonLabel.toLowerCase().includes("movie")) {
             const parsedLabel = parseSeasonNumberFromTitle(s.seasonLabel);
             if (parsedLabel) sNum = parsedLabel;
           } else if (isCur) {

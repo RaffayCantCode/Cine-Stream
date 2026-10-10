@@ -386,29 +386,40 @@ export function sortFranchiseNodes(nodes: FranchiseNode[]): FranchiseNode[] {
 }
 
 export function parseSeasonNumberFromTitle(title: string): number | null {
-  const lower = (title || "").toLowerCase();
-  const m = lower.match(/season\s*([0-9]+)/);
+  if (!title) return null;
+  const lower = title.toLowerCase().trim();
+  if (/\b(special|specials|ova|oav|movie|the\s+movie|film|gekijouban|recap|summary|omake|bonus|blooper)\b/i.test(lower)) {
+    return null;
+  }
+  const m = lower.match(/\bseason\s*([0-9]+)\b/);
   if (m) return parseInt(m[1], 10);
-  const ordMatch = lower.match(/([0-9]+)(?:st|nd|rd|th)\s+season/);
+  const ordMatch = lower.match(/\b([0-9]+)(?:st|nd|rd|th)\s+season\b/);
   if (ordMatch) return parseInt(ordMatch[1], 10);
   const ordinals: Record<string, number> = {
-    "first": 1, "1st": 1,
-    "second": 2, "2nd": 2,
-    "third": 3, "3rd": 3,
-    "fourth": 4, "4th": 4,
-    "fifth": 5, "5th": 5,
-    "sixth": 6, "6th": 6,
-    "seventh": 7, "7th": 7,
-    "eighth": 8, "8th": 8,
+    "first season": 1, "1st season": 1,
+    "second season": 2, "2nd season": 2,
+    "third season": 3, "3rd season": 3,
+    "fourth season": 4, "4th season": 4,
+    "fifth season": 5, "5th season": 5,
+    "sixth season": 6, "6th season": 6,
+    "seventh season": 7, "7th season": 7,
+    "eighth season": 8, "8th season": 8,
     "final season": 4,
   };
   for (const [k, v] of Object.entries(ordinals)) {
     if (new RegExp(`\\b${k}\\b`, "i").test(lower)) return v;
   }
-  const endNum = lower.match(/(?:\s+|:)([2-9])$/);
-  if (endNum) return parseInt(endNum[1], 10);
+  const seasonShort = lower.match(/\bs([1-9][0-9]?)\b/);
+  if (seasonShort) return parseInt(seasonShort[1], 10);
+
+  if (!/\b(part|cour|vol|volume|ep|episode|chapter|act)\b/i.test(lower)) {
+    const endNum = lower.match(/(?:\s+|:)([2-9])$/);
+    if (endNum) return parseInt(endNum[1], 10);
+  }
   return null;
 }
+
+const SPECIAL_ANIME_REGEX = /\b(ova|oav|special|specials|chibi|petit|spin-?off|picture\s+drama|audio\s+drama|recap|summary|digest|omake|bonus|blooper|interlude|side\s+story|preview|pv|tokubetsu|collab|crossover)\b/i;
 
 export function buildSeasonList(nodes: FranchiseNode[], currentId: number): SeasonInfo[] {
   const sorted = sortFranchiseNodes(nodes);
@@ -417,7 +428,8 @@ export function buildSeasonList(nodes: FranchiseNode[], currentId: number): Seas
   const seasons: SeasonInfo[] = sorted.map(node => {
     const shortMovie = node.format === "MOVIE" && (node.episodes || 1) <= 1 && (node.duration || 0) > 0 && node.duration! < 40;
     const isMovie = node.format === "MOVIE" && !shortMovie;
-    const isSpecial = node.format === "SPECIAL" || shortMovie;
+    const isShortOna = node.format === "ONA" && ((node.duration && node.duration <= 15) || (!node.title.toLowerCase().includes("season") && (node.episodes || 0) <= 4));
+    const isSpecial = node.format === "SPECIAL" || shortMovie || node.format === "TV_SHORT" || isShortOna || SPECIAL_ANIME_REGEX.test(node.title);
     const isOva = node.format === "OVA";
 
     let label = (node as any).seasonLabel || "";
@@ -923,21 +935,27 @@ export async function getAnimeDetails(
 
   const mappedSeasons: SeasonInfo[] = baseSeasons.map(s => {
     const sIsMovie = (s.seasonLabel || "").startsWith("Movie") || isMovie;
+    const sIsSpecial =
+      (s.seasonLabel || "").toLowerCase().startsWith("special") ||
+      (s.seasonLabel || "").toLowerCase().startsWith("ova") ||
+      (s as any).format === "SPECIAL" ||
+      (s as any).format === "OVA" ||
+      SPECIAL_ANIME_REGEX.test(s.name);
     const isCurrentSeason = String(s.id) === String(numId);
-    const tid = sIsMovie ? null : (s.tmdbId || tmdbId || null);
-    let sNum: number | null = sIsMovie ? null : (s.tmdbSeasonNumber ?? null);
-    let offset = sIsMovie ? 0 : (s.episodeOffset || 0);
+    const tid = (sIsMovie || sIsSpecial) ? null : (s.tmdbId || tmdbId || null);
+    let sNum: number | null = (sIsMovie || sIsSpecial) ? null : (s.tmdbSeasonNumber ?? null);
+    let offset = (sIsMovie || sIsSpecial) ? 0 : (s.episodeOffset || 0);
 
-    if (isCurrentSeason && aniZip?.episodes?.["1"]) {
+    if (isCurrentSeason && !sIsMovie && !sIsSpecial && aniZip?.episodes?.["1"]) {
       const ep1 = aniZip.episodes["1"];
       if (ep1.seasonNumber !== undefined && sNum === null) sNum = ep1.seasonNumber;
       if (ep1.episodeNumber !== undefined && offset === 0) offset = Math.max(ep1.episodeNumber - 1, 0);
     }
-    if (!sIsMovie && sNum === null) {
+    if (!sIsMovie && !sIsSpecial && sNum === null) {
       const parsed = parseSeasonNumberFromTitle(s.name);
       if (parsed) {
         sNum = parsed;
-      } else if (s.seasonLabel) {
+      } else if (s.seasonLabel && !s.seasonLabel.toLowerCase().includes("special") && !s.seasonLabel.toLowerCase().includes("movie")) {
         const parsedLabel = parseSeasonNumberFromTitle(s.seasonLabel);
         if (parsedLabel) sNum = parsedLabel;
       } else if (isCurrentSeason) {
@@ -946,7 +964,7 @@ export async function getAnimeDetails(
         sNum = null;
       }
     }
-    if (tid && sNum !== null) tmdbSeasonMap[s.id] = sNum;
+    if (tid && sNum !== null && !sIsMovie && !sIsSpecial) tmdbSeasonMap[s.id] = sNum;
 
     return { ...s, tmdbId: tid, tmdbSeasonNumber: sNum, episodeOffset: offset, coverImage: s.coverImage || anime.poster, bannerImage: s.bannerImage || anime.bannerImage };
   });

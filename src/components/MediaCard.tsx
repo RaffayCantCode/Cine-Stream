@@ -67,7 +67,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
     if (!path) return null;
     if (path.startsWith("http://") || path.startsWith("https://")) return path;
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
-    return `https://image.tmdb.org/t/p/w780${cleanPath}`;
+    return `https://image.tmdb.org/t/p/w500${cleanPath}`;
   };
 
   const initialPosterUrl = getTmdbImageUrl(item.profile_path || item.poster_path);
@@ -87,14 +87,14 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
     }
   }, [initialPosterUrl]);
 
-  // Network-adaptive fallback: If high-res w780 takes more than 5s on slow internet, try lighter w500
+  // Network-adaptive fallback: If w500 takes more than 4s on slow internet, try lighter w342
   useEffect(() => {
     if (isLoaded || hasError || !imgSrc) return;
     const timer = setTimeout(() => {
-      if (!isLoaded && !hasError && imgSrc.includes("/w780/")) {
-        setImgSrc((prev) => prev ? prev.replace("/w780/", "/w500/") : null);
+      if (!isLoaded && !hasError && imgSrc.includes("/w500/")) {
+        setImgSrc((prev) => prev ? prev.replace("/w500/", "/w342/") : null);
       }
-    }, 5000);
+    }, 4000);
     return () => clearTimeout(timer);
   }, [imgSrc, isLoaded, hasError]);
 
@@ -165,7 +165,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
               className={`w-full h-full object-cover transition-opacity duration-500 ease-out ${
                 isLoaded ? "opacity-100" : "opacity-0"
               }`}
-              loading="eager"
+              loading={priority || index < 4 ? "eager" : "lazy"}
               decoding="async"
               onLoad={() => setIsLoaded(true)}
               onError={handleImageError}

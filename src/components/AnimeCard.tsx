@@ -147,7 +147,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
               className={`w-full h-full object-cover transition-opacity duration-500 ease-out ${
                 isLoaded ? "opacity-100" : "opacity-0"
               }`}
-              loading="eager"
+              loading={index < 4 ? "eager" : "lazy"}
               decoding="async"
               onLoad={() => setIsLoaded(true)}
               onError={handleImageError}
