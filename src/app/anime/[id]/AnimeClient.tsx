@@ -390,10 +390,12 @@ async function clientFetchAnimeFallback(
   return null;
 }
 
-class AnimeContentErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean; error: Error | null }> {
+class AnimeContentErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean; error: Error | null; retryCount: number }> {
+  private autoRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(props: { children: ReactNode; fallback?: ReactNode }) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, retryCount: 0 };
   }
 
   static getDerivedStateFromError(error: Error) {
@@ -402,10 +404,21 @@ class AnimeContentErrorBoundary extends Component<{ children: ReactNode; fallbac
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("[AnimeContentErrorBoundary] Caught exception in anime content:", error, errorInfo);
+
+    // Auto-retry once silently for transient hydration/timing errors (params not yet ready)
+    if (this.state.retryCount < 1) {
+      this.autoRetryTimer = setTimeout(() => {
+        this.setState((prev) => ({ hasError: false, error: null, retryCount: prev.retryCount + 1 }));
+      }, 100);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.autoRetryTimer) clearTimeout(this.autoRetryTimer);
   }
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.hasError && this.state.retryCount >= 1) {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
@@ -417,7 +430,7 @@ class AnimeContentErrorBoundary extends Component<{ children: ReactNode; fallbac
             <div className="text-sm text-white/60">An unexpected rendering issue occurred. You can retry or head back to the anime directory.</div>
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
-                onClick={() => this.setState({ hasError: false, error: null })}
+                onClick={() => this.setState({ hasError: false, error: null, retryCount: 0 })}
                 className="px-5 py-2.5 rounded-xl bg-white text-black text-sm font-bold hover:bg-white/90 transition-all active:scale-95 shadow-md"
               >
                 Retry
@@ -430,6 +443,14 @@ class AnimeContentErrorBoundary extends Component<{ children: ReactNode; fallbac
               </Link>
             </div>
           </div>
+        </div>
+      );
+    }
+    if (this.state.hasError) {
+      // Auto-retrying silently — show a spinner while we wait
+      return (
+        <div className="min-h-screen w-full flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-[#7288AE] animate-spin" />
         </div>
       );
     }
@@ -465,7 +486,8 @@ function TrailerButton() {
 export default function AnimeClient({ initialData }: { initialData?: any | null } = {}) {
   const router = useRouter();
   const params = useParams();
-  const id = params?.id as string;
+  // Normalize id: always a string even if params haven't hydrated yet on first SSR render
+  const id = (params?.id as string) || "";
   const { data: session, status } = useSession();
   const [playingSeason, setPlayingSeason] = useState<number>(1);
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
@@ -1533,6 +1555,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
+
+  // Guard: if params haven't hydrated yet on first SSR pass, show spinner
+  if (!id) {
+    return (
+      <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20`}>
+        <Sidebar />
+        <div className="min-h-screen w-full flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-[#7288AE] animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}>
