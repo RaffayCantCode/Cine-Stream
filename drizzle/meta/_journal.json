@@ -43,6 +43,13 @@
       "when": 1787659291194,
       "tag": "0005_wealthy_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792540800000,
+      "tag": "0006_performance_indexes",
+      "breakpoints": true
     }
   ]
 }

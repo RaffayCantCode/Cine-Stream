@@ -1,5 +1,6 @@
 export const runtime = 'edge';
 import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
+import { compactSeasonData } from "@/lib/tmdb-details";
 
 export async function GET(
   request: Request,
@@ -13,7 +14,9 @@ export async function GET(
       { append_to_response: "videos" },
       { noCache: false }
     );
-    return Response.json(data, { headers: cacheHeaders(3600) });
+    return Response.json(compactSeasonData(data), {
+      headers: cacheHeaders(3600),
+    });
   } catch (error) {
     return Response.json(
       { error: "Failed to fetch season details" },

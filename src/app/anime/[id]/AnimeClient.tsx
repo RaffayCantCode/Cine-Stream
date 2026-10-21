@@ -13,6 +13,7 @@ import { usePageContentReady } from "@/lib/pageLoad";
 import { useMediaLogo } from "@/components/MediaLogo";
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
+import { ANIME_API_VERSION, animeEpisodesCacheKey, animeMetaCacheKey, animeMetaUrl } from "@/lib/anime-cache";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
 import { AnimeSeasonSelector, type FranchiseNodeItem } from "@/components/AnimeSeasonSelector";
@@ -84,11 +85,19 @@ interface FranchiseNode {
   episodeOffset?: number;
 }
 
+interface SeasonLoadHints {
+  tmdbId?: number | null;
+  tmdbSeason?: number | null;
+  episodeOffset?: number | null;
+  seasonName?: string | null;
+  totalEpisodes?: number | null;
+  isUpcoming?: boolean;
+  isUnavailable?: boolean;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-
-const ANIME_API_VERSION = "v55-resilient";
 
 export function getSafeAnimeTitle(raw: any): string {
   if (!raw) return "";
@@ -530,6 +539,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const prevIdRef = useRef<string | null>(null);
   const loadedSeasonIds = useRef<Set<string>>(new Set());
   const animeStatusRef = useRef<string | null>(null);
+  // Refs mirror the latest meta so async loaders never read a stale render closure.
+  const animeRef = useRef<AnimeDetail | null>(anime);
+  const franchiseNodesRef = useRef<FranchiseNode[]>(franchiseNodes);
+  // Guards against slow episode responses overwriting newer season selections.
+  const episodeRequestRef = useRef(0);
+  const episodeAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => { animeRef.current = anime; }, [anime]);
+  useEffect(() => { franchiseNodesRef.current = franchiseNodes; }, [franchiseNodes]);
+  useEffect(() => () => { episodeAbortRef.current?.abort(); }, []);
 
   // ── Derived: logo, banner, title ─────────────────────────────────────────
   const animeTitle = getSafeAnimeTitle(anime?.name || (anime as any)?.title || "");
@@ -900,48 +919,67 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const loadSeasonEpisodes = useCallback(async (
     seasonId: string,
     force = false,
-    tmdbId?: number | null,
-    tmdbSeason?: number | null,
-    episodeOffset?: number | null
+    hints: SeasonLoadHints = {}
   ) => {
     if (!force && loadedSeasonIds.current.has(seasonId)) return;
+
+    // Every load supersedes any in-flight one. Older responses are ignored so a
+    // slow season can never overwrite the season the user is currently viewing.
+    const requestId = ++episodeRequestRef.current;
+    episodeAbortRef.current?.abort();
+    const controller = new AbortController();
+    episodeAbortRef.current = controller;
+    const isLatest = () => requestId === episodeRequestRef.current;
+
     setEpisodesLoading(true);
     setSeasonOverview(null);
 
-    const EP_KEY = `cs_anime_eps_${id}_${seasonId}_${ANIME_API_VERSION}`;
-    if (!force) {
-      try {
-        const cached = sessionStorage.getItem(EP_KEY);
-        if (cached) {
-          const p = JSON.parse(cached);
-          const hasRealData = p?.episodes?.some((e: any) => !e.isPlaceholder && (e.title !== `Episode ${e.episodeNum}` || e.thumbnail));
-          if (p?.episodes?.length && p._cachedAt && hasRealData) {
-            const age = Date.now() - p._cachedAt;
-            const maxAge = (p.status || "").toUpperCase().includes("RELEASING") ? 2 * 60 * 1000 : 5 * 60 * 1000;
-            if (age < maxAge) {
-              setEpisodes(prev => {
-                const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
-                return [...other, ...p.episodes].sort((a, b) => a.episodeNum - b.episodeNum);
-              });
-              if (p.seasonOverview) setSeasonOverview(p.seasonOverview);
-              loadedSeasonIds.current.add(seasonId);
-              setEpisodesLoading(false);
-              return;
-            } else {
-              sessionStorage.removeItem(EP_KEY);
-            }
+    const meta = animeRef.current;
+    const nodes = franchiseNodesRef.current;
+    const matchingSeason =
+      meta?.seasons?.find(s => String(s.id) === String(seasonId)) ||
+      (initialData?.seasons || []).find((s: any) => String(s.id) === String(seasonId)) ||
+      nodes?.find(n => String(n.id) === String(seasonId));
+
+    // Serve a fresh session copy first (works for revisits and back-navigation).
+    const EP_KEY = animeEpisodesCacheKey(id, seasonId);
+    try {
+      const cached = sessionStorage.getItem(EP_KEY);
+      if (cached) {
+        const p = JSON.parse(cached);
+        const hasRealData = p?.episodes?.some((e: any) => !e.isPlaceholder && (e.title !== `Episode ${e.episodeNum}` || e.thumbnail));
+        if (p?.episodes?.length && p._cachedAt && hasRealData) {
+          const age = Date.now() - p._cachedAt;
+          const maxAge = (p.status || "").toUpperCase().includes("RELEASING") ? 2 * 60 * 1000 : 5 * 60 * 1000;
+          if (age < maxAge) {
+            setEpisodes(prev => {
+              const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
+              return [...other, ...p.episodes].sort((a, b) => a.episodeNum - b.episodeNum);
+            });
+            if (p.seasonOverview) setSeasonOverview(p.seasonOverview);
+            loadedSeasonIds.current.add(seasonId);
+            setEpisodesLoading(false);
+            return;
           }
+          sessionStorage.removeItem(EP_KEY);
         }
-      } catch {}
-    }
+      }
+    } catch {}
+
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 9000);
 
     try {
-      const matchingSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || (initialData?.seasons || []).find((s: any) => String(s.id) === String(seasonId)) || franchiseNodes?.find(n => String(n.id) === String(seasonId));
-      const sName = getSafeAnimeTitle((matchingSeason as any)?.name || (matchingSeason as any)?.title || anime?.name || "");
-      const sTot = (matchingSeason as any)?.totalEpisodes || (matchingSeason as any)?.episodes || anime?.totalEpisodes || 0;
-      const effectiveTmdbId = tmdbId ?? (matchingSeason as any)?.tmdbId ?? anime?.tmdbId ?? null;
-      const effectiveTmdbSeason = tmdbSeason ?? (matchingSeason as any)?.tmdbSeasonNumber ?? null;
-      const effectiveOffset = episodeOffset ?? (matchingSeason as any)?.episodeOffset ?? 0;
+      const sName = getSafeAnimeTitle(
+        hints.seasonName || (matchingSeason as any)?.name || (matchingSeason as any)?.title || meta?.name || ""
+      );
+      const sTot = hints.totalEpisodes || (matchingSeason as any)?.totalEpisodes || (matchingSeason as any)?.episodes || meta?.totalEpisodes || 0;
+      const effectiveTmdbId = hints.tmdbId ?? (matchingSeason as any)?.tmdbId ?? meta?.tmdbId ?? null;
+      const effectiveTmdbSeason = hints.tmdbSeason ?? (matchingSeason as any)?.tmdbSeasonNumber ?? null;
+      const effectiveOffset = hints.episodeOffset ?? (matchingSeason as any)?.episodeOffset ?? 0;
       const tmdbQ = effectiveTmdbId != null ? `&tmdbId=${effectiveTmdbId}` : "";
       const tsQ = effectiveTmdbSeason != null ? `&tmdbSeason=${effectiveTmdbSeason}` : "";
       const offQ = effectiveOffset != null ? `&episodeOffset=${effectiveOffset}` : "";
@@ -949,10 +987,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
       const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean } }>(
         `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`,
-        { signal: AbortSignal.timeout(8000) }
+        { signal: controller.signal, skipCache: force }
       );
-      const isUpcoming = Boolean((anime as any)?.isUpcoming || (matchingSeason as any)?.isUpcoming || data.data?.isUpcoming);
-      const isUnavailable = Boolean((anime as any)?.isUnavailable || (matchingSeason as any)?.isUnavailable || data.data?.isUnavailable);
+      clearTimeout(timeout);
+      if (!isLatest()) return;
+
+      const isUpcoming = Boolean(hints.isUpcoming || (matchingSeason as any)?.isUpcoming || (meta as any)?.isUpcoming || data.data?.isUpcoming);
+      const isUnavailable = Boolean(hints.isUnavailable || (matchingSeason as any)?.isUnavailable || (meta as any)?.isUnavailable || data.data?.isUnavailable);
 
       if (isUpcoming || isUnavailable) {
         setEpisodes(prev => prev.filter(e => String(e.seasonId) !== String(seasonId)));
@@ -986,18 +1027,23 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         return;
       }
     } catch (err) {
+      clearTimeout(timeout);
+      if (!isLatest()) return;
+      if (controller.signal.aborted && !timedOut) return;
       console.warn(`[AnimeClient] Episode API failed for ${seasonId}:`, err);
     }
 
     // Try browser-direct AniZip mappings before synthetic fallback
     try {
       const cleanSeasonNum = String(seasonId).replace(/\D/g, "");
-      if (cleanSeasonNum) {
+      if (cleanSeasonNum && isLatest()) {
         const isKitsuSeason = String(seasonId).startsWith("kitsu");
         const azUrl = `https://api.ani.zip/mappings?${isKitsuSeason ? "kitsu_id=" : "anilist_id="}${cleanSeasonNum}`;
         const azRes = await fetch(azUrl, { signal: AbortSignal.timeout(4000) });
+        if (!isLatest()) return;
         if (azRes.ok) {
           const azJson = await azRes.json();
+          if (!isLatest()) return;
           if (azJson?.episodes && Object.keys(azJson.episodes).length > 0) {
             const azEpisodes: Episode[] = Object.entries(azJson.episodes)
               .map(([numStr, ep]: [string, any]) => {
@@ -1019,6 +1065,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               .sort((a, b) => a.episodeNum - b.episodeNum);
 
             if (azEpisodes.length > 0) {
+              if (!isLatest()) return;
               setEpisodes(prev => {
                 const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
                 return [...other, ...azEpisodes];
@@ -1032,16 +1079,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
     } catch {}
 
+    if (!isLatest()) return;
+
     // Fallback: generate placeholder episodes
-    const matchSeason = anime?.seasons?.find(s => String(s.id) === String(seasonId)) || (franchiseNodes || []).find(n => String(n.id) === String(seasonId));
-    const isMov = ((matchSeason as any)?.seasonLabel || "").startsWith("Movie") || (matchSeason as any)?.format === "MOVIE" || anime?.format === "MOVIE";
-    const count = isMov ? 1 : Math.max((matchSeason as any)?.totalEpisodes || (matchSeason as any)?.episodes || 1, 1);
+    const matchSeason = meta?.seasons?.find(s => String(s.id) === String(seasonId)) || (nodes || []).find(n => String(n.id) === String(seasonId)) || matchingSeason;
+    const isMov = ((matchSeason as any)?.seasonLabel || "").startsWith("Movie") || (matchSeason as any)?.format === "MOVIE" || meta?.format === "MOVIE";
+    const count = isMov ? 1 : Math.max((matchSeason as any)?.totalEpisodes || (matchSeason as any)?.episodes || hints.totalEpisodes || 1, 1);
     const fallback: Episode[] = Array.from({ length: count }, (_, i) => ({
       episodeId: `${seasonId}-${i + 1}`,
       episodeNum: i + 1,
-      title: isMov ? getSafeAnimeTitle((matchSeason as any)?.name || (matchSeason as any)?.title || anime?.name || "Complete Movie") : `Episode ${i + 1}`,
-      description: isMov ? getSafeAnimeDescription(anime?.description) : undefined,
-      thumbnail: isMov ? ((matchSeason as any)?.coverImage || anime?.poster) : undefined,
+      title: isMov ? getSafeAnimeTitle((matchSeason as any)?.name || (matchSeason as any)?.title || meta?.name || "Complete Movie") : `Episode ${i + 1}`,
+      description: isMov ? getSafeAnimeDescription(meta?.description) : undefined,
+      thumbnail: isMov ? ((matchSeason as any)?.coverImage || meta?.poster) : undefined,
       isReleased: true,
       seasonId: String(seasonId),
       seasonNum: 1,
@@ -1052,15 +1101,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     });
     loadedSeasonIds.current.add(seasonId);
     setEpisodesLoading(false);
-  }, [id, anime, franchiseNodes, initialData]);
+  }, [id, initialData]);
 
   // ── MAIN DATA LOADING EFFECT ─────────────────────────────────────────────
   // One clean sequential effect: meta → episodes → background extras
   // Prevents ALL race conditions from the old 4-effect system.
   useEffect(() => {
     if (!id) return;
-    if (prevIdRef.current === id) return;
-    const isFirstMount = prevIdRef.current === null;
+    // A repeated invocation for the same id (React StrictMode/Fast Refresh)
+    // reuses the initial-mount path instead of returning early, otherwise the
+    // aborted first request would leave the page stuck on its loading state.
+    const isFirstMount = prevIdRef.current === null || prevIdRef.current === id;
     prevIdRef.current = id;
 
     // On first mount with valid initial data — skip meta fetch, just load episodes
@@ -1112,13 +1163,26 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
       const effectiveSeasonId = seasonIdParam || initialData.openedSeasonId || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent)?.id || initialData.id || id;
       setCurrentSeasonId(effectiveSeasonId);
+      animeRef.current = initialData as AnimeDetail;
       const matchSeason = (initialData.seasons || []).find((s: SeasonInfo) => String(s.id) === String(effectiveSeasonId)) || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent) || initialData.seasons?.[0];
-      loadSeasonEpisodes(matchSeason?.id || effectiveSeasonId, true, matchSeason?.tmdbId, matchSeason?.tmdbSeasonNumber, matchSeason?.episodeOffset);
+      loadSeasonEpisodes(matchSeason?.id || effectiveSeasonId, true, {
+        tmdbId: matchSeason?.tmdbId,
+        tmdbSeason: matchSeason?.tmdbSeasonNumber,
+        episodeOffset: matchSeason?.episodeOffset,
+        seasonName: matchSeason?.name,
+        totalEpisodes: matchSeason?.totalEpisodes,
+        isUpcoming: Boolean(initialData.isUpcoming),
+        isUnavailable: Boolean(initialData.isUnavailable),
+      });
       return;
     }
 
     // Navigating to a new anime: reset state first
     if (!isFirstMount) {
+      // Invalidate any episode request still in flight for the previous anime.
+      episodeRequestRef.current += 1;
+      episodeAbortRef.current?.abort();
+      animeRef.current = null;
       setAnime(null);
       setEpisodes([]);
       setSelectedEp(null);
@@ -1126,6 +1190,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       setSeasonOverview(null);
       setRecommendations([]);
       setFranchiseNodes([]);
+      franchiseNodesRef.current = [];
       setIsLoading(true);
       setEpisodesLoading(true);
       setError(null);
@@ -1136,31 +1201,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const abortController = new AbortController();
 
     const run = async () => {
-      // 1) If there's a session seed, use it immediately and start episodes right away
-      let seedData: AnimeDetail | null = null;
-      if (typeof window !== "undefined") {
-        try {
-          const s = sessionStorage.getItem(`cs_anime_seed_${id}`) || sessionStorage.getItem(`cinestream_anime_${id}`);
-          if (s) {
-            const p = JSON.parse(s);
-            if (p && String(p.id) === String(id)) seedData = p as AnimeDetail;
-          }
-        } catch {}
-      }
-
-      if (seedData && !cancelled) {
-        setAnime(seedData);
-        setIsLoading(false);
-        animeStatusRef.current = seedData.status || null;
-        const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-        const targetSeason = urlParams.get("seasonId") || id;
-        setCurrentSeasonId(targetSeason);
-        // Instantly kick off episode loading in parallel with meta fetch
-        loadSeasonEpisodes(targetSeason, false).catch(() => {});
-      }
-
-      // 2) Fetch full meta from server (check session cache first)
-      const META_KEY = `cs_anime_meta_${id}_${ANIME_API_VERSION}`;
+      // 1) Fetch authoritative meta (fetchJson cache is warmed on card hover).
+      const META_KEY = animeMetaCacheKey(id);
       let metaData: any = null;
       try {
         const cached = sessionStorage.getItem(META_KEY);
@@ -1177,7 +1219,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       if (!metaData) {
         try {
           metaData = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
-            `/api/anime/${id}/meta?v=${ANIME_API_VERSION}`,
+            animeMetaUrl(id),
             { signal: abortController.signal }
           );
           if (metaData?.success && metaData?.data?.anime) {
@@ -1192,7 +1234,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       }
 
-      // 2.5) Direct residential browser fallback when server edge APIs fail or are blocked
+      // 2) Direct residential browser fallback when server edge APIs fail or are blocked
       if (!metaData?.success || !metaData?.data?.anime) {
         try {
           const directFallback = await clientFetchAnimeFallback(id, abortController.signal);
@@ -1206,7 +1248,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               },
             };
             safeSessionSet(META_KEY, JSON.stringify({ ...metaData, _cachedAt: Date.now() }));
-            safeSessionSet(`cs_anime_seed_${id}`, JSON.stringify(directFallback.anime));
           }
         } catch (e) {
           console.warn("[AnimeClient] Direct client fallback failed:", e);
@@ -1216,17 +1257,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       if (cancelled) return;
 
       if (!metaData?.success || !metaData?.data?.anime) {
-        if (!seedData) {
-          setError("Anime not found");
-          setIsLoading(false);
-          setEpisodesLoading(false);
-        } else {
-          const target = seedData.id || id;
-          try {
-            await loadSeasonEpisodes(target, true);
-          } catch {}
-          if (!cancelled) setEpisodesLoading(false);
-        }
+        setError("Anime not found");
+        setIsLoading(false);
+        setEpisodesLoading(false);
         return;
       }
 
@@ -1234,14 +1267,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       if (!a.logoUrl && effectiveLogo) a.logoUrl = effectiveLogo;
       animeStatusRef.current = a.status || null;
 
-      if (!cancelled) {
-        setAnime(a);
-        setIsLoading(false);
-      }
+      // Update the ref before any async episode work so loadSeasonEpisodes reads
+      // the same complete meta that is about to render.
+      animeRef.current = a;
+      setAnime(a);
+      setIsLoading(false);
 
       // Update franchise nodes if available
       const newNodes = metaData.data.franchiseNodes;
-      if (!cancelled && newNodes?.length > 1) {
+      if (newNodes?.length > 1) {
+        franchiseNodesRef.current = newNodes;
         setFranchiseNodes(newNodes);
         for (const n of newNodes) {
           FRANCHISE_CACHE.set(String(n.id), newNodes);
@@ -1308,13 +1343,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       if (!cancelled) setCurrentSeasonId(targetSeasonId);
 
-      const targetSeason = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(targetSeasonId)) || availableSeasons.find((s: SeasonInfo) => s.isCurrent) || availableSeasons[0];
+      const targetSeason =
+        availableSeasons.find((s: SeasonInfo) => String(s.id) === String(targetSeasonId)) ||
+        (!urlSeasonId ? (availableSeasons.find((s: SeasonInfo) => s.isCurrent) || availableSeasons[0]) : undefined);
       await loadSeasonEpisodes(
         targetSeason?.id || targetSeasonId,
         true,
-        targetSeason?.tmdbId,
-        targetSeason?.tmdbSeasonNumber,
-        targetSeason?.episodeOffset
+        {
+          tmdbId: targetSeason?.tmdbId,
+          tmdbSeason: targetSeason?.tmdbSeasonNumber,
+          episodeOffset: targetSeason?.episodeOffset,
+          seasonName: targetSeason?.name,
+          totalEpisodes: targetSeason?.totalEpisodes,
+          isUpcoming: Boolean((a as any).isUpcoming),
+          isUnavailable: Boolean((a as any).isUnavailable),
+        }
       );
     };
 
@@ -1459,7 +1502,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setSelectedEp(null);
     setEpisodeNotice(null);
     setSeasonOverview(null);
-    loadSeasonEpisodes(sId, true, (season as any).tmdbId, (season as any).tmdbSeasonNumber, (season as any).episodeOffset);
+    loadSeasonEpisodes(sId, true, {
+      tmdbId: (season as any).tmdbId,
+      tmdbSeason: (season as any).tmdbSeasonNumber,
+      episodeOffset: (season as any).episodeOffset,
+      seasonName: (season as any).name || (season as any).title,
+      totalEpisodes: (season as any).totalEpisodes || (season as any).episodes,
+      isUpcoming: Boolean((season as any).isUpcoming),
+      isUnavailable: Boolean((season as any).isUnavailable),
+    });
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("seasonId", sId);

@@ -30,6 +30,9 @@ const STORAGE_KEYS = [
 ];
 const PRIMARY_STORAGE_KEY = "cinestream.manga_history_v4";
 
+/** Guest reading history follows the same 30-day inactivity rule as accounts. */
+const LOCAL_HISTORY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 const READ_CHAPTERS_STORAGE_KEYS = [
   "cinestream.manga_read_chapters_v2",
   "cinestream.manga_read_chapters_v1",
@@ -52,32 +55,50 @@ export function getLocalMangaHistory(): MangaReadingProgress[] {
       if (raw) {
         const parsed: MangaReadingProgress[] = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed
-            .map((item) => {
-              const cleanId = (item.mangaId || "").replace(/^(wc|asura)-/, "");
-              const isFallbackCover = !item.mangaCover || item.mangaCover.includes("icon-512.png") || item.mangaCover.includes("icon.png");
-              const mangaCover = isFallbackCover && item.mangaId?.startsWith("wc-")
-                ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
-                : item.mangaCover || "/icon-512.png";
+          const cutoff = Date.now() - LOCAL_HISTORY_MAX_AGE_MS;
+          const fresh = parsed.filter((item) => {
+            const updatedAt = Number(item?.updatedAt);
+            return Number.isFinite(updatedAt) && updatedAt >= cutoff;
+          });
 
-              const rawType = (item.mangaType || "").toLowerCase();
-              let mangaType: "manga" | "manhwa" | "manhua" = "manga";
-              if (rawType === "manhwa" || rawType === "manhua") {
-                mangaType = rawType;
-              } else if (
-                item.mangaId?.startsWith("asura-") ||
-                /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(item.mangaTitle || "")
-              ) {
-                mangaType = "manhwa";
-              }
+          // Persist the cleanup once so stale guest entries do not linger.
+          if (fresh.length !== parsed.length) {
+            const payload = JSON.stringify(fresh);
+            for (const storageKey of STORAGE_KEYS) {
+              try {
+                localStorage.setItem(storageKey, payload);
+              } catch {}
+            }
+          }
 
-              return {
-                ...item,
-                mangaCover,
-                mangaType,
-              };
-            })
-            .sort((a, b) => b.updatedAt - a.updatedAt);
+          if (fresh.length > 0) {
+            return fresh
+              .map((item) => {
+                const cleanId = (item.mangaId || "").replace(/^(wc|asura)-/, "");
+                const isFallbackCover = !item.mangaCover || item.mangaCover.includes("icon-512.png") || item.mangaCover.includes("icon.png");
+                const mangaCover = isFallbackCover && item.mangaId?.startsWith("wc-")
+                  ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+                  : item.mangaCover || "/icon-512.png";
+
+                const rawType = (item.mangaType || "").toLowerCase();
+                let mangaType: "manga" | "manhwa" | "manhua" = "manga";
+                if (rawType === "manhwa" || rawType === "manhua") {
+                  mangaType = rawType;
+                } else if (
+                  item.mangaId?.startsWith("asura-") ||
+                  /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(item.mangaTitle || "")
+                ) {
+                  mangaType = "manhwa";
+                }
+
+                return {
+                  ...item,
+                  mangaCover,
+                  mangaType,
+                };
+              })
+              .sort((a, b) => b.updatedAt - a.updatedAt);
+          }
         }
       }
     }

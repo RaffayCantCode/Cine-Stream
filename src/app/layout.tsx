@@ -80,6 +80,33 @@ export default function RootLayout({
         {/* Anime image sources */}
         <link rel="preconnect" href="https://api.anipub.xyz" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://api.anipub.xyz" />
+        {/* Local development must not be controlled by the production SW.
+            Dev chunks keep stable URLs, so a cache-first worker would serve
+            stale code after every rebuild. */}
+        {process.env.NODE_ENV !== "production" && (
+          <script dangerouslySetInnerHTML={{ __html: `
+            (function() {
+              try {
+                var h = window.location.hostname;
+                if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') {
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function(regs) {
+                      regs.forEach(function(r) { r.unregister(); });
+                    });
+                  }
+                  if (typeof caches !== 'undefined') {
+                    caches.keys().then(function(keys) {
+                      keys.forEach(function(k) {
+                        if (k.indexOf('cinestream-') === 0) caches.delete(k);
+                      });
+                    });
+                  }
+                }
+              } catch(e) {}
+            })();
+          `}} />
+        )}
+
         {/* Deployment Cache Invalidation */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
@@ -108,7 +135,7 @@ export default function RootLayout({
             } catch(e) {}
           })();
           (function() {
-            var BUILD_VER = 'v33-static-cache-first';
+            var BUILD_VER = 'v34-static-cache-first';
             try {
               if (typeof localStorage !== 'undefined') {
                 var ver = localStorage.getItem('sv_build_ver');
@@ -117,7 +144,7 @@ export default function RootLayout({
                   if (typeof caches !== 'undefined') {
                     caches.keys().then(function(keys) {
                       keys.forEach(function(k) {
-                        if (k.indexOf('v33') === -1) {
+                        if (k.indexOf('v34') === -1) {
                           caches.delete(k);
                         }
                       });

@@ -52,4 +52,3 @@ dev-server.log
 # backups & migration dumps
 backup_data/
 export_neon_data.mjs
-*.ts

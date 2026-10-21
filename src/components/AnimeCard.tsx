@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Star, Play } from "lucide-react";
 import { memo, useCallback, useState, useEffect, useRef } from "react";
+import { fetchJson } from "@/lib/utils";
+import { animeMetaUrl } from "@/lib/anime-cache";
 
 export interface AnimeItem {
   id: string;
@@ -43,6 +45,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
   const [imageError, setImageError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  const preloadingRef = useRef<string | null>(null);
   const subCount = typeof (item as any).episodes === "number" ? (item as any).episodes : (item.episodes?.sub ?? null);
   const dubCount = item.episodes?.dub ?? null;
 
@@ -87,10 +90,14 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
 
   const handlePreload = useCallback(() => {
     if (typeof window === "undefined" || !item?.id) return;
-    try {
-      sessionStorage.setItem(`cs_anime_seed_${item.id}`, JSON.stringify(item));
-    } catch {}
-  }, [item]);
+    if (preloadingRef.current === item.id) return;
+    preloadingRef.current = item.id;
+    // Warm the same fetchJson cache entry AnimeClient reads, so the details page
+    // opens with the authoritative full meta instead of list-card seed data.
+    fetchJson(animeMetaUrl(item.id)).catch(() => {
+      preloadingRef.current = null;
+    });
+  }, [item.id]);
 
   return (
     <div

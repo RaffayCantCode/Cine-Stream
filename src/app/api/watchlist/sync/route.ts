@@ -87,12 +87,14 @@ export async function POST(request: Request) {
         .from(watchlists)
         .where(eq(watchlists.userId, userId))
         .orderBy(desc(watchlists.createdAt))
+        .limit(500)
         .catch(() => []),
       db
         .select()
         .from(mangaBookmarks)
         .where(eq(mangaBookmarks.userId, userId))
         .orderBy(desc(mangaBookmarks.createdAt))
+        .limit(500)
         .catch(() => []),
     ]);
 

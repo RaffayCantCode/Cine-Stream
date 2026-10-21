@@ -819,7 +819,7 @@ export function CinemaPlayer({
 
         {/* Reloading Source Floating Feedback */}
         {isReloading && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-black/90 border border-white/20 backdrop-blur-md text-xs font-bold text-white flex items-center gap-2 shadow-2xl animate-fade-in pointer-events-none">
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-black/90 border border-white/20 backdrop-blur-md text-xs font-bold text-white flex items-center gap-2 shadow-2xl animate-fade-in pointer-events-none">
             <RotateCcw className="w-4 h-4 animate-spin text-primary" />
             <span>Reloading current source...</span>
           </div>
@@ -828,30 +828,30 @@ export function CinemaPlayer({
 
       {/* ── Top Bar: Single Site Control Layer (Floating Overlay on tablet/desktop when showTopBar is true: z-50) ── */}
       {showTopBar && (
-        <header className="hidden sm:flex absolute top-0 inset-x-0 h-14 sm:h-16 z-50 px-3 sm:px-6 items-center justify-between bg-zinc-950/85 border-b border-white/10 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 pointer-events-auto shadow-2xl">
+        <header className="hidden sm:flex absolute top-0 inset-x-0 h-12 z-50 px-2.5 sm:px-4 items-center justify-between bg-gradient-to-b from-black/80 via-black/45 to-transparent border-b border-white/[0.06] backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-150 pointer-events-auto">
           {/* Left: Back / Exit Button */}
           <div className="flex items-center gap-2 shrink-0">
             <Link
               href={metadata.backUrl}
-              className="flex items-center gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-xs border border-white/15 backdrop-blur-md transition-all shadow-md cursor-pointer shrink-0 group"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/15 active:scale-95 text-white/90 font-semibold text-[11px] border border-white/10 backdrop-blur-sm transition-all cursor-pointer shrink-0 group"
               title="Back to Details"
             >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
               <span className="hidden sm:inline">Back</span>
             </Link>
           </div>
 
           {/* Center: Title & Episode Subtitle & Source Badge */}
-          <div className="flex flex-col items-center text-center max-w-[34%] sm:max-w-[48%] truncate px-2">
-            <div className="flex items-center justify-center gap-2 max-w-full">
-              <h2 className="text-xs sm:text-sm md:text-base font-black text-white tracking-tight drop-shadow-md truncate">
+          <div className="flex flex-col items-center text-center max-w-[38%] sm:max-w-[52%] truncate px-2 leading-tight">
+            <div className="flex items-center justify-center gap-1.5 max-w-full">
+              <h2 className="text-[11px] sm:text-xs md:text-sm font-bold text-white/95 tracking-tight drop-shadow-md truncate">
                 {metadata.title}
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 text-[10px] sm:text-[11px] font-black uppercase tracking-wider shrink-0 shadow-sm">
+              <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary/90 border border-primary/20 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide shrink-0">
                 {activeServer.name || "Source 1"}
               </span>
             </div>
-            <span className="text-[10px] sm:text-xs text-white/60 font-semibold drop-shadow-sm truncate">
+            <span className="text-[9px] sm:text-[10px] text-white/50 font-medium drop-shadow-sm truncate">
               {isAnime && metadata.episode
                 ? `Episode ${metadata.episode}${metadata.episodeTitle ? ` • ${metadata.episodeTitle}` : ""}`
                 : metadata.season && metadata.episode
@@ -861,7 +861,7 @@ export function CinemaPlayer({
           </div>
 
           {/* Right: Site Control Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Episode selection (if TV/Anime with episodes) */}
             {seasons && seasons.length > 0 && (
               <button
@@ -869,14 +869,14 @@ export function CinemaPlayer({
                   setShowEpisodeCarousel(!showEpisodeCarousel);
                   setShowServerMenu(false);
                 }}
-                className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
+                className={`px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                   showEpisodeCarousel
-                    ? "bg-white text-black shadow-lg"
-                    : "bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md"
+                    ? "bg-white text-black shadow-md"
+                    : "bg-white/[0.08] hover:bg-white/15 text-white/90 border border-white/10 backdrop-blur-sm"
                 }`}
                 title="Episode List"
               >
-                <Layers className="w-4 h-4" />
+                <Layers className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Episodes</span>
               </button>
             )}
@@ -887,14 +887,14 @@ export function CinemaPlayer({
                 setShowServerMenu(!showServerMenu);
                 setShowEpisodeCarousel(false);
               }}
-              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
+              className={`px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 showServerMenu
-                  ? "bg-white text-black shadow-lg"
-                  : "bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md"
+                  ? "bg-white text-black shadow-md"
+                  : "bg-white/[0.08] hover:bg-white/15 text-white/90 border border-white/10 backdrop-blur-sm"
               }`}
               title="Switch Source"
             >
-              <Cloud className="w-4 h-4" />
+              <Cloud className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Sources</span>
             </button>
 
@@ -902,30 +902,30 @@ export function CinemaPlayer({
             <button
               onClick={handleReloadSource}
               disabled={isReloading}
-              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md active:scale-95 disabled:opacity-60"
+              className="px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-white/[0.08] hover:bg-white/15 text-white/90 border border-white/10 backdrop-blur-sm active:scale-95 disabled:opacity-60"
               title="Reload Current Source"
             >
-              <RotateCcw className={`w-4 h-4 ${isReloading ? "animate-spin text-primary" : ""}`} />
+              <RotateCcw className={`w-3.5 h-3.5 ${isReloading ? "animate-spin text-primary" : ""}`} />
               <span className="hidden lg:inline">{isReloading ? "Reloading..." : "Reload"}</span>
             </button>
 
             {/* Fullscreen Toggle Button */}
             <button
               onClick={toggleFullscreen}
-              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md bg-white/10 hover:bg-white/20 text-white border border-white/15 backdrop-blur-md active:scale-95"
+              className="px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-white/[0.08] hover:bg-white/15 text-white/90 border border-white/10 backdrop-blur-sm active:scale-95"
               title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
             >
-              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+              {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
             </button>
 
-            {/* Hide Top Bar Button (Brighter & on the right) */}
+            {/* Hide Top Bar Button */}
             <button
               onClick={handleToggleTopBar}
-              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-2xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-lg bg-white/25 hover:bg-white/35 active:scale-95 text-white border border-white/40 hover:border-white/60 backdrop-blur-md hover:shadow-white/10 shrink-0 group"
+              className="px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer bg-white/[0.12] hover:bg-white/20 active:scale-95 text-white/90 border border-white/15 backdrop-blur-sm shrink-0 group"
               title="Hide Top Bar (Press M to toggle)"
             >
-              <ChevronUp className="w-4 h-4 text-white drop-shadow group-hover:-translate-y-0.5 transition-transform" />
-              <span className="hidden sm:inline text-white font-black tracking-wide">Hide</span>
+              <ChevronUp className="w-3.5 h-3.5 text-white/90 group-hover:-translate-y-0.5 transition-transform" />
+              <span className="hidden sm:inline tracking-wide">Hide</span>
             </button>
           </div>
         </header>
@@ -1084,7 +1084,7 @@ export function CinemaPlayer({
 
       {/* ── Floating Episode Horizontal Carousel ── */}
       {showEpisodeCarousel && seasons && seasons.length > 0 && (
-        <div className="fixed top-16 sm:top-18 inset-x-0 z-50 mx-2 sm:mx-8 p-4 sm:p-5 rounded-3xl bg-[#18181b]/95 border border-white/10 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] animate-fade-in space-y-3 max-h-[calc(100dvh-5rem)] overflow-y-auto">
+        <div className="fixed top-14 inset-x-0 z-50 mx-2 sm:mx-8 p-4 sm:p-5 rounded-3xl bg-[#18181b]/95 border border-white/10 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] animate-fade-in space-y-3 max-h-[calc(100dvh-5rem)] overflow-y-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 flex-wrap">
               {seasons.length > 1 ? (
@@ -1319,7 +1319,7 @@ export function CinemaPlayer({
 
       {/* ── Floating Server Selection Popup ── */}
       {showServerMenu && (
-        <div className="fixed top-16 sm:top-18 right-3 sm:right-8 z-50 w-72 sm:w-80 max-h-[calc(100dvh-5rem)] overflow-y-auto bg-[#18181b]/95 border border-white/15 rounded-2xl p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-fade-in space-y-3">
+        <div className="fixed top-14 right-3 sm:right-8 z-50 w-72 sm:w-80 max-h-[calc(100dvh-5rem)] overflow-y-auto bg-[#18181b]/95 border border-white/15 rounded-2xl p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-fade-in space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-white/10">
             <div className="flex items-center gap-2">
               <Server className="w-3.5 h-3.5 text-primary" />

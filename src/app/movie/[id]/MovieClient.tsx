@@ -53,13 +53,26 @@ interface Movie {
   videos?: { results: any[] };
 }
 
-export default function MovieClient() {
+interface MovieClientProps {
+  initialData?: Movie | null;
+  initialHidden?: boolean;
+}
+
+function cacheMovieForWatch(data: Movie) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(`cinestream_movie_${data.id}`, JSON.stringify(data));
+  } catch {}
+}
+
+export default function MovieClient({ initialData, initialHidden = false }: MovieClientProps) {
   const router = useRouter();
   const params = useParams();
   const id = Number(params.id);
   const { status } = useSession();
-  const [movie, setMovie] = useState<Movie | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const initialMovie = initialData && Number(initialData.id) === id ? initialData : null;
+  const [movie, setMovie] = useState<Movie | null>(initialMovie);
+  const [isLoading, setIsLoading] = useState(!initialMovie && !initialHidden);
   const [error, setError] = useState<string | null>(null);
   const activeLogo = useMemo(() => {
     const logos = (movie as any)?.images?.logos;
@@ -96,10 +109,35 @@ export default function MovieClient() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+
+    const provided = initialData && Number(initialData.id) === id ? initialData : null;
+    if (provided) {
+      setMovie(provided);
+      setError(null);
+      setIsLoading(false);
+      cacheMovieForWatch(provided);
+      return;
+    }
+
+    if (initialHidden) {
+      setMovie(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
     const fetchMovie = async () => {
+      setIsLoading(true);
+      setMovie(null);
       setError(null);
       try {
-        const data = await fetchJson<Movie>(`/api/tmdb/movie/${id}`);
+        const data = await fetchJson<Movie>(`/api/tmdb/movie/${id}`, {
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+
         const backdropSrc = data.backdrop_path
           ? `https://image.tmdb.org/t/p/original${data.backdrop_path}`
           : null;
@@ -112,21 +150,22 @@ export default function MovieClient() {
           document.head.appendChild(link);
         }
         setMovie(data);
-        if (typeof window !== "undefined") {
-          try {
-            sessionStorage.setItem(`cinestream_movie_${id}`, JSON.stringify(data));
-          } catch {}
-        }
+        cacheMovieForWatch(data);
       } catch (error) {
+        if (cancelled || controller.signal.aborted) return;
         setMovie(null);
         setError(error instanceof Error ? error.message : "Failed to fetch movie");
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     fetchMovie();
-  }, [id]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [id, initialData, initialHidden]);
 
   const autoPlayHandledRef = useRef(false);
   useEffect(() => {

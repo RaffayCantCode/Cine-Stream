@@ -1,7 +1,7 @@
 "use client";
 
-import { SessionProvider } from "next-auth/react";
-import { ReactNode, useEffect } from "react";
+import { SessionProvider, useSession } from "next-auth/react";
+import { ReactNode, useEffect, useRef } from "react";
 import { ContentModeProvider } from "@/context/ContentModeContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { WatchlistProvider } from "@/context/WatchlistContext";
@@ -12,12 +12,73 @@ interface ProvidersProps {
   children: ReactNode;
 }
 
+const ACTIVITY_STORAGE_KEY = "cinestream_activity_ping";
+const ACTIVITY_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Keeps `lastActiveAt` current without a DB write on every request. The server
+ * uses it to clear manga reading history after 30 days of inactivity.
+ */
+function UserActivityHeartbeat() {
+  const { status, data: session } = useSession();
+  const sentRef = useRef(false);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      sentRef.current = false;
+      return;
+    }
+    if (sentRef.current) return;
+
+    const storageKey = session?.user?.id
+      ? `${ACTIVITY_STORAGE_KEY}_${session.user.id}`
+      : ACTIVITY_STORAGE_KEY;
+    let lastPing = 0;
+    try {
+      lastPing = Number(localStorage.getItem(storageKey) || 0);
+    } catch {}
+    if (Date.now() - lastPing < ACTIVITY_INTERVAL_MS) return;
+
+    sentRef.current = true;
+    fetch("/api/user/activity", { method: "POST", keepalive: true })
+      .then((res) => {
+        if (!res.ok) {
+          sentRef.current = false;
+          return;
+        }
+        try {
+          localStorage.setItem(storageKey, String(Date.now()));
+        } catch {}
+      })
+      .catch(() => {
+        sentRef.current = false;
+      });
+  }, [status, session?.user?.id]);
+
+  return null;
+}
+
 export function Providers({ children }: ProvidersProps) {
   const pathname = usePathname();
   const isWatchPage = pathname?.startsWith("/watch/") || pathname === "/watch";
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    // Development rebuilds keep the same /_next/static URLs, so the production
+    // cache-first service worker would keep serving old chunks and hide code
+    // changes (including the page's data-loading effects). Never run it locally.
+    if (process.env.NODE_ENV !== "production") {
+      navigator.serviceWorker.getRegistrations()
+        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+        .catch(() => {});
+      if (typeof caches !== "undefined") {
+        caches.keys()
+          .then((keys) => Promise.all(keys.filter((k) => k.startsWith("cinestream-")).map((k) => caches.delete(k))))
+          .catch(() => {});
+      }
+      return;
+    }
 
     let refreshing = false;
     const onControllerChange = () => {
@@ -74,6 +135,7 @@ export function Providers({ children }: ProvidersProps) {
   }, []);
   return (
     <SessionProvider refetchOnWindowFocus={false}>
+      <UserActivityHeartbeat />
       <ThemeProvider>
         <WatchlistProvider>
           <ContentModeProvider>

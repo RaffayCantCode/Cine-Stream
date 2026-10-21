@@ -1,8 +1,13 @@
 export const runtime = 'edge';
+import { cache } from "react";
 import type { Metadata } from "next";
-import { tmdbFetch } from "@/lib/tmdb";
 import { constructMediaMetadata } from "@/lib/social-preview";
+import { fetchMovieDetails } from "@/lib/tmdb-details";
 import MovieClient from "./MovieClient";
+
+// React's per-request cache lets generateMetadata and the page share one TMDB
+// request instead of fetching the same movie twice during a single render.
+const getMovieDetails = cache(fetchMovieDetails);
 
 export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
@@ -11,7 +16,8 @@ export async function generateMetadata(
   const id = params?.id || "";
 
   try {
-    const rawMovie = await tmdbFetch(`/movie/${id}`).catch(() => null) as any;
+    const result = await getMovieDetails(id);
+    const rawMovie = result?.data as any;
 
     if (rawMovie && rawMovie.id && !rawMovie.adult) {
       const title = rawMovie.title || rawMovie.name || "Movie";
@@ -40,6 +46,19 @@ export async function generateMetadata(
   });
 }
 
-export default function MoviePage() {
-  return <MovieClient />;
+export default async function MoviePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const result = await getMovieDetails(id).catch(() => null);
+
+  return (
+    <MovieClient
+      key={id}
+      initialData={(result?.data ?? null) as any}
+      initialHidden={Boolean(result?.hidden)}
+    />
+  );
 }

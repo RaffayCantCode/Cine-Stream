@@ -6,6 +6,18 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { recordUserActivity } from "@/lib/user-activity";
+
+const ROLE_CACHE_TTL_MS = 5 * 60 * 1000;
+const roleCache = new Map<string, { role: string; expiresAt: number }>();
+
+function cacheRole(userId: string, role: string) {
+  if (roleCache.size > 1000) {
+    const oldest = roleCache.keys().next().value;
+    if (oldest) roleCache.delete(oldest);
+  }
+  roleCache.set(userId, { role, expiresAt: Date.now() + ROLE_CACHE_TTL_MS });
+}
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -56,6 +68,10 @@ function getAuth() {
             const isValid = await compare(password, user.password);
             if (!isValid) return null;
 
+            // Mark the user active and clear stale manga history before the
+            // session starts, so a return after 30+ days starts clean.
+            await recordUserActivity(user.id);
+
             return {
               id: user.id,
               email: user.email,
@@ -93,19 +109,29 @@ function getAuth() {
           if (user) {
             token.sub = user.id;
             token.role = (user as any).role || "user";
+            if (token.sub) {
+              cacheRole(token.sub, token.role as string);
+            }
           }
           if (token.sub) {
-            const database = getDatabase();
-            if (database) {
-              try {
-                const dbUser = await database.query.users.findFirst({
-                  where: eq(users.id, token.sub),
-                });
-                if (dbUser?.role) {
-                  token.role = dbUser.role;
+            const cached = roleCache.get(token.sub);
+            if (cached && cached.expiresAt > Date.now()) {
+              token.role = cached.role;
+            } else {
+              const database = getDatabase();
+              if (database) {
+                try {
+                  const dbUser = await database.query.users.findFirst({
+                    where: eq(users.id, token.sub),
+                    columns: { role: true },
+                  });
+                  if (dbUser?.role) {
+                    token.role = dbUser.role;
+                    cacheRole(token.sub, dbUser.role);
+                  }
+                } catch {
+                  // Keep existing token.role if DB query fails
                 }
-              } catch {
-                // Keep existing token.role if DB query fails
               }
             }
           }

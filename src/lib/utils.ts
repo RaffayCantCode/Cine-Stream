@@ -171,7 +171,19 @@ export async function fetchJson<T = unknown>(
 
   if (shouldUseCache) {
     pendingRequests.set(cacheKey, request as Promise<unknown>);
-    request.finally(() => pendingRequests.delete(cacheKey));
+    // Drop aborted requests from the shared map immediately so the next caller
+    // starts a fresh request instead of inheriting an already-rejected promise.
+    const signal = requestInit.signal;
+    if (signal) {
+      signal.addEventListener("abort", () => {
+        if (pendingRequests.get(cacheKey) === request) {
+          pendingRequests.delete(cacheKey);
+        }
+      }, { once: true });
+    }
+    // The finally-chain rejects alongside the request; swallow that copy so an
+    // aborted fetch does not surface as an unhandled rejection.
+    request.finally(() => pendingRequests.delete(cacheKey)).catch(() => {});
   }
 
   return request;

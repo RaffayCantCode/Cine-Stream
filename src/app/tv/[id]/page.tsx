@@ -1,8 +1,13 @@
 export const runtime = 'edge';
+import { cache } from "react";
 import type { Metadata } from "next";
-import { tmdbFetch } from "@/lib/tmdb";
 import { constructMediaMetadata } from "@/lib/social-preview";
+import { fetchTvDetails } from "@/lib/tmdb-details";
 import TvClient from "./TvClient";
+
+// React's per-request cache lets generateMetadata and the page share one TMDB
+// request (including the bundled first season) during a single render.
+const getTvDetails = cache(fetchTvDetails);
 
 export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
@@ -11,7 +16,8 @@ export async function generateMetadata(
   const id = params?.id || "";
 
   try {
-    const rawShow = await tmdbFetch(`/tv/${id}`).catch(() => null) as any;
+    const result = await getTvDetails(id);
+    const rawShow = result?.data as any;
 
     if (rawShow && rawShow.id && !rawShow.adult) {
       const title = rawShow.name || rawShow.title || "TV Show";
@@ -40,6 +46,19 @@ export async function generateMetadata(
   });
 }
 
-export default function TvPage() {
-  return <TvClient />;
+export default async function TvPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const result = await getTvDetails(id).catch(() => null);
+
+  return (
+    <TvClient
+      key={id}
+      initialData={(result?.data ?? null) as any}
+      initialHidden={Boolean(result?.hidden)}
+    />
+  );
 }

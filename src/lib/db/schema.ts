@@ -1,4 +1,5 @@
 ﻿import {
+  index,
   integer,
   primaryKey,
   sqliteTable,
@@ -24,7 +25,10 @@ export const users = sqliteTable("user", {
   createdAt: integer("createdAt", { mode: "timestamp_ms" })
     .$defaultFn(() => new Date())
     .notNull(),
-});
+}, (t) => [
+  index("idx_user_last_active").on(t.lastActiveAt),
+  index("idx_user_created").on(t.createdAt),
+]);
 
 export const accounts = sqliteTable(
   "account",
@@ -100,6 +104,7 @@ export const watchHistory = sqliteTable(
       t.season,
       t.episode
     ),
+    index("idx_watch_history_user_watched").on(t.userId, t.watchedAt),
   ]
 );
 
@@ -122,6 +127,7 @@ export const watchlists = sqliteTable(
   },
   (t) => [
     uniqueIndex("uq_watchlist_user_media").on(t.userId, t.mediaId, t.mediaType),
+    index("idx_watchlist_user_created").on(t.userId, t.createdAt),
   ]
 );
 
@@ -150,6 +156,8 @@ export const mangaReadingHistory = sqliteTable(
   },
   (t) => [
     uniqueIndex("uq_manga_reading_user_manga").on(t.userId, t.mangaId),
+    index("idx_manga_history_user_updated").on(t.userId, t.updatedAt),
+    index("idx_manga_history_updated").on(t.updatedAt),
   ]
 );
 
@@ -175,6 +183,7 @@ export const mangaBookmarks = sqliteTable(
   },
   (t) => [
     uniqueIndex("uq_manga_bookmarks_user_manga").on(t.userId, t.mangaId),
+    index("idx_manga_bookmarks_user_created").on(t.userId, t.createdAt),
   ]
 );
 

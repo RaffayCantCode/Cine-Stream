@@ -6,6 +6,10 @@ import { getDb } from "@/lib/db";
 import { mangaReadingHistory, MangaReadingHistoryItem } from "@/lib/db/schema";
 import { eq, desc, and, or } from "drizzle-orm";
 import { z } from "zod";
+import {
+  cleanupInactiveMangaHistory,
+  cleanupInactiveMangaHistoryForUser,
+} from "@/lib/user-activity";
 
 const SaveMangaProgressSchema = z.object({
   mangaId: z.string(),
@@ -50,6 +54,12 @@ export async function GET(request: Request) {
       return { ...row, mangaCover, mangaType };
     };
 
+    // Clear history for users who have been inactive for 30+ days. Doing this
+    // before both queries guarantees a returning user never sees stale
+    // "Continue reading" entries or resumes an expired chapter.
+    await cleanupInactiveMangaHistoryForUser(session.user.id);
+    await cleanupInactiveMangaHistory();
+
     if (mangaId) {
       const rows = await db
         .select()
@@ -62,7 +72,10 @@ export async function GET(request: Request) {
         )
         .limit(1);
 
-      return Response.json({ item: normalizeRow(rows[0]) || null });
+      return Response.json(
+        { item: normalizeRow(rows[0]) || null },
+        { headers: { "Cache-Control": "no-store, max-age=0" } }
+      );
     }
 
     const rows = await db
@@ -72,7 +85,10 @@ export async function GET(request: Request) {
       .orderBy(desc(mangaReadingHistory.updatedAt))
       .limit(30);
 
-    return Response.json({ items: rows.map(normalizeRow) });
+    return Response.json(
+      { items: rows.map(normalizeRow) },
+      { headers: { "Cache-Control": "no-store, max-age=0" } }
+    );
   } catch (err: any) {
     console.warn("[API/manga/history] GET failed:", err);
     return Response.json({ items: [], item: null });

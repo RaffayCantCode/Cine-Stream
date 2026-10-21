@@ -79,18 +79,44 @@ interface TvShow {
   similar?: { results: any[] };
   recommendations?: { results: any[] };
   videos?: { results: any[] };
+  _initialSeasonNum?: number;
+  _initialSeasonData?: Season | null;
 }
 
-export default function TvClient() {
+interface TvClientProps {
+  initialData?: TvShow | null;
+  initialHidden?: boolean;
+}
+
+function cacheTvForWatch(data: TvShow) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(`cinestream_tv_${data.id}`, JSON.stringify(data));
+  } catch {}
+}
+
+export default function TvClient({ initialData, initialHidden = false }: TvClientProps) {
   const router = useRouter();
   const params = useParams();
   const id = Number(params.id);
   const { data: session, status } = useSession();
-  const [show, setShow] = useState<TvShow | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  const [playingSeason, setPlayingSeason] = useState<number>(1);
+  const initialShow = initialData && Number(initialData.id) === id ? initialData : null;
+  const initialSeasonNum =
+    Number(initialShow?._initialSeasonNum) ||
+    initialShow?.seasons?.find((season) => season.season_number > 0)?.season_number ||
+    1;
+  const initialSeasonData = initialShow?._initialSeasonData ?? null;
+  const seasonCacheRef = useRef<Map<number, Season>>(
+    initialSeasonData && initialSeasonNum
+      ? new Map([[initialSeasonNum, initialSeasonData]])
+      : new Map()
+  );
+  const [show, setShow] = useState<TvShow | null>(initialShow);
+  const [isLoading, setIsLoading] = useState(!initialShow && !initialHidden);
+  const [selectedSeason, setSelectedSeason] = useState<number>(initialSeasonNum);
+  const [playingSeason, setPlayingSeason] = useState<number>(initialSeasonNum);
   const [playingEpisode, setPlayingEpisode] = useState<number>(1);
+  const [seasonData, setSeasonData] = useState<Season | null>(initialSeasonData);
   const [episodeChunk, setEpisodeChunk] = useState<number>(0);
   const [hasActiveProgress, setHasActiveProgress] = useState(false);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
@@ -223,8 +249,6 @@ export default function TvClient() {
     setIsStateLoaded(true);
   }, [id, status, isStateLoaded]);
 
-  const seasonCacheRef = useRef<Map<number, Season>>(new Map());
-  const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -265,10 +289,44 @@ export default function TvClient() {
   };
 
   useEffect(() => {
+    const provided = initialData && Number(initialData.id) === id ? initialData : null;
+
+    if (provided) {
+      setShow(provided);
+      setError(null);
+      setIsLoading(false);
+      cacheTvForWatch(provided);
+
+      const sNum = Number(provided._initialSeasonNum);
+      const sData = provided._initialSeasonData;
+      if (sNum && sData) {
+        seasonCacheRef.current.set(sNum, sData);
+        setSeasonData(sData);
+        setSeasonLoading(false);
+      }
+      return;
+    }
+
+    if (initialHidden) {
+      setShow(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
     const fetchShow = async () => {
+      setIsLoading(true);
+      setShow(null);
+      setSeasonData(null);
       setError(null);
       try {
-        const data = await fetchJson<TvShow>(`/api/tmdb/tv/${id}`);
+        const data = await fetchJson<TvShow>(`/api/tmdb/tv/${id}`, {
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+
         const backdropSrc = data.backdrop_path
           ? `https://image.tmdb.org/t/p/original${data.backdrop_path}`
           : null;
@@ -282,9 +340,9 @@ export default function TvClient() {
         }
         // Set show data first so React can start rendering
         setShow(data);
-        if ((data as any)?._initialSeasonData && (data as any)?._initialSeasonNum) {
-          const sNum = Number((data as any)._initialSeasonNum);
-          const sData = (data as any)._initialSeasonData;
+        if (data._initialSeasonData && data._initialSeasonNum) {
+          const sNum = Number(data._initialSeasonNum);
+          const sData = data._initialSeasonData;
           seasonCacheRef.current.set(sNum, sData);
           if (selectedSeason === sNum || (!hasActiveProgress && selectedSeason === 1)) {
             setSeasonData(sData);
@@ -299,21 +357,22 @@ export default function TvClient() {
           }
           return prev;
         });
-        if (typeof window !== "undefined") {
-          try {
-            sessionStorage.setItem(`cinestream_tv_${id}`, JSON.stringify(data));
-          } catch {}
-        }
+        cacheTvForWatch(data);
       } catch (error) {
+        if (cancelled || controller.signal.aborted) return;
         setShow(null);
         setError(error instanceof Error ? error.message : "Failed to fetch show");
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     fetchShow();
-  }, [id]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [id, initialData, initialHidden]);
 
   const autoPlayHandledRef = useRef(false);
   useEffect(() => {
@@ -381,7 +440,7 @@ export default function TvClient() {
   }, [id, show, playingSeason, playingEpisode, status, isStateLoaded, hasActiveProgress]);
 
   useEffect(() => {
-    if (!selectedSeason) return;
+    if (!selectedSeason || isLoading) return;
 
     if (seasonCacheRef.current.has(selectedSeason)) {
       setSeasonData(seasonCacheRef.current.get(selectedSeason)!);
@@ -411,7 +470,7 @@ export default function TvClient() {
 
     fetchSeason();
     return () => { isActive = false; };
-  }, [id, selectedSeason]);
+  }, [id, selectedSeason, isLoading]);
 
   const handleWatchEpisode = async (season: number, episodeNumber: number, episodeName?: string) => {
     const targetEpisode = season === selectedSeason

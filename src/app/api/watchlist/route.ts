@@ -31,12 +31,14 @@ export async function GET() {
         .from(watchlists)
         .where(eq(watchlists.userId, session.user.id))
         .orderBy(desc(watchlists.createdAt))
+        .limit(500)
         .catch(() => []),
       db
         .select()
         .from(mangaBookmarks)
         .where(eq(mangaBookmarks.userId, session.user.id))
         .orderBy(desc(mangaBookmarks.createdAt))
+        .limit(500)
         .catch(() => []),
     ]);
 
