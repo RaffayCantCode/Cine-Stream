@@ -13,6 +13,7 @@ import { GridMediaCard } from "@/components/GridMediaCard";
 import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
+import { MediaDetailLoadingShell } from "@/components/MediaDetailLoadingShell";
 
 
 import { usePageContentReady } from "@/lib/pageLoad";
@@ -83,7 +84,17 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
     const chosen = englishLogo || nullLangLogo || jaLogo || logos[0];
     return chosen?.file_path ? `https://image.tmdb.org/t/p/w500${chosen.file_path}` : null;
   }, [movie]);
-  usePageContentReady(!isLoading);
+  // The loading shell is already on screen; never keep the full-screen route
+  // loader up while the detail API request is still in flight.
+  usePageContentReady(true);
+
+  // Client navigations skip blocking metadata generation, so keep the tab
+  // title accurate once the details arrive.
+  useEffect(() => {
+    if (!movie?.title) return;
+    const year = movie.release_date ? ` (${String(movie.release_date).slice(0, 4)})` : "";
+    document.title = `${movie.title}${year} - CineStream`;
+  }, [movie]);
 
   const { theme } = useTheme();
   const isGlobalTheme = theme === "global";
@@ -139,7 +150,7 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
         if (cancelled) return;
 
         const backdropSrc = data.backdrop_path
-          ? `https://image.tmdb.org/t/p/original${data.backdrop_path}`
+          ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`
           : null;
         // Preload backdrop immediately — starts download before React renders
         if (backdropSrc) {
@@ -229,19 +240,7 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
 
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <Sidebar />
-        <div className="w-full h-[65vh] bg-muted/30 animate-pulse" />
-        <div className="px-5 md:px-10 py-12 max-w-screen-2xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
-          <div className="md:col-span-2 space-y-4">
-            <div className="h-12 w-3/4 bg-muted/40 rounded animate-pulse" />
-            <div className="h-6 w-1/2 bg-muted/40 rounded animate-pulse" />
-            <div className="h-28 w-full bg-muted/40 rounded animate-pulse" />
-          </div>
-        </div>
-      </div>
-    );
+    return <MediaDetailLoadingShell mediaType="movie" />;
   }
 
   if (!movie || (movie as any).isHidden) {
@@ -268,7 +267,7 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
   }
 
   const backdropUrl = movie.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`
     : null;
   const posterUrl = movie.poster_path
     ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`

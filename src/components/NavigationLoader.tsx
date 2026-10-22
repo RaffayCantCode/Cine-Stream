@@ -84,7 +84,10 @@ export function NavigationLoader() {
   const requestHide = useCallback(() => {
     if (shownAtRef.current === null) return;
     const isWatchRoute = pathname.startsWith("/watch/");
-    const minHold = isWatchRoute ? 0 : MIN_HOLD_MS;
+    // Detail routes now render a real loading shell immediately, so there is
+    // no reason to keep the branded overlay up while it is already visible.
+    const isMediaDetailRoute = /^\/(movie|tv|anime)\//.test(pathname);
+    const minHold = isWatchRoute ? 0 : isMediaDetailRoute ? 200 : MIN_HOLD_MS;
     const wait = Math.max(
       0,
       minHold - (Date.now() - shownAtRef.current)
@@ -313,7 +316,7 @@ export function NavigationLoader() {
       {visible && (
         <motion.div
           key="navigation-loader"
-          className="fixed inset-0 z-[999999] pointer-events-auto"
+          className="fixed inset-0 z-[999999] pointer-events-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.24, ease: "easeInOut" } }}

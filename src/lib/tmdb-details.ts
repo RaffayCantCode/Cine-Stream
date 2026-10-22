@@ -197,40 +197,29 @@ export async function fetchMovieDetails(id: string): Promise<TmdbDetailsResult> 
 }
 
 /**
- * Fetches TV details and the first real season in one TMDB request whenever
- * possible. TMDB supports `append_to_response=season/1,season/1/videos`, so the
- * common case no longer pays for a second sequential request before the page
- * can render. Shows whose first real season is not 1 fall back to a single
- * on-demand season request.
+ * Fetches TV details without blocking on season/episode data.
+ *
+ * Bundling `season/1` into `append_to_response` meant the detail page could
+ * not render until TMDB had serialised every episode (and its videos) of the
+ * first season — often several seconds for long-running shows. The client
+ * already loads the active season on demand (and caches it per session), so
+ * the show hero now paints as soon as the show record arrives.
  */
 export async function fetchTvDetails(id: string): Promise<TmdbDetailsResult> {
   const overridePromise = safeOverride("tv", id);
 
   try {
-    const startedAt = Date.now();
-    // Run the override lookup and the (large) TMDB request concurrently.
-    const [override, initialData] = await Promise.all([
+    // Run the override lookup and the TMDB request concurrently.
+    const [override, data] = await Promise.all([
       overridePromise,
       tmdbFetch(`/tv/${id}`, {
-        append_to_response: `${BASE_APPEND},season/1,season/1/videos`,
+        append_to_response: BASE_APPEND,
         include_image_language: IMAGE_LANGUAGES,
       }),
     ]);
 
     if (override?.isHidden || override?.status === "hidden") {
       return { data: null, hidden: true };
-    }
-
-    let data = initialData;
-
-    // Some very old / unusual entries do not have a season 1. Retry without the
-    // season append so the show itself still renders. Only retry fast failures
-    // (typically a 404); a timeout should not double the page's wait time.
-    if (!data && Date.now() - startedAt < 3000) {
-      data = await tmdbFetch(`/tv/${id}`, {
-        append_to_response: BASE_APPEND,
-        include_image_language: IMAGE_LANGUAGES,
-      });
     }
 
     if (!data || typeof data !== "object" || !(data as any).id) {
@@ -241,53 +230,12 @@ export async function fetchTvDetails(id: string): Promise<TmdbDetailsResult> {
     }
 
     // tmdbFetch returns its shared memory-cache object. Clone before trimming
-    // and removing the season/1 append keys so later requests can reuse the
-    // cached payload.
+    // so one request cannot remove fields that another request still needs.
     const result = structuredClone(data) as Record<string, any>;
     cleanRecommendations(result);
     compactDetailPayload(result);
 
-    const seasons = Array.isArray(result.seasons) ? result.seasons : [];
-    const firstSeasonNum =
-      seasons.find((season: any) => Number(season?.season_number) > 0)
-        ?.season_number ?? 1;
-
-    let initialSeasonData = result["season/1"] as Record<string, any> | undefined;
-    const seasonVideos = result["season/1/videos"] as
-      | { results?: any[] }
-      | undefined;
-
-    if (initialSeasonData) {
-      initialSeasonData = compactSeasonData({
-        ...initialSeasonData,
-        videos: seasonVideos ?? initialSeasonData.videos,
-      });
-    }
-
-    // These are implementation details, not part of the public show payload.
-    delete result["season/1"];
-    delete result["season/1/videos"];
-
-    if (!initialSeasonData || Number(firstSeasonNum) !== 1) {
-      const fetchedSeason = (await tmdbFetch(
-        `/tv/${id}/season/${firstSeasonNum}`,
-        { append_to_response: "videos" }
-      )) as Record<string, any> | null;
-      initialSeasonData = fetchedSeason
-        ? compactSeasonData(fetchedSeason)
-        : undefined;
-    }
-
-    const finalResult = applyMediaOverride(result, override) as
-      | Record<string, any>
-      | null;
-
-    if (finalResult && initialSeasonData) {
-      finalResult._initialSeasonNum = Number(firstSeasonNum);
-      finalResult._initialSeasonData = initialSeasonData;
-    }
-
-    return { data: finalResult, hidden: false };
+    return { data: applyMediaOverride(result, override), hidden: false };
   } catch (error) {
     const fallbackOverride = await overridePromise;
     if (fallbackOverride?.isHidden || fallbackOverride?.status === "hidden") {

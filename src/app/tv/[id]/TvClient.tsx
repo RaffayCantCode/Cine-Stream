@@ -12,6 +12,7 @@ import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 
 
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
+import { MediaDetailLoadingShell } from "@/components/MediaDetailLoadingShell";
 
 function TvHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -131,7 +132,17 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
     const chosen = englishLogo || nullLangLogo || jaLogo || logos[0];
     return chosen?.file_path ? `https://image.tmdb.org/t/p/w500${chosen.file_path}` : null;
   }, [show]);
-  usePageContentReady(!isLoading);
+  // The loading shell is already on screen; never keep the full-screen route
+  // loader up while the detail API request is still in flight.
+  usePageContentReady(true);
+
+  // Client navigations skip blocking metadata generation, so keep the tab
+  // title accurate once the details arrive.
+  useEffect(() => {
+    if (!show?.name) return;
+    const year = show.first_air_date ? ` (${String(show.first_air_date).slice(0, 4)})` : "";
+    document.title = `${show.name}${year} - CineStream`;
+  }, [show]);
 
   const { theme } = useTheme();
   const isGlobalTheme = theme === "global";
@@ -328,7 +339,7 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
         if (cancelled) return;
 
         const backdropSrc = data.backdrop_path
-          ? `https://image.tmdb.org/t/p/original${data.backdrop_path}`
+          ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`
           : null;
         // Preload backdrop immediately via <link rel=preload> for fastest paint
         if (backdropSrc) {
@@ -515,12 +526,7 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
 
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <Sidebar />
-        <div className="w-full h-[65vh] bg-muted/30 animate-pulse" />
-      </div>
-    );
+    return <MediaDetailLoadingShell mediaType="tv" />;
   }
 
   if (!show || (show as any).isHidden) {
@@ -547,7 +553,7 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
   }
 
   const backdropUrl = show.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${show.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/w1280${show.backdrop_path}`
     : null;
   const posterUrl = show.poster_path
     ? `https://image.tmdb.org/t/p/w342${show.poster_path}`
@@ -589,9 +595,9 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
   };
 
   const tvBackdropUrl = show.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${show.backdrop_path}`
+    ? `https://image.tmdb.org/t/p/w1280${show.backdrop_path}`
     : show.poster_path
-    ? `https://image.tmdb.org/t/p/original${show.poster_path}`
+    ? `https://image.tmdb.org/t/p/w780${show.poster_path}`
     : null;
 
   return (
@@ -884,6 +890,24 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
                 </div>
               );
             })()}
+
+            {seasonLoading && !seasonData && (
+              <div className="space-y-3" aria-label="Loading episodes">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex gap-4 rounded-2xl border border-white/[0.05] bg-white/[0.02] p-3"
+                  >
+                    <div className="w-32 sm:w-44 aspect-video shrink-0 rounded-xl bg-white/[0.06] animate-pulse" />
+                    <div className="flex-1 space-y-2 py-1">
+                      <div className="h-4 w-2/3 bg-white/[0.08] rounded animate-pulse" />
+                      <div className="h-3 w-full bg-white/[0.05] rounded animate-pulse" />
+                      <div className="h-3 w-5/6 bg-white/[0.05] rounded animate-pulse" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
         </section>
 
         {(((show.credits as any)?.cast && (show.credits as any).cast.length > 0) || ((show.credits as any)?.crew && (show.credits as any).crew.length > 0)) && (

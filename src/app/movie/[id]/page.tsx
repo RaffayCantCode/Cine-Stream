@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { cache } from "react";
 import type { Metadata } from "next";
 import { constructMediaMetadata } from "@/lib/social-preview";
+import { isMetadataBotRequest } from "@/lib/metadata-bots";
 import { fetchMovieDetails } from "@/lib/tmdb-details";
 import MovieClient from "./MovieClient";
 
@@ -14,6 +15,17 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const params = await props.params;
   const id = params?.id || "";
+
+  // Only crawlers/social previews wait for dynamic tags. For real visitors the
+  // page shell must stream immediately; the client fills in the title later.
+  if (!(await isMetadataBotRequest())) {
+    return constructMediaMetadata({
+      title: "Movie",
+      mediaTypeLabel: "Movie",
+      urlPath: `/movie/${id}`,
+      fallbackDescription: "Stream movies and TV shows in Full HD on CineStream.",
+    });
+  }
 
   try {
     const result = await getMovieDetails(id);
@@ -52,13 +64,10 @@ export default async function MoviePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const result = await getMovieDetails(id).catch(() => null);
 
-  return (
-    <MovieClient
-      key={id}
-      initialData={(result?.data ?? null) as any}
-      initialHidden={Boolean(result?.hidden)}
-    />
-  );
+  // Never await TMDB in the page itself. The route commits immediately, the
+  // loading shell paints, and the client fetches details (usually from the
+  // hover-prefetched cache). This is what makes every click feel instant even
+  // when TMDB is slow or a Cloudflare cold start is involved.
+  return <MovieClient key={id} initialData={null} initialHidden={false} />;
 }

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Star, Film, Tv, Play } from "lucide-react";
-import { isTmdbAnime, cn } from "@/lib/utils";
+import { isTmdbAnime, cn, fetchJson } from "@/lib/utils";
+import { cacheMediaPreview } from "@/lib/media-preview-cache";
 
 interface MediaItem {
   id: number | string;
@@ -28,6 +30,7 @@ interface GridMediaCardProps {
 }
 
 export function GridMediaCard({ item, index = 0, action, className }: GridMediaCardProps) {
+  const router = useRouter();
   const isManga = item.media_type === "manga" || item.media_type === "manhwa";
   const rawTargetUrl = (item as any).targetUrl || (item as any).target_url;
   const isAnime =
@@ -62,6 +65,43 @@ export function GridMediaCard({ item, index = 0, action, className }: GridMediaC
   };
 
   const initialPosterUrl = getTmdbImageUrl(item.poster_path);
+
+  // Warm dynamic detail routes on intent (see MediaCard for rationale).
+  const warmedRef = useRef(false);
+  const warmDestination = useCallback(() => {
+    if (warmedRef.current || !link?.startsWith("/")) return;
+    warmedRef.current = true;
+
+    const previewType = link.startsWith("/tv/")
+      ? "tv"
+      : link.startsWith("/movie/")
+      ? "movie"
+      : null;
+
+    if (previewType) {
+      cacheMediaPreview(item, previewType);
+      void fetchJson(`/api/tmdb/${previewType}/${item.id}`).catch(() => {});
+    }
+
+    router.prefetch(link);
+  }, [link, item, router]);
+
+  // Avoid firing a detail request for every card the pointer sweeps across.
+  const warmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleWarm = useCallback(() => {
+    if (warmedRef.current || warmTimerRef.current) return;
+    warmTimerRef.current = setTimeout(() => {
+      warmTimerRef.current = null;
+      warmDestination();
+    }, 120);
+  }, [warmDestination]);
+  const cancelScheduledWarm = useCallback(() => {
+    if (warmTimerRef.current) {
+      clearTimeout(warmTimerRef.current);
+      warmTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => cancelScheduledWarm, [cancelScheduledWarm]);
 
   const [imgSrc, setImgSrc] = useState<string | null>(initialPosterUrl);
   const [hasError, setHasError] = useState(false);
@@ -116,6 +156,11 @@ export function GridMediaCard({ item, index = 0, action, className }: GridMediaC
         <Link
           href={link}
           prefetch={false}
+          onMouseEnter={scheduleWarm}
+          onMouseLeave={cancelScheduledWarm}
+          onFocus={warmDestination}
+          onPointerDown={warmDestination}
+          onTouchStart={warmDestination}
           className="absolute inset-0 block focus:outline-none z-10"
         >
           {imgSrc && !hasError ? (
@@ -186,7 +231,14 @@ export function GridMediaCard({ item, index = 0, action, className }: GridMediaC
 
       {/* Details (always visible below) */}
       <div className="flex flex-col gap-1 px-1">
-        <Link href={link} prefetch={false} className="focus:outline-none">
+        <Link
+          href={link}
+          prefetch={false}
+          onFocus={warmDestination}
+          onMouseEnter={scheduleWarm}
+          onMouseLeave={cancelScheduledWarm}
+          className="focus:outline-none"
+        >
           <h3 className="text-foreground font-bold text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors">
             {title}
           </h3>

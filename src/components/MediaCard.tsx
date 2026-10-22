@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Star, Play, Film, Tv } from "lucide-react";
-import { isTmdbAnime } from "@/lib/utils";
+import { isTmdbAnime, fetchJson } from "@/lib/utils";
+import { cacheMediaPreview } from "@/lib/media-preview-cache";
 
 interface MediaItem {
   id: number;
@@ -33,6 +35,7 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
 };
 
 export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = false }: MediaCardProps) {
+  const router = useRouter();
   const isPerson = item.media_type === "person";
   const isManga = item.media_type === "manga" || item.media_type === "manhwa";
   const rawTargetUrl = (item as any).targetUrl || (item as any).target_url;
@@ -71,6 +74,48 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
   };
 
   const initialPosterUrl = getTmdbImageUrl(item.profile_path || item.poster_path);
+
+  // Warm the destination as soon as the visitor shows intent. Detail pages are
+  // server-rendered and dynamic, so without this the first click has to wait
+  // for a cold RSC + TMDB round-trip. Prefetching on hover/focus/touch gives
+  // that work a head start while the card data lets loading.tsx paint instantly.
+  const warmedRef = useRef(false);
+  const warmDestination = useCallback(() => {
+    if (warmedRef.current || !link?.startsWith("/")) return;
+    warmedRef.current = true;
+
+    const previewType = link.startsWith("/tv/")
+      ? "tv"
+      : link.startsWith("/movie/")
+      ? "movie"
+      : null;
+
+    if (previewType) {
+      cacheMediaPreview(item, previewType);
+      // Warm the detail API too. The page and the API share tmdbFetch's cache,
+      // so the click usually lands on data that is already in flight/cached.
+      void fetchJson(`/api/tmdb/${previewType}/${item.id}`).catch(() => {});
+    }
+
+    router.prefetch(link);
+  }, [link, item, router]);
+
+  // Avoid firing a detail request for every card the pointer sweeps across.
+  const warmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleWarm = useCallback(() => {
+    if (warmedRef.current || warmTimerRef.current) return;
+    warmTimerRef.current = setTimeout(() => {
+      warmTimerRef.current = null;
+      warmDestination();
+    }, 120);
+  }, [warmDestination]);
+  const cancelScheduledWarm = useCallback(() => {
+    if (warmTimerRef.current) {
+      clearTimeout(warmTimerRef.current);
+      warmTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => cancelScheduledWarm, [cancelScheduledWarm]);
 
   const [imgSrc, setImgSrc] = useState<string | null>(initialPosterUrl);
   const [hasError, setHasError] = useState(false);
@@ -120,6 +165,11 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       <Link
         href={link}
         prefetch={false}
+        onMouseEnter={scheduleWarm}
+        onMouseLeave={cancelScheduledWarm}
+        onFocus={warmDestination}
+        onPointerDown={warmDestination}
+        onTouchStart={warmDestination}
         className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none hover:will-change-transform ${
           rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"
         }`}
