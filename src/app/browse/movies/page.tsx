@@ -7,7 +7,6 @@ import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
 import { cn, fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
-import { usePageContentReady } from "@/lib/pageLoad";
 import { getBrowseStartPage } from "@/lib/browse-prefetch";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
@@ -34,8 +33,6 @@ export default function BrowseMoviesPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [initialContentReady, setInitialContentReady] = useState(false);
-  usePageContentReady(initialContentReady);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   // Resolve the randomised start page synchronously so the first request can
@@ -178,7 +175,6 @@ export default function BrowseMoviesPage() {
       } finally {
         setIsLoading(false);
         initialLoad.current = false;
-        setInitialContentReady(true);
       }
     };
 

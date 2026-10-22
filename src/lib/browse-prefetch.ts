@@ -66,6 +66,46 @@ export function prefetchBrowseRoute(href: string): void {
   }
 }
 
+type RoutePrefetch = (href: string) => void;
+
+let primaryRoutePrefetchScheduled = false;
+
+/**
+ * Warm the actual routes (RSC payload + page JS) for Movies and TV once per
+ * session.
+ *
+ * The desktop nav links only mount while the menu capsule is open, so Next's
+ * automatic <Link> prefetch never sees them — every first click used to wait
+ * for the route payload before the page could open. Prefetching on mount
+ * removes that wait and lets the browse pages paint immediately.
+ *
+ * Skipped on save-data / 2G connections, where the extra downloads would cost
+ * more than they save.
+ */
+export function prefetchPrimaryBrowseRoutes(prefetch: RoutePrefetch): void {
+  if (typeof window === "undefined" || primaryRoutePrefetchScheduled) return;
+
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }
+  ).connection;
+  if (connection?.saveData) return;
+  if (connection?.effectiveType && /(^|-)2g$/.test(connection.effectiveType)) {
+    return;
+  }
+
+  primaryRoutePrefetchScheduled = true;
+
+  const run = () => {
+    prefetch("/browse/movies");
+    prefetch("/browse/tv");
+  };
+
+  // Give the current page's own chunks a moment to settle first.
+  window.setTimeout(run, 400);
+}
+
 let primaryPrefetchScheduled = false;
 
 /**

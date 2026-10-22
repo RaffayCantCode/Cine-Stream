@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { 
   Home, 
   Film, 
@@ -27,7 +27,7 @@ import { ThemeButton } from "@/components/ThemeButton";
 import { useWatchlist } from "@/context/WatchlistContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getTheme } from "@/lib/themes";
-import { prefetchBrowseRoute, prefetchPrimaryBrowse } from "@/lib/browse-prefetch";
+import { prefetchBrowseRoute, prefetchPrimaryBrowse, prefetchPrimaryBrowseRoutes } from "@/lib/browse-prefetch";
 
 // The admin panel is a large, admin-only chunk. Loading it lazily keeps it out
 // of the bundle (and off the hydration path) for every regular visitor.
@@ -46,6 +46,7 @@ const navLinks = [
 
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session, status } = useSession();
   const watchlist = useWatchlist();
   const watchlistCount = watchlist?.items?.length || 0;
@@ -146,10 +147,13 @@ export const Sidebar = memo(function Sidebar() {
     setAccountOpen(false);
   }, [pathname]);
 
-  // Warm the primary Movies/TV destinations once per session.
+  // Warm the primary Movies/TV destinations once per session. Their nav links
+  // only exist while the menu is open, so Next cannot auto-prefetch the routes
+  // — warm both the data and the route payloads explicitly.
   useEffect(() => {
     prefetchPrimaryBrowse(pathname);
-  }, [pathname]);
+    prefetchPrimaryBrowseRoutes((href) => router.prefetch(href));
+  }, [pathname, router]);
 
   // Click outside to close capsules
   useEffect(() => {
@@ -218,9 +222,9 @@ export const Sidebar = memo(function Sidebar() {
                     <Link
                       key={href}
                       href={href}
-                      onMouseEnter={() => prefetchBrowseRoute(href)}
-                      onFocus={() => prefetchBrowseRoute(href)}
-                      onPointerDown={() => prefetchBrowseRoute(href)}
+                      onMouseEnter={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
+                      onFocus={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
+                      onPointerDown={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
                       style={isActive ? themeNavStyles.activeLinkStyle : undefined}
                       className={cn(
                         "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200",
@@ -260,6 +264,10 @@ export const Sidebar = memo(function Sidebar() {
             onClick={() => {
               setMenuOpen((prev) => !prev);
               setAccountOpen(false);
+              // The menu links are only mounted while the capsule is open;
+              // start warming them as soon as it opens (no-op if prefetched).
+              router.prefetch("/browse/movies");
+              router.prefetch("/browse/tv");
             }}
             style={menuOpen ? themeNavStyles.triggerActiveStyle : themeNavStyles.triggerIdleStyle}
             className={cn(
@@ -575,9 +583,9 @@ export const Sidebar = memo(function Sidebar() {
             <Link
               key={href}
               href={href}
-              onMouseEnter={() => prefetchBrowseRoute(href)}
-              onFocus={() => prefetchBrowseRoute(href)}
-              onPointerDown={() => prefetchBrowseRoute(href)}
+              onMouseEnter={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
+              onFocus={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
+              onPointerDown={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
               className={cn(
                 "relative flex-1 h-full flex flex-col items-center justify-center transition-all duration-200 select-none touch-manipulation cursor-pointer",
                 isActive ? "text-white" : "text-white/45 hover:text-white/80"

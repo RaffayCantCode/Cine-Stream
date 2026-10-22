@@ -1,48 +1,49 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { LoadingScreen } from "@/components/LoadingScreen";
-import {
-  PAGE_LOADING_EVENT,
-  PAGE_READY_EVENT,
-  declarePageLoading,
-  isPageContentLoading,
-} from "@/lib/pageLoad";
 
-/** Route-enter completion event dispatched by the app template. */
-const ROUTE_ENTER_COMPLETE = "sv:route-enter-complete";
-/** Minimum time the loader stays on screen so it reads as a real page load. */
-const MIN_HOLD_MS = 350;
-/** Fallback: hide this long after the route commits if the enter event never fires. */
-const ENTER_FALLBACK_MS = 1600;
-/** Fallback when a page announced async content but never reported ready. */
-const CONTENT_FALLBACK_MS = 8000;
-/** Hard cap so a stuck state can never leave the loader on screen. */
-const SAFETY_MS = 12000;
-
-interface NavTimers {
-  minHold?: number;
-  enterFallback?: number;
-  contentFallback?: number;
-  safety?: number;
-}
+/** Minimum time the loader stays fully opaque once a route has committed. */
+const DEFAULT_MIN_HOLD_MS = 350;
+/**
+ * Browse list routes render a complete shell (header, filters, skeleton grid)
+ * on their very first paint and fill the grid in place. Holding the branded
+ * overlay over them made a cold/slow TMDB request block the whole screen for
+ * seconds, so they get a much shorter hold.
+ */
+const BROWSE_MIN_HOLD_MS = 160;
+/** Detail routes already render their own loading shell — keep it brief. */
+const MEDIA_MIN_HOLD_MS = 200;
+/** Watch routes render the player immediately. */
+const WATCH_MIN_HOLD_MS = 0;
+/** Duration of the overlay fade-out. */
+const FADE_MS = 240;
 
 const normalizePath = (p: string) => p.replace(/\/+$/, "") || "/";
+
+/** List routes that paint their own full shell and load data in place. */
+const isBrowseRoute = (p: string) => p.startsWith("/browse/");
+
+const minHoldFor = (pathname: string): number => {
+  if (pathname.startsWith("/watch/")) return WATCH_MIN_HOLD_MS;
+  if (isBrowseRoute(pathname)) return BROWSE_MIN_HOLD_MS;
+  if (/^\/(movie|tv|anime|manga|person)\//.test(pathname)) return MEDIA_MIN_HOLD_MS;
+  return DEFAULT_MIN_HOLD_MS;
+};
 
 /**
  * Client-side navigation loader.
  *
- * The loader only appears the moment the new page actually shows up: while a
- * route is fetching, the current page stays fully visible and interactive
- * (no instant block on click). When the new route commits, the themed
- * `LoadingScreen` covers the swap in the same paint, holds until the incoming
- * page is fully painted, then fades out revealing it.
+ * While a route is fetching, the current page stays fully visible and
+ * interactive (no instant block on click). When the new route commits, the
+ * themed `LoadingScreen` covers the swap in the same paint, holds for a short
+ * route-specific beat, then fades out revealing the incoming page.
  *
- * Pages that load async content can opt in via `usePageContentReady`: while
- * they are loading, the loader keeps playing past the enter animation and
- * only ends once their content is ready (no more skeletons underneath).
+ * It deliberately does NOT wait for the incoming page's async data: every page
+ * already renders its own skeleton/loading shell, and gating navigation on
+ * data fetches was what made Movies/TV feel like they took seconds to open.
  *
  * It is pointer-events-none, so it never swallows clicks — a second click
  * always lands on a real link. Back/forward and param-only updates (e.g.
@@ -51,10 +52,16 @@ const normalizePath = (p: string) => p.replace(/\/+$/, "") || "/";
 export function NavigationLoader() {
   const pathname = usePathname();
   const [visible, setVisible] = useState(false);
+  /**
+   * Keeps the overlay mounted for the exit fade. This is handled manually
+   * instead of with AnimatePresence: the logo's infinite animations prevent
+   * AnimatePresence from ever completing the exit, which left a stuck,
+   * invisible overlay in the DOM that also stopped later navigations from
+   * showing the loader again.
+   */
+  const [mounted, setMounted] = useState(false);
   const pendingNavRef = useRef<string | null>(null);
-  const shownAtRef = useRef<number | null>(null);
-  const awaitingContentRef = useRef(false);
-  const timersRef = useRef<NavTimers>({});
+  const hideTimerRef = useRef<number | null>(null);
 
   /* Derived state read during render: if the committed route matches a
      user-initiated navigation, mount the loader in the SAME commit as the
@@ -66,38 +73,6 @@ export function NavigationLoader() {
   if (shouldShow !== visible) {
     setVisible(shouldShow);
   }
-
-  const clearTimers = useCallback(() => {
-    const timers = timersRef.current;
-    Object.values(timers).forEach((t) => window.clearTimeout(t));
-    timersRef.current = {};
-  }, []);
-
-  const hide = useCallback(() => {
-    clearTimers();
-    awaitingContentRef.current = false;
-    shownAtRef.current = null;
-    setVisible(false);
-  }, [clearTimers]);
-
-  /* End the loader, but never before the minimum hold time has elapsed (0ms on watch routes). */
-  const requestHide = useCallback(() => {
-    if (shownAtRef.current === null) return;
-    const isWatchRoute = pathname.startsWith("/watch/");
-    // Detail routes now render a real loading shell immediately, so there is
-    // no reason to keep the branded overlay up while it is already visible.
-    const isMediaDetailRoute = /^\/(movie|tv|anime)\//.test(pathname);
-    const minHold = isWatchRoute ? 0 : isMediaDetailRoute ? 200 : MIN_HOLD_MS;
-    const wait = Math.max(
-      0,
-      minHold - (Date.now() - shownAtRef.current)
-    );
-    if (wait === 0) {
-      hide();
-    } else {
-      timersRef.current.minHold = window.setTimeout(hide, wait);
-    }
-  }, [hide, pathname]);
 
   /* Link clicks: remember the target of every internal <a> leading to a
      different pathname, so the loader can reveal when it commits. */
@@ -135,21 +110,6 @@ export function NavigationLoader() {
       }
 
       pendingNavRef.current = targetPath;
-
-      // When navigating to media pages like /anime/ or /movie/, trigger the loader immediately for instant feedback
-      if (
-        targetPath.startsWith("/anime/") ||
-        targetPath.startsWith("/movie/") ||
-        targetPath.startsWith("/tv/") ||
-        targetPath.startsWith("/manga/")
-      ) {
-        declarePageLoading();
-        awaitingContentRef.current = true;
-        if (shownAtRef.current === null) {
-          shownAtRef.current = Date.now();
-        }
-        setVisible(true);
-      }
     };
 
     document.addEventListener("click", onClick, true);
@@ -157,7 +117,8 @@ export function NavigationLoader() {
   }, []);
 
   /* Navigation API: cover programmatic router.push/replace and history traversal,
-     so clicking an episode, going to watch page, and returning back triggers proper loader */
+     so clicking an episode, going to a watch page, and returning back triggers
+     the loader at commit. */
   useEffect(() => {
     if (typeof window === "undefined" || !("navigation" in window)) return;
 
@@ -181,19 +142,6 @@ export function NavigationLoader() {
         }
 
         pendingNavRef.current = targetPath;
-        if (
-          targetPath.startsWith("/anime/") ||
-          targetPath.startsWith("/movie/") ||
-          targetPath.startsWith("/tv/") ||
-          targetPath.startsWith("/manga/")
-        ) {
-          declarePageLoading();
-          awaitingContentRef.current = true;
-          if (shownAtRef.current === null) {
-            shownAtRef.current = Date.now();
-          }
-          setVisible(true);
-        }
       } catch {
         return;
       }
@@ -205,128 +153,67 @@ export function NavigationLoader() {
     return () => navigation?.removeEventListener("navigate", onNavigate);
   }, []);
 
-  /* Popstate (browser back/forward button): catch transitions back to anime or media pages */
+  /* Popstate (browser back/forward button): catch transitions back to media pages. */
   useEffect(() => {
     const onPopState = () => {
-      const currentPath = normalizePath(window.location.pathname);
-      pendingNavRef.current = currentPath;
-      if (
-        currentPath.startsWith("/anime/") ||
-        currentPath.startsWith("/movie/") ||
-        currentPath.startsWith("/tv/") ||
-        currentPath.startsWith("/manga/")
-      ) {
-        declarePageLoading();
-        awaitingContentRef.current = true;
-        if (shownAtRef.current === null) {
-          shownAtRef.current = Date.now();
-        }
-        setVisible(true);
-      }
+      pendingNavRef.current = normalizePath(window.location.pathname);
     };
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  /* End signals from the page:
-     - route enter complete -> end unless the page is still loading content
-     - page content loading  -> wait for the page's own content, not just the shell
-     - page content ready    -> content is on screen, end the loader */
-  useEffect(() => {
-    const onEnterComplete = () => {
-      if (!awaitingContentRef.current && !isPageContentLoading()) {
-        requestHide();
-      }
-    };
-    const onContentLoading = () => {
-      awaitingContentRef.current = true;
-      if (shownAtRef.current === null) {
-        shownAtRef.current = Date.now();
-      }
-      setVisible(true);
-      if (timersRef.current.enterFallback) {
-        window.clearTimeout(timersRef.current.enterFallback);
-        timersRef.current.enterFallback = undefined;
-      }
-      if (timersRef.current.contentFallback) {
-        window.clearTimeout(timersRef.current.contentFallback);
-      }
-      timersRef.current.contentFallback = window.setTimeout(
-        hide,
-        CONTENT_FALLBACK_MS
-      );
-    };
-    const onContentReady = () => {
-      awaitingContentRef.current = false;
-      requestHide();
-    };
-
-    window.addEventListener(ROUTE_ENTER_COMPLETE, onEnterComplete);
-    window.addEventListener(PAGE_LOADING_EVENT, onContentLoading);
-    window.addEventListener(PAGE_READY_EVENT, onContentReady);
-    return () => {
-      window.removeEventListener(ROUTE_ENTER_COMPLETE, onEnterComplete);
-      window.removeEventListener(PAGE_LOADING_EVENT, onContentLoading);
-      window.removeEventListener(PAGE_READY_EVENT, onContentReady);
-    };
-  }, [requestHide, hide]);
-
-  /* Consume the pending mark and arm the fallback timers for this route. */
+  /* The route has committed: consume the pending mark and keep the overlay up
+     for the route's short hold, then reveal the incoming page (which has
+     already painted its own shell/skeleton). */
   useEffect(() => {
     pendingNavRef.current = null;
     if (!visible) return;
-    if (shownAtRef.current === null) {
-      shownAtRef.current = Date.now();
+
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
     }
 
-    // Watch routes render viewport and video player immediately - dismiss loader with zero delay
-    if (pathname.startsWith("/watch/")) {
-      hide();
+    const hold = minHoldFor(pathname);
+    if (hold <= 0) {
+      setVisible(false);
       return;
     }
 
-    const isAwaiting = awaitingContentRef.current || isPageContentLoading();
-    awaitingContentRef.current = isAwaiting;
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      setVisible(false);
+    }, hold);
 
-    if (!isAwaiting) {
-      timersRef.current.enterFallback = window.setTimeout(hide, ENTER_FALLBACK_MS);
-    } else {
-      if (timersRef.current.enterFallback) {
-        window.clearTimeout(timersRef.current.enterFallback);
-        timersRef.current.enterFallback = undefined;
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
       }
-      if (!timersRef.current.contentFallback) {
-        timersRef.current.contentFallback = window.setTimeout(
-          hide,
-          CONTENT_FALLBACK_MS
-        );
-      }
-    }
-    if (!timersRef.current.safety) {
-      timersRef.current.safety = window.setTimeout(hide, SAFETY_MS);
-    }
-  }, [pathname, visible, hide]);
+    };
+  }, [pathname, visible]);
 
-  /* Cleanup all pending timers on unmount. */
-  useEffect(() => () => clearTimers(), [clearTimers]);
+  /* Hold the overlay for the duration of its exit fade, then unmount it. */
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setMounted(false), FADE_MS + 20);
+    return () => window.clearTimeout(timer);
+  }, [visible]);
+
+  if (!visible && !mounted) return null;
 
   return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          key="navigation-loader"
-          className="fixed inset-0 z-[999999] pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.24, ease: "easeInOut" } }}
-          transition={{
-            opacity: { duration: 0.18, ease: "easeOut" },
-          }}
-        >
-          <LoadingScreen />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <motion.div
+      className="fixed inset-0 z-[999999] pointer-events-none"
+      initial={false}
+      animate={{ opacity: visible ? 1 : 0 }}
+      transition={{ duration: FADE_MS / 1000, ease: "easeInOut" }}
+    >
+      <LoadingScreen />
+    </motion.div>
   );
 }

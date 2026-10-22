@@ -7,7 +7,6 @@ import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
 import { cn, fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime, filterExcludeNews } from "@/lib/utils";
-import { usePageContentReady } from "@/lib/pageLoad";
 import { getBrowseStartPage } from "@/lib/browse-prefetch";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
@@ -34,8 +33,6 @@ export default function BrowseTvPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [shows, setShows] = useState<TvShow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [initialContentReady, setInitialContentReady] = useState(false);
-  usePageContentReady(initialContentReady);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   // Resolve the randomised start page synchronously so the first request can
@@ -177,7 +174,6 @@ export default function BrowseTvPage() {
       } finally {
         setIsLoading(false);
         initialLoad.current = false;
-        setInitialContentReady(true);
       }
     };
 
