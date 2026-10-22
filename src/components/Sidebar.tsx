@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { 
   Home, 
@@ -24,9 +25,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ThemeButton } from "@/components/ThemeButton";
 import { useWatchlist } from "@/context/WatchlistContext";
-import { AdminPanelModal } from "@/components/admin/AdminPanelModal";
 import { useTheme } from "@/context/ThemeContext";
 import { getTheme } from "@/lib/themes";
+import { prefetchBrowseRoute, prefetchPrimaryBrowse } from "@/lib/browse-prefetch";
+
+// The admin panel is a large, admin-only chunk. Loading it lazily keeps it out
+// of the bundle (and off the hydration path) for every regular visitor.
+const AdminPanelModal = dynamic(
+  () => import("@/components/admin/AdminPanelModal").then((m) => m.AdminPanelModal),
+  { ssr: false }
+);
 
 const navLinks = [
   { href: "/", label: "Home", icon: Home },
@@ -138,6 +146,11 @@ export const Sidebar = memo(function Sidebar() {
     setAccountOpen(false);
   }, [pathname]);
 
+  // Warm the primary Movies/TV destinations once per session.
+  useEffect(() => {
+    prefetchPrimaryBrowse(pathname);
+  }, [pathname]);
+
   // Click outside to close capsules
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -205,6 +218,9 @@ export const Sidebar = memo(function Sidebar() {
                     <Link
                       key={href}
                       href={href}
+                      onMouseEnter={() => prefetchBrowseRoute(href)}
+                      onFocus={() => prefetchBrowseRoute(href)}
+                      onPointerDown={() => prefetchBrowseRoute(href)}
                       style={isActive ? themeNavStyles.activeLinkStyle : undefined}
                       className={cn(
                         "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200",
@@ -559,6 +575,9 @@ export const Sidebar = memo(function Sidebar() {
             <Link
               key={href}
               href={href}
+              onMouseEnter={() => prefetchBrowseRoute(href)}
+              onFocus={() => prefetchBrowseRoute(href)}
+              onPointerDown={() => prefetchBrowseRoute(href)}
               className={cn(
                 "relative flex-1 h-full flex flex-col items-center justify-center transition-all duration-200 select-none touch-manipulation cursor-pointer",
                 isActive ? "text-white" : "text-white/45 hover:text-white/80"

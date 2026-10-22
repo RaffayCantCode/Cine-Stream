@@ -60,6 +60,32 @@ const inFlightTmdb = new Map<string, Promise<unknown>>();
 const tmdbMemoryCache = new Map<string, { data: unknown; timestamp: number }>();
 const TMDB_MEM_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
+/**
+ * Cheap path check for endpoints that return a paginated `results` array.
+ * Only those need the admin hidden-overrides lookup, so we avoid an extra DB
+ * query for plain detail requests.
+ */
+function likelyReturnsResults(path: string): boolean {
+  return (
+    path.includes("/discover/") ||
+    path.includes("/search/") ||
+    path.includes("/trending/") ||
+    path.includes("/recommendations") ||
+    path.includes("/similar") ||
+    path.includes("/popular") ||
+    path.includes("/top_rated") ||
+    path.includes("/now_playing") ||
+    path.includes("/upcoming") ||
+    path.includes("/airing_today") ||
+    path.includes("/on_the_air") ||
+    path.startsWith("/collection/") ||
+    path.startsWith("/person/") ||
+    path.startsWith("/keyword/") ||
+    path.startsWith("/company/") ||
+    path.startsWith("/network/")
+  );
+}
+
 export async function tmdbFetch(
   path: string,
   params?: Record<string, string>,
@@ -118,26 +144,88 @@ export async function tmdbFetch(
         : { next: { revalidate } }),
     };
 
-    const fetchPromise = (async () => {
-      const res = await fetch(fullUrl, { ...fetchOptions, signal: AbortSignal.timeout(8000) });
+    // The in-memory map above only lives for one isolate. Cloudflare's Cache
+    // API is shared between isolates/requests, so a cold instance can reuse a
+    // response another instance already fetched. Guarded so Node/local dev
+    // (where `caches.default` does not exist) simply skips this layer.
+    const edgeCaches = (globalThis as unknown as {
+      caches?: { default?: Cache };
+    }).caches;
+    const edgeCache =
+      !options?.noCache && edgeCaches?.default ? edgeCaches.default : null;
+    const edgeCacheKey = edgeCache
+      ? new Request(fullUrl, { method: "GET" })
+      : null;
 
-      if (!res.ok) {
-        console.warn(`[TMDB] fetch failed (${res.status}): ${fullUrl}`);
-        return null;
+    // Start the admin hidden-override lookup together with the TMDB request.
+    // These used to run sequentially, so every cold list request paid the DB
+    // round-trip *after* the network call had already finished.
+    const overridesPromise =
+      !options?.noCache && likelyReturnsResults(path)
+        ? import("@/lib/media-overrides")
+            .then(async (mod) => ({
+              hiddenSet: await mod.getHiddenMediaSet(),
+              isHidden: mod.isMediaItemHidden,
+            }))
+            .catch(() => null)
+        : null;
+
+    const fetchPromise = (async () => {
+      let data: unknown = null;
+
+      if (edgeCache && edgeCacheKey) {
+        try {
+          const hit = await edgeCache.match(edgeCacheKey);
+          if (hit) {
+            data = await hit.json();
+          }
+        } catch {}
       }
 
-      const data = await res.json();
+      if (data === null) {
+        const res = await fetch(fullUrl, {
+          ...fetchOptions,
+          signal: AbortSignal.timeout(8000),
+        });
+
+        if (!res.ok) {
+          console.warn(`[TMDB] fetch failed (${res.status}): ${fullUrl}`);
+          return null;
+        }
+
+        data = await res.json();
+
+        if (edgeCache && edgeCacheKey && data) {
+          try {
+            await edgeCache.put(
+              edgeCacheKey,
+              new Response(JSON.stringify(data), {
+                headers: {
+                  "Content-Type": "application/json",
+                  "Cache-Control": `public, max-age=${revalidate}`,
+                },
+              })
+            );
+          } catch {}
+        }
+      }
+
       const filtered: any = filterTmdbResponse(data, isSearch);
 
       // Filter out any Movie or TV show marked as "hidden" in admin overrides
-      if (filtered && typeof filtered === "object" && "results" in filtered && Array.isArray(filtered.results)) {
-        try {
-          const { getHiddenMediaSet, isMediaItemHidden } = await import("@/lib/media-overrides");
-          const hiddenSet = await getHiddenMediaSet();
-          if (hiddenSet.size > 0) {
-            filtered.results = filtered.results.filter((item: any) => !isMediaItemHidden(item, hiddenSet));
-          }
-        } catch {}
+      if (
+        filtered &&
+        typeof filtered === "object" &&
+        "results" in filtered &&
+        Array.isArray(filtered.results) &&
+        overridesPromise
+      ) {
+        const overrides = await overridesPromise;
+        if (overrides && overrides.hiddenSet.size > 0) {
+          filtered.results = filtered.results.filter(
+            (item: any) => !overrides.isHidden(item, overrides.hiddenSet)
+          );
+        }
       }
 
       if (filtered && !options?.noCache) {

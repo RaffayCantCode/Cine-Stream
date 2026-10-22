@@ -219,7 +219,9 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     };
   }, [emblaApi, filteredItems.length]);
 
-  // Auto-upgrade legacy items that didn't have backdropPath stored
+  // Auto-upgrade legacy items that didn't have backdropPath stored.
+  // Deferred until the browser is idle so these optional enrichment requests
+  // never compete with the page's primary content/images on first paint.
   useEffect(() => {
     if (!rawItems || rawItems.length === 0) return;
     const missingBackdrop = rawItems.filter(
@@ -228,43 +230,61 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     if (missingBackdrop.length === 0) return;
 
     let isMounted = true;
-    Promise.all(
-      missingBackdrop.map(async (item) => {
-        try {
-          const res = await fetch(`/api/tmdb/${item.mediaType}/${item.mediaId}`);
-          if (!res.ok) return null;
-          const json = await res.json();
-          if (json?.backdrop_path) {
-            return {
-              mediaId: item.mediaId,
-              mediaType: item.mediaType,
-              backdropPath: json.backdrop_path as string,
-            };
-          }
-        } catch {}
-        return null;
-      })
-    ).then((updates) => {
+    const controller = new AbortController();
+
+    const run = () => {
       if (!isMounted) return;
-      const validUpdates = updates.filter(Boolean);
-      if (validUpdates.length > 0) {
-        setCachedItems((prev) => {
-          const next = prev.map((it) => {
-            const up = validUpdates.find(
-              (u) => u?.mediaId === it.mediaId && u?.mediaType === it.mediaType
-            );
-            return up ? { ...it, backdropPath: up.backdropPath } : it;
-          });
+      Promise.all(
+        missingBackdrop.slice(0, 6).map(async (item) => {
           try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ items: next, cachedAt: Date.now() }));
+            const res = await fetch(`/api/tmdb/${item.mediaType}/${item.mediaId}`, {
+              signal: controller.signal,
+            });
+            if (!res.ok) return null;
+            const json = await res.json();
+            if (json?.backdrop_path) {
+              return {
+                mediaId: item.mediaId,
+                mediaType: item.mediaType,
+                backdropPath: json.backdrop_path as string,
+              };
+            }
           } catch {}
-          return next;
-        });
-      }
-    });
+          return null;
+        })
+      ).then((updates) => {
+        if (!isMounted) return;
+        const validUpdates = updates.filter(Boolean);
+        if (validUpdates.length > 0) {
+          setCachedItems((prev) => {
+            const next = prev.map((it) => {
+              const up = validUpdates.find(
+                (u) => u?.mediaId === it.mediaId && u?.mediaType === it.mediaType
+              );
+              return up ? { ...it, backdropPath: up.backdropPath } : it;
+            });
+            try {
+              localStorage.setItem(CACHE_KEY, JSON.stringify({ items: next, cachedAt: Date.now() }));
+            } catch {}
+            return next;
+          });
+        }
+      });
+    };
+
+    const idleId =
+      typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback(run, { timeout: 4000 })
+        : window.setTimeout(run, 1500);
 
     return () => {
       isMounted = false;
+      controller.abort();
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
     };
   }, [rawItems?.length]);
 

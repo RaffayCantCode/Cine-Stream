@@ -149,16 +149,22 @@ async function safeOverride(
  * the extra browser -> API round-trip on first paint and on client navigation.
  */
 export async function fetchMovieDetails(id: string): Promise<TmdbDetailsResult> {
-  const override = await safeOverride("movie", id);
-  if (override?.isHidden || override?.status === "hidden") {
-    return { data: null, hidden: true };
-  }
+  const overridePromise = safeOverride("movie", id);
 
   try {
-    const data = await tmdbFetch(`/movie/${id}`, {
-      append_to_response: BASE_APPEND,
-      include_image_language: IMAGE_LANGUAGES,
-    });
+    // The override lookup (DB) and TMDB request are independent — run them in
+    // parallel so the page does not pay both latencies back to back.
+    const [override, data] = await Promise.all([
+      overridePromise,
+      tmdbFetch(`/movie/${id}`, {
+        append_to_response: BASE_APPEND,
+        include_image_language: IMAGE_LANGUAGES,
+      }),
+    ]);
+
+    if (override?.isHidden || override?.status === "hidden") {
+      return { data: null, hidden: true };
+    }
 
     if (!data || typeof data !== "object" || !(data as any).id) {
       if (override) {
@@ -175,7 +181,10 @@ export async function fetchMovieDetails(id: string): Promise<TmdbDetailsResult> 
 
     return { data: applyMediaOverride(result, override), hidden: false };
   } catch (error) {
-    const fallbackOverride = await safeOverride("movie", id);
+    const fallbackOverride = await overridePromise;
+    if (fallbackOverride?.isHidden || fallbackOverride?.status === "hidden") {
+      return { data: null, hidden: true };
+    }
     if (fallbackOverride) {
       return {
         data: applyMediaOverride(null, fallbackOverride),
@@ -195,17 +204,24 @@ export async function fetchMovieDetails(id: string): Promise<TmdbDetailsResult> 
  * on-demand season request.
  */
 export async function fetchTvDetails(id: string): Promise<TmdbDetailsResult> {
-  const override = await safeOverride("tv", id);
-  if (override?.isHidden || override?.status === "hidden") {
-    return { data: null, hidden: true };
-  }
+  const overridePromise = safeOverride("tv", id);
 
   try {
     const startedAt = Date.now();
-    let data = await tmdbFetch(`/tv/${id}`, {
-      append_to_response: `${BASE_APPEND},season/1,season/1/videos`,
-      include_image_language: IMAGE_LANGUAGES,
-    });
+    // Run the override lookup and the (large) TMDB request concurrently.
+    const [override, initialData] = await Promise.all([
+      overridePromise,
+      tmdbFetch(`/tv/${id}`, {
+        append_to_response: `${BASE_APPEND},season/1,season/1/videos`,
+        include_image_language: IMAGE_LANGUAGES,
+      }),
+    ]);
+
+    if (override?.isHidden || override?.status === "hidden") {
+      return { data: null, hidden: true };
+    }
+
+    let data = initialData;
 
     // Some very old / unusual entries do not have a season 1. Retry without the
     // season append so the show itself still renders. Only retry fast failures
@@ -273,7 +289,10 @@ export async function fetchTvDetails(id: string): Promise<TmdbDetailsResult> {
 
     return { data: finalResult, hidden: false };
   } catch (error) {
-    const fallbackOverride = await safeOverride("tv", id);
+    const fallbackOverride = await overridePromise;
+    if (fallbackOverride?.isHidden || fallbackOverride?.status === "hidden") {
+      return { data: null, hidden: true };
+    }
     if (fallbackOverride) {
       return {
         data: applyMediaOverride(null, fallbackOverride),

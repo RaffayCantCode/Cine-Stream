@@ -8,6 +8,7 @@ import { MediaCard } from "@/components/MediaCard";
 import { Search, Shuffle, Loader2 } from "lucide-react";
 import { cn, fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
 import { usePageContentReady } from "@/lib/pageLoad";
+import { getBrowseStartPage } from "@/lib/browse-prefetch";
 const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
 
 interface Genre {
@@ -37,20 +38,17 @@ export default function BrowseMoviesPage() {
   usePageContentReady(initialContentReady);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
-  const [page, setPage] = useState<number | null>(null);
+  // Resolve the randomised start page synchronously so the first request can
+  // start on mount instead of waiting for an extra effect/render pass. The
+  // value is kept for the tab session, which makes repeat visits cache hits.
+  const [page, setPage] = useState<number>(() => getBrowseStartPage("movies"));
   const [loadKey, setLoadKey] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const initialLoad = useRef(true);
-  const nextBatchRef = useRef<number>(2);
+  const nextBatchRef = useRef<number>(page + 1);
 
-  // Set random starting page client-side on mount
-  useEffect(() => {
-    const randomPage = Math.floor(Math.random() * 100) + 1;
-    setPage(randomPage);
-    nextBatchRef.current = randomPage + 1;
-  }, []);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const isLoadingRef = useRef(false);
   const hasMoreRef = useRef(true);
@@ -109,7 +107,6 @@ export default function BrowseMoviesPage() {
   }, [selectedGenre, sortBy, debouncedSearch]);
 
   useEffect(() => {
-    if (page === null) return;
     const fetchMovies = async () => {
       setIsLoading(true);
       setError(null);
@@ -149,16 +146,9 @@ export default function BrowseMoviesPage() {
           return filterExcludeAnime(filterReleasedSafeContent(raw, !!debouncedSearch.trim()));
         });
 
-        // Background preloading for the next batch's images (w780 high quality)
-        if (typeof window !== "undefined") {
-          allItems.slice(0, 15).forEach((item) => {
-            if (item.poster_path) {
-              const img = new Image();
-              const p = item.poster_path.startsWith("/") ? item.poster_path : `/${item.poster_path}`;
-              img.src = `https://image.tmdb.org/t/p/w780${p}`;
-            }
-          });
-        }
+        // No eager w780 poster preloading here: the visible cards already
+        // request w500, so preloading a larger copy of the same images doubled
+        // bandwidth and competed with the actual grid.
 
         setMovies((prev) => {
           const combined = initialLoad.current ? shuffleArray(allItems) : [...prev, ...allItems];
