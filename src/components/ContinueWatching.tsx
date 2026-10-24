@@ -20,12 +20,20 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
   title: string;
   eager?: boolean;
 }) {
+  // Portrait cards: prefer the poster artwork, fall back to the backdrop when
+  // a poster is not available (e.g. some legacy history entries).
   const getInitialSrc = useCallback(() => {
-    const rawPath = backdropPath || posterPath;
-    if (!rawPath) return null;
-    if (rawPath.startsWith("http")) return rawPath;
-    const cleanPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-    return `https://image.tmdb.org/t/p/w780${cleanPath}`;
+    if (posterPath) {
+      if (posterPath.startsWith("http")) return posterPath;
+      const cleanPath = posterPath.startsWith("/") ? posterPath : `/${posterPath}`;
+      return `https://image.tmdb.org/t/p/w500${cleanPath}`;
+    }
+    if (backdropPath) {
+      if (backdropPath.startsWith("http")) return backdropPath;
+      const cleanPath = backdropPath.startsWith("/") ? backdropPath : `/${backdropPath}`;
+      return `https://image.tmdb.org/t/p/w780${cleanPath}`;
+    }
+    return null;
   }, [backdropPath, posterPath]);
 
   const [imgSrc, setImgSrc] = useState<string | null>(getInitialSrc);
@@ -48,8 +56,11 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
   useEffect(() => {
     if (isLoaded || hasError || !imgSrc) return;
     const timer = setTimeout(() => {
-      if (!isLoaded && !hasError && imgSrc.includes("/w780/")) {
-        setImgSrc((prev) => (prev ? prev.replace("/w780/", "/w300/") : null));
+      if (isLoaded || hasError) return;
+      if (imgSrc.includes("/w780/")) {
+        setImgSrc((prev) => (prev ? prev.replace("/w780/", "/w500/") : null));
+      } else if (imgSrc.includes("/w500/")) {
+        setImgSrc((prev) => (prev ? prev.replace("/w500/", "/w342/") : null));
       }
     }, 5000);
     return () => clearTimeout(timer);
@@ -58,11 +69,19 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
   const handleImageError = () => {
     if (imgSrc && imgSrc.includes("/w780/")) {
       // Fallback to smaller TMDB size
-      setImgSrc(imgSrc.replace("/w780/", "/w300/"));
-    } else if (backdropPath && posterPath && imgSrc && !imgSrc.includes(posterPath)) {
-      // If backdrop failed, try fallback to posterPath
-      const posterClean = posterPath.startsWith("/") ? posterPath : `/${posterPath}`;
-      setImgSrc(posterPath.startsWith("http") ? posterPath : `https://image.tmdb.org/t/p/w500${posterClean}`);
+      setImgSrc(imgSrc.replace("/w780/", "/w500/"));
+    } else if (imgSrc && imgSrc.includes("/w500/")) {
+      setImgSrc(imgSrc.replace("/w500/", "/w342/"));
+    } else if (imgSrc && imgSrc.includes("/w342/")) {
+      setImgSrc(imgSrc.replace("/w342/", "/w185/"));
+    } else if (backdropPath && imgSrc && posterPath && !imgSrc.includes(backdropPath)) {
+      // If the poster failed entirely, fall back to the backdrop
+      const backdropClean = backdropPath.startsWith("/") ? backdropPath : `/${backdropPath}`;
+      setImgSrc(
+        backdropPath.startsWith("http")
+          ? backdropPath
+          : `https://image.tmdb.org/t/p/w780${backdropClean}`
+      );
     } else {
       setHasError(true);
     }
@@ -400,10 +419,10 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
               <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 onClick={() => handlePlay(item)}
-                className="flex-[0_0_auto] w-[230px] xs:w-[250px] sm:w-[275px] md:w-[305px] lg:w-[335px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.02] first:origin-left hover:z-10"
+                className="flex-[0_0_auto] w-[142px] xs:w-[152px] sm:w-[168px] md:w-[188px] lg:w-[204px] xl:w-[216px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.02] first:origin-left hover:z-10"
               >
-                {/* 16:9 Landscape Artwork Card */}
-                <div className="aspect-video w-full rounded-xl sm:rounded-2xl overflow-hidden bg-card/80 ring-1 ring-white/10 relative shadow-[0_6px_20px_-4px_rgba(0,0,0,0.5)] transition-all duration-300 group-hover:ring-white/25 group-hover:shadow-[0_16px_32px_-6px_rgba(0,0,0,0.7)]">
+                {/* 2:3 Portrait Poster Card */}
+                <div className="aspect-[2/3] w-full rounded-xl sm:rounded-2xl overflow-hidden bg-card/80 ring-1 ring-white/10 relative shadow-[0_6px_20px_-4px_rgba(0,0,0,0.5)] transition-all duration-300 group-hover:ring-white/25 group-hover:shadow-[0_16px_32px_-6px_rgba(0,0,0,0.7)]">
                   <ContinueWatchingPoster
                     backdropPath={item.backdropPath}
                     posterPath={item.posterPath}
@@ -413,11 +432,11 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                   />
 
                   {/* Vignette Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
 
                   {/* Media Type Badge */}
                   <div
-                    className={`absolute top-2.5 left-2.5 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md tracking-wider uppercase shadow-md backdrop-blur-md border border-white/10 pointer-events-none transition-opacity duration-300 group-hover:opacity-40 ${
+                    className={`absolute top-2 left-2 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded tracking-wider uppercase shadow-md backdrop-blur-md border border-white/10 pointer-events-none transition-opacity duration-300 group-hover:opacity-40 ${
                       item.mediaType === "movie"
                         ? "bg-rose-600/85 border-rose-500/30"
                         : item.mediaType === "tv"
@@ -432,15 +451,15 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                   <button
                     type="button"
                     onClick={(e) => handleRemove(item.mediaId, item.mediaType, e)}
-                    className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/70 hover:bg-rose-600 text-white/80 hover:text-white flex items-center justify-center transition-all duration-200 hover:scale-110 z-30 opacity-0 group-hover:opacity-100 shadow-lg border border-white/15 cursor-pointer"
+                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-rose-600 text-white/80 hover:text-white flex items-center justify-center transition-all duration-200 hover:scale-110 z-30 opacity-0 group-hover:opacity-100 shadow-lg border border-white/15 cursor-pointer"
                     title="Remove from continue watching"
                     aria-label="Remove"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3 h-3" />
                   </button>
 
                   {/* Hover Overlay with Resume & Details Actions */}
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-2.5 p-3 z-20">
+                  <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-2 p-2.5 z-20">
                     {/* Resume Button */}
                     <button
                       type="button"
@@ -461,10 +480,10 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                         e.stopPropagation();
                         handlePlay(item);
                       }}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl bg-white hover:bg-white/90 text-black text-xs font-black shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-white hover:bg-white/90 text-black text-[11px] font-black shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
                       title="Resume playback"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                      <Play className="w-3 h-3 fill-current ml-0.5" />
                       <span>Resume</span>
                     </button>
 
@@ -472,23 +491,23 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                     <button
                       type="button"
                       onClick={(e) => handleOpenPage(item, e)}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/20 text-xs font-bold shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/20 text-[11px] font-bold shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
                       title="Open details page"
                     >
-                      <Info className="w-3.5 h-3.5 text-zinc-300" />
+                      <Info className="w-3 h-3 text-zinc-300" />
                       <span>Details</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Metadata underneath the card: Title and Episode Info, Strictly NO timestamp or time-left */}
-                <div className="mt-2.5 px-0.5 space-y-0.5">
-                  <h3 className="text-sm font-bold text-white tracking-tight line-clamp-1 group-hover:text-primary transition-colors">
+                <div className="mt-2 px-0.5 space-y-0.5">
+                  <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight line-clamp-2 leading-snug group-hover:text-primary transition-colors">
                     {item.title}
                   </h3>
 
                   {(item.mediaType === "tv" || item.mediaType === "anime") && (
-                    <p className="text-xs text-zinc-400 font-medium line-clamp-1 flex items-center gap-1.5">
+                    <p className="text-[11px] text-zinc-400 font-medium line-clamp-1 flex items-center gap-1.5">
                       {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 ? (
                         <span className="text-zinc-300 font-semibold">
                           S{item.season}:E{item.episode}
