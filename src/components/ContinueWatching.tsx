@@ -6,23 +6,26 @@ import { Play, X, Tv, Film, Info, ChevronLeft, ChevronRight } from "lucide-react
 import useSWR, { mutate } from "swr";
 import useEmblaCarousel from "embla-carousel-react";
 import { useEffect, useState, useRef, memo, useCallback } from "react";
+import { ANIME_API_VERSION } from "@/lib/anime-cache";
 
 const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
   posterPath,
   mediaType,
   title,
   eager,
+  onNeedsPoster,
 }: {
   posterPath: string | null;
   mediaType: "movie" | "tv" | "anime";
   title: string;
   eager?: boolean;
+  onNeedsPoster?: () => void;
 }) {
   // Portrait cards only ever use the poster artwork (never the wide banner),
   // so the artwork fits the 2:3 card exactly like the other cards on the site.
   const getInitialSrc = useCallback(() => {
     if (!posterPath) return null;
-    if (posterPath.startsWith("http")) return posterPath;
+    if (posterPath.startsWith("http") || posterPath.startsWith("data:")) return posterPath;
     const cleanPath = posterPath.startsWith("/") ? posterPath : `/${posterPath}`;
     return `https://image.tmdb.org/t/p/w500${cleanPath}`;
   }, [posterPath]);
@@ -31,11 +34,13 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  const requestedPosterRef = useRef(false);
 
   useEffect(() => {
     const nextSrc = getInitialSrc();
     setImgSrc(nextSrc);
     setHasError(false);
+    requestedPosterRef.current = false;
     if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
       setIsLoaded(true);
     } else {
@@ -55,6 +60,12 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
     return () => clearTimeout(timer);
   }, [imgSrc, isLoaded, hasError]);
 
+  const requestRealPoster = useCallback(() => {
+    if (requestedPosterRef.current) return;
+    requestedPosterRef.current = true;
+    onNeedsPoster?.();
+  }, [onNeedsPoster]);
+
   const handleImageError = () => {
     // Step down through smaller TMDB poster sizes before giving up.
     if (imgSrc && imgSrc.includes("/w500/")) {
@@ -63,6 +74,18 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
       setImgSrc(imgSrc.replace("/w342/", "/w185/"));
     } else {
       setHasError(true);
+      // Stored artwork is unusable — resolve the real poster instead.
+      requestRealPoster();
+    }
+  };
+
+  const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    setIsLoaded(true);
+    const img = event.currentTarget;
+    // Some legacy history rows stored a wide banner in the poster field.
+    // Detect it and swap in the proper portrait poster.
+    if (img.naturalWidth > 0 && img.naturalWidth > img.naturalHeight) {
+      requestRealPoster();
     }
   };
 
@@ -80,7 +103,7 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
           alt={title}
           loading={eager ? "eager" : "lazy"}
           decoding="async"
-          onLoad={() => setIsLoaded(true)}
+          onLoad={handleImageLoad}
           onError={handleImageError}
           className={`w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105 ${
             isLoaded ? "opacity-100" : "opacity-0"
@@ -169,6 +192,74 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
 
+  // Posters resolved from the same APIs the normal title cards use. These are
+  // used when a history row has no usable poster (missing, broken, or a banner).
+  const [posterOverrides, setPosterOverrides] = useState<Record<string, string>>({});
+  const posterRequestsRef = useRef<Set<string>>(new Set());
+
+  const resolvePoster = useCallback(async (item: WatchHistoryItem) => {
+    if (!item?.mediaId) return;
+    const key = `${item.mediaType}-${item.mediaId}`;
+    if (posterRequestsRef.current.has(key)) return;
+    posterRequestsRef.current.add(key);
+
+    try {
+      let poster: string | null = null;
+
+      if (item.mediaType === "anime") {
+        const res = await fetch(
+          `/api/anime/${encodeURIComponent(String(item.mediaId))}/meta?v=${ANIME_API_VERSION}`
+        );
+        if (res.ok) {
+          const json = await res.json();
+          const anime = json?.data?.anime;
+          poster =
+            anime?.poster ||
+            anime?.coverImage?.extraLarge ||
+            anime?.coverImage?.large ||
+            null;
+
+          // Fall back to the matching season's cover art when the show has none.
+          if (!poster && Array.isArray(anime?.seasons)) {
+            const season =
+              anime.seasons.find((s: any) => String(s?.id) === String(item.mediaId)) ||
+              anime.seasons.find((s: any) => Number(s?.seasonNumber ?? s?.number) === Number(item.season)) ||
+              anime.seasons[0];
+            poster = season?.coverImage || null;
+          }
+        }
+      } else {
+        const res = await fetch(`/api/tmdb/${item.mediaType}/${item.mediaId}`);
+        if (res.ok) {
+          const json = await res.json();
+          poster = json?.poster_path || null;
+        }
+      }
+
+      if (!poster) {
+        posterRequestsRef.current.delete(key);
+        return;
+      }
+
+      setPosterOverrides((prev) => ({ ...prev, [key]: poster as string }));
+
+      // Persist so the correct portrait poster is shown instantly next time.
+      setCachedItems((prev) => {
+        const next = prev.map((it) =>
+          it.mediaId === item.mediaId && it.mediaType === item.mediaType
+            ? { ...it, posterPath: poster as string }
+            : it
+        );
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ items: next, cachedAt: Date.now() }));
+        } catch {}
+        return next;
+      });
+    } catch {
+      posterRequestsRef.current.delete(key);
+    }
+  }, []);
+
   // Keep Continue Watching cache and UI updated in real-time across tabs / page navigations
   useEffect(() => {
     const handleSync = () => {
@@ -216,57 +307,21 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     };
   }, [emblaApi, filteredItems.length]);
 
-  // Auto-upgrade legacy items that didn't have a posterPath stored, so every
-  // continue watching card can render the same portrait poster artwork as the
-  // rest of the site. Deferred until the browser is idle so these optional
-  // enrichment requests never compete with the page's primary content/images.
+  // Auto-upgrade items whose stored artwork is missing, so every continue
+  // watching card renders the same portrait poster as the rest of the site.
+  // Deferred until the browser is idle so these optional enrichment requests
+  // never compete with the page's primary content/images.
   useEffect(() => {
     if (!rawItems || rawItems.length === 0) return;
-    const missingPoster = rawItems.filter(
-      (it) => !it.posterPath && it.mediaType !== "anime" && it.mediaId
-    );
+    const missingPoster = rawItems.filter((it) => !it.posterPath && it.mediaId);
     if (missingPoster.length === 0) return;
 
     let isMounted = true;
-    const controller = new AbortController();
 
     const run = () => {
       if (!isMounted) return;
-      Promise.all(
-        missingPoster.slice(0, 6).map(async (item) => {
-          try {
-            const res = await fetch(`/api/tmdb/${item.mediaType}/${item.mediaId}`, {
-              signal: controller.signal,
-            });
-            if (!res.ok) return null;
-            const json = await res.json();
-            if (json?.poster_path) {
-              return {
-                mediaId: item.mediaId,
-                mediaType: item.mediaType,
-                posterPath: json.poster_path as string,
-              };
-            }
-          } catch {}
-          return null;
-        })
-      ).then((updates) => {
-        if (!isMounted) return;
-        const validUpdates = updates.filter(Boolean);
-        if (validUpdates.length > 0) {
-          setCachedItems((prev) => {
-            const next = prev.map((it) => {
-              const up = validUpdates.find(
-                (u) => u?.mediaId === it.mediaId && u?.mediaType === it.mediaType
-              );
-              return up ? { ...it, posterPath: up.posterPath } : it;
-            });
-            try {
-              localStorage.setItem(CACHE_KEY, JSON.stringify({ items: next, cachedAt: Date.now() }));
-            } catch {}
-            return next;
-          });
-        }
+      missingPoster.slice(0, 8).forEach((item) => {
+        void resolvePoster(item);
       });
     };
 
@@ -277,14 +332,13 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
 
     return () => {
       isMounted = false;
-      controller.abort();
       if (typeof window.cancelIdleCallback === "function") {
         window.cancelIdleCallback(idleId);
       } else {
         window.clearTimeout(idleId);
       }
     };
-  }, [rawItems?.length]);
+  }, [rawItems?.length, resolvePoster]);
 
   // Continue Watching is strictly for logged-in accounts
   if (status !== "authenticated") {
@@ -394,7 +448,10 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
         {/* Embla Carousel Container */}
         <div className="overflow-hidden -mx-3 px-3 md:-mx-4 md:px-4 -mt-2 pt-2 pb-5 -mb-2" ref={emblaRef}>
           <div className="flex gap-3.5 sm:gap-4 md:gap-5">
-            {filteredItems.map((item: WatchHistoryItem, idx: number) => (
+            {filteredItems.map((item: WatchHistoryItem, idx: number) => {
+              const posterKey = `${item.mediaType}-${item.mediaId}`;
+              const posterSrc = posterOverrides[posterKey] ?? item.posterPath;
+              return (
               <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 onClick={() => handlePlay(item)}
@@ -403,10 +460,11 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                 {/* 2:3 Portrait Poster Card */}
                 <div className="aspect-[2/3] w-full rounded-xl sm:rounded-2xl overflow-hidden bg-card/80 ring-1 ring-white/10 relative shadow-[0_6px_20px_-4px_rgba(0,0,0,0.5)] transition-all duration-300 group-hover:ring-white/25 group-hover:shadow-[0_16px_32px_-6px_rgba(0,0,0,0.7)]">
                   <ContinueWatchingPoster
-                    posterPath={item.posterPath}
+                    posterPath={posterSrc}
                     mediaType={item.mediaType}
                     title={item.title}
                     eager={idx < 4}
+                    onNeedsPoster={() => resolvePoster(item)}
                   />
 
                   {/* Vignette Overlay */}
@@ -505,7 +563,8 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
