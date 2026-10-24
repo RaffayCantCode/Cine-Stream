@@ -8,33 +8,24 @@ import useEmblaCarousel from "embla-carousel-react";
 import { useEffect, useState, useRef, memo, useCallback } from "react";
 
 const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
-  backdropPath,
   posterPath,
   mediaType,
   title,
   eager,
 }: {
-  backdropPath?: string | null;
   posterPath: string | null;
   mediaType: "movie" | "tv" | "anime";
   title: string;
   eager?: boolean;
 }) {
-  // Portrait cards: prefer the poster artwork, fall back to the backdrop when
-  // a poster is not available (e.g. some legacy history entries).
+  // Portrait cards only ever use the poster artwork (never the wide banner),
+  // so the artwork fits the 2:3 card exactly like the other cards on the site.
   const getInitialSrc = useCallback(() => {
-    if (posterPath) {
-      if (posterPath.startsWith("http")) return posterPath;
-      const cleanPath = posterPath.startsWith("/") ? posterPath : `/${posterPath}`;
-      return `https://image.tmdb.org/t/p/w500${cleanPath}`;
-    }
-    if (backdropPath) {
-      if (backdropPath.startsWith("http")) return backdropPath;
-      const cleanPath = backdropPath.startsWith("/") ? backdropPath : `/${backdropPath}`;
-      return `https://image.tmdb.org/t/p/w780${cleanPath}`;
-    }
-    return null;
-  }, [backdropPath, posterPath]);
+    if (!posterPath) return null;
+    if (posterPath.startsWith("http")) return posterPath;
+    const cleanPath = posterPath.startsWith("/") ? posterPath : `/${posterPath}`;
+    return `https://image.tmdb.org/t/p/w500${cleanPath}`;
+  }, [posterPath]);
 
   const [imgSrc, setImgSrc] = useState<string | null>(getInitialSrc);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -57,9 +48,7 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
     if (isLoaded || hasError || !imgSrc) return;
     const timer = setTimeout(() => {
       if (isLoaded || hasError) return;
-      if (imgSrc.includes("/w780/")) {
-        setImgSrc((prev) => (prev ? prev.replace("/w780/", "/w500/") : null));
-      } else if (imgSrc.includes("/w500/")) {
+      if (imgSrc.includes("/w500/")) {
         setImgSrc((prev) => (prev ? prev.replace("/w500/", "/w342/") : null));
       }
     }, 5000);
@@ -67,21 +56,11 @@ const ContinueWatchingPoster = memo(function ContinueWatchingPoster({
   }, [imgSrc, isLoaded, hasError]);
 
   const handleImageError = () => {
-    if (imgSrc && imgSrc.includes("/w780/")) {
-      // Fallback to smaller TMDB size
-      setImgSrc(imgSrc.replace("/w780/", "/w500/"));
-    } else if (imgSrc && imgSrc.includes("/w500/")) {
+    // Step down through smaller TMDB poster sizes before giving up.
+    if (imgSrc && imgSrc.includes("/w500/")) {
       setImgSrc(imgSrc.replace("/w500/", "/w342/"));
     } else if (imgSrc && imgSrc.includes("/w342/")) {
       setImgSrc(imgSrc.replace("/w342/", "/w185/"));
-    } else if (backdropPath && imgSrc && posterPath && !imgSrc.includes(backdropPath)) {
-      // If the poster failed entirely, fall back to the backdrop
-      const backdropClean = backdropPath.startsWith("/") ? backdropPath : `/${backdropPath}`;
-      setImgSrc(
-        backdropPath.startsWith("http")
-          ? backdropPath
-          : `https://image.tmdb.org/t/p/w780${backdropClean}`
-      );
     } else {
       setHasError(true);
     }
@@ -127,7 +106,6 @@ interface WatchHistoryItem {
   mediaType: "movie" | "tv" | "anime";
   title: string;
   posterPath: string | null;
-  backdropPath?: string | null;
   season?: number;
   episode?: number;
   episodeName?: string;
@@ -238,15 +216,16 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     };
   }, [emblaApi, filteredItems.length]);
 
-  // Auto-upgrade legacy items that didn't have backdropPath stored.
-  // Deferred until the browser is idle so these optional enrichment requests
-  // never compete with the page's primary content/images on first paint.
+  // Auto-upgrade legacy items that didn't have a posterPath stored, so every
+  // continue watching card can render the same portrait poster artwork as the
+  // rest of the site. Deferred until the browser is idle so these optional
+  // enrichment requests never compete with the page's primary content/images.
   useEffect(() => {
     if (!rawItems || rawItems.length === 0) return;
-    const missingBackdrop = rawItems.filter(
-      (it) => !it.backdropPath && it.mediaType !== "anime" && it.mediaId
+    const missingPoster = rawItems.filter(
+      (it) => !it.posterPath && it.mediaType !== "anime" && it.mediaId
     );
-    if (missingBackdrop.length === 0) return;
+    if (missingPoster.length === 0) return;
 
     let isMounted = true;
     const controller = new AbortController();
@@ -254,18 +233,18 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
     const run = () => {
       if (!isMounted) return;
       Promise.all(
-        missingBackdrop.slice(0, 6).map(async (item) => {
+        missingPoster.slice(0, 6).map(async (item) => {
           try {
             const res = await fetch(`/api/tmdb/${item.mediaType}/${item.mediaId}`, {
               signal: controller.signal,
             });
             if (!res.ok) return null;
             const json = await res.json();
-            if (json?.backdrop_path) {
+            if (json?.poster_path) {
               return {
                 mediaId: item.mediaId,
                 mediaType: item.mediaType,
-                backdropPath: json.backdrop_path as string,
+                posterPath: json.poster_path as string,
               };
             }
           } catch {}
@@ -280,7 +259,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
               const up = validUpdates.find(
                 (u) => u?.mediaId === it.mediaId && u?.mediaType === it.mediaType
               );
-              return up ? { ...it, backdropPath: up.backdropPath } : it;
+              return up ? { ...it, posterPath: up.posterPath } : it;
             });
             try {
               localStorage.setItem(CACHE_KEY, JSON.stringify({ items: next, cachedAt: Date.now() }));
@@ -419,12 +398,11 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
               <div
                 key={`${item.mediaType}-${item.mediaId}-${item.season ?? 0}-${item.episode ?? 0}`}
                 onClick={() => handlePlay(item)}
-                className="flex-[0_0_auto] w-[142px] xs:w-[152px] sm:w-[168px] md:w-[188px] lg:w-[204px] xl:w-[216px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.02] first:origin-left hover:z-10"
+                className="flex-[0_0_auto] w-[140px] sm:w-[168px] md:w-[195px] lg:w-[215px] relative group cursor-pointer transition-transform duration-300 hover:scale-[1.02] first:origin-left hover:z-10"
               >
                 {/* 2:3 Portrait Poster Card */}
                 <div className="aspect-[2/3] w-full rounded-xl sm:rounded-2xl overflow-hidden bg-card/80 ring-1 ring-white/10 relative shadow-[0_6px_20px_-4px_rgba(0,0,0,0.5)] transition-all duration-300 group-hover:ring-white/25 group-hover:shadow-[0_16px_32px_-6px_rgba(0,0,0,0.7)]">
                   <ContinueWatchingPoster
-                    backdropPath={item.backdropPath}
                     posterPath={item.posterPath}
                     mediaType={item.mediaType}
                     title={item.title}
