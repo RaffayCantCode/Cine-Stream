@@ -3,12 +3,21 @@ import type { Metadata } from "next";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import AnimeClient from "./AnimeClient";
 
-async function fetchLightweightAnimeMeta(id: string): Promise<{
+type LightweightAnimeMeta = {
   title: string;
   overview: string;
   bannerUrl: string | null;
   posterUrl: string | null;
-} | null> {
+};
+
+// generateMetadata runs on every navigation. Cache the lightweight lookup in
+// the edge isolate so back/forward navigation and repeat visits don't block on
+// another AniList/Kitsu round-trip.
+const LIGHT_META_TTL = 15 * 60 * 1000;
+const LIGHT_META_FAIL_TTL = 60 * 1000;
+const lightMetaCache = new Map<string, { value: LightweightAnimeMeta | null; expires: number }>();
+
+async function fetchLightweightAnimeMeta(id: string): Promise<LightweightAnimeMeta | null> {
   const clean = String(id || "").trim();
   if (clean.startsWith("kitsu-")) {
     const kid = clean.replace("kitsu-", "");
@@ -55,6 +64,25 @@ async function fetchLightweightAnimeMeta(id: string): Promise<{
   return null;
 }
 
+async function fetchLightweightAnimeMetaCached(id: string): Promise<LightweightAnimeMeta | null> {
+  const key = String(id || "").trim().toLowerCase();
+  if (!key) return null;
+
+  const cached = lightMetaCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
+  const value = await fetchLightweightAnimeMeta(key).catch(() => null);
+  if (lightMetaCache.size > 300) {
+    const first = lightMetaCache.keys().next().value;
+    if (first !== undefined) lightMetaCache.delete(first);
+  }
+  lightMetaCache.set(key, {
+    value,
+    expires: Date.now() + (value ? LIGHT_META_TTL : LIGHT_META_FAIL_TTL),
+  });
+  return value;
+}
+
 export async function generateMetadata(
   props: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
@@ -62,7 +90,7 @@ export async function generateMetadata(
   const id = params?.id || "";
 
   try {
-    const meta = await fetchLightweightAnimeMeta(id).catch(() => null);
+    const meta = await fetchLightweightAnimeMetaCached(id);
     if (meta) {
       return constructMediaMetadata({
         title: meta.title,

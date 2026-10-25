@@ -484,15 +484,8 @@ export async function getAnimeDetailsViaKitsu(
     } catch {}
   }
 
-  // Step 2.5: If still no kitsuId and numId is numeric, test if numId is a direct Kitsu ID
-  if (!kitsuId && !isNaN(numId) && numId > 0) {
-    try {
-      const directKitsu = await kitsuFetchJson<any>(`${KITSU_BASE}/anime/${numId}?fields[anime]=canonicalTitle`);
-      if (directKitsu?.data?.id) {
-        kitsuId = String(directKitsu.data.id);
-      }
-    } catch {}
-  }
+  // Step 2.5 removed: a plain numeric ID in this codebase means AniList, never
+  // Kitsu. Probing it as a Kitsu ID could silently return an unrelated anime.
 
   // Step 3: If still no kitsuId and id is a title string (NOT a numeric ID), search Kitsu by title
   if (!kitsuId && isNaN(numId) && !isKitsuInput && !isMalInput) {
@@ -512,8 +505,10 @@ export async function getAnimeDetailsViaKitsu(
     `${KITSU_BASE}/anime/${kitsuId}?include=categories,mediaRelationships.destination`
   );
 
-  // If direct lookup by kitsuId failed, check if numId is a TMDB, AniList, or MAL ID
-  if ((!kitsuData || !kitsuData.data) && !isNaN(numId) && numId > 0) {
+  // If direct lookup by kitsuId failed, retry the TMDB mapping only when the
+  // caller explicitly supplied a TMDB ID. Reinterpreting an AniList/MAL ID as a
+  // TMDB ID would resolve a different title (ID namespaces overlap).
+  if ((!kitsuData || !kitsuData.data) && isTmdbInput && !isNaN(numId) && numId > 0) {
     try {
       const azParam = `themoviedb_id=${numId}`;
       const azRes = await fetch(`https://api.ani.zip/mappings?${azParam}`, {

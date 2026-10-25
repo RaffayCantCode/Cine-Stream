@@ -86,6 +86,8 @@ export interface FranchiseNode {
   tmdbId?: number | null;
   tmdbSeasonNumber?: number | null;
   episodeOffset?: number;
+  anilistId?: number | null;
+  curated?: boolean;
 }
 
 export interface FillerLookup {
@@ -759,47 +761,9 @@ export async function getAnimeDetails(
 
   // Handle kitsu-prefixed IDs
   if (id.startsWith("kitsu-")) {
-    const kRes = await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes);
-    if (kRes) return store(kRes);
-
-    // Fallback: If direct Kitsu lookup returned null, check if the numeric part is an AniList or TMDB ID
-    const rawClean = id.replace(/^kitsu-/, "").trim();
-    const rawNum = parseInt(rawClean, 10);
-    if (!isNaN(rawNum) && rawNum > 0 && depth < 1) {
-      try {
-        const azTmdb = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${rawNum}`, {
-          signal: AbortSignal.timeout(3000),
-          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-        }).then(r => r.ok ? r.json() : null).catch(() => null);
-
-        if (azTmdb?.mappings?.anilist_id) {
-          const targetId = String(azTmdb.mappings.anilist_id).trim();
-          if (targetId.toLowerCase() !== cleanId && !visited.has(targetId.toLowerCase())) {
-            const resolved = await getAnimeDetails(targetId, epLimit, skipEpisodes, depth + 1, visited);
-            if (resolved) return store(resolved);
-          }
-        } else if (azTmdb?.mappings?.kitsu_id) {
-          const resolved = await getAnimeDetailsViaKitsu(`kitsu-${azTmdb.mappings.kitsu_id}`, epLimit, skipEpisodes);
-          if (resolved) return store(resolved);
-        }
-      } catch {}
-
-      try {
-        const azAl = await fetch(`https://api.ani.zip/mappings?anilist_id=${rawNum}`, {
-          signal: AbortSignal.timeout(3000),
-          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-        }).then(r => r.ok ? r.json() : null).catch(() => null);
-
-        if (azAl?.mappings) {
-          const targetId = String(rawNum).trim();
-          if (targetId.toLowerCase() !== cleanId && !visited.has(targetId.toLowerCase())) {
-            const resolved = await getAnimeDetails(targetId, epLimit, skipEpisodes, depth + 1, visited);
-            if (resolved) return store(resolved);
-          }
-        }
-      } catch {}
-    }
-    return null;
+    // Kitsu IDs live in their own numeric namespace. Never reinterpret the
+    // numeric part as an AniList/TMDB ID — that can open an unrelated anime.
+    return store(await getAnimeDetailsViaKitsu(id, epLimit, skipEpisodes));
   }
 
   // Resolve numeric AniList ID
@@ -854,26 +818,11 @@ export async function getAnimeDetails(
   ]);
 
   if (!media) {
-    if (!isNaN(numId) && numId > 0 && depth < 1) {
-      try {
-        const azTmdb = await fetch(`https://api.ani.zip/mappings?themoviedb_id=${numId}`, {
-          signal: AbortSignal.timeout(2500),
-          headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
-        }).then(r => r.ok ? r.json() : null).catch(() => null);
-
-        if (azTmdb?.mappings?.anilist_id) {
-          const targetId = String(azTmdb.mappings.anilist_id).trim();
-          if (targetId.toLowerCase() !== cleanId && targetId !== String(numId) && !visited.has(targetId.toLowerCase())) {
-            const resolved = await getAnimeDetails(targetId, epLimit, skipEpisodes, depth + 1, visited);
-            if (resolved) return store(resolved);
-          }
-        } else if (azTmdb?.mappings?.kitsu_id) {
-          const resolved = await getAnimeDetailsViaKitsu(`kitsu-${azTmdb.mappings.kitsu_id}`, epLimit, skipEpisodes);
-          if (resolved) return store(resolved);
-        }
-      } catch {}
-    }
-
+    // AniList is unreachable/rate-limited. NEVER reinterpret this AniList ID as a
+    // TMDB ID here: numeric namespaces overlap, so e.g. AniList 131681 (Attack on
+    // Titan S4 Part 2) would resolve to TMDB 131681 (Fanfare of Adolescence) and
+    // silently open a completely different anime. Resolve the *same* AniList ID
+    // through AniZip/Kitsu instead, and return null if that also fails.
     return store(await getAnimeDetailsViaKitsu(String(numId), epLimit, skipEpisodes));
   }
 

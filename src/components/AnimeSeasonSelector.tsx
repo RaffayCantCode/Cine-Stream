@@ -8,6 +8,7 @@ import type { SeasonInfo } from "@/lib/anime-fetch";
 
 export interface FranchiseNodeItem {
   id: string | number;
+  anilistId?: string | number | null;
   idMal?: string | number | null;
   title: string;
   episodes?: number | null;
@@ -34,7 +35,7 @@ interface AnimeSeasonSelectorProps {
   onSelectSeason?: (season: SeasonInfo | FranchiseNodeItem) => void;
 }
 
-const SPECIAL_REGEX = /\b(ova|oav|special|specials|chibi|petit|spin-?off|picture\s+drama|audio\s+drama|recap|summary|digest|omake|bonus|blooper|interlude|side\s+story|lost\s+girls|no\s+regrets|ilse|slime\s+diaries|tensura\s+nikki|coleus\s+no\s+yume|marumaru\s+no\s+mahou|titan\s+junior\s+high|preview|pv|tokubetsu|collab|crossover)\b/i;
+const SPECIAL_REGEX = /\b(ova|oav|special|specials|chibi|petit|spin-?off|picture\s+drama|audio\s+drama|recap|summary|digest|omake|bonus|blooper|interlude|side\s+story|lost\s+girls|no\s+regrets|ilse|slime\s+diaries|tensura\s+nikki|coleus\s+no\s+yume|marumaru\s+no\s+mahou|titan\s+junior\s+high|junior\s+high|chuugakkou|chūgakkou|preview|pv|tokubetsu|collab|crossover)\b/i;
 const MOVIE_REGEX = /\b(movie|the\s+movie|film|theatrical|gekijouban|scarlet\s+bond|mugen\s+train|jujutsu\s+kaisen\s+0|two\s+heroes|heroes\s+rising|world\s+heroes|you'?re\s+next)\b/i;
 
 function getSafeTitle(val: any): string {
@@ -140,10 +141,13 @@ export function AnimeSeasonSelector({
 
       const cleanCurr = String(currentAnimeId || "").trim().toLowerCase();
       const itemId = String(item.id || "").trim().toLowerCase();
-      const isCurrentActive = itemId === cleanCurr || (item.idMal && String(item.idMal).toLowerCase() === cleanCurr);
+      const itemAnilistId = String(item.anilistId || "").trim().toLowerCase();
+      const isCurrentActive =
+        itemId === cleanCurr ||
+        (itemAnilistId && itemAnilistId === cleanCurr) ||
+        (item.idMal && String(item.idMal).toLowerCase() === cleanCurr);
       const hasExplicitSeason = /\b(season\s*\d+|\d+(?:st|nd|rd|th)\s+season|final\s+season)\b/i.test(title);
       const isChibiOrMini = (duration > 0 && duration <= 15);
-      const isAuthoritativeTv = fmt === "TV" && (eps >= 5 || hasExplicitSeason) && !isChibiOrMini;
 
       // 1. Specials (OVAs, Chibis, side stories, short ONAs, recaps, mini-series, collabs)
       const isSpecialFmt = fmt === "OVA" || fmt === "SPECIAL" || fmt === "TV_SHORT";
@@ -153,7 +157,12 @@ export function AnimeSeasonSelector({
       const isShortSpecial = eps > 0 && eps <= 2 && duration > 0 && duration <= 25 && fmt !== "MOVIE";
       const isCollabTitle = /\b(collab|crossover|\bx\b)\b/i.test(title);
 
-      const isClassedSpecial = !isAuthoritativeTv && (isSpecialFmt || isSpecialLabel || isSpecialTitle || isShortOna || isShortSpecial || isCollabTitle || isChibiOrMini);
+      // A clearly-labelled spin-off/OVA/special stays a special even when it is a
+      // 12-episode TV production (e.g. "Attack on Titan: Junior High"). Only an
+      // explicit "Season N" in the title can promote it back to the main run.
+      const isClassedSpecial = !hasExplicitSeason && (
+        isSpecialFmt || isSpecialLabel || isSpecialTitle || isShortOna || isShortSpecial || isCollabTitle || isChibiOrMini
+      );
 
       if (isClassedSpecial) {
         specialsList.push(item);
@@ -359,6 +368,10 @@ export function AnimeSeasonSelector({
     if (cleanSeasonId) {
       const match = allItems.find((it) => String(it.id).trim().toLowerCase() === cleanSeasonId);
       if (match) return String(match.id);
+      const anilistMatch = allItems.find(
+        (it) => it.anilistId && String(it.anilistId).trim().toLowerCase() === cleanSeasonId
+      );
+      if (anilistMatch) return String(anilistMatch.id);
       const malMatch = allItems.find(
         (it) => it.idMal && String(it.idMal).trim().toLowerCase() === cleanSeasonId
       );
@@ -369,6 +382,10 @@ export function AnimeSeasonSelector({
     if (cleanCurrentId) {
       const match = allItems.find((it) => String(it.id).trim().toLowerCase() === cleanCurrentId);
       if (match) return String(match.id);
+      const anilistMatch = allItems.find(
+        (it) => it.anilistId && String(it.anilistId).trim().toLowerCase() === cleanCurrentId
+      );
+      if (anilistMatch) return String(anilistMatch.id);
       const malMatch = allItems.find(
         (it) => it.idMal && String(it.idMal).trim().toLowerCase() === cleanCurrentId
       );
@@ -392,11 +409,14 @@ export function AnimeSeasonSelector({
       {/* Main TV Seasons */}
       {seasons.map((s) => {
         const active = isItemActive(s);
-        const isCurrentShow = String(s.id).trim().toLowerCase() === cleanCurrentId;
+        const targetId = s.anilistId || s.id;
+        const isCurrentShow =
+          String(targetId).trim().toLowerCase() === cleanCurrentId ||
+          String(s.id).trim().toLowerCase() === cleanCurrentId;
         return (
           <Link
             key={`season-pill-${s.id}`}
-            href={`/anime/${s.id}`}
+            href={`/anime/${targetId}`}
             title={getSafeTitle(s.title)}
             onClick={(e) => {
               if (isCurrentShow && onSelectSeason) {
@@ -460,7 +480,7 @@ export function AnimeSeasonSelector({
                 return (
                   <Link
                     key={`movie-${m.id}`}
-                    href={`/anime/${m.id}`}
+                    href={`/anime/${m.anilistId || m.id}`}
                     onClick={() => setMoviesOpen(false)}
                     className={cn(
                       "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors group",
@@ -520,7 +540,7 @@ export function AnimeSeasonSelector({
                 return (
                   <Link
                     key={`special-${sp.id}`}
-                    href={`/anime/${sp.id}`}
+                    href={`/anime/${sp.anilistId || sp.id}`}
                     onClick={() => setSpecialsOpen(false)}
                     className={cn(
                       "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors group",

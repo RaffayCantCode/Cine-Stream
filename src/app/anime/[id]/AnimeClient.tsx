@@ -289,59 +289,62 @@ async function clientFetchAnimeFallback(
     }
   }
 
-  // 2. Direct Kitsu API query from browser
-  try {
-    const cleanKitsuId = idStr.replace(/^kitsu-/, "").trim();
-    const kRes = await fetch(`https://kitsu.io/api/edge/anime/${encodeURIComponent(cleanKitsuId)}?include=categories`, {
-      headers: { "Accept": "application/vnd.api+json" },
-      signal: signal || AbortSignal.timeout(6000),
-    });
+  // 2. Direct Kitsu API query from browser (only for real Kitsu IDs — a plain
+  // numeric ID here is an AniList ID and would resolve to a different anime)
+  if (isKitsu) {
+    try {
+      const cleanKitsuId = idStr.replace(/^kitsu-/, "").trim();
+      const kRes = await fetch(`https://kitsu.io/api/edge/anime/${encodeURIComponent(cleanKitsuId)}?include=categories`, {
+        headers: { "Accept": "application/vnd.api+json" },
+        signal: signal || AbortSignal.timeout(6000),
+      });
 
-    if (kRes.ok) {
-      const kJson = await kRes.json();
-      const kData = kJson?.data;
-      if (kData) {
-        const attr = kData.attributes || {};
-        const title = getSafeAnimeTitle(attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Anime");
-        const poster = attr.posterImage?.large || attr.posterImage?.original || "";
-        const banner = attr.coverImage?.large || attr.coverImage?.original || null;
-        const eps = attr.episodeCount || 1;
-        const score = attr.averageRating ? (parseFloat(attr.averageRating) / 10).toFixed(1) : null;
-        const desc = getSafeAnimeDescription(attr.synopsis || attr.description);
+      if (kRes.ok) {
+        const kJson = await kRes.json();
+        const kData = kJson?.data;
+        if (kData) {
+          const attr = kData.attributes || {};
+          const title = getSafeAnimeTitle(attr.titles?.en || attr.canonicalTitle || attr.titles?.en_jp || "Anime");
+          const poster = attr.posterImage?.large || attr.posterImage?.original || "";
+          const banner = attr.coverImage?.large || attr.coverImage?.original || null;
+          const eps = attr.episodeCount || 1;
+          const score = attr.averageRating ? (parseFloat(attr.averageRating) / 10).toFixed(1) : null;
+          const desc = getSafeAnimeDescription(attr.synopsis || attr.description);
 
-        const seasonInfo: SeasonInfo = {
-          id: `kitsu-${kData.id}`,
-          name: title,
-          seasonLabel: "Season 1",
-          totalEpisodes: eps,
-          isCurrent: true,
-          coverImage: poster,
-          bannerImage: banner,
-        };
+          const seasonInfo: SeasonInfo = {
+            id: `kitsu-${kData.id}`,
+            name: title,
+            seasonLabel: "Season 1",
+            totalEpisodes: eps,
+            isCurrent: true,
+            coverImage: poster,
+            bannerImage: banner,
+          };
 
-        const anime: AnimeDetail = {
-          id: `kitsu-${kData.id}`,
-          name: title,
-          jname: attr.titles?.ja_jp || null,
-          poster,
-          bannerImage: banner,
-          description: desc,
-          type: (attr.subtype || "TV").toUpperCase(),
-          format: (attr.subtype || "TV").toUpperCase(),
-          rating: score,
-          score,
-          status: attr.status === "current" ? "RELEASING" : (attr.status === "finished" ? "FINISHED" : "NOT_YET_RELEASED"),
-          genres: [],
-          totalEpisodes: eps,
-          seasons: [seasonInfo],
-          openedSeasonId: `kitsu-${kData.id}`,
-        };
+          const anime: AnimeDetail = {
+            id: `kitsu-${kData.id}`,
+            name: title,
+            jname: attr.titles?.ja_jp || null,
+            poster,
+            bannerImage: banner,
+            description: desc,
+            type: (attr.subtype || "TV").toUpperCase(),
+            format: (attr.subtype || "TV").toUpperCase(),
+            rating: score,
+            score,
+            status: attr.status === "current" ? "RELEASING" : (attr.status === "finished" ? "FINISHED" : "NOT_YET_RELEASED"),
+            genres: [],
+            totalEpisodes: eps,
+            seasons: [seasonInfo],
+            openedSeasonId: `kitsu-${kData.id}`,
+          };
 
-        return { anime, franchiseNodes: [] };
+          return { anime, franchiseNodes: [] };
+        }
       }
+    } catch (err) {
+      console.warn("[AnimeClient] Kitsu direct client query failed:", err);
     }
-  } catch (err) {
-    console.warn("[AnimeClient] Kitsu direct client query failed:", err);
   }
 
   // 3. Direct AniZip mappings query from browser
@@ -553,7 +556,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // ── Derived: logo, banner, title ─────────────────────────────────────────
   const animeTitle = getSafeAnimeTitle(anime?.name || (anime as any)?.title || "");
   const effectiveInitialLogo = (initialData as any)?.logoUrl || (anime as any)?.logoUrl || null;
-  const { logoUrl, backdropUrl: mediaBackdropUrl, loading: logoLoading } = useMediaLogo(id, "anime", animeTitle, effectiveInitialLogo);
+  const { logoUrl, backdropUrl: mediaBackdropUrl, loading: logoLoading } = useMediaLogo(
+    anime ? id : "",
+    "anime",
+    anime ? animeTitle : "",
+    effectiveInitialLogo
+  );
   const effectiveLogo = (anime as any)?.logoUrl || (initialData as any)?.logoUrl || logoUrl;
 
   const seasons = useMemo(() => anime?.seasons || [], [anime]);
@@ -1378,13 +1386,33 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   // ── Watch order background hydration ─────────────────────────────────────
   useEffect(() => {
-    if (!id) return;
+    // Wait for the authoritative meta first: firing the watch-order crawl in
+    // parallel doubles AniList traffic (which can trip the circuit breaker) and
+    // lets a franchise response overwrite the current anime's season bar.
+    if (!id || !anime?.id) return;
+
+    // Curated franchises from the meta response are already complete and exact.
+    if ((franchiseNodes || []).some(n => (n as any).curated)) return;
+
     let cancelled = false;
     const mem = FRANCHISE_CACHE.get(String(id));
     if (mem && mem.length > franchiseNodes.length) {
       setFranchiseNodes(mem);
       return;
     }
+
+    const normalize = (v: any) => String(v || "").replace(/[^a-z0-9]/g, "").toLowerCase();
+    const currentAnimeId = String(anime.id || "").trim();
+    const currentRouteId = String(id || "").trim();
+    const currentTitleKey = normalize(animeTitle);
+    const belongsToCurrentAnime = (nodes: FranchiseNode[]) =>
+      nodes.some(n => {
+        const ids = [n.id, (n as any).anilistId, n.idMal].filter(Boolean).map(v => String(v).trim());
+        if (currentAnimeId && ids.includes(currentAnimeId)) return true;
+        if (!currentAnimeId && currentRouteId && ids.includes(currentRouteId)) return true;
+        const nTitle = normalize(n.title);
+        return Boolean(currentTitleKey && nTitle && (nTitle.includes(currentTitleKey) || currentTitleKey.includes(nTitle)));
+      });
 
     const t = setTimeout(async () => {
       try {
@@ -1394,6 +1422,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         if (cancelled) return;
         const nodes = res?.data?.franchiseNodes;
         if (nodes && nodes.length > 1) {
+          // Reject a graph that doesn't actually contain the anime on screen.
+          if (!belongsToCurrentAnime(nodes)) return;
           if (nodes.length >= franchiseNodes.length) {
             setFranchiseNodes(nodes);
           }
@@ -1405,7 +1435,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       } catch {}
     }, 150);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [id, animeTitle, franchiseNodes.length]);
+  }, [id, anime?.id, animeTitle, franchiseNodes.length]);
 
   // ── Recommendations ───────────────────────────────────────────────────────
   useEffect(() => {

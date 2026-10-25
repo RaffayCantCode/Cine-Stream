@@ -659,13 +659,13 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/3GQKYh6Trm8pxd2AypovoYQf4Ay.jpg",
     poster_path: "/xUfRZu2mi8jH6SzQEJGP6tjBuYj.jpg",
     items: [
-      { id: 101922, media_type: "anime", anilist_id: 101922, episodes: 26, title: "Demon Slayer: Season 1", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg", tmdb_id: 85937, tmdb_season_number: 1 },
-      { id: 112151, media_type: "anime", tmdb_type: "movie", anilist_id: 112151, episodes: 1, title: "Mugen Train (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png", tmdb_id: 635302 },
-      { id: 129874, media_type: "anime", anilist_id: 129874, episodes: 7, title: "Mugen Train Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg", tmdb_id: 85937, tmdb_season_number: 2 },
-      { id: 142329, media_type: "anime", anilist_id: 142329, episodes: 11, title: "Entertainment District Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg", tmdb_id: 85937, tmdb_season_number: 3 },
-      { id: 145139, media_type: "anime", anilist_id: 145139, episodes: 11, title: "Swordsmith Village Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png", tmdb_id: 85937, tmdb_season_number: 4 },
-      { id: 166240, media_type: "anime", anilist_id: 166240, episodes: 8, title: "Hashira Training Arc", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png", tmdb_id: 85937, tmdb_season_number: 5 },
-      { id: 178788, media_type: "anime", tmdb_type: "movie", anilist_id: 178788, episodes: 1, title: "Infinity Castle (Movie)", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178788-zm3gtpB9TpRt.jpg", tmdb_id: 1311031 },
+      { id: 101922, media_type: "anime", anilist_id: 101922, episodes: 26, title: "Demon Slayer: Season 1", release_date: "2019-04-06", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg", tmdb_id: 85937, tmdb_season_number: 1 },
+      { id: 112151, media_type: "anime", tmdb_type: "movie", anilist_id: 112151, episodes: 1, title: "Mugen Train (Movie)", release_date: "2020-10-16", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112151-1qlQwPB1RrJe.png", tmdb_id: 635302 },
+      { id: 129874, media_type: "anime", anilist_id: 129874, episodes: 7, title: "Mugen Train Arc", release_date: "2021-10-10", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx129874-g6ZKXB94Hui1.jpg", tmdb_id: 85937, tmdb_season_number: 2 },
+      { id: 142329, media_type: "anime", anilist_id: 142329, episodes: 11, title: "Entertainment District Arc", release_date: "2021-12-05", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx142329-kET1PIXJv2eW.jpg", tmdb_id: 85937, tmdb_season_number: 3 },
+      { id: 145139, media_type: "anime", anilist_id: 145139, episodes: 11, title: "Swordsmith Village Arc", release_date: "2023-04-09", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145139-rRimpHGWLhym.png", tmdb_id: 85937, tmdb_season_number: 4 },
+      { id: 166240, media_type: "anime", anilist_id: 166240, episodes: 8, title: "Hashira Training Arc", release_date: "2024-05-12", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx166240-PBV7zukIHW7V.png", tmdb_id: 85937, tmdb_season_number: 5 },
+      { id: 178788, media_type: "anime", tmdb_type: "movie", anilist_id: 178788, episodes: 1, title: "Infinity Castle (Movie)", release_date: "2025-07-18", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178788-zm3gtpB9TpRt.jpg", tmdb_id: 1311031 },
     ]
   },
   {
@@ -675,10 +675,10 @@ export const FRANCHISES: FranchiseDefinition[] = [
     backdrop_path: "/lthkKBLe1rX6iThgVFg22O02sJw.jpg",
     poster_path: "/fHpKWq9ayzSk8nSwqRuaAUemRKh.jpg",
     items: [
-      { id: 113415, media_type: "anime", anilist_id: 113415, title: "Jujutsu Kaisen Season 1", episodes: 24, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-LHBAeoZDIsnF.jpg", tmdb_id: 95479, tmdb_season_number: 1 },
-      { id: 131573, media_type: "anime", anilist_id: 131573, title: "Jujutsu Kaisen 0 (Movie)", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131573-rpl82vDEDRm6.jpg", tmdb_id: 810693 },
-      { id: 145064, media_type: "anime", anilist_id: 145064, title: "Jujutsu Kaisen Season 2", episodes: 23, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145064-hSNRJM03pvv1.jpg", tmdb_id: 95479, tmdb_season_number: 2 },
-      { id: 172463, media_type: "anime", anilist_id: 172463, title: "Jujutsu Kaisen Season 3", episodes: 24, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx172463-LnXqHzt74SJL.jpg", tmdb_id: 95479, tmdb_season_number: 3 },
+      { id: 113415, media_type: "anime", anilist_id: 113415, title: "Jujutsu Kaisen Season 1", episodes: 24, release_date: "2020-10-03", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-LHBAeoZDIsnF.jpg", tmdb_id: 95479, tmdb_season_number: 1 },
+      { id: 131573, media_type: "anime", anilist_id: 131573, title: "Jujutsu Kaisen 0 (Movie)", episodes: 1, release_date: "2021-12-24", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131573-rpl82vDEDRm6.jpg", tmdb_id: 810693 },
+      { id: 145064, media_type: "anime", anilist_id: 145064, title: "Jujutsu Kaisen Season 2", episodes: 23, release_date: "2023-07-06", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx145064-hSNRJM03pvv1.jpg", tmdb_id: 95479, tmdb_season_number: 2 },
+      { id: 172463, media_type: "anime", anilist_id: 172463, title: "Jujutsu Kaisen Season 3", episodes: 24, release_date: "2026-01-09", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx172463-LnXqHzt74SJL.jpg", tmdb_id: 95479, tmdb_season_number: 3 },
     ]
   },
   {
@@ -985,6 +985,7 @@ export function getCuratedAnimeFranchiseNodes(anilistId: number, title?: string)
         return {
           id: uniqueId,
           anilistId: item.anilist_id || item.id,
+          curated: true,
           idMal: null,
           title: item.title || franchise.name,
           episodes: item.episodes || (isMovie || isSpecial ? 1 : 12),

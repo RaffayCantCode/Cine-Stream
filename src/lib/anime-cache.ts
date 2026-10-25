@@ -5,7 +5,7 @@
  * changes. It is part of every anime fetch URL, so old browser/CDN entries are
  * never mixed with new data.
  */
-export const ANIME_API_VERSION = "v56-sync";
+export const ANIME_API_VERSION = "v58-curated-years";
 
 export function animeMetaUrl(id: string): string {
   return `/api/anime/${encodeURIComponent(id)}/meta?v=${ANIME_API_VERSION}`;
