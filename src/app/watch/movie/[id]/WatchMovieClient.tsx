@@ -218,6 +218,13 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
     fetchMovie();
   }, [movieId, session]);
 
+  // Client navigations skip blocking metadata generation, so keep the tab title
+  // in sync with the movie name once details arrive.
+  useEffect(() => {
+    if (!movie?.title) return;
+    document.title = `Watch ${movie.title} | Cine-Stream`;
+  }, [movie]);
+
   // Preconnect embed domains early for lightning-fast iframe startup
   useEffect(() => {
     const domains = [
@@ -243,7 +250,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
   const rating = movie?.vote_average ?? 0;
 
   const metadata: CinemaPlayerMetadata = {
-    title: movie?.title || "Movie Stream",
+    title: movie?.title || "",
     year,
     rating,
     overview: movie?.overview || "",
@@ -297,7 +304,7 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
           mediaId={movieId}
           fallbackIframeUrl={activeSource.url}
           server={activeSource.type}
-          title={movie?.title || "Movie Stream"}
+          title={movie?.title || "CineStream"}
           poster={backdropUrl || posterUrl || undefined}
         />
       </CinemaPlayer>

@@ -254,6 +254,13 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     return seasonData?.episodes?.find((e) => e.episode_number === episodeNumber);
   }, [seasonData, episodeNumber]);
 
+  // Client navigations skip blocking metadata generation, so keep the tab title
+  // in sync with the show name once details arrive.
+  useEffect(() => {
+    if (!show?.name) return;
+    document.title = `Watch ${show.name} S${seasonNumber} E${episodeNumber} | Cine-Stream`;
+  }, [show, seasonNumber, episodeNumber]);
+
   // ── Reliably record watch history in Database and localStorage cache on every episode change ──
   useEffect(() => {
     if (!show || !showId) return;
@@ -372,7 +379,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
   const rating = show?.vote_average ?? 0;
 
   const metadata: CinemaPlayerMetadata = {
-    title: show?.name || `TV Series (S${seasonNumber} E${episodeNumber})`,
+    title: show?.name || "",
     episodeTitle: currentEpisodeData?.name,
     season: seasonNumber,
     episode: episodeNumber,
@@ -433,7 +440,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
           episode={episodeNumber}
           fallbackIframeUrl={activeSource.url}
           server={activeSource.type}
-          title={`${show?.name || "TV Series"} S${seasonNumber}E${episodeNumber}`}
+          title={`${show?.name || "CineStream"} S${seasonNumber}E${episodeNumber}`}
           poster={backdropUrl || posterUrl || undefined}
         />
       </CinemaPlayer>

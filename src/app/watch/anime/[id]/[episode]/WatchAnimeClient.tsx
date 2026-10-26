@@ -570,6 +570,13 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
     };
   }, [anime, currentEpDetail, episodeNumber, animeId, ratingNum]);
 
+  // Client navigations skip blocking metadata generation, so keep the tab title
+  // in sync with the anime name once details arrive.
+  useEffect(() => {
+    if (!anime?.name) return;
+    document.title = `Watch ${anime.name} Ep ${episodeNumber} | Cine-Stream`;
+  }, [anime, episodeNumber]);
+
   const drawerSeason: DrawerSeason[] = useMemo(() => {
     return [
       {
