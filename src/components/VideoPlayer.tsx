@@ -148,7 +148,7 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   useEffect(() => {
     const domains = [
       "https://embedmaster.link",
-      "https://player.vidlove.cc",
+      "https://vixsrc.to",
       "https://vidlink.pro",
       "https://vidsrc.sh",
       "https://autoembed.co",

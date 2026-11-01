@@ -18,11 +18,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
-    baseUrl: "https://player.vidlove.cc",
-    type: "vidlove",
+    baseUrl: "https://vixsrc.to",
+    type: "vixsrc",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://player.vidlove.cc",
+    healthCheckUrl: "https://vixsrc.to",
   },
   {
     name: "Source 3",
@@ -114,7 +114,7 @@ export function getDefaultMovieOrder(): string[] {
 export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource[] {
   const defaultMovieTags: Record<string, string> = {
     embedmaster: "best",
-    vidlove: "good",
+    vixsrc: "good",
     vidlink: "good",
     vidsrc: "good",
     autoembed: "backup",

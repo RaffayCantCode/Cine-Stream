@@ -114,7 +114,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     const byType = new Map(base.map((s) => [s.type, s]));
     const ordered: StreamingSource[] = [];
     sourceConfig.forEach((entry) => {
-      const key = entry.key === "vixsrc" || entry.key === "bingr" ? "vidlove" : entry.key;
+      const key = entry.key === "vidlove" || entry.key === "bingr" ? "vixsrc" : entry.key;
       const src = byType.get(key);
       if (src && !ordered.some((o) => o.type === src.type)) {
         ordered.push({
@@ -128,16 +128,16 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
       if (!ordered.some((o) => o.type === s.type)) ordered.push(s);
     });
 
-    // Guarantee EmbedMaster is strictly Source 1 and VidLove is strictly Source 2
+    // Guarantee EmbedMaster is strictly Source 1 and VixSrc is strictly Source 2
     const emIdx = ordered.findIndex((s) => s.type === "embedmaster");
     if (emIdx > 0) {
       const [em] = ordered.splice(emIdx, 1);
       ordered.unshift(em);
     }
-    const vlIdx = ordered.findIndex((s) => s.type === "vidlove");
-    if (vlIdx !== -1 && vlIdx !== 1) {
-      const [vl] = ordered.splice(vlIdx, 1);
-      ordered.splice(1, 0, vl);
+    const vixsrcIdx = ordered.findIndex((s) => s.type === "vixsrc");
+    if (vixsrcIdx !== -1 && vixsrcIdx !== 1) {
+      const [vix] = ordered.splice(vixsrcIdx, 1);
+      ordered.splice(1, 0, vix);
     }
 
     return ordered.map((s, index) => ({
@@ -358,7 +358,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
   useEffect(() => {
     const domains = [
       "https://embedmaster.link",
-      "https://player.vidlove.cc",
+      "https://vixsrc.to",
       "https://vidlink.pro",
       "https://vidsrc.sh",
       "https://autoembed.co",
