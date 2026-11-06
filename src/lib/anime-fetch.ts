@@ -31,6 +31,11 @@ export interface AnimeItem {
   nextAiringEpisode?: { episode: number; airingAt: number; timeUntilAiring: number } | null;
   backdrop?: string | null;
   logoUrl?: string | null;
+  popularity?: number | null;
+  studios?: string[];
+  startDate?: { year?: number | null; month?: number | null; day?: number | null } | null;
+  endDate?: { year?: number | null; month?: number | null; day?: number | null } | null;
+  coverColor?: string | null;
 }
 
 export interface SeasonInfo {
@@ -310,6 +315,16 @@ function transformAniList(media: any): AnimeItem | null {
     duration: media.duration || null,
     trailerId: media.trailer?.site === "youtube" ? media.trailer.id : null,
     nextAiringEpisode: media.nextAiringEpisode || null,
+    popularity: typeof media.popularity === "number" ? media.popularity : null,
+    studios: Array.isArray(media.studios?.nodes)
+      ? media.studios.nodes
+          .filter((studio: any) => studio?.isAnimationStudio !== false)
+          .map((studio: any) => studio?.name)
+          .filter(Boolean)
+      : [],
+    startDate: media.startDate || null,
+    endDate: media.endDate || null,
+    coverColor: media.coverImage?.color || null,
   };
 }
 
@@ -721,8 +736,9 @@ export async function getAnimeByGenre(genre: string, page = 1): Promise<AnimeIte
 
 const MEDIA_Q = `query ($id: Int) {
   Media(id: $id, type: ANIME, isAdult: false) {
-    id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
+    id idMal isAdult title { romaji english native } coverImage { large extraLarge color } bannerImage
     episodes genres averageScore description status type format season seasonYear duration trailer { id site } nextAiringEpisode { episode airingAt timeUntilAiring }
+    popularity startDate { year month day } endDate { year month day } studios { nodes { name isAnimationStudio } }
     relations {
       edges { relationType node { id idMal title { romaji english native } episodes status season seasonYear format duration type isAdult bannerImage coverImage { large extraLarge } } }
     }

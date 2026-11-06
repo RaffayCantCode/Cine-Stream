@@ -1,17 +1,25 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { MangaItem, MangaChapter, ChapterPagesData } from "@/lib/manga-fetch";
 import {
   getLocalMangaProgress,
+  fetchServerMangaProgress,
   saveLocalMangaProgress,
   saveServerMangaProgress,
   markChapterAsRead,
 } from "@/lib/manga-history";
 import { fetchJson } from "@/lib/utils";
+import { getMangaTheme, mangaThemeStyle, resolveMangaKind } from "@/lib/manga-theme";
+import {
+  PagedReader,
+  PagedReaderMode,
+  ReadingDirection,
+} from "@/components/manga/PagedReader";
+import { MangaPageItem } from "@/components/manga/MangaPageItem";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -19,21 +27,20 @@ import {
   ChevronDown,
   Maximize,
   Minimize,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-  Loader2,
-  CheckCircle2,
-  List,
-  AlertCircle,
   Sun,
-  SunMedium,
   SunDim,
   X,
-  Check,
+  List,
+  Loader2,
+  AlertCircle,
+  RotateCcw,
+  Settings,
+  AlignJustify,
+  Square,
+  Columns,
+  CheckCircle2,
 } from "lucide-react";
 import { usePageContentReady } from "@/lib/pageLoad";
-import { MangaPageItem } from "@/components/manga/MangaPageItem";
 
 export interface MangaReaderClientProps {
   mangaId: string;
@@ -42,6 +49,20 @@ export interface MangaReaderClientProps {
   initialChapters?: MangaChapter[];
   initialPages?: ChapterPagesData | null;
 }
+
+type ReaderMode = "webtoon" | PagedReaderMode;
+
+const MODE_OPTIONS: {
+  key: ReaderMode;
+  label: string;
+  hint: string;
+  icon: typeof AlignJustify;
+  desktopOnly?: boolean;
+}[] = [
+  { key: "webtoon", label: "Scroll", hint: "Continuous vertical strip", icon: AlignJustify },
+  { key: "single", label: "Single", hint: "One page at a time", icon: Square },
+  { key: "double", label: "Dual", hint: "Two-page spread", icon: Columns, desktopOnly: true },
+];
 
 export default function MangaReaderClient({
   mangaId,
@@ -64,88 +85,187 @@ export default function MangaReaderClient({
   const [sessionCover, setSessionCover] = useState<string | null>(null);
   const [sessionType, setSessionType] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const sc = sessionStorage.getItem(`cs_manga_cover_${mangaId}`);
-      if (sc && !sc.includes("icon-512.png")) setSessionCover(sc);
-      const st = sessionStorage.getItem(`cs_manga_type_${mangaId}`);
-      if (st) setSessionType(st);
-    }
-  }, [mangaId]);
-
   const [manga, setManga] = useState<MangaItem | null>(initialManga);
   const [chapters, setChapters] = useState<MangaChapter[]>(initialChapters);
   const [pagesData, setPagesData] = useState<ChapterPagesData | null>(initialPages);
   const [isLoading, setIsLoading] = useState(!initialPages);
   const [error, setError] = useState<string | null>(null);
 
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [zoomLevel, setZoomLevel] = useState<number>(50); // 50% default for desktop, 100% for mobile
-  const [brightness, setBrightness] = useState<number>(100); // 30% to 150%
-  const [brightnessPickerOpen, setBrightnessPickerOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const currentPageRef = useRef(1);
+  const [brightness, setBrightness] = useState(100);
+  const [webtoonWidth, setWebtoonWidth] = useState(100);
+  const [readerMode, setReaderMode] = useState<ReaderMode>("webtoon");
+  const [direction, setDirection] = useState<ReadingDirection>("rtl");
+  const [isMobile, setIsMobile] = useState(false);
+  const [prefsReady, setPrefsReady] = useState(false);
+
   const [showControls, setShowControls] = useState(true);
   const [chapterPickerOpen, setChapterPickerOpen] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const touchStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const prefsInitializedRef = useRef(false);
+  const lastScrollPageRef = useRef(1);
+
+  const resolvedKind = useMemo(
+    () =>
+      resolveMangaKind({
+        type: manga?.type || initialManga?.type || queryType || sessionType,
+        tags: manga?.tags,
+        title: manga?.title || initialManga?.title || queryTitle,
+        id: mangaId,
+      }),
+    [
+      manga?.type,
+      manga?.tags,
+      manga?.title,
+      initialManga?.type,
+      initialManga?.title,
+      queryType,
+      queryTitle,
+      sessionType,
+      mangaId,
+    ]
+  );
+
+  const theme = useMemo(() => getMangaTheme(resolvedKind), [resolvedKind]);
+  const accentText = theme.isManhwa ? "text-white" : "text-black";
+  /** Webtoon strips are far too tall for a two-page spread — dual is manga-only. */
+  const dualAllowed = resolvedKind === "manga";
+  const availableModes = useMemo(
+    () => MODE_OPTIONS.filter((option) => option.key !== "double" || dualAllowed),
+    [dualAllowed]
+  );
 
   usePageContentReady(!isLoading);
 
-  // Load Saved Preferences (Brightness & Zoom Level with 50% desktop / 100% mobile default)
+  // Session cover/type hints (instant render before API resolves)
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sc = sessionStorage.getItem(`cs_manga_cover_${mangaId}`);
+    if (sc && !sc.includes("icon-512.png")) setSessionCover(sc);
+    const st = sessionStorage.getItem(`cs_manga_type_${mangaId}`);
+    if (st) setSessionType(st);
+  }, [mangaId]);
+
+  // Load persisted reader preferences once.
+  useEffect(() => {
+    if (typeof window === "undefined" || prefsInitializedRef.current) return;
+    prefsInitializedRef.current = true;
+
+    const mobile = window.matchMedia("(max-width: 767px)").matches;
+    setIsMobile(mobile);
+
     try {
-      const isMobile = window.innerWidth < 768;
-      if (isMobile) {
-        setZoomLevel(100);
+      const storedMode = localStorage.getItem("cinestream.manga_reader_mode");
+      const storedDir = localStorage.getItem("cinestream.manga_reading_direction");
+      const storedWidth = parseInt(
+        localStorage.getItem("cinestream.manga_webtoon_width") || "",
+        10
+      );
+      const storedBrightness = parseInt(
+        localStorage.getItem("cinestream.manga_brightness") || "",
+        10
+      );
+
+      if (storedBrightness >= 30 && storedBrightness <= 150) {
+        setBrightness(storedBrightness);
+      }
+      if (storedWidth >= 60 && storedWidth <= 150) {
+        setWebtoonWidth(storedWidth);
+      }
+
+      setDirection(
+        storedDir === "rtl" || storedDir === "ltr"
+          ? storedDir
+          : resolvedKind === "manga"
+          ? "rtl"
+          : "ltr"
+      );
+
+      let mode: ReaderMode;
+      if (storedMode === "webtoon" || storedMode === "single" || storedMode === "double") {
+        mode = storedMode;
       } else {
-        const savedZoom = localStorage.getItem("cinestream.manga_zoom_level");
-        if (savedZoom) {
-          const parsed = parseInt(savedZoom, 10);
-          if (!isNaN(parsed) && parsed >= 20 && parsed <= 200) {
-            const cleanZoom = Math.round(parsed / 10) * 10;
-            setZoomLevel(cleanZoom);
-          } else {
-            setZoomLevel(50);
-          }
-        } else {
-          setZoomLevel(50);
-        }
+        mode = mobile ? "webtoon" : resolvedKind === "manga" ? "single" : "webtoon";
       }
+      if (mobile && mode === "double") mode = "single";
 
-      const handleResize = () => {
-        if (window.innerWidth < 768) {
-          setZoomLevel(100);
-        }
-      };
-      window.addEventListener("resize", handleResize);
+      setReaderMode(mode);
+    } catch {
+      setReaderMode(window.matchMedia("(max-width: 767px)").matches ? "webtoon" : "single");
+    }
 
-      const savedBrightness = localStorage.getItem("cinestream.manga_brightness");
-      if (savedBrightness) {
-        const parsed = parseInt(savedBrightness, 10);
-        if (!isNaN(parsed) && parsed >= 30 && parsed <= 150) {
-          setBrightness(parsed);
-        }
+    setPrefsReady(true);
+
+    const mql = window.matchMedia("(max-width: 767px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      if (e.matches) {
+        setReaderMode((prev) => (prev === "double" ? "single" : prev));
       }
-
-      return () => {
-        window.removeEventListener("resize", handleResize);
-      };
-    } catch {}
+    };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSetBrightness = (val: number) => {
-    const clamped = Math.max(30, Math.min(150, val));
+  const updateBrightness = useCallback((value: number) => {
+    const clamped = Math.max(30, Math.min(150, value));
     setBrightness(clamped);
     try {
       localStorage.setItem("cinestream.manga_brightness", String(clamped));
     } catch {}
-  };
+  }, []);
+
+  const updateWebtoonWidth = useCallback((value: number) => {
+    const clamped = Math.max(60, Math.min(150, value));
+    setWebtoonWidth(clamped);
+    try {
+      localStorage.setItem("cinestream.manga_webtoon_width", String(clamped));
+    } catch {}
+  }, []);
+
+  const changeMode = useCallback(
+    (mode: ReaderMode) => {
+      if (mode === "double" && (isMobile || !dualAllowed)) return;
+      setReaderMode(mode);
+      setSettingsOpen(false);
+      setShowControls(true);
+      try {
+        localStorage.setItem("cinestream.manga_reader_mode", mode);
+      } catch {}
+      if (mode === "double") {
+        setCurrentPage((page) => (page <= 1 ? 1 : page % 2 === 0 ? page : page - 1));
+      }
+    },
+    [dualAllowed, isMobile]
+  );
+
+  // Keep manhwa out of dual mode even if an old preference or URL asked for it.
+  useEffect(() => {
+    if (readerMode !== "double" || dualAllowed) return;
+    setReaderMode("webtoon");
+    try {
+      localStorage.setItem("cinestream.manga_reader_mode", "webtoon");
+    } catch {}
+  }, [dualAllowed, readerMode]);
+
+  const changeDirection = useCallback((next: ReadingDirection) => {
+    setDirection(next);
+    try {
+      localStorage.setItem("cinestream.manga_reading_direction", next);
+    } catch {}
+  }, []);
 
   const exitFullscreenIfActive = useCallback(() => {
-    if (typeof document !== "undefined" && (document.fullscreenElement || (document as any).webkitFullscreenElement)) {
+    if (
+      typeof document !== "undefined" &&
+      (document.fullscreenElement || (document as any).webkitFullscreenElement)
+    ) {
       if (document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
       } else if ((document as any).webkitExitFullscreen) {
@@ -154,10 +274,24 @@ export default function MangaReaderClient({
     }
   }, []);
 
-  // Listen to standard fullscreen change events & automatically exit fullscreen when leaving reader
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if ((el as any).webkitRequestFullscreen) {
+        (el as any).webkitRequestFullscreen();
+      }
+    } else {
+      exitFullscreenIfActive();
+    }
+  }, [exitFullscreenIfActive]);
+
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement));
+      setIsFullscreen(
+        Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement)
+      );
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -174,7 +308,7 @@ export default function MangaReaderClient({
     };
   }, [exitFullscreenIfActive]);
 
-  // Fetch Manga Details, Chapter List, and Chapter Pages
+  // Fetch manga details, chapter list and chapter pages.
   const loadChapter = useCallback(async () => {
     if (pagesData && pagesData.chapterId === chapterId && manga && chapters.length > 0) {
       setIsLoading(false);
@@ -186,19 +320,45 @@ export default function MangaReaderClient({
     setError(null);
 
     try {
-      const titleParam = queryTitle ? `?title=${encodeURIComponent(queryTitle)}&ch=${encodeURIComponent(queryCh)}` : "";
+      const titleParam = queryTitle
+        ? `?title=${encodeURIComponent(queryTitle)}&ch=${encodeURIComponent(queryCh)}`
+        : "";
 
       const fetches: Promise<any>[] = [];
-      if (!manga) fetches.push(fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${mangaId}`).catch(() => ({ success: false, item: null })));
-      else fetches.push(Promise.resolve({ success: true, item: manga }));
+      if (!manga) {
+        fetches.push(
+          fetchJson<{ success: boolean; item: MangaItem }>(
+            `/api/manga/details/${mangaId}`
+          ).catch(() => ({ success: false, item: null }))
+        );
+      } else {
+        fetches.push(Promise.resolve({ success: true, item: manga }));
+      }
 
-      if (chapters.length === 0) fetches.push(fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${mangaId}?order=asc&limit=500`));
-      else fetches.push(Promise.resolve({ success: true, chapters }));
+      if (chapters.length === 0) {
+        fetches.push(
+          fetchJson<{ success: boolean; chapters: MangaChapter[] }>(
+            `/api/manga/chapters/${mangaId}?order=asc&limit=500`
+          )
+        );
+      } else {
+        fetches.push(Promise.resolve({ success: true, chapters }));
+      }
 
       if (!pagesData || pagesData.chapterId !== chapterId) {
-        fetches.push(fetchJson<{ success: boolean; pageUrls: string[]; dataSaverUrls: string[] }>(`/api/manga/chapter/${chapterId}${titleParam}`));
+        fetches.push(
+          fetchJson<{ success: boolean; pageUrls: string[]; dataSaverUrls: string[] }>(
+            `/api/manga/chapter/${chapterId}${titleParam}`
+          )
+        );
       } else {
-        fetches.push(Promise.resolve({ success: true, pageUrls: pagesData.pageUrls, dataSaverUrls: pagesData.dataSaverUrls }));
+        fetches.push(
+          Promise.resolve({
+            success: true,
+            pageUrls: pagesData.pageUrls,
+            dataSaverUrls: pagesData.dataSaverUrls,
+          })
+        );
       }
 
       const [detailsData, chaptersData, pagesRes] = await Promise.all(fetches);
@@ -207,8 +367,14 @@ export default function MangaReaderClient({
         setManga(detailsData.item);
         if (typeof window !== "undefined") {
           try {
-            if (detailsData.item.coverImage && !detailsData.item.coverImage.includes("icon-512.png")) {
-              sessionStorage.setItem(`cs_manga_cover_${mangaId}`, detailsData.item.coverImage);
+            if (
+              detailsData.item.coverImage &&
+              !detailsData.item.coverImage.includes("icon-512.png")
+            ) {
+              sessionStorage.setItem(
+                `cs_manga_cover_${mangaId}`,
+                detailsData.item.coverImage
+              );
             }
             if (detailsData.item.type) {
               sessionStorage.setItem(`cs_manga_type_${mangaId}`, detailsData.item.type);
@@ -230,7 +396,9 @@ export default function MangaReaderClient({
           dataSaverUrls: pagesRes.dataSaverUrls || [],
         });
       } else {
-        setError("Could not retrieve chapter images. The chapter may be offline or still uploading.");
+        setError(
+          "Could not retrieve chapter images. The chapter may be offline or still uploading."
+        );
       }
     } catch (err: any) {
       console.error("Failed to load chapter:", err);
@@ -240,165 +408,300 @@ export default function MangaReaderClient({
     }
   }, [mangaId, chapterId, queryTitle, queryCh, manga, chapters, pagesData]);
 
+  // Load each chapter exactly once. The loader closes over async state
+  // (manga / chapters / pagesData), so keeping it in a ref prevents the
+  // effect from re-firing in a loop when a series has no chapters.
+  const loadChapterRef = useRef(loadChapter);
+  const loadedChapterKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    loadChapter();
+    loadChapterRef.current = loadChapter;
   }, [loadChapter]);
+  useEffect(() => {
+    const key = `${mangaId}:${chapterId}`;
+    if (loadedChapterKeyRef.current === key) return;
+    loadedChapterKeyRef.current = key;
+    loadChapterRef.current();
+  }, [mangaId, chapterId]);
 
-  // Ensure scroll is at the very top on chapter switch
+  // Reset scroll and page when switching chapters.
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
     if (readerContainerRef.current) {
       readerContainerRef.current.scrollTop = 0;
     }
+    pageRefs.current.clear();
+    setCurrentPage(1);
+    lastScrollPageRef.current = 1;
   }, [chapterId]);
 
-  // Current Chapter Metadata
+  // Restore the last read page in this chapter (paged modes + webtoon).
+  const restoredChapterRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pagesData || pagesData.pageUrls.length === 0) return;
+    if (isAuthed) return; // signed-in readers restore from the server below
+    const restoreKey = `${pagesData.chapterId}:${pagesData.pageUrls.length}`;
+    if (restoredChapterRef.current === restoreKey) return;
+    restoredChapterRef.current = restoreKey;
+
+    const stored = getLocalMangaProgress(mangaId);
+    const clean = (value: string) => value.replace(/^(wc|asura)-/, "");
+    const sameChapter = stored && clean(stored.chapterId) === clean(chapterId);
+    const page = sameChapter ? stored?.pageNumber || 1 : 1;
+    const safePage = Math.max(1, Math.min(pagesData.pageUrls.length, page));
+    setCurrentPage(safePage);
+    lastScrollPageRef.current = safePage;
+
+    if (safePage > 1 && readerMode === "webtoon") {
+      window.setTimeout(() => {
+        pageRefs.current.get(safePage)?.scrollIntoView({ block: "start" });
+      }, 450);
+    }
+  }, [pagesData, mangaId, chapterId, readerMode, isAuthed]);
+
+  // Signed-in readers resume from their synced server progress.
+  const serverRestoredRef = useRef<string | null>(null);
+  const serverRestoreFinishedRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthed || !pagesData || pagesData.pageUrls.length === 0) return;
+    const restoreKey = `${pagesData.chapterId}:${pagesData.pageUrls.length}`;
+    if (serverRestoredRef.current === restoreKey) return;
+    serverRestoredRef.current = restoreKey;
+    serverRestoreFinishedRef.current = false;
+
+    let cancelled = false;
+    fetchServerMangaProgress(mangaId)
+      .then((stored) => {
+        if (cancelled || !stored) return;
+        const clean = (value: string) => value.replace(/^(wc|asura)-/, "");
+        if (clean(stored.chapterId) !== clean(chapterId)) return;
+        const safePage = Math.max(
+          1,
+          Math.min(pagesData.pageUrls.length, stored.pageNumber || 1)
+        );
+        setCurrentPage(safePage);
+        lastScrollPageRef.current = safePage;
+        if (safePage > 1 && readerMode === "webtoon") {
+          window.setTimeout(() => {
+            pageRefs.current.get(safePage)?.scrollIntoView({ block: "start" });
+          }, 450);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) serverRestoreFinishedRef.current = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthed, pagesData, mangaId, chapterId, readerMode]);
+
   const currentChapter = useMemo(() => {
     const cleanTarget = chapterId.replace(/^(wc|asura)-/, "");
     return (
       chapters.find(
-        (c) =>
-          c.id === chapterId ||
-          c.id.replace(/^(wc|asura)-/, "") === cleanTarget
+        (c) => c.id === chapterId || c.id.replace(/^(wc|asura)-/, "") === cleanTarget
       ) || null
     );
   }, [chapters, chapterId]);
 
-  // Sorted Chapters List (Ascending 1, 2, 3...)
-  const sortedChapters = useMemo(() => {
-    return [...chapters].sort((a, b) => (parseFloat(a.chapterNumber) || 0) - (parseFloat(b.chapterNumber) || 0));
-  }, [chapters]);
+  const sortedChapters = useMemo(
+    () =>
+      [...chapters].sort(
+        (a, b) => (parseFloat(a.chapterNumber) || 0) - (parseFloat(b.chapterNumber) || 0)
+      ),
+    [chapters]
+  );
 
-  // Previous and Next Chapters
   const currentChapterIdx = useMemo(() => {
     const cleanTarget = chapterId.replace(/^(wc|asura)-/, "");
     return sortedChapters.findIndex(
-      (c) =>
-        c.id === chapterId ||
-        c.id.replace(/^(wc|asura)-/, "") === cleanTarget
+      (c) => c.id === chapterId || c.id.replace(/^(wc|asura)-/, "") === cleanTarget
     );
   }, [sortedChapters, chapterId]);
 
-  const prevChapter = useMemo(() => {
-    return currentChapterIdx > 0
-      ? sortedChapters[currentChapterIdx - 1]
-      : null;
-  }, [sortedChapters, currentChapterIdx]);
+  const prevChapter = useMemo(
+    () => (currentChapterIdx > 0 ? sortedChapters[currentChapterIdx - 1] : null),
+    [sortedChapters, currentChapterIdx]
+  );
 
-  const nextChapter = useMemo(() => {
-    return currentChapterIdx >= 0 && currentChapterIdx < sortedChapters.length - 1
-      ? sortedChapters[currentChapterIdx + 1]
-      : null;
-  }, [sortedChapters, currentChapterIdx]);
+  const nextChapter = useMemo(
+    () =>
+      currentChapterIdx >= 0 && currentChapterIdx < sortedChapters.length - 1
+        ? sortedChapters[currentChapterIdx + 1]
+        : null,
+    [sortedChapters, currentChapterIdx]
+  );
 
-  // Total pages count
   const totalPages = pagesData?.pageUrls?.length || 0;
 
-  // Persist Chapter Reading Progress (1 request per chapter opened)
-  const persistChapterProgress = useCallback(() => {
+  const resolvedTitle = manga?.title || initialManga?.title || queryTitle || "Manga";
+  const resolvedChapterNumber =
+    currentChapter?.chapterNumber || queryCh || "1";
+  const resolvedChapterLabel = currentChapter?.title
+    ? currentChapter.title
+    : `Chapter ${resolvedChapterNumber}`;
+
+  // Resolve the best available cover once, reused by progress + header.
+  const resolvedCover = useMemo(() => {
     const cleanId = mangaId.replace(/^(wc|asura)-/, "");
-    const resolvedTitle = manga?.title || initialManga?.title || queryTitle || "Manga";
-    const rawCover = manga?.coverImage || initialManga?.coverImage || queryCover || sessionCover;
-    const isFallbackCover = !rawCover || rawCover.includes("icon-512.png") || rawCover.includes("icon.png");
-    const resolvedCover = isFallbackCover
-      ? (mangaId.startsWith("wc-") ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp` : "/icon-512.png")
-      : rawCover;
+    const raw =
+      manga?.coverImage || initialManga?.coverImage || queryCover || sessionCover;
+    const isFallback = !raw || raw.includes("icon-512.png") || raw.includes("icon.png");
+    return isFallback && mangaId.startsWith("wc-")
+      ? `https://temp.compsci88.com/cover/normal/${cleanId}.webp`
+      : raw || "/icon-512.png";
+  }, [manga?.coverImage, initialManga?.coverImage, queryCover, sessionCover, mangaId]);
 
-    const rawType = manga?.type || initialManga?.type || queryType || sessionType;
-    let resolvedType: "manga" | "manhwa" | "manhua" = "manga";
-    if (rawType === "manhwa" || rawType === "manhua") {
-      resolvedType = rawType;
-    } else if (
-      mangaId.startsWith("asura-") ||
-      /raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(resolvedTitle)
-    ) {
-      resolvedType = "manhwa";
-    }
-
-    const resolvedChapterNumber = currentChapter?.chapterNumber || queryCh || "1";
-    const resolvedChapterTitle = currentChapter?.title || null;
-    const resolvedTotalPages = totalPages > 0 ? totalPages : 1;
-
-    const payload = {
+  const buildProgressPayload = useCallback(
+    (pageNumber: number) => ({
       mangaId,
       mangaTitle: resolvedTitle,
       mangaCover: resolvedCover,
-      mangaType: resolvedType,
+      mangaType: resolvedKind,
       chapterId,
       chapterNumber: resolvedChapterNumber,
-      chapterTitle: resolvedChapterTitle,
-      pageNumber: 1,
-      totalPages: resolvedTotalPages,
+      chapterTitle: currentChapter?.title || null,
+      pageNumber: Math.max(1, pageNumber),
+      totalPages: totalPages > 0 ? totalPages : 1,
       nextChapterId: nextChapter ? nextChapter.id : null,
       nextChapterNumber: nextChapter ? nextChapter.chapterNumber : null,
+    }),
+    [
+      mangaId,
+      resolvedTitle,
+      resolvedCover,
+      resolvedKind,
+      chapterId,
+      resolvedChapterNumber,
+      currentChapter?.title,
+      totalPages,
+      nextChapter,
+    ]
+  );
+
+  const persistProgress = useCallback(
+    (pageNumber: number, immediate = false) => {
+      const payload = buildProgressPayload(pageNumber);
+      if (isAuthed) {
+        saveServerMangaProgress(payload, immediate);
+      } else {
+        saveLocalMangaProgress(payload);
+      }
+
+      if (typeof window !== "undefined") {
+        try {
+          if (!resolvedCover.includes("icon-512.png")) {
+            sessionStorage.setItem(`cs_manga_cover_${mangaId}`, resolvedCover);
+          }
+          sessionStorage.setItem(`cs_manga_type_${mangaId}`, resolvedKind);
+          sessionStorage.setItem(`cs_manga_title_${mangaId}`, resolvedTitle);
+        } catch {}
+      }
+    },
+    [buildProgressPayload, isAuthed, resolvedCover, resolvedKind, resolvedTitle, mangaId]
+  );
+
+  // Keep the latest page/closure available to unload and navigation handlers.
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  const persistProgressRef = useRef(persistProgress);
+  useEffect(() => {
+    persistProgressRef.current = persistProgress;
+  }, [persistProgress]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (totalPages <= 0) return;
+      if (isAuthed && !serverRestoreFinishedRef.current) return;
+      persistProgressRef.current(currentPageRef.current, true);
     };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, [totalPages, isAuthed]);
 
-    if (isAuthed) {
-      saveServerMangaProgress(payload, true);
-    } else {
-      saveLocalMangaProgress(payload);
-    }
-
-    if (typeof window !== "undefined") {
-      try {
-        if (!resolvedCover.includes("icon-512.png")) {
-          sessionStorage.setItem(`cs_manga_cover_${mangaId}`, resolvedCover);
-        }
-        sessionStorage.setItem(`cs_manga_type_${mangaId}`, resolvedType);
-      } catch {}
-    }
-
-    markChapterAsRead(mangaId, chapterId, resolvedChapterNumber);
-  }, [
-    isAuthed,
-    manga,
-    initialManga,
-    queryTitle,
-    queryCover,
-    queryType,
-    sessionCover,
-    sessionType,
-    currentChapter,
-    queryCh,
-    totalPages,
-    mangaId,
-    chapterId,
-    nextChapter,
-  ]);
-
-  // Save chapter progress once when entering the chapter
+  // Mark the chapter read and persist the entry once per chapter. When this
+  // chapter already has saved progress we keep that page instead of resetting
+  // the reader to page 1 (which would erase the resume position).
+  const initialisedChapterRef = useRef<string | null>(null);
   useEffect(() => {
     if (authStatus === "loading") return;
-    persistChapterProgress();
-  }, [authStatus, chapterId, persistChapterProgress]);
 
-  // Preload Next 3 Pages in Memory
+    const initKey = `${authStatus}:${mangaId}:${chapterId}`;
+    if (initialisedChapterRef.current === initKey) return;
+    initialisedChapterRef.current = initKey;
+
+    markChapterAsRead(mangaId, chapterId, resolvedChapterNumber);
+
+    // Local readers can persist immediately; signed-in readers wait for the
+    // server restore so opening a chapter never rewinds synced progress.
+    if (!isAuthed) {
+      const stored = getLocalMangaProgress(mangaId);
+      const clean = (value: string) => value.replace(/^(wc|asura)-/, "");
+      const sameChapter = !!stored && clean(stored.chapterId) === clean(chapterId);
+      persistProgress(sameChapter ? Math.max(1, stored?.pageNumber || 1) : 1, true);
+    }
+  }, [
+    authStatus,
+    isAuthed,
+    chapterId,
+    mangaId,
+    resolvedChapterNumber,
+    persistProgress,
+  ]);
+
+  // Debounced page-position save.
+  const pageSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!pagesData || totalPages === 0) return;
+    if (authStatus === "loading") return;
+    if (isAuthed && !serverRestoreFinishedRef.current) return;
+    if (pageSaveTimerRef.current) clearTimeout(pageSaveTimerRef.current);
+    pageSaveTimerRef.current = setTimeout(() => {
+      persistProgress(currentPage);
+    }, 1200);
+    return () => {
+      if (pageSaveTimerRef.current) clearTimeout(pageSaveTimerRef.current);
+    };
+  }, [currentPage, pagesData, totalPages, persistProgress, authStatus, isAuthed]);
+
+  // Preload upcoming pages.
   useEffect(() => {
     if (!pagesData?.pageUrls) return;
     const urls = pagesData.pageUrls;
-    const nextIndices = [currentPage, currentPage + 1, currentPage + 2].filter((i) => i < urls.length);
-    for (const idx of nextIndices) {
-      const img = new Image();
-      img.src = urls[idx];
+    const amount = readerMode === "double" ? 4 : 3;
+    for (let offset = 1; offset <= amount; offset += 1) {
+      const idx = currentPage - 1 + offset;
+      if (idx < urls.length) {
+        const img = new Image();
+        img.src = urls[idx];
+      }
     }
-  }, [pagesData, currentPage]);
+  }, [pagesData, currentPage, readerMode]);
 
-  // Webtoon Scroll Intersection Observer (100% local React state - ZERO network requests on scroll)
+  // Track the visible page while scrolling (webtoon).
   useEffect(() => {
-    if (totalPages <= 0) return;
+    if (readerMode !== "webtoon" || totalPages <= 0) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const pageNum = parseInt(entry.target.getAttribute("data-page") || "1", 10);
-            if (pageNum && pageNum !== currentPage) {
-              setCurrentPage(pageNum);
-            }
+          if (!entry.isIntersecting) continue;
+          const pageNum = parseInt(entry.target.getAttribute("data-page") || "0", 10);
+          if (pageNum > 0 && pageNum !== lastScrollPageRef.current) {
+            lastScrollPageRef.current = pageNum;
+            setCurrentPage(pageNum);
           }
         }
       },
-      { threshold: 0.4 }
+      { rootMargin: "-45% 0px -45% 0px", threshold: 0 }
     );
 
     pageRefs.current.forEach((el) => {
@@ -406,137 +709,188 @@ export default function MangaReaderClient({
     });
 
     return () => observer.disconnect();
-  }, [totalPages, currentPage]);
+  }, [totalPages, readerMode, pagesData]);
 
-  // Zoom Handler Functions (+ / - / reset in clean steps of 10)
-  const handleZoomIn = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setZoomLevel((prev) => {
-      const base = Math.floor(prev / 10) * 10;
-      const next = Math.min(200, base + 10);
-      try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
-      return next;
-    });
-  };
-
-  const handleZoomOut = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setZoomLevel((prev) => {
-      const base = Math.ceil(prev / 10) * 10;
-      const next = Math.max(20, base - 10);
-      try { localStorage.setItem("cinestream.manga_zoom_level", String(next)); } catch {}
-      return next;
-    });
-  };
-
-  const handleZoomReset = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-    const targetZoom = isMobile ? 100 : 50;
-    setZoomLevel(targetZoom);
-    try { localStorage.setItem("cinestream.manga_zoom_level", String(targetZoom)); } catch {}
-  };
-
-  // Proper Fullscreen Toggle (Standard document-level fullscreen)
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      const el = document.documentElement;
-      if (el.requestFullscreen) {
-        el.requestFullscreen().catch(() => {});
-      } else if ((el as any).webkitRequestFullscreen) {
-        (el as any).webkitRequestFullscreen();
-      }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen();
-      }
-    }
-  };
-
-  // Keyboard Shortcuts
+  // Keep the double-page spread aligned to an even page start.
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (readerMode !== "double") return;
+    setCurrentPage((page) => (page <= 1 ? 1 : page % 2 === 0 ? page : page - 1));
+  }, [readerMode]);
+
+  const scrollToPage = useCallback((page: number) => {
+    const target = Math.max(1, Math.min(totalPages, page));
+    const el = pageRefs.current.get(target);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    lastScrollPageRef.current = target;
+    setCurrentPage(target);
+  }, [totalPages]);
+
+  const goToNextChapter = useCallback(() => {
+    if (!nextChapter) return;
+    persistProgress(currentPageRef.current, true);
+    router.push(
+      `/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(
+        resolvedTitle
+      )}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`
+    );
+  }, [nextChapter, router, mangaId, resolvedTitle, persistProgress]);
+
+  const goToPrevChapter = useCallback(() => {
+    if (!prevChapter) return;
+    persistProgress(currentPageRef.current, true);
+    router.push(
+      `/manga/${mangaId}/read/${prevChapter.id}?title=${encodeURIComponent(
+        resolvedTitle
+      )}&ch=${encodeURIComponent(prevChapter.chapterNumber)}`
+    );
+  }, [prevChapter, router, mangaId, resolvedTitle, persistProgress]);
+
+  const goNext = useCallback(() => {
+    if (readerMode === "webtoon") {
+      scrollToPage(currentPage + 1);
+      return;
+    }
+    if (readerMode === "single") {
+      if (currentPage < totalPages) setCurrentPage((page) => Math.min(totalPages, page + 1));
+      else goToNextChapter();
+      return;
+    }
+    if (currentPage === 1) {
+      if (totalPages >= 2) setCurrentPage(2);
+      else goToNextChapter();
+      return;
+    }
+    if (currentPage + 2 <= totalPages) setCurrentPage(currentPage + 2);
+    else goToNextChapter();
+  }, [readerMode, currentPage, totalPages, scrollToPage, goToNextChapter]);
+
+  const goPrev = useCallback(() => {
+    if (readerMode === "webtoon") {
+      scrollToPage(currentPage - 1);
+      return;
+    }
+    if (readerMode === "single") {
+      setCurrentPage((page) => Math.max(1, page - 1));
+      return;
+    }
+    setCurrentPage((page) => (page <= 2 ? 1 : page - 2));
+  }, [readerMode, currentPage, scrollToPage]);
+
+  const toggleControls = useCallback(() => {
+    setShowControls((prev) => !prev);
+    setSettingsOpen(false);
+    setChapterPickerOpen(false);
+  }, []);
+
+  // Auto-hide the chrome after a few seconds of reading in every mode.
+  useEffect(() => {
+    if (!showControls) return;
+    if (settingsOpen || chapterPickerOpen) return;
+    const timer = setTimeout(
+      () => setShowControls(false),
+      readerMode === "webtoon" ? 6500 : 5200
+    );
+    return () => clearTimeout(timer);
+  }, [showControls, readerMode, currentPage, settingsOpen, chapterPickerOpen]);
+
+  // Keyboard shortcuts.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
 
       if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         toggleFullscreen();
-      } else if (e.key === "+" || e.key === "=") {
+        return;
+      }
+
+      if (e.key === "Escape") {
+        setSettingsOpen(false);
+        setChapterPickerOpen(false);
+        return;
+      }
+
+      if (readerMode === "webtoon") return;
+
+      const forwardKey = direction === "rtl" ? "ArrowLeft" : "ArrowRight";
+      const backKey = direction === "rtl" ? "ArrowRight" : "ArrowLeft";
+
+      if (e.key === forwardKey || e.key === " " || e.key === "PageDown" || e.key === "ArrowDown") {
         e.preventDefault();
-        handleZoomIn();
-      } else if (e.key === "-" || e.key === "_") {
+        goNext();
+      } else if (e.key === backKey || e.key === "PageUp" || e.key === "ArrowUp") {
         e.preventDefault();
-        handleZoomOut();
-      } else if (e.key === "0") {
-        e.preventDefault();
-        handleZoomReset();
-      } else if (e.key === "[") {
-        e.preventDefault();
-        handleSetBrightness(brightness - 10);
-      } else if (e.key === "]") {
-        e.preventDefault();
-        handleSetBrightness(brightness + 10);
+        goPrev();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [brightness]);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [readerMode, direction, goNext, goPrev, toggleFullscreen]);
 
-  // Handle tap to toggle controls on mobile with proper scroll discrimination
-  // A "tap" = touchstart + touchend with minimal movement and short duration
-  const touchStartTime = useRef<number>(0);
+  const progressPercent = totalPages > 0 ? (currentPage / totalPages) * 100 : 0;
+  const atChapterEnd =
+    readerMode === "double" ? currentPage + 1 >= totalPages : currentPage >= totalPages;
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length > 0) {
-      touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      touchStartTime.current = Date.now();
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (e.changedTouches.length > 0) {
-      const dx = Math.abs(e.changedTouches[0].clientX - touchStartPos.current.x);
-      const dy = Math.abs(e.changedTouches[0].clientY - touchStartPos.current.y);
-      const elapsed = Date.now() - touchStartTime.current;
-      // Tap = minimal movement (< 12px in any direction) AND short duration (< 300ms)
-      if (dx < 12 && dy < 12 && elapsed < 300) {
-        // Close any open menus first; if none open, toggle the bar
-        if (chapterPickerOpen || brightnessPickerOpen || mobileNavOpen) {
-          setChapterPickerOpen(false);
-          setBrightnessPickerOpen(false);
-          setMobileNavOpen(false);
-        } else {
-          setShowControls((prev) => !prev);
-        }
-      }
-    }
-  };
+  const headerChapterHref = (chapter: MangaChapter) =>
+    `/manga/${mangaId}/read/${chapter.id}?title=${encodeURIComponent(
+      resolvedTitle
+    )}&ch=${encodeURIComponent(chapter.chapterNumber)}&cover=${encodeURIComponent(
+      resolvedCover
+    )}&type=${encodeURIComponent(resolvedKind)}`;
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
-        <Loader2 className="w-10 h-10 animate-spin text-primary mb-3" />
-        <p className="text-sm text-zinc-400 font-bold">Loading chapter pages...</p>
+      <div
+        className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4 p-6 text-center"
+        style={mangaThemeStyle(resolvedKind) as React.CSSProperties}
+      >
+        <div
+          className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10"
+          style={{ background: theme.gradient }}
+        >
+          <Loader2 className={`h-7 w-7 animate-spin ${accentText}`} />
+        </div>
+        <div>
+          <p className="text-sm font-black text-white">Preparing your chapter</p>
+          <p className="text-xs font-semibold text-white/45 mt-1">
+            Fetching high-resolution pages…
+          </p>
+        </div>
       </div>
     );
   }
 
   if (error || !pagesData || pagesData.pageUrls.length === 0) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
+      <div
+        className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center"
+        style={mangaThemeStyle(resolvedKind) as React.CSSProperties}
+      >
         <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-400 border border-red-500/30 flex items-center justify-center mb-4">
           <AlertCircle className="w-8 h-8" />
         </div>
-        <h2 className="text-2xl font-black text-white mb-2">Chapter Temporarily Unavailable</h2>
-        <p className="text-sm text-zinc-400 max-w-md mb-6">{error || "Could not retrieve chapter images."}</p>
-        
+        <h2 className="text-2xl font-black text-white mb-2">
+          Chapter Temporarily Unavailable
+        </h2>
+        <p className="text-sm text-zinc-400 max-w-md mb-6">
+          {error || "Could not retrieve chapter images."}
+        </p>
+
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             onClick={() => loadChapter()}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-primary hover:opacity-90 text-primary-foreground font-black text-sm shadow-xl shadow-primary/30 active:scale-95 cursor-pointer touch-manipulation"
+            className={`inline-flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm shadow-xl active:scale-95 cursor-pointer touch-manipulation ${accentText}`}
+            style={{ background: theme.gradient }}
           >
             <RotateCcw className="w-4 h-4" />
             <span>Retry Loading Chapter</span>
@@ -557,447 +911,598 @@ export default function MangaReaderClient({
   return (
     <div
       ref={readerContainerRef}
-      className="min-h-screen w-full bg-black text-white flex flex-col justify-start select-none relative overflow-x-hidden"
-      style={
-        {
-          "--primary": "42 75% 65%",
-          "--primary-foreground": "210 30% 6%",
-          "--ring": "42 75% 65%",
-          "--accent": "42 75% 65%",
-        } as React.CSSProperties
-      }
+      style={mangaThemeStyle(resolvedKind) as React.CSSProperties}
+      className="relative min-h-screen w-full bg-black text-white select-none overflow-x-hidden"
     >
-      {/* TOP FLOATING NAVIGATION BAR (Clean, Responsive & Fully Accessible on Mobile & Desktop) */}
+      {/* Ambient glow */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background: theme.isManhwa
+            ? "radial-gradient(circle at 50% 0%, rgba(157,3,252,0.13) 0%, transparent 42%), radial-gradient(circle at 90% 90%, rgba(252,3,173,0.08) 0%, transparent 40%)"
+            : "radial-gradient(circle at 50% 0%, rgba(255,255,255,0.05) 0%, transparent 42%)",
+        }}
+      />
+
+      {/* TOP BAR */}
       <header
         style={{
-          paddingTop: "max(0.6rem, env(safe-area-inset-top, 0.6rem))",
-          paddingBottom: "0.6rem",
-          paddingLeft: "max(0.6rem, env(safe-area-inset-left, 0.6rem))",
-          paddingRight: "max(0.6rem, env(safe-area-inset-right, 0.6rem))",
+          paddingTop: "max(0.55rem, env(safe-area-inset-top, 0.55rem))",
+          paddingLeft: "max(0.55rem, env(safe-area-inset-left, 0.55rem))",
+          paddingRight: "max(0.55rem, env(safe-area-inset-right, 0.55rem))",
+          paddingBottom: "0.55rem",
         }}
-        className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-          showControls ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"
-        } bg-black/95 backdrop-blur-2xl border-b border-white/10 px-2.5 sm:px-6 flex items-center justify-between gap-2 shadow-2xl`}
+        className={`fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-2 border-b border-white/10 bg-black/85 px-2.5 backdrop-blur-2xl transition-all duration-300 sm:px-5 ${
+          showControls
+            ? "translate-y-0 opacity-100"
+            : "-translate-y-full opacity-0 pointer-events-none"
+        }`}
       >
-        {/* Left: Back, (Desktop) Prev Chapter Button & Title/Chapter */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <Link
             href={`/manga/${mangaId}`}
             onClick={exitFullscreenIfActive}
-            className="p-2 rounded-xl bg-white/[0.06] hover:bg-primary/20 hover:text-primary text-white/80 transition-colors shrink-0 touch-manipulation active:scale-90"
-            title="Back to Details"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white active:scale-90 sm:h-9 sm:w-9"
+            title="Back to details"
           >
-            <ArrowLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            <ArrowLeft className="h-4 w-4" />
           </Link>
 
-          {/* Previous Chapter Button (Desktop) */}
-          {prevChapter && (
-            <Link
-              href={`/manga/${mangaId}/read/${prevChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(prevChapter.chapterNumber)}`}
-              className="hidden sm:flex items-center gap-1 px-3 py-1.5 sm:py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 hover:border-primary/50 text-xs font-black shadow-md transition-all cursor-pointer shrink-0 touch-manipulation active:scale-95"
-              title={`Previous Chapter (Ch. ${prevChapter.chapterNumber})`}
-            >
-              <ChevronLeft className="w-3.5 h-3.5 stroke-[3]" />
-              <span>Prev Ch.</span>
-            </Link>
-          )}
-
-          <div className="hidden lg:flex flex-col min-w-0">
-            <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[180px] md:max-w-xs">
-              {manga?.title || queryTitle || "Manga"}
-            </h1>
-            <span className="text-[10px] sm:text-[11px] text-primary font-bold truncate">
-              {currentChapter ? currentChapter.title || `Chapter ${currentChapter.chapterNumber}` : queryCh ? `Chapter ${queryCh}` : `Chapter`}
-            </span>
-          </div>
-        </div>
-
-        {/* Center: Chapter Jump Picker + Brightness Adjuster */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          
-          {/* Chapter Dropdown Jump Picker */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setChapterPickerOpen(!chapterPickerOpen);
-                setBrightnessPickerOpen(false);
-              }}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-xs font-bold text-white transition-all cursor-pointer touch-manipulation active:scale-95"
-            >
-              <List className="w-3.5 h-3.5 text-primary" />
-              <span>Ch. {currentChapter?.chapterNumber || queryCh || "1"}</span>
-            </button>
-
-            {/* Click-away backdrop overlay */}
-            {chapterPickerOpen && (
-              <div
-                className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm"
-                onClick={() => setChapterPickerOpen(false)}
-              />
-            )}
-
-            {/* Chapter Jump Menu */}
-            {chapterPickerOpen && (
-              <div className="fixed left-3 right-3 sm:left-auto sm:-translate-x-1/4 sm:w-80 top-16 sm:top-full mt-2 max-h-[75vh] sm:max-h-96 flex flex-col bg-[#0c0d14] border-2 border-primary/50 rounded-2xl p-3 shadow-[0_25px_80px_rgba(0,0,0,0.98)] z-50">
-                <div className="flex items-center justify-between px-2 pb-2.5 mb-2 border-b border-white/10 shrink-0">
-                  <span className="text-xs font-black uppercase tracking-wider text-primary">
-                    Jump to Chapter ({chapters.length})
-                  </span>
-                  <button
-                    onClick={() => setChapterPickerOpen(false)}
-                    className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
-                    aria-label="Close chapter menu"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar pr-1">
-                  {[...sortedChapters].reverse().map((ch) => {
-                    const isCurrent = ch.id === chapterId;
-                    return (
-                      <button
-                        key={ch.id}
-                        onClick={() => {
-                          setChapterPickerOpen(false);
-                          router.push(`/manga/${mangaId}/read/${ch.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(ch.chapterNumber)}`);
-                        }}
-                        className={`text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between touch-manipulation border ${
-                          isCurrent
-                            ? "bg-primary text-primary-foreground font-black border-primary shadow-lg shadow-primary/30"
-                            : "bg-white/[0.04] text-zinc-100 hover:bg-primary hover:text-black border-white/5"
-                        }`}
-                      >
-                        <span className="truncate">{ch.title || `Chapter ${ch.chapterNumber}`}</span>
-                        {isCurrent ? (
-                          <CheckCircle2 className="w-4 h-4 text-primary-foreground shrink-0 ml-2" />
-                        ) : (
-                          <span className="text-[10px] text-zinc-400 font-mono shrink-0 ml-2">Ch. {ch.chapterNumber}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* BRIGHTNESS CONTROL (Compact & Responsive for Desktop + Mobile) */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                setBrightnessPickerOpen(!brightnessPickerOpen);
-                setChapterPickerOpen(false);
-              }}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer touch-manipulation active:scale-95 ${
-                brightness !== 100
-                  ? "bg-primary/15 border-primary/40 text-primary"
-                  : "bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white"
-              }`}
-              title="Adjust Reader Brightness"
-              aria-label="Adjust Reader Brightness"
-            >
-              {brightness < 70 ? (
-                <SunDim className="w-3.5 h-3.5 text-primary" />
-              ) : brightness > 110 ? (
-                <Sun className="w-3.5 h-3.5 text-primary" />
-              ) : (
-                <SunMedium className="w-3.5 h-3.5 text-primary" />
-              )}
-              <span className="font-mono text-[11px] sm:text-xs">{brightness}%</span>
-            </button>
-
-            {/* Click-away backdrop overlay */}
-            {brightnessPickerOpen && (
-              <div
-                className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-                onClick={() => setBrightnessPickerOpen(false)}
-              />
-            )}
-
-            {/* Brightness Popover Menu */}
-            {brightnessPickerOpen && (
-              <div className="fixed left-4 right-4 sm:left-auto sm:-translate-x-1/3 sm:w-80 top-16 sm:top-full mt-2 flex flex-col bg-[#0c0d14] border-2 border-primary/60 rounded-2xl p-4 shadow-[0_25px_80px_rgba(0,0,0,0.98)] z-50 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <SunMedium className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-black uppercase tracking-wider text-white">
-                      Brightness
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-primary font-mono bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/30">
-                      {brightness}%
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setBrightnessPickerOpen(false)}
-                      className="p-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/30 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
-                      title="Apply & Close"
-                      aria-label="Close Brightness Popup"
-                    >
-                      <Check className="w-4 h-4 stroke-[3]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Range Slider */}
-                <div className="flex items-center gap-3 py-1">
-                  <SunDim className="w-4 h-4 text-zinc-400 shrink-0" />
-                  <input
-                    type="range"
-                    min="30"
-                    max="150"
-                    step="5"
-                    value={brightness}
-                    onChange={(e) => handleSetBrightness(parseInt(e.target.value, 10))}
-                    onInput={(e: any) => handleSetBrightness(parseInt(e.target.value, 10))}
-                    className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary touch-manipulation"
-                  />
-                  <Sun className="w-4 h-4 text-primary shrink-0" />
-                </div>
-
-                {/* Quick Preset Buttons */}
-                <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-white/10">
-                  {[50, 75, 100, 125].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => handleSetBrightness(preset)}
-                      className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer touch-manipulation ${
-                        brightness === preset
-                          ? "bg-primary text-primary-foreground font-black shadow-md shadow-primary/30 scale-102"
-                          : "bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white"
-                      }`}
-                    >
-                      {preset}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Zoom Controls, Fullscreen & Next Chapter Button */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          
-          {/* Zoom In / Out Controls (Bold & Prominent) - Hidden on Mobile */}
-          <div className="hidden sm:flex items-center bg-[#141622] border-2 border-primary/40 hover:border-primary/80 rounded-2xl p-1 shadow-lg shadow-black/50 transition-all">
-            <button
-              onClick={handleZoomOut}
-              disabled={zoomLevel <= 20}
-              className="p-1.5 sm:p-2 rounded-xl bg-white/[0.04] hover:bg-white/10 text-white/90 hover:text-primary disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
-              title="Zoom Out (-10%)"
-              aria-label="Zoom Out"
-            >
-              <ZoomOut className="w-4 h-4 stroke-[2.5]" />
-            </button>
-
-            <span className="px-2 font-mono text-[11px] sm:text-xs font-black text-primary select-none min-w-[42px] text-center">
-              {zoomLevel}%
-            </span>
-
-            <button
-              onClick={handleZoomIn}
-              disabled={zoomLevel >= 200}
-              className="p-1.5 sm:p-2 rounded-xl bg-primary/20 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/50 hover:border-primary font-black shadow-md shadow-primary/20 hover:scale-105 disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer touch-manipulation active:scale-90"
-              title="Zoom In (+10%)"
-              aria-label="Zoom In"
-            >
-              <ZoomIn className="w-4 h-4 stroke-[2.5]" />
-            </button>
-          </div>
-
-          {/* Fullscreen Button: Hidden on Mobile */}
-          <button
-            onClick={toggleFullscreen}
-            className="hidden sm:flex p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white/80 hover:text-primary transition-colors cursor-pointer touch-manipulation active:scale-90"
-            title="Toggle Fullscreen (F)"
-            aria-label="Toggle Fullscreen"
+          <span
+            className={`hidden shrink-0 rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-wider sm:inline-flex ${theme.chipClass}`}
           >
-            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            {theme.label}
+          </span>
+
+          <div className="min-w-0">
+            <h1 className="truncate text-xs font-black text-white sm:text-sm">
+              {resolvedTitle}
+            </h1>
+            <p className="truncate text-[10px] font-bold text-white/45 sm:text-[11px]">
+              {resolvedChapterLabel}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setChapterPickerOpen((open) => !open);
+              setSettingsOpen(false);
+            }}
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-2.5 text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white active:scale-95 sm:h-9"
+            title="Chapters"
+          >
+            <List className="h-4 w-4" />
+            <span className="hidden text-[11px] font-black sm:inline">
+              Ch. {resolvedChapterNumber}
+            </span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${
+                chapterPickerOpen ? "rotate-180" : ""
+              }`}
+            />
           </button>
 
-          {/* Desktop Next Chapter Button */}
-          {nextChapter && (
-            <Link
-              href={`/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`}
-              className="hidden sm:flex items-center gap-1 px-3.5 py-2 rounded-xl bg-primary hover:opacity-90 text-primary-foreground text-xs font-black shadow-lg shadow-primary/25 transition-all cursor-pointer shrink-0 touch-manipulation active:scale-95"
-              title={`Next Chapter (Ch. ${nextChapter.chapterNumber})`}
-            >
-              <span>Next Ch.</span>
-              <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
-            </Link>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsOpen((open) => !open);
+              setChapterPickerOpen(false);
+            }}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors active:scale-90 sm:h-9 sm:w-9 ${
+              settingsOpen
+                ? "border-white/30 bg-white/15 text-white"
+                : "border-white/10 bg-white/[0.06] text-white/80 hover:bg-white/[0.12] hover:text-white"
+            }`}
+            title="Reader settings"
+            aria-label="Reader settings"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
 
-          {/* Mobile Chapter Navigation Dropdown (Only appears if prev or next chapter exists) */}
-          {(prevChapter || nextChapter) && (
-            <div className="relative sm:hidden">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileNavOpen(!mobileNavOpen);
-                  setChapterPickerOpen(false);
-                  setBrightnessPickerOpen(false);
-                }}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-black shadow-lg shadow-primary/25 transition-all cursor-pointer touch-manipulation active:scale-95"
-                title="Navigate Chapters"
-                aria-label="Navigate Chapters"
-              >
-                <span>Nav</span>
-                <ChevronDown className={`w-3.5 h-3.5 stroke-[3] transition-transform duration-200 ${mobileNavOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {/* Mobile Nav Overlay & Menu */}
-              {mobileNavOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-                    onClick={() => setMobileNavOpen(false)}
-                  />
-                  <div className="fixed right-2.5 top-16 w-60 flex flex-col bg-[#0c0d14] border-2 border-primary/60 rounded-2xl p-2.5 shadow-[0_25px_80px_rgba(0,0,0,0.98)] z-50 space-y-2">
-                    <div className="flex items-center justify-between px-2 pb-1.5 border-b border-white/10">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-primary">
-                        Chapter Navigation
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setMobileNavOpen(false)}
-                        className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    {prevChapter && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMobileNavOpen(false);
-                          router.push(`/manga/${mangaId}/read/${prevChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(prevChapter.chapterNumber)}`);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-bold transition-all active:scale-95 cursor-pointer border border-white/10"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <ChevronLeft className="w-4 h-4 text-primary shrink-0 stroke-[2.5]" />
-                          <span>Prev Chapter</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-zinc-400">Ch. {prevChapter.chapterNumber}</span>
-                      </button>
-                    )}
-
-                    {nextChapter && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMobileNavOpen(false);
-                          router.push(`/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black shadow-md shadow-primary/30 transition-all active:scale-95 cursor-pointer"
-                      >
-                        <span>Next Chapter</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-mono opacity-80">Ch. {nextChapter.chapterNumber}</span>
-                          <ChevronRight className="w-4 h-4 shrink-0 stroke-[3]" />
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="hidden h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white active:scale-90 sm:flex"
+            title="Toggle fullscreen (F)"
+            aria-label="Toggle fullscreen"
+          >
+            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </button>
         </div>
       </header>
 
-      {/* MAIN READING CANVAS (Pure Continuous Vertical Scroll with Hardware-Accelerated Brightness & Zoom) */}
-      <main
-        style={{
-          paddingTop: "max(4.5rem, calc(4.25rem + env(safe-area-inset-top, 0px)))",
-          paddingBottom: "max(2rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))",
-        }}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        className="flex-1 flex flex-col items-center justify-start min-h-screen w-full cursor-default overflow-x-hidden"
-      >
-        <div
-          style={{
-            width: `${zoomLevel}%`,
-            maxWidth: `${Math.max(360, Math.round(1400 * (zoomLevel / 100)))}px`,
-            filter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
-            WebkitFilter: brightness !== 100 ? `brightness(${brightness}%)` : undefined,
-          }}
-          className="flex flex-col items-center mx-auto transition-[width,filter] duration-150 relative"
-        >
-          {pagesData.pageUrls.map((url, idx) => {
-            const pageNum = idx + 1;
-            const dataSaverUrl = pagesData.dataSaverUrls?.[idx] || "";
-            return (
-              <MangaPageItem
-                key={pageNum}
-                pageNum={pageNum}
-                totalPages={totalPages}
-                url={url}
-                dataSaverUrl={dataSaverUrl}
-                brightness={brightness}
-                onPageRef={(el) => {
-                  if (el) pageRefs.current.set(pageNum, el);
-                  else pageRefs.current.delete(pageNum);
-                }}
-                onTap={() => {
-                  if (chapterPickerOpen || brightnessPickerOpen || mobileNavOpen) {
-                    setChapterPickerOpen(false);
-                    setBrightnessPickerOpen(false);
-                    setMobileNavOpen(false);
-                  } else {
-                    setShowControls((prev) => !prev);
-                  }
-                }}
-              />
-            );
-          })}
+      {/* CHAPTER PICKER */}
+      {chapterPickerOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm"
+            onClick={() => setChapterPickerOpen(false)}
+          />
+          <div
+            className="fixed left-3 right-3 z-50 flex max-h-[72vh] flex-col rounded-2xl border border-white/15 bg-[#0a0a0d]/98 p-3 shadow-[0_30px_90px_rgba(0,0,0,0.95)] backdrop-blur-2xl sm:left-auto sm:right-6 sm:w-96"
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 4rem)" }}
+          >
+            <div className="mb-2 flex shrink-0 items-center justify-between border-b border-white/10 px-1 pb-2.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-white/70">
+                Chapters ({chapters.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setChapterPickerOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                aria-label="Close chapter list"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="custom-scrollbar flex flex-col gap-1.5 overflow-y-auto pr-1">
+              {[...sortedChapters].reverse().map((ch) => {
+                const clean = (value: string) => value.replace(/^(wc|asura)-/, "");
+                const isCurrent = clean(ch.id) === clean(chapterId);
+                return (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    onClick={() => {
+                      setChapterPickerOpen(false);
+                      router.push(headerChapterHref(ch));
+                    }}
+                    className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all active:scale-[0.99] ${
+                      isCurrent
+                        ? `border-transparent ${accentText}`
+                        : "border-white/5 bg-white/[0.04] text-white/80 hover:bg-white/[0.09] hover:text-white"
+                    }`}
+                    style={isCurrent ? { background: theme.gradient } : undefined}
+                  >
+                    <span className="truncate">
+                      {ch.title || `Chapter ${ch.chapterNumber}`}
+                    </span>
+                    {isCurrent ? (
+                      <CheckCircle2 className={`ml-2 h-4 w-4 shrink-0 ${accentText}`} />
+                    ) : (
+                      <span className="ml-2 shrink-0 font-mono text-[10px] text-white/35">
+                        Ch. {ch.chapterNumber}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
-          {/* END OF CHAPTER BANNER */}
-          {totalPages > 0 && (
-            <div className="w-full p-8 my-8 text-center bg-zinc-950 border border-white/10 rounded-3xl space-y-4 max-w-xl mx-4 shadow-2xl">
-              <div className="w-12 h-12 rounded-full bg-primary/15 text-primary flex items-center justify-center mx-auto border border-primary/30">
-                <CheckCircle2 className="w-6 h-6" />
+      {/* SETTINGS PANEL */}
+      {settingsOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm"
+            onClick={() => setSettingsOpen(false)}
+          />
+          <div
+            className="fixed left-3 right-3 z-50 flex max-h-[76vh] flex-col gap-4 overflow-y-auto rounded-2xl border border-white/15 bg-[#0a0a0d]/98 p-4 shadow-[0_30px_90px_rgba(0,0,0,0.95)] backdrop-blur-2xl sm:left-auto sm:right-6 sm:w-[350px]"
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 4rem)" }}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-white/70">
+                Reader Settings
+              </span>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                aria-label="Close settings"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-white/40">
+                Reading mode
+              </p>
+              <div
+                className={`grid gap-1.5 ${
+                  availableModes.length === 2 ? "grid-cols-2" : "grid-cols-3"
+                }`}
+              >
+                {availableModes.map((option) => {
+                  const Icon = option.icon;
+                  const disabled = option.desktopOnly && isMobile;
+                  const active = readerMode === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => changeMode(option.key)}
+                      style={active ? { background: theme.gradient } : undefined}
+                      className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-[10px] font-black transition-all ${
+                        active
+                          ? `border-transparent ${accentText}`
+                          : "border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.09] hover:text-white"
+                      } ${disabled ? "cursor-not-allowed opacity-35" : "cursor-pointer"}`}
+                      title={
+                        disabled ? "Double page mode is available on tablets & desktop" : option.hint
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {isMobile && dualAllowed && (
+                <p className="mt-1.5 text-[10px] font-semibold text-white/35">
+                  Dual page mode unlocks on tablet &amp; desktop.
+                </p>
+              )}
+              {!dualAllowed && (
+                <p className="mt-1.5 text-[10px] font-semibold text-white/35">
+                  Dual page is manga-only; manhwa uses the continuous scroll reader.
+                </p>
+              )}
+            </div>
+
+            {readerMode !== "webtoon" && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-white/40">
+                  Reading direction
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(["ltr", "rtl"] as const).map((dir) => (
+                    <button
+                      key={dir}
+                      type="button"
+                      onClick={() => changeDirection(dir)}
+                      style={direction === dir ? { background: theme.gradient } : undefined}
+                      className={`rounded-xl border px-3 py-2 text-[11px] font-black transition-all ${
+                        direction === dir
+                          ? `border-transparent ${accentText}`
+                          : "border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.09] hover:text-white"
+                      }`}
+                    >
+                      {dir === "ltr" ? "Left → Right" : "Right → Left"}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[10px] font-semibold text-white/35">
+                  Manga usually reads right → left. Manhwa reads left → right.
+                </p>
+              </div>
+            )}
+
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-wider text-white/40">
+                  Brightness
+                </p>
+                <span className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] font-black text-white/70">
+                  {brightness}%
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <SunDim className="h-4 w-4 shrink-0 text-white/40" />
+                <input
+                  type="range"
+                  min={30}
+                  max={150}
+                  step={5}
+                  value={brightness}
+                  onChange={(e) => updateBrightness(parseInt(e.target.value, 10))}
+                  className="reader-range w-full"
+                  style={{ accentColor: theme.primaryHex }}
+                />
+                <Sun className="h-4 w-4 shrink-0 text-white/60" />
+              </div>
+              <div className="mt-2 grid grid-cols-4 gap-1.5">
+                {[50, 75, 100, 125].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => updateBrightness(preset)}
+                    className={`rounded-lg px-2 py-1 text-[10px] font-black transition-colors ${
+                      brightness === preset
+                        ? "bg-white/20 text-white"
+                        : "bg-white/[0.05] text-white/50 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {preset}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {readerMode === "webtoon" && (
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-white/40">
+                    Page width
+                  </p>
+                  <span className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] font-black text-white/70">
+                    {webtoonWidth}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[10px] font-black text-white/40">Narrow</span>
+                  <input
+                    type="range"
+                    min={60}
+                    max={150}
+                    step={10}
+                    value={webtoonWidth}
+                    onChange={(e) => updateWebtoonWidth(parseInt(e.target.value, 10))}
+                    className="reader-range w-full"
+                    style={{ accentColor: theme.primaryHex }}
+                  />
+                  <span className="text-[10px] font-black text-white/40">Wide</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateWebtoonWidth(100)}
+                  className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.04] py-1.5 text-[10px] font-black text-white/60 hover:bg-white/[0.09] hover:text-white"
+                >
+                  Reset to fit width
+                </button>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
+              <p className="text-[10px] font-bold leading-relaxed text-white/40">
+                {readerMode === "webtoon"
+                  ? "Tap the page to hide or show the controls. Use the page width slider to zoom the strip."
+                  : isMobile
+                  ? "Tap the sides to turn pages, swipe to navigate, double-tap or pinch to zoom. Tap the middle to hide the controls."
+                  : "Arrow keys turn pages, wheel navigates, Ctrl + wheel zooms, F toggles fullscreen."}
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* MAIN READING AREA */}
+      {readerMode === "webtoon" ? (
+        <main
+          className="relative z-10 flex min-h-screen w-full flex-col items-center overflow-x-auto"
+          style={{
+            paddingTop: "max(3.9rem, calc(3.5rem + env(safe-area-inset-top, 0px)))",
+            paddingBottom: "max(6.5rem, calc(5.5rem + env(safe-area-inset-bottom, 0px)))",
+          }}
+        >
+          <div
+            style={{
+              width: `${webtoonWidth}%`,
+              maxWidth: `${Math.round(980 * (webtoonWidth / 100))}px`,
+            }}
+            className="relative mx-auto flex shrink-0 flex-col items-center"
+          >
+            {pagesData.pageUrls.map((url, idx) => {
+              const pageNum = idx + 1;
+              const dataSaverUrl = pagesData.dataSaverUrls?.[idx] || "";
+              return (
+                <MangaPageItem
+                  key={`${pagesData.chapterId}-${pageNum}`}
+                  pageNum={pageNum}
+                  totalPages={totalPages}
+                  url={url}
+                  dataSaverUrl={dataSaverUrl}
+                  brightness={brightness}
+                  onPageRef={(el) => {
+                    if (el) pageRefs.current.set(pageNum, el);
+                    else pageRefs.current.delete(pageNum);
+                  }}
+                  onTap={toggleControls}
+                />
+              );
+            })}
+
+            {/* END OF CHAPTER */}
+            <div className="mx-auto my-8 w-[calc(100%-2rem)] max-w-xl space-y-4 rounded-3xl border border-white/10 bg-[#0a0a0d] p-5 text-center shadow-2xl sm:p-7">
+              <div
+                className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-white/15"
+                style={{ background: theme.gradient }}
+              >
+                <CheckCircle2 className={`h-6 w-6 ${accentText}`} />
               </div>
               <h3 className="text-xl font-black text-white">
-                Finished {currentChapter ? currentChapter.title || `Chapter ${currentChapter.chapterNumber}` : "Chapter"}!
+                Finished {resolvedChapterLabel}!
               </h3>
+              <p className="text-xs font-semibold text-white/45">
+                {totalPages} pages · {theme.label}
+              </p>
 
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 {prevChapter && (
                   <Link
-                    href={`/manga/${mangaId}/read/${prevChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(prevChapter.chapterNumber)}`}
-                    className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 font-bold text-sm shadow-lg transition-all cursor-pointer touch-manipulation active:scale-95"
+                    href={headerChapterHref(prevChapter)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-bold text-white transition-all hover:bg-white/[0.12] active:scale-95"
                   >
-                    <ChevronLeft className="w-4 h-4 stroke-[3]" />
-                    <span>Previous Ch. {prevChapter.chapterNumber}</span>
+                    <ChevronLeft className="h-4 w-4" />
+                    <span>Ch. {prevChapter.chapterNumber}</span>
                   </Link>
                 )}
 
                 {nextChapter ? (
                   <Link
-                    href={`/manga/${mangaId}/read/${nextChapter.id}?title=${encodeURIComponent(manga?.title || "")}&ch=${encodeURIComponent(nextChapter.chapterNumber)}`}
-                    className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-primary hover:opacity-90 text-primary-foreground font-black text-sm shadow-xl shadow-primary/30 transition-all cursor-pointer touch-manipulation active:scale-95"
+                    href={headerChapterHref(nextChapter)}
+                    style={{ background: theme.gradient }}
+                    className={`inline-flex items-center gap-2 rounded-2xl px-7 py-3 text-sm font-black shadow-xl transition-all hover:opacity-90 active:scale-95 ${accentText}`}
                   >
-                    <span>Read Next Chapter {nextChapter.chapterNumber}</span>
-                    <ChevronRight className="w-4 h-4 stroke-[3]" />
+                    <span>Read Ch. {nextChapter.chapterNumber}</span>
+                    <ChevronRight className="h-4 w-4" />
                   </Link>
                 ) : (
-                  <p className="text-xs text-primary font-bold w-full">
-                    🎉 You are caught up with the latest released chapter!
+                  <p className="w-full text-xs font-bold text-white/60">
+                    You are all caught up with the latest chapter.
                   </p>
                 )}
               </div>
+
+              <Link
+                href={`/manga/${mangaId}`}
+                onClick={exitFullscreenIfActive}
+                className="inline-flex items-center gap-1.5 pt-1 text-[11px] font-black text-white/40 transition-colors hover:text-white"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to series details
+              </Link>
             </div>
-          )}
+          </div>
+        </main>
+      ) : (
+        <main className="reader-stage relative z-10">
+          <PagedReader
+            pageUrls={pagesData.pageUrls}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            mode={readerMode}
+            direction={direction}
+            brightness={brightness}
+            showControls={showControls}
+            isMobile={isMobile}
+            onPrev={goPrev}
+            onNext={goNext}
+            onToggleControls={toggleControls}
+          />
+        </main>
+      )}
+
+      {/* END-OF-CHAPTER ACTION (paged modes) */}
+      {readerMode !== "webtoon" && totalPages > 0 && atChapterEnd && (
+        <div
+          className={`fixed bottom-24 left-1/2 z-30 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-2xl border border-white/15 bg-black/85 p-3 shadow-2xl backdrop-blur-xl transition-opacity duration-300 ${
+            showControls ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-wider text-white/40">
+                Chapter complete
+              </p>
+              <p className="truncate text-xs font-black text-white">
+                {resolvedChapterLabel}
+              </p>
+            </div>
+            {nextChapter ? (
+              <button
+                type="button"
+                onClick={goToNextChapter}
+                style={{ background: theme.gradient }}
+                className={`flex shrink-0 items-center gap-1 rounded-xl px-4 py-2 text-xs font-black active:scale-95 ${accentText}`}
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <span className="shrink-0 text-[10px] font-bold text-white/40">
+                All caught up
+              </span>
+            )}
+          </div>
         </div>
-      </main>
+      )}
+
+      {/* BOTTOM CONTROL BAR */}
+      <div
+        style={{
+          paddingBottom: "max(0.55rem, env(safe-area-inset-bottom, 0.55rem))",
+          paddingLeft: "max(0.55rem, env(safe-area-inset-left, 0.55rem))",
+          paddingRight: "max(0.55rem, env(safe-area-inset-right, 0.55rem))",
+        }}
+        className={`fixed inset-x-0 bottom-0 z-40 transition-all duration-300 ${
+          showControls
+            ? "translate-y-0 opacity-100"
+            : "translate-y-full opacity-0 pointer-events-none"
+        }`}
+      >
+        <div className="mx-auto flex w-full max-w-5xl items-center gap-1.5 rounded-2xl border border-white/12 bg-black/80 p-2 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:gap-3 sm:p-2.5">
+          <button
+            type="button"
+            onClick={goToPrevChapter}
+            disabled={!prevChapter}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/70 transition-colors hover:bg-white/[0.12] hover:text-white disabled:cursor-not-allowed disabled:opacity-25 sm:h-9 sm:w-9"
+            title={prevChapter ? `Previous chapter ${prevChapter.chapterNumber}` : "No previous chapter"}
+            aria-label="Previous chapter"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={goPrev}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/70 transition-colors hover:bg-white/[0.12] hover:text-white sm:h-9 sm:w-9"
+            title="Previous page"
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          <div className="min-w-0 flex-1 px-1">
+            <div className="mb-1 flex items-center justify-between gap-2 text-[9px] font-black uppercase tracking-wider text-white/45 sm:text-[10px]">
+              <span className="truncate">{theme.label}</span>
+              <span className="shrink-0 font-mono text-white/70">
+                {currentPage} / {totalPages}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={Math.max(1, totalPages)}
+              value={Math.min(currentPage, Math.max(1, totalPages))}
+              onChange={(e) => {
+                const page = parseInt(e.target.value, 10);
+                if (readerMode === "webtoon") scrollToPage(page);
+                else setCurrentPage(page);
+              }}
+              className="reader-range w-full"
+              style={{
+                accentColor: theme.primaryHex,
+                background: `linear-gradient(to right, ${theme.primaryHex} 0%, ${
+                  theme.accentHex
+                } ${progressPercent}%, rgba(255,255,255,0.14) ${progressPercent}%)`,
+              }}
+              aria-label="Reading progress"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={goNext}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/70 transition-colors hover:bg-white/[0.12] hover:text-white sm:h-9 sm:w-9"
+            title="Next page"
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={goToNextChapter}
+            disabled={!nextChapter}
+            className="hidden h-9 shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[0.05] px-2.5 text-[10px] font-black text-white/70 transition-colors hover:bg-white/[0.12] hover:text-white disabled:cursor-not-allowed disabled:opacity-25 sm:flex"
+            title={nextChapter ? `Next chapter ${nextChapter.chapterNumber}` : "No next chapter"}
+          >
+            <span>Next Ch.</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsOpen(true);
+              setChapterPickerOpen(false);
+            }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/70 transition-colors hover:bg-white/[0.12] hover:text-white sm:hidden"
+            title="Reader settings"
+            aria-label="Reader settings"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

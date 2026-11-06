@@ -420,9 +420,23 @@ export const EpisodeGridCard = memo(function EpisodeGridCard({ item }: { item: E
   );
 });
 
-export const EpisodeGridView = memo(function EpisodeGridView({ items }: { items: EpisodeItem[] }) {
+export const EpisodeGridView = memo(function EpisodeGridView({
+  items,
+  layout = "default",
+}: {
+  items: EpisodeItem[];
+  /** "comfortable" renders 2–3 larger cards per row for roomier detail pages. */
+  layout?: "default" | "comfortable";
+}) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-6 4xl:grid-cols-7 gap-3.5 sm:gap-4 md:gap-5 w-full">
+    <div
+      className={cn(
+        "grid w-full",
+        layout === "comfortable"
+          ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-3 gap-4 sm:gap-5 md:gap-6"
+          : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-6 4xl:grid-cols-7 gap-3.5 sm:gap-4 md:gap-5"
+      )}
+    >
       {items.map((item) => (
         <EpisodeGridCard key={item.key} item={item} />
       ))}
@@ -694,10 +708,21 @@ export function EpisodePagination({
               key={p}
               onClick={() => onPageChange(p)}
               title={`Episodes ${rangeStart}–${rangeEnd}`}
+              aria-current={isCurrent ? "page" : undefined}
+              style={
+                isCurrent
+                  ? {
+                      backgroundImage:
+                        "linear-gradient(135deg, var(--anime-accent, #4B5694) 0%, var(--anime-accent-2, #7288AE) 100%)",
+                      color: "var(--anime-accent-contrast, #ffffff)",
+                      boxShadow: "0 10px 22px -8px rgba(0,0,0,0.65)",
+                    }
+                  : undefined
+              }
               className={cn(
                 "min-w-[36px] h-[36px] px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center select-none",
                 isCurrent
-                  ? "bg-gradient-to-r from-[#4B5694] to-[#7288AE] text-white shadow-lg shadow-[#4B5694]/25 ring-1 ring-white/20 scale-105"
+                  ? "ring-1 ring-white/20 scale-105"
                   : "bg-white/[0.04] border border-white/[0.08] text-white/70 hover:text-white hover:bg-white/[0.08]"
               )}
             >

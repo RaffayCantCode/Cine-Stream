@@ -24,6 +24,7 @@ import {
 } from "@/lib/manga-history";
 import { fetchJson } from "@/lib/utils";
 import { MangaItem } from "@/lib/manga-fetch";
+import { getMangaTheme, mangaThemeStyle } from "@/lib/manga-theme";
 
 export default function ContinueReadingPage() {
   const { status } = useSession();
@@ -210,10 +211,10 @@ export default function ContinueReadingPage() {
         className="min-h-screen bg-background text-foreground pb-20"
         style={
           {
-            "--primary": "42 75% 65%",
-            "--primary-foreground": "210 30% 6%",
-            "--ring": "42 75% 65%",
-            "--accent": "42 75% 65%",
+            "--primary": "0 0% 100%",
+            "--primary-foreground": "0 0% 4%",
+            "--ring": "0 0% 100%",
+            "--accent": "0 0% 72%",
           } as React.CSSProperties
         }
       >
@@ -258,10 +259,10 @@ export default function ContinueReadingPage() {
       className="min-h-screen bg-background text-foreground pb-20"
       style={
         {
-          "--primary": "42 75% 65%",
-          "--primary-foreground": "210 30% 6%",
-          "--ring": "42 75% 65%",
-          "--accent": "42 75% 65%",
+          "--primary": "0 0% 100%",
+          "--primary-foreground": "0 0% 4%",
+          "--ring": "0 0% 100%",
+          "--accent": "0 0% 72%",
         } as React.CSSProperties
       }
     >
@@ -360,11 +361,13 @@ export default function ContinueReadingPage() {
                     : (/raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(item.mangaTitle) || item.mangaId.startsWith("asura-")
                         ? "manhwa"
                         : item.mangaType || "manga");
+                  const theme = getMangaTheme(effectiveType);
 
                   return (
                     <div
                       key={item.mangaId}
-                      className="group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-zinc-950/90 border border-white/[0.08] hover:border-primary/45 hover:shadow-[0_12px_28px_hsl(var(--primary)/0.15)] transition-all duration-300 overflow-hidden"
+                      style={mangaThemeStyle(effectiveType) as React.CSSProperties}
+                      className={`group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-zinc-950/90 border border-white/[0.08] transition-all duration-300 overflow-hidden ${theme.cardHoverClass}`}
                     >
                       {/* Poster Cover Box (Compact Aspect on Mobile) */}
                       <div className="relative w-full aspect-[4/5] sm:aspect-[3/4] overflow-hidden bg-zinc-900">
@@ -387,12 +390,14 @@ export default function ContinueReadingPage() {
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
 
+                        <div className="absolute inset-x-0 top-0 h-[3px] z-20" style={{ background: theme.gradient }} />
+
                         {/* Gradient Scrim */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none" />
 
                         {/* Top Floating Badges: Type on left, Discard X on right */}
                         <div className="absolute top-1.5 sm:top-2 inset-x-1.5 sm:inset-x-2 flex items-center justify-between z-20">
-                          <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-black/90 text-primary border border-white/20 text-[8px] sm:text-[9px] font-black uppercase tracking-wider backdrop-blur-md">
+                          <span className={`px-1.5 sm:px-2 py-0.5 rounded-md border text-[8px] sm:text-[9px] font-black uppercase tracking-wider backdrop-blur-md ${theme.chipClass}`}>
                             {effectiveType}
                           </span>
                           <button
@@ -415,7 +420,7 @@ export default function ContinueReadingPage() {
 
                         {/* Bottom Chapter Overlay on Poster */}
                         <div className="absolute bottom-2 left-2 z-10">
-                          <span className="text-primary font-mono font-black bg-black/90 px-2.5 py-1 rounded-lg border border-white/20 text-xs sm:text-sm shadow-lg backdrop-blur-md">
+                          <span className="font-mono font-black bg-black/90 px-2.5 py-1 rounded-lg border border-white/20 text-xs sm:text-sm shadow-lg backdrop-blur-md" style={{ color: theme.primaryHex }}>
                             Ch. {item.chapterNumber}
                           </span>
                         </div>
@@ -425,7 +430,7 @@ export default function ContinueReadingPage() {
                       <div className="p-2 sm:p-3 flex flex-col justify-between flex-1 gap-1.5 sm:gap-2 bg-zinc-950">
                         <Link
                           href={`/manga/${item.mangaId}`}
-                          className="font-black text-[11px] sm:text-sm text-white line-clamp-1 hover:text-primary transition-colors block"
+                          className="font-black text-[11px] sm:text-sm text-white line-clamp-1 transition-colors block"
                           title={item.mangaTitle}
                         >
                           {item.mangaTitle}
@@ -434,7 +439,8 @@ export default function ContinueReadingPage() {
                         <div className="flex items-center gap-1 sm:gap-1.5 pt-1 border-t border-white/[0.06]">
                           <Link
                             href={`/manga/${item.mangaId}/read/${item.chapterId}?title=${encodeURIComponent(item.mangaTitle)}&ch=${encodeURIComponent(item.chapterNumber)}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
-                            className="flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl bg-primary text-primary-foreground text-[10px] sm:text-xs font-black shadow-md shadow-primary/25 flex items-center justify-center gap-1 active:scale-95 transition-all hover:opacity-90 touch-manipulation cursor-pointer"
+                            style={{ background: theme.gradient }}
+                            className={`flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl ${theme.isManhwa ? "text-white" : "text-black"} text-[10px] sm:text-xs font-black shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all hover:opacity-90 touch-manipulation cursor-pointer`}
                             title={`Resume Reading Chapter ${item.chapterNumber}`}
                           >
                             <Play className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current shrink-0" />
@@ -443,7 +449,7 @@ export default function ContinueReadingPage() {
 
                           <Link
                             href={`/manga/${item.mangaId}`}
-                            className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/80 hover:text-primary transition-all flex items-center justify-center active:scale-95 touch-manipulation cursor-pointer shrink-0"
+                            className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/80 hover:text-white transition-all flex items-center justify-center active:scale-95 touch-manipulation cursor-pointer shrink-0"
                             title="Open Manga Details"
                             aria-label="Open Manga Details"
                           >

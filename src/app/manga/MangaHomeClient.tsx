@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { MangaCard } from "@/components/manga/MangaCard";
 import { MangaItem, isCleanManga } from "@/lib/manga-fetch";
+import { getMangaTheme, mangaThemeStyle } from "@/lib/manga-theme";
 import { 
   getLocalMangaHistory, 
   saveLocalMangaProgress,
@@ -656,61 +657,116 @@ export default function MangaHomeClient({
   }, [hasMore, isGenreLoading, isSearching, isLoadingMore, loadMoreItems]);
 
   const activeGenreObj = useMemo(() => GENRES.find((g) => g.id === selectedGenre), [selectedGenre]);
+  const filterTheme = useMemo(
+    () => getMangaTheme(selectedType === "all" ? null : selectedType),
+    [selectedType]
+  );
 
   return (
-    <div
-      className="min-h-screen bg-background text-foreground pb-24"
-      style={
-        {
-          "--primary": "42 75% 65%",
-          "--primary-foreground": "210 30% 6%",
-          "--ring": "42 75% 65%",
-          "--accent": "42 75% 65%",
-        } as React.CSSProperties
-      }
-    >
+    <div className="relative min-h-screen bg-[#060608] text-foreground pb-24 overflow-x-clip">
+      {/* Ambient section glow: monochrome on the left, manhwa violet-magenta on the right */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className="absolute -top-48 left-[8%] h-[520px] w-[520px] rounded-full bg-white/[0.035] blur-[130px]" />
+        <div
+          className="absolute -top-40 right-[4%] h-[560px] w-[560px] rounded-full blur-[150px] opacity-60"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(157,3,252,0.20) 0%, rgba(252,3,173,0.10) 45%, transparent 72%)",
+          }}
+        />
+      </div>
+
       <Sidebar />
 
-      <main className="w-full pt-8 md:pt-24 lg:pt-28">
+      <main className="relative z-10 w-full pt-8 md:pt-24 lg:pt-28">
         <div className="px-5 sm:px-8 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto space-y-12">
           
           {/* Header Section */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-black uppercase tracking-wider mb-3 shadow-[0_0_15px_hsl(var(--primary)/0.2)]">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/15 text-white/80 text-xs font-black uppercase tracking-wider mb-3 backdrop-blur-md">
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Dedicated Manga & Manhwa Reader</span>
+                <span>Dedicated Manga &amp; Manhwa Reader</span>
               </div>
               <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white">
-                Manga & Manhwa
+                Manga <span className="text-zinc-500">&amp;</span>{" "}
+                <span
+                  className="bg-clip-text text-transparent"
+                  style={{ backgroundImage: getMangaTheme("manhwa").gradient }}
+                >
+                  Manhwa
+                </span>
               </h1>
-              <p className="text-sm md:text-base text-zinc-300 font-medium mt-1.5 max-w-xl">
-                Read thousands of full manga, manhwa, and webtoons with high-res chapters and zero ads.
+              <p className="text-sm md:text-base text-zinc-400 font-medium mt-1.5 max-w-xl">
+                Read thousands of full manga, manhwa, and webtoons with high-res
+                chapters and zero ads.
               </p>
+              <div className="flex flex-wrap items-center gap-2 mt-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/20 text-[10px] font-black uppercase tracking-wider text-white">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                  Manga · Monochrome
+                </span>
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#c840ff]/40 text-[10px] font-black uppercase tracking-wider text-[#ecb6ff]"
+                  style={{ background: "rgba(157,3,252,0.12)" }}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: getMangaTheme("manhwa").gradient }}
+                  />
+                  Manhwa · Violet → Magenta
+                </span>
+              </div>
             </div>
 
             {/* Type Selector Tabs (All Series, Manhwa, Manga) */}
-            <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] backdrop-blur-md self-start md:self-end">
-              {(["all", "manhwa", "manga"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => handleSetSelectedType(t)}
-                  className={`px-4 py-2 rounded-xl text-xs font-black capitalize transition-all cursor-pointer ${
-                    selectedType === t
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-102"
-                      : "text-white/60 hover:text-white hover:bg-white/[0.06]"
-                  }`}
-                >
-                  {t === "all" ? "All Series" : t === "manhwa" ? "Manhwa" : "Manga"}
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] backdrop-blur-md self-start md:self-end">
+              {(["all", "manhwa", "manga"] as const).map((t) => {
+                const isActive = selectedType === t;
+                const isManhwaTab = t === "manhwa";
+                const isMangaTab = t === "manga";
+                return (
+                  <button
+                    key={t}
+                    onClick={() => handleSetSelectedType(t)}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black capitalize transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isActive
+                        ? isManhwaTab
+                          ? "text-white shadow-[0_10px_26px_-10px_rgba(157,3,252,0.85)] scale-[1.02]"
+                          : "bg-white text-black shadow-[0_10px_24px_-12px_rgba(255,255,255,0.65)] scale-[1.02]"
+                        : "text-white/55 hover:text-white hover:bg-white/[0.06]"
+                    }`}
+                    style={
+                      isActive && isManhwaTab
+                        ? { background: getMangaTheme("manhwa").gradient }
+                        : undefined
+                    }
+                  >
+                    {isMangaTab && (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isActive ? "bg-black/70" : "bg-white/60"
+                        }`}
+                      />
+                    )}
+                    {isManhwaTab && (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isActive ? "bg-white" : "bg-[#d24bff]"
+                        }`}
+                      />
+                    )}
+                    {t === "all" ? "All Series" : t === "manhwa" ? "Manhwa" : "Manga"}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Search & Genre Filter Bar */}
           <div className="space-y-4">
             <div className="relative max-w-xl">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/60 pointer-events-none" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/45 pointer-events-none" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -720,7 +776,7 @@ export default function MangaHomeClient({
                   }
                 }}
                 placeholder="Search manga, manhwa, or authors (e.g. Solo Leveling, One Piece)..."
-                className="w-full h-12 pl-11 pr-12 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] focus:bg-white/[0.06] border border-white/[0.08] focus:border-primary/60 text-white text-sm outline-none transition-all placeholder:text-white/35 shadow-inner"
+                className="w-full h-12 pl-11 pr-12 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] focus:bg-white/[0.06] border border-white/[0.08] focus:border-white/45 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.05)] text-white text-sm outline-none transition-all placeholder:text-white/35 shadow-inner"
               />
               {searchQuery && (
                 <button
@@ -734,18 +790,26 @@ export default function MangaHomeClient({
               )}
             </div>
 
-            {/* Genre Pills with High-Contrast Active State */}
+            {/* Genre Pills with type-aware active state */}
             <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-2 pt-1">
               {GENRES.map((g) => {
                 const isActive = selectedGenre === g.id;
+                const manhwaAccent = selectedType === "manhwa";
                 return (
                   <button
                     key={g.label}
                     onClick={() => handleSetSelectedGenre(g.id)}
-                    className={`shrink-0 px-4 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+                    style={
+                      isActive && manhwaAccent
+                        ? { background: getMangaTheme("manhwa").gradient }
+                        : undefined
+                    }
+                    className={`shrink-0 px-4 py-2 rounded-xl text-xs transition-all cursor-pointer border ${
                       isActive
-                        ? "bg-primary text-primary-foreground border border-primary shadow-lg shadow-primary/30 font-black scale-105"
-                        : "bg-white/[0.04] text-white/70 border border-white/[0.08] hover:bg-white/[0.08] hover:text-white font-bold"
+                        ? manhwaAccent
+                          ? "text-white border-transparent font-black shadow-[0_10px_26px_-10px_rgba(157,3,252,0.8)] scale-105"
+                          : "bg-white text-black border-transparent font-black shadow-[0_10px_24px_-12px_rgba(255,255,255,0.6)] scale-105"
+                        : "bg-white/[0.04] text-white/70 border-white/[0.08] hover:bg-white/[0.08] hover:text-white font-bold"
                     }`}
                   >
                     {g.label}
@@ -760,23 +824,30 @@ export default function MangaHomeClient({
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <Bookmark className="w-5 h-5 text-primary" />
-                  <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
-                    Continue Reading
-                  </h2>
+                  <div className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/15 flex items-center justify-center">
+                    <Bookmark className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+                      Continue Reading
+                    </h2>
+                    <p className="text-[11px] sm:text-xs text-white/45 font-semibold">
+                      Pick up exactly where you left off
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   {isMounted && history.length > 6 && (
                     <Link
                       href="/manga/continue-reading"
-                      className="text-xs font-black text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+                      className="text-xs font-black text-white/70 hover:text-white flex items-center gap-1 transition-colors"
                     >
                       View All ({history.length})
                       <ChevronRight className="w-3.5 h-3.5" />
                     </Link>
                   )}
                   {isMounted && (
-                    <span className="text-xs text-primary font-black bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
+                    <span className="text-xs text-white font-black bg-white/[0.06] px-3 py-1 rounded-full border border-white/15">
                       {history.length} In Progress
                     </span>
                   )}
@@ -795,11 +866,13 @@ export default function MangaHomeClient({
                     : (/raeliana|duke's mansion|solo leveling|manhwa|webtoon/i.test(item.mangaTitle) || item.mangaId.startsWith("asura-")
                         ? "manhwa"
                         : item.mangaType || "manga");
+                  const theme = getMangaTheme(effectiveType);
 
                   return (
                     <div
                       key={item.mangaId}
-                      className="group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-zinc-950/90 border border-white/[0.08] hover:border-primary/45 hover:shadow-[0_12px_28px_hsl(var(--primary)/0.15)] transition-all duration-300 overflow-hidden"
+                      style={mangaThemeStyle(effectiveType) as React.CSSProperties}
+                      className={`group relative flex flex-col justify-between rounded-2xl sm:rounded-3xl bg-zinc-950/90 border border-white/[0.08] transition-all duration-300 overflow-hidden ${theme.cardHoverClass}`}
                     >
                       {/* Poster Cover Box (Compact Aspect on Mobile) */}
                       <div className="relative w-full aspect-[4/5] sm:aspect-[3/4] overflow-hidden bg-zinc-900">
@@ -822,13 +895,16 @@ export default function MangaHomeClient({
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
 
+                        {/* Identity accent line */}
+                        <div className="absolute inset-x-0 top-0 h-[3px] z-20" style={{ background: theme.gradient }} />
+
                         {/* Gradient Scrim */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none" />
 
                         {/* Top Floating Badges: Type on left, Discard X on right */}
                         <div className="absolute top-1.5 sm:top-2 inset-x-1.5 sm:inset-x-2 flex items-center justify-between z-20">
                           {isMounted && (
-                            <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-black/90 text-primary border border-white/20 text-[8px] sm:text-[9px] font-black uppercase tracking-wider backdrop-blur-md">
+                            <span className={`px-1.5 sm:px-2 py-0.5 rounded-md border text-[8px] sm:text-[9px] font-black uppercase tracking-wider backdrop-blur-md ${theme.chipClass}`}>
                               {effectiveType}
                             </span>
                           )}
@@ -854,7 +930,7 @@ export default function MangaHomeClient({
 
                         {/* Bottom Chapter Overlay on Poster */}
                         <div className="absolute bottom-2 left-2 z-10">
-                          <span className="text-primary font-mono font-black bg-black/90 px-2.5 py-1 rounded-lg border border-white/20 text-xs sm:text-sm shadow-lg backdrop-blur-md">
+                          <span className="font-mono font-black bg-black/90 px-2.5 py-1 rounded-lg border border-white/20 text-xs sm:text-sm shadow-lg backdrop-blur-md" style={{ color: theme.primaryHex }}>
                             Ch. {item.chapterNumber}
                           </span>
                         </div>
@@ -864,7 +940,7 @@ export default function MangaHomeClient({
                       <div className="p-2 sm:p-3 flex flex-col justify-between flex-1 gap-1.5 sm:gap-2 bg-zinc-950">
                         <Link
                           href={`/manga/${item.mangaId}`}
-                          className="font-black text-[11px] sm:text-sm text-white line-clamp-1 hover:text-primary transition-colors block"
+                          className="font-black text-[11px] sm:text-sm text-white line-clamp-1 transition-colors block"
                           title={item.mangaTitle}
                         >
                           {item.mangaTitle}
@@ -873,7 +949,8 @@ export default function MangaHomeClient({
                         <div className="flex items-center gap-1 sm:gap-1.5 pt-1 border-t border-white/[0.06]">
                           <Link
                             href={`/manga/${item.mangaId}/read/${item.chapterId}?title=${encodeURIComponent(item.mangaTitle)}&ch=${encodeURIComponent(item.chapterNumber)}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
-                            className="flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl bg-primary text-primary-foreground text-[10px] sm:text-xs font-black shadow-md shadow-primary/25 flex items-center justify-center gap-1 active:scale-95 transition-all hover:opacity-90 touch-manipulation cursor-pointer"
+                            style={{ background: theme.gradient }}
+                            className={`flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl ${theme.isManhwa ? "text-white" : "text-black"} text-[10px] sm:text-xs font-black shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all hover:opacity-90 touch-manipulation cursor-pointer`}
                             title={`Resume Reading Chapter ${item.chapterNumber}`}
                           >
                             <Play className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-current shrink-0" />
@@ -882,7 +959,7 @@ export default function MangaHomeClient({
 
                           <Link
                             href={`/manga/${item.mangaId}`}
-                            className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/80 hover:text-primary transition-all flex items-center justify-center active:scale-95 touch-manipulation cursor-pointer shrink-0"
+                            className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/80 hover:text-white transition-all flex items-center justify-center active:scale-95 touch-manipulation cursor-pointer shrink-0"
                             title="Open Manga Details"
                             aria-label="Open Manga Details"
                           >
@@ -900,7 +977,7 @@ export default function MangaHomeClient({
                 <div className="flex justify-center pt-2">
                   <Link
                     href="/manga/continue-reading"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-850 text-primary border border-primary/30 hover:border-primary font-black text-xs sm:text-sm transition-all shadow-lg active:scale-95 touch-manipulation"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white border border-white/20 hover:border-white/50 font-black text-xs sm:text-sm transition-all shadow-lg active:scale-95 touch-manipulation"
                   >
                     <BookOpen className="w-4 h-4" />
                     <span>View All Continue Reading ({history.length})</span>
@@ -914,11 +991,14 @@ export default function MangaHomeClient({
           {/* SEARCH RESULTS VIEW (with Infinite Scroll) */}
           {debouncedSearch.trim() ? (
             <section className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-black text-white tracking-tight">
-                  Search Results for &quot;{debouncedSearch}&quot;
-                </h2>
-                <span className="text-xs text-primary font-bold">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-black text-white tracking-tight">
+                    Search Results for &quot;{debouncedSearch}&quot;
+                  </h2>
+                  <div className="h-0.5 w-14 rounded-full mt-2 bg-white/70" />
+                </div>
+                <span className="text-xs text-white font-bold bg-white/[0.06] px-3 py-1.5 rounded-full border border-white/15">
                   {isSearching ? "Searching..." : `${searchResults.length} titles`}
                 </span>
               </div>
@@ -940,7 +1020,7 @@ export default function MangaHomeClient({
                   {/* Infinite Scroll Sentinel */}
                   <div ref={sentinelRef} className="py-8 flex items-center justify-center">
                     {isLoadingMore && (
-                      <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                      <div className="flex items-center gap-2 text-xs font-bold text-white">
                         <Loader2 className="w-5 h-5 animate-spin" />
                         <span>Loading more results...</span>
                       </div>
@@ -958,9 +1038,42 @@ export default function MangaHomeClient({
           ) : selectedGenre || selectedType !== "all" ? (
             /* FILTERED GENRE / TYPE VIEW (Infinite Scroll & Accurate Titles) */
             <section className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <span
+                      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                        filterTheme.isManhwa
+                          ? "text-[#ecb6ff] border-[#c840ff]/40"
+                          : "text-white border-white/25"
+                      }`}
+                      style={
+                        filterTheme.isManhwa
+                          ? { background: "rgba(157,3,252,0.12)" }
+                          : { background: "rgba(255,255,255,0.06)" }
+                      }
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{ background: filterTheme.gradient }}
+                      />
+                      {selectedType === "manhwa"
+                        ? "Manhwa · Violet → Magenta"
+                        : selectedType === "manga"
+                        ? "Manga · Monochrome"
+                        : "Mixed Collection"}
+                    </span>
+                  </div>
+                  <h2
+                    className={`text-2xl sm:text-3xl font-black tracking-tight ${
+                      filterTheme.isManhwa ? "bg-clip-text text-transparent" : "text-white"
+                    }`}
+                    style={
+                      filterTheme.isManhwa
+                        ? { backgroundImage: filterTheme.gradient }
+                        : undefined
+                    }
+                  >
                     {activeGenreObj?.label
                       ? `${activeGenreObj.label} ${selectedType === "manhwa" ? "Manhwa" : selectedType === "manga" ? "Manga" : "Titles"}`
                       : selectedType === "manhwa"
@@ -969,7 +1082,7 @@ export default function MangaHomeClient({
                       ? "Trending Japanese Mangas"
                       : "Filtered Series"}
                   </h2>
-                  <p className="text-xs sm:text-sm text-zinc-400 font-semibold mt-0.5">
+                  <p className="text-xs sm:text-sm text-zinc-400 font-semibold mt-1">
                     {selectedType === "manhwa"
                       ? `Real-time Korean Manhwa ${activeGenreObj?.label ? `in ${activeGenreObj.label}` : "series"}`
                       : selectedType === "manga"
@@ -977,7 +1090,18 @@ export default function MangaHomeClient({
                       : `Equal 50/50 mix of trending Manga & Manhwa ${activeGenreObj?.label ? `in ${activeGenreObj.label}` : ""}`}
                   </p>
                 </div>
-                <span className="text-xs text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
+                <span
+                  className={`text-xs font-black px-3 py-1.5 rounded-full border ${
+                    filterTheme.isManhwa
+                      ? "text-[#ecb6ff] border-[#c840ff]/40"
+                      : "text-white border-white/20 bg-white/[0.06]"
+                  }`}
+                  style={
+                    filterTheme.isManhwa
+                      ? { background: "rgba(157,3,252,0.12)" }
+                      : undefined
+                  }
+                >
                   {isMounted ? (isGenreLoading ? "Loading..." : `${genreResults.length} loaded`) : ""}
                 </span>
               </div>
@@ -999,7 +1123,7 @@ export default function MangaHomeClient({
                   {/* Infinite Scroll Sentinel */}
                   <div ref={sentinelRef} className="py-8 flex items-center justify-center">
                     {isLoadingMore && (
-                      <div className="flex items-center gap-2 text-xs font-black text-primary">
+                      <div className="flex items-center gap-2 text-xs font-black text-white">
                         <Loader2 className="w-5 h-5 animate-spin" />
                         <span>Loading more {activeGenreObj?.label || "series"}...</span>
                       </div>
@@ -1011,16 +1135,23 @@ export default function MangaHomeClient({
           ) : (
             /* DEFAULT 3 REAL-TIME MODULAR SECTIONS */
             <>
-              {/* SECTION 1: TRENDING NOW (Loads and appears first!) */}
+              {/* SECTION 1: TRENDING NOW (mixed picks) */}
               <section className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <TrendingUp className="w-5 h-5 text-primary" />
-                    <h2 className="text-2xl font-black text-white tracking-tight">
-                      Trending Now
-                    </h2>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/[0.07] border border-white/15 flex items-center justify-center">
+                      <TrendingUp className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-white tracking-tight">
+                        Trending Now
+                      </h2>
+                      <p className="text-[11px] sm:text-xs text-white/45 font-semibold">
+                        The most read manga &amp; manhwa right now
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-xs font-bold text-primary/80">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-white/70 border border-white/15 bg-white/[0.04] px-3 py-1.5 rounded-full">
                     {isMounted && "Real-Time Picks"}
                   </span>
                 </div>
@@ -1036,16 +1167,32 @@ export default function MangaHomeClient({
                 </div>
               </section>
 
-              {/* SECTION 2: TRENDING MANHWAS (Loads and appears as soon as ready) */}
-              <section className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <Flame className="w-5 h-5 text-primary" />
-                    <h2 className="text-2xl font-black text-white tracking-tight">
-                      Trending Manhwas
-                    </h2>
+              {/* SECTION 2: TRENDING MANHWAS (violet → magenta identity) */}
+              <section className="space-y-5" style={mangaThemeStyle("manhwa") as React.CSSProperties}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center shadow-[0_10px_26px_-10px_rgba(157,3,252,0.85)]"
+                      style={{ background: getMangaTheme("manhwa").gradient }}
+                    >
+                      <Flame className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h2
+                        className="text-2xl font-black tracking-tight bg-clip-text text-transparent"
+                        style={{ backgroundImage: getMangaTheme("manhwa").gradient }}
+                      >
+                        Trending Manhwas
+                      </h2>
+                      <p className="text-[11px] sm:text-xs text-[#cf9ff5]/80 font-semibold">
+                        Full-colour Korean webtoons, updated daily
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
+                  <span
+                    className="text-[10px] font-black uppercase tracking-wider text-[#f0c2ff] border border-[#c840ff]/40 px-3 py-1.5 rounded-full"
+                    style={{ background: "rgba(157,3,252,0.14)" }}
+                  >
                     {isMounted && "Korean Manhwa"}
                   </span>
                 </div>
@@ -1063,16 +1210,23 @@ export default function MangaHomeClient({
                 </div>
               </section>
 
-              {/* SECTION 3: TRENDING MANGAS (Loads and appears as soon as ready) */}
+              {/* SECTION 3: TRENDING MANGAS (monochrome identity) */}
               <section className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <Sparkles className="w-5 h-5 text-primary" />
-                    <h2 className="text-2xl font-black text-white tracking-tight">
-                      Trending Mangas
-                    </h2>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-[0_10px_26px_-12px_rgba(255,255,255,0.75)]">
+                      <Sparkles className="w-4 h-4 text-black" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-white tracking-tight">
+                        Trending Mangas
+                      </h2>
+                      <p className="text-[11px] sm:text-xs text-white/45 font-semibold">
+                        Ink-and-paper Japanese manga classics &amp; new hits
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/30">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-white border border-white/25 bg-white/[0.06] px-3 py-1.5 rounded-full">
                     {isMounted && "Japanese Manga"}
                   </span>
                 </div>

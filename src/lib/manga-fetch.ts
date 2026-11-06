@@ -51,17 +51,25 @@ const WEEBCENTRAL_BASE = "https://weebcentral.com";
 const ASURA_API = "https://api.asurascans.com/api";
 
 // Bump this whenever fetch logic or data shape changes to instantly drop stale in-memory cache
-const CACHE_VERSION = "v13";
+const CACHE_VERSION = "v14";
 
 const BLOCKED_TAGS = new Set([
+  "adult",
   "smut",
   "erotica",
   "hentai",
   "pornographic",
   "doujinshi",
   "sexual violence",
+  "sexual content",
+  "explicit",
   "r-18",
+  "18+",
   "nsfw",
+  "ntr",
+  "netorare",
+  "incest",
+  "milf",
 ]);
 
 const BLOCKED_TITLE_PATTERNS = [
@@ -76,17 +84,72 @@ const BLOCKED_TITLE_PATTERNS = [
   /\bsmut\b/i,
   /\braw.*adult\b/i,
   /\br-18\b/i,
+  /\b18\+\b/i,
   /\bnsfw\b/i,
   /\bnetorare\b/i,
   /\bntr\b/i,
   /\bfuck\b/i,
   /\bcondom\b/i,
   /\bcreampie\b/i,
+  /\bincest\b/i,
+  /\bmilf\b/i,
+  /\bsecret class\b/i,
+  /\bboarding diary\b/i,
+  /\bbrawling go\b/i,
+  /\berotic scheme\b/i,
 ];
 
+type ContentRating = MangaItem["contentRating"];
+
+/** Single source of truth for rating tags across list + detail parsing. */
+function deriveContentRating(tags?: string[] | null): ContentRating {
+  const lower = (tags || []).map((tag) => tag.trim().toLowerCase());
+
+  if (
+    lower.some((tag) =>
+      ["hentai", "pornographic", "doujinshi", "sexual violence"].includes(tag)
+    )
+  ) {
+    return "pornographic";
+  }
+
+  if (
+    lower.some((tag) =>
+      [
+        "adult",
+        "smut",
+        "erotica",
+        "nsfw",
+        "18+",
+        "r-18",
+        "explicit",
+        "sexual content",
+        "ntr",
+        "netorare",
+        "incest",
+        "milf",
+      ].includes(tag)
+    )
+  ) {
+    return "erotica";
+  }
+
+  if (
+    lower.some((tag) =>
+      ["mature", "ecchi", "harem", "suggestive"].includes(tag)
+    )
+  ) {
+    return "suggestive";
+  }
+
+  return "safe";
+}
+
 /**
- * Validates that a manga item is clean from straight hentai / pornographic content.
- * Note: Mainstream "Adult", "Mature", "18+", and "Ecchi" series (e.g. Berserk, Chainsaw Man, High School DxD, Gantz) are permitted.
+ * Single gate for every list/detail surface. Anything tagged Adult, 18+, Smut,
+ * NTR, etc. is treated as erotica and rejected so adult manhwa cannot leak in
+ * through search, trending, or a stale details cache. Mature/ecchi/harem series
+ * remain available as "suggestive".
  */
 export function isCleanManga(item: MangaItem): boolean {
   if (!item) return false;
@@ -282,20 +345,7 @@ function parseWeebCentralHtml(html: string): MangaItem[] {
       type = "manga";
     }
 
-    let contentRating: "safe" | "suggestive" | "erotica" | "pornographic" = "safe";
-    if (
-      lowerTags.some((t) => ["hentai", "pornographic", "doujinshi", "sexual violence"].includes(t))
-    ) {
-      contentRating = "pornographic";
-    } else if (
-      lowerTags.some((t) => ["smut", "erotica", "nsfw", "18+", "r-18"].includes(t))
-    ) {
-      contentRating = "erotica";
-    } else if (
-      lowerTags.some((t) => ["adult", "mature", "ecchi", "harem"].includes(t))
-    ) {
-      contentRating = "suggestive";
-    }
+    const contentRating = deriveContentRating(tags);
 
     items.push({
       id,
@@ -329,25 +379,29 @@ async function getAsuraPopularSeries(limit = 32): Promise<MangaItem[]> {
     const data = await res.json();
     const seriesList = data.data || [];
 
-    return seriesList.map((s: any) => ({
-      id: `asura-${s.slug}`,
-      title: decodeHtmlEntities(s.title || s.slug),
-      altTitles: s.alt_titles || [],
-      description:
-        decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) ||
-        `Read ${s.title} on CineStream.`,
-      coverImage: s.cover || s.cover_url || s.thumbnail || s.thumbnail_url || s.image || "/icon-512.png",
-      bannerImage: s.banner || s.banner_url || s.cover || s.cover_url || "/icon-512.png",
-      type: "manhwa" as const,
-      status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
-      releaseYear: s.release_year || null,
-      tags: Array.isArray(s.genres)
+    return seriesList.map((s: any) => {
+      const tags = Array.isArray(s.genres)
         ? s.genres.map((g: any) => (typeof g === "string" ? g : g.name || "Action"))
-        : ["Action", "Manhwa", "Fantasy"],
-      contentRating: "safe" as const,
-      originalLanguage: "ko",
-      source: "asura" as const,
-    }));
+        : ["Action", "Manhwa", "Fantasy"];
+
+      return {
+        id: `asura-${s.slug}`,
+        title: decodeHtmlEntities(s.title || s.slug),
+        altTitles: s.alt_titles || [],
+        description:
+          decodeHtmlEntities((s.description || "").replace(/<[^>]+>/g, "").trim()) ||
+          `Read ${s.title} on CineStream.`,
+        coverImage: s.cover || s.cover_url || s.thumbnail || s.thumbnail_url || s.image || "/icon-512.png",
+        bannerImage: s.banner || s.banner_url || s.cover || s.cover_url || "/icon-512.png",
+        type: "manhwa" as const,
+        status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
+        releaseYear: s.release_year || null,
+        tags,
+        contentRating: deriveContentRating(tags),
+        originalLanguage: "ko",
+        source: "asura" as const,
+      };
+    });
   } catch (err) {
     console.warn("[MangaFetch] Asura getAsuraPopularSeries failed:", err);
     return [];
@@ -836,6 +890,7 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
   const cacheKey = `details_${id}`;
   const cached = getFromCache<MangaItem>(cacheKey);
   if (cached) {
+    if (!isCleanManga(cached)) return null;
     const lowerTags = (cached.tags || []).map((t) => t.toLowerCase());
     if (
       lowerTags.some((t) => t.includes("manhwa") || t.includes("webtoon") || t.includes("korean")) ||
@@ -873,10 +928,13 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
             status: (s.status?.toLowerCase() === "completed" ? "completed" : "ongoing") as any,
             releaseYear: s.release_year || null,
             tags: (s.genres || ["Action", "Manhwa", "Fantasy"]).map((g: any) => typeof g === "string" ? g : g.name || "Action"),
-            contentRating: "safe",
+            contentRating: deriveContentRating(
+              (s.genres || []).map((g: any) => (typeof g === "string" ? g : g.name || "Action"))
+            ),
             originalLanguage: "ko",
             source: "asura",
           };
+          if (!isCleanManga(item)) return null;
           setInCache(cacheKey, item, 1800);
           return item;
         }
@@ -985,11 +1043,12 @@ export async function getMangaDetails(id: string): Promise<MangaItem | null> {
           releaseYear,
           authors: authors.length > 0 ? authors : undefined,
           tags: tags.length > 0 ? tags : ["Action"],
-          contentRating: "safe",
+          contentRating: deriveContentRating(tags),
           originalLanguage: type === "manhwa" ? "ko" : type === "manhua" ? "zh" : "ja",
           source: "weebcentral",
         };
 
+        if (!isCleanManga(item)) return null;
         setInCache(cacheKey, item, 1800);
         return item;
       }

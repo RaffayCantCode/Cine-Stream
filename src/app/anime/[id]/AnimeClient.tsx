@@ -6,18 +6,24 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimeCard } from "@/components/AnimeCard";
-import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, EpisodeChunkBar, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { useMediaLogo } from "@/components/MediaLogo";
-import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
+import {
+  DEFAULT_COVER_PALETTE,
+  buildPaletteFromColor,
+  extractCoverPalette,
+  withAlpha,
+  readableTextOn,
+  type CoverPalette,
+} from "@/lib/cover-palette";
 import { ANIME_API_VERSION, animeEpisodesCacheKey, animeMetaCacheKey, animeMetaUrl } from "@/lib/anime-cache";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
 import { AnimeSeasonSelector, type FranchiseNodeItem } from "@/components/AnimeSeasonSelector";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, Film } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, Film, CalendarDays, ListVideo, Radio, Clock, Tv, X, Eye, Building2, Sparkles } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -48,6 +54,11 @@ interface AnimeDetail {
   backdrop?: string | null;
   bannerImage?: string | null;
   logoUrl?: string | null;
+  popularity?: number | null;
+  studios?: string[];
+  startDate?: { year?: number | null; month?: number | null; day?: number | null } | null;
+  endDate?: { year?: number | null; month?: number | null; day?: number | null } | null;
+  coverColor?: string | null;
 }
 
 interface Episode {
@@ -142,6 +153,34 @@ function formatAnimeStatus(raw?: string | null): { label: string; style: "finish
   return { label: "FINISHED", style: "finished" };
 }
 
+type PartialDate = { year?: number | null; month?: number | null; day?: number | null } | null | undefined;
+
+function formatDatePart(date: PartialDate): string | null {
+  if (!date?.year) return null;
+  if (!date.month) return String(date.year);
+  const parsed = new Date(date.year, date.month - 1, date.day || 1);
+  if (Number.isNaN(parsed.getTime())) return String(date.year);
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: date.day ? "numeric" : undefined,
+    year: "numeric",
+  });
+}
+
+function formatAiredRange(start?: PartialDate, end?: PartialDate): string | null {
+  const from = formatDatePart(start);
+  const to = formatDatePart(end);
+  if (!from && !to) return null;
+  if (from && to && from !== to) return `${from} – ${to}`;
+  return from || to;
+}
+
+function formatSeasonLabel(season?: string | null, year?: number | null): string | null {
+  if (!season && !year) return null;
+  const label = season ? season.charAt(0).toUpperCase() + season.slice(1).toLowerCase() : "";
+  return [label, year].filter(Boolean).join(" ") || null;
+}
+
 // Direct browser fallback from residential IP when server API is blocked or unreachable
 async function clientFetchAnimeFallback(
   rawId: string,
@@ -159,7 +198,7 @@ async function clientFetchAnimeFallback(
           id
           idMal
           title { romaji english native }
-          coverImage { large extraLarge }
+          coverImage { large extraLarge color }
           bannerImage
           format
           season
@@ -172,6 +211,10 @@ async function clientFetchAnimeFallback(
           duration
           trailer { id site }
           nextAiringEpisode { episode airingAt timeUntilAiring }
+          popularity
+          startDate { year month day }
+          endDate { year month day }
+          studios { nodes { name isAnimationStudio } }
           relations {
             edges {
               relationType
@@ -279,6 +322,16 @@ async function clientFetchAnimeFallback(
             trailerId: media.trailer?.site === "youtube" ? media.trailer.id : null,
             duration: media.duration || null,
             nextAiringEpisode: media.nextAiringEpisode || null,
+            popularity: typeof media.popularity === "number" ? media.popularity : null,
+            studios: Array.isArray(media.studios?.nodes)
+              ? media.studios.nodes
+                  .filter((studio: any) => studio?.isAnimationStudio !== false)
+                  .map((studio: any) => studio?.name)
+                  .filter(Boolean)
+              : [],
+            startDate: media.startDate || null,
+            endDate: media.endDate || null,
+            coverColor: media.coverImage?.color || null,
           };
 
           return { anime, franchiseNodes: nodes };
@@ -473,18 +526,37 @@ class AnimeContentErrorBoundary extends Component<{ children: ReactNode; fallbac
 const FRANCHISE_CACHE = new Map<string, FranchiseNode[]>();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRAILER BUTTON (inner component, reads CinematicHero context)
+// HERO INFO RAIL
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrailerButton() {
-  const { playTrailer, hasTrailer } = useCinematicHero();
-  if (!hasTrailer) return null;
+function MetaStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 transition-colors hover:border-white/[0.14] hover:bg-white/[0.055] md:flex-row md:items-center md:justify-between md:gap-3">
+      <span className="flex shrink-0 items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-white/35">
+        <Icon className="h-3 w-3 text-[color:var(--anime-accent)]" />
+        {label}
+      </span>
+      <span className="min-w-0 text-sm font-black text-white md:text-right">{value}</span>
+    </div>
+  );
+}
+
+function TrailerButton({ trailerId, onClick }: { trailerId?: string | null; onClick: () => void }) {
+  if (!trailerId) return null;
   return (
     <button
-      onClick={playTrailer}
-      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold px-6 py-4 rounded-xl text-sm transition-all border border-white/15 backdrop-blur-md shadow-lg"
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-3.5 text-sm font-bold text-white shadow-lg backdrop-blur-md transition-all hover:bg-white/20 active:scale-95 sm:px-6 sm:py-4"
     >
-      <Film className="w-4 h-4 text-fuchsia-400 shrink-0" />
+      <Film className="h-4 w-4 shrink-0 text-[color:var(--anime-accent)]" />
       <span>Trailer</span>
     </button>
   );
@@ -524,6 +596,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [isPlaying, setIsPlaying] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [trailerOpen, setTrailerOpen] = useState(false);
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>(() => {
     if (initialData?.franchiseNodes?.length > 1) return initialData.franchiseNodes;
     return [];
@@ -537,6 +610,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [episodeView, setEpisodeView] = useState<EpisodeViewMode>("grid");
   const [episodePage, setEpisodePage] = useState(1);
   const [listChunkIndex, setListChunkIndex] = useState(0);
+  const [coverPalette, setCoverPalette] = useState<CoverPalette>(DEFAULT_COVER_PALETTE);
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const prevIdRef = useRef<string | null>(null);
@@ -556,7 +630,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // ── Derived: logo, banner, title ─────────────────────────────────────────
   const animeTitle = getSafeAnimeTitle(anime?.name || (anime as any)?.title || "");
   const effectiveInitialLogo = (initialData as any)?.logoUrl || (anime as any)?.logoUrl || null;
-  const { logoUrl, backdropUrl: mediaBackdropUrl, loading: logoLoading } = useMediaLogo(
+  const { logoUrl } = useMediaLogo(
     anime ? id : "",
     "anime",
     anime ? animeTitle : "",
@@ -588,17 +662,61 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }, [seasons, franchiseNodes, currentSeasonId]);
 
   const displayPoster = (currentSeasonInfo as any)?.coverImage || (currentSeason as any)?.coverImage || anime?.poster || "";
-  const displayBanner =
-    (currentSeasonInfo as any)?.bannerImage ||
-    (anime as any)?.bannerImage ||
-    (initialData as any)?.bannerImage ||
-    (typeof anime?.backdrop === "string" ? (anime.backdrop.startsWith("http") ? anime.backdrop : `https://image.tmdb.org/t/p/original${anime.backdrop}`) : null) ||
-    mediaBackdropUrl ||
-    anime?.poster || "";
   const displayTitle = getSafeAnimeTitle((currentSeasonInfo as any)?.title || (currentSeasonInfo as any)?.name || currentSeason?.name || anime?.name || "");
   const displayYear = (currentSeasonInfo as any)?.seasonYear || currentSeason?.seasonYear || anime?.seasonYear || null;
   const displayFormat = getSafeAnimeTitle((currentSeasonInfo as any)?.format || (currentSeasonInfo as any)?.type || anime?.format || anime?.type || "Anime");
   const displayStatus = getSafeAnimeTitle(currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "");
+
+  // Theme the page from the artwork: AniList ships a dominant cover colour, and
+  // we fall back to sampling the poster when that colour is missing.
+  const seededPalette = useMemo(
+    () => buildPaletteFromColor(anime?.coverColor || null),
+    [anime?.coverColor]
+  );
+
+  useEffect(() => {
+    if (seededPalette) {
+      setCoverPalette(seededPalette);
+      return;
+    }
+    let cancelled = false;
+    if (!displayPoster) {
+      setCoverPalette(DEFAULT_COVER_PALETTE);
+      return;
+    }
+    setCoverPalette(DEFAULT_COVER_PALETTE);
+    extractCoverPalette(displayPoster).then((palette) => {
+      if (!cancelled && palette) setCoverPalette(palette);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [displayPoster, seededPalette]);
+
+  const accentVars = useMemo(
+    () =>
+      ({
+        "--anime-accent": coverPalette.accent,
+        "--anime-accent-2": coverPalette.accent2,
+        "--anime-accent-contrast": readableTextOn(coverPalette.accentRgb),
+        "--anime-accent-08": withAlpha(coverPalette.accentRgb, 0.08),
+        "--anime-accent-15": withAlpha(coverPalette.accentRgb, 0.15),
+        "--anime-accent-25": withAlpha(coverPalette.accentRgb, 0.25),
+        "--anime-accent-40": withAlpha(coverPalette.accentRgb, 0.4),
+        "--anime-accent-2-12": withAlpha(coverPalette.accent2Rgb, 0.12),
+        "--anime-accent-2-25": withAlpha(coverPalette.accent2Rgb, 0.25),
+        "--anime-accent-2-40": withAlpha(coverPalette.accent2Rgb, 0.4),
+      }) as React.CSSProperties,
+    [coverPalette]
+  );
+  const watchButtonStyle = useMemo(
+    () =>
+      ({
+        backgroundImage: `linear-gradient(135deg, ${coverPalette.accent} 0%, ${coverPalette.accent2} 100%)`,
+        color: readableTextOn(coverPalette.accentRgb),
+      }) as React.CSSProperties,
+    [coverPalette]
+  );
 
   const isPageReady = Boolean(!isLoading || error || (anime as any)?.isHidden);
   usePageContentReady(isPageReady);
@@ -662,7 +780,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setPlayingSeason(1);
     setPlayingEpisode(1);
     setSelectedEp(null);
+    setTrailerOpen(false);
   }, [id]);
+
+  useEffect(() => {
+    if (!trailerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTrailerOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [trailerOpen]);
 
   useEffect(() => {
     if (typeof document !== "undefined" && displayTitle) {
@@ -1631,7 +1759,30 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   })();
   const animeDescription = seasonOverview || (currentSeasonInfo as any)?.description || (currentSeason as any)?.description || anime?.description || "";
   const isLongDescription = animeDescription.length > 200;
-  const animeBackdropUrl = displayBanner || displayPoster || null;
+  const episodeCount = isMovieFormat
+    ? 1
+    : (dedupedCurrentEps.length ||
+        (currentSeasonInfo as any)?.totalEpisodes ||
+        (currentSeasonInfo as any)?.episodes ||
+        currentSeason?.totalEpisodes ||
+        (anime as any)?.totalEpisodes ||
+        1);
+  const airedRange = formatAiredRange(anime?.startDate, anime?.endDate);
+  const studioName = (Array.isArray(anime?.studios) ? anime.studios : []).filter(Boolean)[0] || null;
+  const seasonLabel = formatSeasonLabel(anime?.season, anime?.seasonYear);
+  const viewsLabel =
+    typeof anime?.popularity === "number" && anime.popularity > 0
+      ? anime.popularity.toLocaleString("en-US")
+      : null;
+  const statusMeta = formatAnimeStatus(displayStatus);
+  const statusLabel =
+    statusMeta.style === "airing" ? "Ongoing" : statusMeta.style === "upcoming" ? "Upcoming" : "Completed";
+  const statusDotClass =
+    statusMeta.style === "airing"
+      ? "bg-emerald-400 animate-pulse"
+      : statusMeta.style === "upcoming"
+      ? "bg-sky-400"
+      : "bg-white/50";
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -1650,8 +1801,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }
 
   return (
-    <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}>
-      {isPageReady && Boolean(anime) && <AmbientBackdropGlow backdropUrl={animeBackdropUrl} />}
+    <div
+      style={accentVars}
+      className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}
+    >
       <Sidebar />
 
       <AnimeContentErrorBoundary>
@@ -1672,174 +1825,339 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             </div>
           ) : (
             <>
-              {/* Hero */}
-              <CinematicHero backdropPath={displayBanner} trailerId={anime.trailerId} title={displayTitle} theme="anime">
-                <div className="relative z-10 pb-4 md:pb-8 px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 flex flex-col lg:flex-row lg:items-end justify-between gap-6 w-full">
-                  <div className="flex flex-row items-center gap-3.5 sm:gap-6 md:gap-8 min-w-0 flex-1">
-                    <div className="shrink-0 w-24 sm:w-36 md:w-44 lg:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10">
-                      <img src={displayPoster} alt={displayTitle} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 space-y-2 sm:space-y-3 min-w-0">
-                      <div>
-                        {effectiveLogo ? (
-                          <div className="mb-4 sm:mb-5 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]">
-                            <img src={effectiveLogo} alt={displayTitle} className="max-h-20 sm:max-h-24 md:max-h-28 lg:max-h-32 w-auto object-contain object-left drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]" />
-                            {displayTitle && anime?.name && displayTitle.toLowerCase() !== getSafeAnimeTitle(anime.name).toLowerCase() ? (
-                              <div className="mt-2 text-sm sm:text-base font-black text-white/90 tracking-wide drop-shadow-md">
-                                {displayTitle}
-                              </div>
-                            ) : null}
+              {/* ── Hero (CSS-only backdrop, no banner download) ────────── */}
+              <section className="relative isolate overflow-hidden">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 -z-10"
+                  style={{
+                    maskImage: "linear-gradient(to bottom, black 0%, black 62%, transparent 100%)",
+                    WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 62%, transparent 100%)",
+                  }}
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      backgroundImage: `radial-gradient(ellipse at 12% -10%, ${withAlpha(
+                        coverPalette.accentRgb,
+                        0.34
+                      )}, transparent 58%), radial-gradient(ellipse at 88% 8%, ${withAlpha(
+                        coverPalette.accent2Rgb,
+                        0.22
+                      )}, transparent 55%)`,
+                    }}
+                  />
+                  <div
+                    className="absolute -left-24 top-4 h-72 w-72 rounded-full blur-[110px]"
+                    style={{ backgroundColor: withAlpha(coverPalette.accentRgb, 0.28) }}
+                  />
+                  <div
+                    className="absolute right-0 top-0 h-80 w-80 rounded-full blur-[120px]"
+                    style={{ backgroundColor: withAlpha(coverPalette.accent2Rgb, 0.2) }}
+                  />
+                  <div
+                    className="absolute inset-0 opacity-[0.05]"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(rgba(255,255,255,0.45) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.45) 1px, transparent 1px)",
+                      backgroundSize: "72px 72px",
+                      maskImage: "linear-gradient(to bottom, black, transparent 78%)",
+                      WebkitMaskImage: "linear-gradient(to bottom, black, transparent 78%)",
+                    }}
+                  />
+                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                </div>
+
+                {anime.jname && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 select-none [writing-mode:vertical-rl] text-5xl font-black tracking-[0.4em] text-white/[0.035] xl:block"
+                  >
+                    {anime.jname}
+                  </div>
+                )}
+
+                <div className="relative mx-auto w-full max-w-screen-2xl px-4 pb-9 pt-[calc(4.5rem+env(safe-area-inset-top))] sm:px-6 sm:pt-24 md:px-10 md:pt-28 lg:px-12 xl:px-14">
+                  <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] md:items-start md:gap-x-7 md:gap-y-5 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] lg:gap-x-9 xl:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+                      {/* Poster */}
+                      <div className="relative order-1 shrink-0 self-start md:col-start-1 md:row-start-1 md:w-full">
+                        <div
+                          className="absolute -inset-3 rounded-[2rem] blur-xl"
+                          style={{
+                            backgroundImage: `linear-gradient(135deg, ${withAlpha(
+                              coverPalette.accentRgb,
+                              0.42
+                            )} 0%, ${withAlpha(coverPalette.accent2Rgb, 0.26)} 55%, transparent 100%)`,
+                          }}
+                        />
+                        <div className="relative w-40 overflow-hidden rounded-[1.6rem] border border-white/[0.12] bg-white/[0.03] shadow-[0_28px_80px_-14px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-white/[0.06] sm:w-56 md:w-full">
+                          <div className="aspect-[2/3]">
+                            <img
+                              src={displayPoster}
+                              alt={displayTitle}
+                              className="h-full w-full object-cover"
+                              loading="eager"
+                              fetchPriority="high"
+                              decoding="async"
+                            />
                           </div>
-                        ) : !logoLoading ? (
-                          <h1 className="font-black text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-tight tracking-tight select-text">{displayTitle}</h1>
-                        ) : (
-                          <div className="h-10 sm:h-14 md:h-16 w-48 sm:w-64 rounded-xl bg-white/5 animate-pulse mb-3" />
+                          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+                        </div>
+                        {animeScore > 0 && (
+                          <div className="absolute -bottom-3 -right-2 flex items-center gap-1.5 rounded-2xl border border-amber-400/30 bg-[#0b0d12]/95 px-3 py-2 shadow-xl backdrop-blur-md sm:-right-3">
+                            <Star className="h-4 w-4 fill-current text-amber-300" />
+                            <span className="text-sm font-black text-white">{animeScore.toFixed(1)}</span>
+                            <span className="text-[10px] font-bold text-white/35">/10</span>
+                          </div>
                         )}
-                        {anime.jname && <p className="text-primary/90 font-semibold italic text-xs sm:text-sm md:text-base mt-0.5 sm:mt-1 select-text">{anime.jname}</p>}
                       </div>
 
-                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 text-sm sm:text-base font-extrabold">
-                      {animeScore > 0 && (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-400 font-black shadow-sm text-sm sm:text-base">
-                          <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-current text-emerald-400" />
-                          <span className="tracking-tight">{animeScore.toFixed(1)}</span>
-                          <span className="text-white/40 font-bold text-xs">/10</span>
+                      {/* Title & primary actions */}
+                      <div className="order-2 min-w-0 space-y-3 sm:space-y-4 md:col-start-2 md:row-span-2 md:row-start-1 md:self-start md:pt-2">
+                        <div>
+                          <h1 className="sr-only">{displayTitle}</h1>
+                          {effectiveLogo ? (
+                            <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[460px]">
+                              <img
+                                src={effectiveLogo}
+                                alt={displayTitle}
+                                className="max-h-16 w-auto object-contain object-left drop-shadow-[0_6px_30px_rgba(0,0,0,0.95)] sm:max-h-20 md:max-h-24 lg:max-h-28"
+                              />
+                              {displayTitle && anime?.name && displayTitle.toLowerCase() !== getSafeAnimeTitle(anime.name).toLowerCase() ? (
+                                <div className="mt-2 text-sm font-black tracking-wide text-white/90">{displayTitle}</div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <h1 className="select-text break-words text-3xl font-black leading-[1.02] tracking-tight text-white sm:text-4xl md:text-5xl xl:text-6xl">
+                              {displayTitle}
+                            </h1>
+                          )}
+                          {anime.jname && (
+                            <p className="mt-1 select-text text-xs font-semibold italic text-[#9db2d8] sm:text-sm">{anime.jname}</p>
+                          )}
                         </div>
-                      )}
-                      {displayStatus && (() => {
-                        const fmt = formatAnimeStatus(displayStatus);
-                        return (
-                          <span className={`text-[10px] sm:text-xs font-black tracking-wider px-3 py-1 rounded-xl uppercase border shadow-sm ${
-                            fmt.style === "airing" ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30" :
-                            fmt.style === "upcoming" ? "text-sky-300 bg-sky-500/20 border-sky-500/30" :
-                            "text-white bg-white/10 border-white/20"
-                          }`}>{fmt.label}</span>
-                        );
-                      })()}
-                      <span className="px-3 py-1 bg-white/[0.08] border border-white/15 rounded-xl text-xs sm:text-sm font-extrabold text-white shadow-sm">{displayFormat}</span>
-                      <div className="flex flex-wrap gap-2 ml-0.5">
-                        {(Array.isArray(anime.genres) ? anime.genres : []).slice(0, 5).map((g: any, i: number) => {
-                          const label = typeof g === "string" ? g : (g?.name || "");
-                          if (!label) return null;
-                          return (
-                            <span key={typeof g === "string" ? g : (g?.id || i)} className="px-3.5 py-1 bg-fuchsia-500/15 border border-fuchsia-400/30 rounded-full text-xs sm:text-sm font-extrabold text-fuchsia-200 shadow-sm">{label}</span>
-                          );
-                        })}
-                      </div>
-                    </div>
 
-                    {animeDescription && (
-                      <div>
-                        <p className={cn("text-white/65 text-xs sm:text-sm md:text-base leading-relaxed max-w-2xl select-text", isLongDescription && !descExpanded && "line-clamp-2 sm:line-clamp-3")}>{animeDescription}</p>
-                        {isLongDescription && (
-                          <button onClick={() => setDescExpanded(v => !v)} className="mt-1 inline-flex items-center gap-1 text-primary hover:text-primary/85 text-xs sm:text-sm font-bold transition-colors">
-                            {descExpanded ? "Read less" : "Read more"}<ChevronDown className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform", descExpanded && "rotate-180")} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="pt-1">
-                      {(anime as any)?.isUpcoming || (anime as any)?.status === "upcoming" || (currentSeasonInfo as any)?.isUpcoming ? (
-                        <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
-                          <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs sm:text-sm font-semibold shadow-sm">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                            <span>This entry is upcoming. Please check back later.</span>
-                          </div>
-                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
-                          <TrailerButton />
-                        </div>
-                      ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" || (currentSeasonInfo as any)?.isUnavailable ? (
-                        <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
-                          <div className="flex items-center gap-2.5 px-4 py-3 bg-zinc-800/80 border border-zinc-700/60 rounded-xl text-zinc-300 text-xs sm:text-sm font-semibold shadow-sm">
-                            <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 shrink-0" />
-                            <span>This title is currently unavailable on this site. Please check back later.</span>
-                          </div>
-                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
-                          <TrailerButton />
-                        </div>
-                      ) : dedupedCurrentEps.length > 0 ? (
-                        <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 w-full">
-                          <button
-                            onClick={() => {
-                              const activeEp = (hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber)
-                                ? dedupedCurrentEps.find(e => Number(e.episodeNum) === Number(playingEpisode))
-                                : null) || selectedEp;
-                              const target = activeEp || dedupedCurrentEps.find(ep => ep.isReleased !== false) || dedupedCurrentEps[0];
-                              if (target) handleWatchEpisode(target);
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+                            style={{
+                              borderColor: "var(--anime-accent-40)",
+                              backgroundColor: "var(--anime-accent-15)",
+                              color: "var(--anime-accent)",
                             }}
-                            className="group flex items-center gap-2 bg-primary hover:bg-primary/85 active:scale-95 text-primary-foreground font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm transition-all duration-200 shadow-xl shadow-black/30"
                           >
-                            <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current group-hover:scale-110 transition-transform" />
-                            {isMovieFormat
-                              ? `Watch ${dedupedCurrentEps.length > 1 ? `Movie ${dedupedCurrentEps[0]?.episodeNum || 1}` : "Movie"}`
-                              : hasActiveProgress && playingEpisode
-                              ? `Watch Ep ${playingEpisode}`
-                              : `Watch Ep ${selectedEp?.episodeNum || dedupedCurrentEps[0]?.episodeNum || 1}`}
-                          </button>
-                          <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
-                          <TrailerButton />
+                            <Tv className="h-3 w-3" />
+                            {displayFormat}
+                          </span>
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]",
+                              statusMeta.style === "airing"
+                                ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                                : statusMeta.style === "upcoming"
+                                ? "border-sky-400/25 bg-sky-400/10 text-sky-300"
+                                : "border-white/10 bg-white/[0.04] text-white/55"
+                            )}
+                          >
+                            <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass)} />
+                            {statusLabel}
+                          </span>
                         </div>
-                      ) : episodesLoading ? (
-                        <div className="flex items-center gap-4 w-full">
-                          <div className="h-12 w-36 rounded-xl bg-white/10 animate-pulse" />
-                          <TrailerButton />
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 w-full">
-                          <button disabled className="flex items-center gap-2 bg-white/10 text-white/30 font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-xs sm:text-sm cursor-not-allowed">No Episodes Available</button>
-                          <TrailerButton />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CinematicHero>
 
-            {/* Main Content */}
-            <div className="w-full px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14 mt-6 space-y-6">
-              <Link href="/anime" className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
-                <ArrowLeft className="w-4 h-4" /> Back to Anime
-              </Link>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(Array.isArray(anime.genres) ? anime.genres : []).slice(0, 6).map((g: any, i: number) => {
+                            const label = typeof g === "string" ? g : g?.name || "";
+                            if (!label) return null;
+                            return (
+                              <span
+                                key={typeof g === "string" ? g : g?.id || i}
+                                className="rounded-full border px-2.5 py-1 text-[10px] font-bold"
+                                style={{
+                                  borderColor: "var(--anime-accent-2-40)",
+                                  backgroundColor: "var(--anime-accent-2-12)",
+                                  color: coverPalette.accent2,
+                                }}
+                              >
+                                {label}
+                              </span>
+                            );
+                          })}
+                        </div>
 
-              {/* Title & metadata row */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
-                <div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-xl sm:text-2xl font-black text-white">{displayTitle || getSafeAnimeTitle(anime.name)}</h2>
-                    {isMovieFormat && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Movie</span>}
-                    {((anime as any)?.isUpcoming || anime.status === "upcoming") && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Upcoming</span>}
-                    {((anime as any)?.isUnavailable || anime.status === "unavailable") && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-zinc-700/40 text-zinc-300 border border-zinc-600/40">Unavailable</span>}
-                  </div>
-                  {anime.jname && anime.jname !== getSafeAnimeTitle(anime.name) && <p className="text-xs text-white/40 mt-0.5">{anime.jname}</p>}
-                  {animeScore > 0 && (
-                    <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-400 font-bold">
-                      <Star className="w-3.5 h-3.5 fill-current" /><span>{animeScore.toFixed(1)}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 px-4 py-2.5 bg-black/50 backdrop-blur-xl border border-white/15 rounded-2xl shadow-xl shrink-0 self-start sm:self-center">
-                  <span className="text-sm font-bold text-white/90 uppercase tracking-wider">{displayFormat}</span>
-                  {displayYear && (<><div className="w-px h-4 bg-white/15" /><span className="text-sm font-semibold text-white/70">{displayYear}</span></>)}
-                  <div className="w-px h-4 bg-white/15" />
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-base font-black text-white">{isMovieFormat ? 1 : (dedupedCurrentEps.length || (currentSeasonInfo as any)?.totalEpisodes || (currentSeasonInfo as any)?.episodes || currentSeason?.totalEpisodes || (anime as any)?.totalEpisodes || 1)}</span>
-                    <span className="text-xs text-white/50 font-semibold">{isMovieFormat ? "Movie" : (((dedupedCurrentEps.length || (currentSeasonInfo as any)?.totalEpisodes || (currentSeasonInfo as any)?.episodes || currentSeason?.totalEpisodes || (anime as any)?.totalEpisodes) === 1) ? "Episode" : "Episodes")}</span>
-                  </div>
-                  <div className="w-px h-4 bg-white/15" />
-                  {(() => {
-                    const fmt = formatAnimeStatus(displayStatus);
-                    const dot = fmt.style === "airing" ? "bg-emerald-400" : fmt.style === "upcoming" ? "bg-sky-400" : "bg-white/60";
-                    return (
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${dot} ${fmt.style === "airing" ? "animate-pulse" : ""}`} />
-                        <span className="text-sm font-bold text-white">{fmt.style === "airing" ? "Ongoing" : fmt.style === "upcoming" ? "Upcoming" : "Completed"}</span>
+                        {animeDescription && (
+                          <div>
+                            <p
+                              className={cn(
+                                "max-w-2xl select-text text-xs leading-relaxed text-white/60 sm:text-sm md:text-[15px]",
+                                isLongDescription && !descExpanded && "line-clamp-2 sm:line-clamp-3"
+                              )}
+                            >
+                              {animeDescription}
+                            </p>
+                            {isLongDescription && (
+                              <button
+                                onClick={() => setDescExpanded((v) => !v)}
+                                className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-[color:var(--anime-accent)] transition-all hover:brightness-125 sm:text-sm"
+                              >
+                                {descExpanded ? "Read less" : "Read more"}
+                                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform sm:h-4 sm:w-4", descExpanded && "rotate-180")} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                          {(anime as any)?.isUpcoming || (anime as any)?.status === "upcoming" || (currentSeasonInfo as any)?.isUpcoming ? (
+                            <>
+                              <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs font-semibold text-amber-300 sm:px-4 sm:py-3 sm:text-sm">
+                                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
+                                <span>This entry is upcoming. Please check back later.</span>
+                              </div>
+                              <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
+                              <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                            </>
+                          ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" || (currentSeasonInfo as any)?.isUnavailable ? (
+                            <>
+                              <div className="flex items-center gap-2.5 rounded-xl border border-zinc-700/60 bg-zinc-800/80 px-3.5 py-2.5 text-xs font-semibold text-zinc-300 sm:px-4 sm:py-3 sm:text-sm">
+                                <span className="h-2 w-2 shrink-0 rounded-full bg-zinc-400" />
+                                <span>This title is currently unavailable on this site. Please check back later.</span>
+                              </div>
+                              <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
+                              <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                            </>
+                          ) : dedupedCurrentEps.length > 0 ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  const activeEp =
+                                    (hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber)
+                                      ? dedupedCurrentEps.find((e) => Number(e.episodeNum) === Number(playingEpisode))
+                                      : null) || selectedEp;
+                                  const target = activeEp || dedupedCurrentEps.find((ep) => ep.isReleased !== false) || dedupedCurrentEps[0];
+                                  if (target) handleWatchEpisode(target);
+                                }}
+                                style={watchButtonStyle}
+                                className="group flex items-center gap-2 rounded-xl px-6 py-3.5 text-xs font-bold shadow-xl shadow-black/30 transition-all duration-200 hover:brightness-110 active:scale-95 sm:px-8 sm:py-4 sm:text-sm"
+                              >
+                                <Play className="h-4 w-4 fill-current transition-transform group-hover:scale-110 sm:h-5 sm:w-5" />
+                                {isMovieFormat
+                                  ? `Watch ${dedupedCurrentEps.length > 1 ? `Movie ${dedupedCurrentEps[0]?.episodeNum || 1}` : "Movie"}`
+                                  : hasActiveProgress && playingEpisode
+                                  ? `Watch Ep ${playingEpisode}`
+                                  : `Watch Ep ${selectedEp?.episodeNum || dedupedCurrentEps[0]?.episodeNum || 1}`}
+                              </button>
+                              <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
+                              <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                            </>
+                          ) : episodesLoading ? (
+                            <>
+                              <div className="h-12 w-36 animate-pulse rounded-xl bg-white/10" />
+                              <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                            </>
+                          ) : (
+                            <>
+                              <button disabled className="flex cursor-not-allowed items-center gap-2 rounded-xl bg-white/10 px-6 py-3.5 text-xs font-bold text-white/30 sm:px-8 sm:py-4 sm:text-sm">
+                                No Episodes Available
+                              </button>
+                              <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                            </>
+                          )}
+                        </div>
                       </div>
-                    );
-                  })()}
+
+                    {/* Vertical series info rail */}
+                    <aside className="relative order-3 flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-3.5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl md:col-start-1 md:row-start-2">
+                      <div
+                        className="absolute inset-x-6 top-0 h-px"
+                        style={{
+                          backgroundImage: `linear-gradient(to right, transparent, ${withAlpha(
+                            coverPalette.accentRgb,
+                            0.75
+                          )}, transparent)`,
+                        }}
+                      />
+                      <div className="flex items-center justify-between gap-3 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-1.5 w-1.5 rounded-full"
+                            style={{
+                              backgroundColor: coverPalette.accent,
+                              boxShadow: `0 0 10px ${withAlpha(coverPalette.accentRgb, 0.9)}`,
+                            }}
+                          />
+                          <span className="text-[10px] font-black uppercase tracking-[0.24em] text-white/40">Series info</span>
+                        </div>
+                        <span
+                          className="rounded-md border px-1.5 py-0.5 text-[9px] font-black tracking-wider"
+                          style={{
+                            borderColor: "var(--anime-accent-25)",
+                            backgroundColor: "var(--anime-accent-08)",
+                            color: "var(--anime-accent)",
+                          }}
+                        >
+                          {displayYear || displayFormat || "ANIME"}
+                        </span>
+                      </div>
+                      <div className="grid flex-1 content-center grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-1">
+                        <MetaStat icon={Tv} label="Format" value={isMovieFormat ? "Movie" : displayFormat} />
+                        <MetaStat
+                          icon={ListVideo}
+                          label="Episodes"
+                          value={isMovieFormat ? "1" : `${episodeCount}`}
+                        />
+                        {anime?.duration ? (
+                          <MetaStat icon={Clock} label="Duration" value={`${anime.duration} min`} />
+                        ) : null}
+                        {airedRange ? (
+                          <MetaStat icon={CalendarDays} label="Aired" value={airedRange} />
+                        ) : null}
+                        {animeScore > 0 ? (
+                          <MetaStat icon={Star} label="Score" value={animeScore.toFixed(1)} />
+                        ) : null}
+                        {viewsLabel ? (
+                          <MetaStat icon={Eye} label="Views" value={viewsLabel} />
+                        ) : null}
+                        {studioName ? (
+                          <MetaStat
+                            icon={Building2}
+                            label="Studio"
+                            value={
+                              <span className="block truncate" title={studioName}>
+                                {studioName}
+                              </span>
+                            }
+                          />
+                        ) : null}
+                        {seasonLabel ? (
+                          <MetaStat icon={Sparkles} label="Season" value={seasonLabel} />
+                        ) : null}
+                        <MetaStat
+                          icon={Radio}
+                          label="Status"
+                          value={
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass)} />
+                              {statusLabel}
+                            </span>
+                          }
+                        />
+                      </div>
+                    </aside>
+                  </div>
                 </div>
-              </div>
+              </section>
+
+              {/* Main Content */}
+              <div className="mx-auto w-full max-w-screen-2xl px-4 sm:px-6 md:px-10 lg:px-12 xl:px-14">
+                <div className="mt-5 flex items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
+                  <Link href="/anime" className="inline-flex items-center gap-2 text-sm text-white/40 transition-colors hover:text-white">
+                    <ArrowLeft className="h-4 w-4" /> Back to Anime
+                  </Link>
+                  <span className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/25 sm:flex">
+                    <span className="h-px w-8 bg-white/15" />
+                    Stream in HD
+                  </span>
+                </div>
 
               {episodeNotice && (
                 <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200">{episodeNotice}</div>
@@ -1860,7 +2178,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 {/* Episodes header */}
                 <div id="anime-episodes-list" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full shadow-lg" />
+                    <div
+                      className="w-1.5 h-6 rounded-full shadow-lg"
+                      style={{
+                        backgroundImage: `linear-gradient(to bottom, ${coverPalette.accent2}, ${coverPalette.accent})`,
+                      }}
+                    />
                     <h2 className="text-2xl font-black text-white tracking-tight">Episodes</h2>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap max-w-xl justify-end">
@@ -1934,7 +2257,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     return (
                       <div key={`grid-${currentSeasonId}-${activePage}`}>
                         {totalPages > 1 && <div className="mb-6"><EpisodePagination currentPage={activePage} totalPages={totalPages} totalItems={episodeItems.length} itemsPerPage={gridSize} onPageChange={onPageChange} /></div>}
-                        <EpisodeGridView items={sliced} />
+                        <EpisodeGridView items={sliced} layout="comfortable" />
                         {totalPages > 1 && <div className="mt-8"><EpisodePagination currentPage={activePage} totalPages={totalPages} totalItems={episodeItems.length} itemsPerPage={gridSize} onPageChange={onPageChange} /></div>}
                       </div>
                     );
@@ -1961,7 +2284,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 <>
                   <div className="mt-16 mb-6 px-5 md:px-0">
                     <h2 className="text-lg md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
-                      <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
+                      <div
+                        className="w-1.5 h-6 rounded-full"
+                        style={{
+                          backgroundImage: `linear-gradient(to bottom, ${coverPalette.accent2}, ${coverPalette.accent})`,
+                        }}
+                      />
                       You May Like
                     </h2>
                   </div>
@@ -1978,7 +2306,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                 <>
                   <div className="mt-16 mb-6 px-5 md:px-0">
                     <h2 className="text-lg md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
-                      <div className="w-1.5 h-6 bg-gradient-to-b from-[#7288AE] to-[#4B5694] rounded-full" />
+                      <div
+                        className="w-1.5 h-6 rounded-full"
+                        style={{
+                          backgroundImage: `linear-gradient(to bottom, ${coverPalette.accent2}, ${coverPalette.accent})`,
+                        }}
+                      />
                       You May Like
                     </h2>
                   </div>
@@ -1995,6 +2328,37 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         )}
       </main>
       </AnimeContentErrorBoundary>
+
+      {trailerOpen && anime?.trailerId && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-3 backdrop-blur-md sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${displayTitle} trailer`}
+          onClick={() => setTrailerOpen(false)}
+        >
+          <div
+            className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setTrailerOpen(false)}
+              className="absolute right-3 top-3 z-10 rounded-full border border-white/20 bg-black/80 p-2 text-white transition-colors hover:bg-red-600"
+              aria-label="Close trailer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${anime.trailerId}?autoplay=1&mute=0&controls=1&rel=0&playsinline=1`}
+              className="h-full w-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={`${displayTitle} Trailer`}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

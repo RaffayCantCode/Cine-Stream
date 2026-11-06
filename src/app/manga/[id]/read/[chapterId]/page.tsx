@@ -1,10 +1,24 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
-import type { Metadata } from "next";
+
+import type { Metadata, Viewport } from "next";
 import { getMangaDetails, getMangaChapters, getChapterPages } from "@/lib/manga-fetch";
 import { constructMediaMetadata } from "@/lib/social-preview";
 import { Suspense } from "react";
 import MangaReaderClient from "./MangaReaderClient";
+
+/**
+ * The reader is the one place where the browser's native pinch-zoom is useful
+ * (vertical webtoon mode). Paged mode opts out with `touch-action: none` and
+ * runs its own gesture pipeline, so this does not conflict with it.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
+};
 
 export async function generateMetadata(
   props: { params: Promise<{ id: string; chapterId: string }> }

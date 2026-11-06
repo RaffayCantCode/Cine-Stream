@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { MangaItem, MangaChapter } from "@/lib/manga-fetch";
+import { getMangaTheme, mangaThemeStyle, resolveMangaKind } from "@/lib/manga-theme";
 import { 
   getLocalMangaProgress, 
   fetchServerMangaProgress, 
@@ -84,27 +85,24 @@ export default function MangaDetailsClient({
   }, [id]);
 
   const effectiveType = useMemo(() => {
-    const lowerTags = (manga?.tags || []).map((t) => t.toLowerCase());
-    if (lowerTags.some((t) => t.includes("manhwa") || t.includes("webtoon") || t.includes("korean"))) {
-      return "manhwa";
-    }
-    if (lowerTags.some((t) => t.includes("manhua") || t.includes("chinese"))) {
-      return "manhua";
-    }
-    if (sessionType === "manhwa" || sessionType === "manhua") {
-      return sessionType;
-    }
-    if (manga?.type === "manhwa" || manga?.type === "manhua") {
-      return manga.type;
-    }
-    if (id.startsWith("asura-")) {
-      return "manhwa";
-    }
-    if (/infinite mage|solo leveling|raeliana|duke's mansion|tower of god|god of high school|lookism/i.test(manga?.title || "")) {
-      return "manhwa";
-    }
-    return manga?.type || "manga";
-  }, [manga?.type, manga?.tags, manga?.title, id, sessionType]);
+    return resolveMangaKind({
+      type: manga?.type || initialManga?.type || sessionType,
+      tags: manga?.tags,
+      title: manga?.title || initialManga?.title,
+      id,
+    });
+  }, [manga?.type, manga?.tags, manga?.title, initialManga?.type, initialManga?.title, id, sessionType]);
+
+  const theme = useMemo(() => getMangaTheme(effectiveType), [effectiveType]);
+  const primaryCtaClass = theme.isManhwa
+    ? "text-white shadow-xl"
+    : "bg-[#E5E5E5] hover:bg-white text-[#090F15] shadow-xl shadow-black/40";
+  const primaryCtaStyle = theme.isManhwa
+    ? {
+        background: theme.gradient,
+        boxShadow: "0 20px 46px -18px rgba(157,3,252,0.75)",
+      }
+    : undefined;
 
   const { isSaved, toggle } = useWatchlist();
   const inWatchlist = manga ? isSaved(manga.id, effectiveType) : false;
@@ -311,11 +309,11 @@ export default function MangaDetailsClient({
 
   const mangaBackdropUrl = effectiveBanner || effectiveCover || null;
 
-  const { theme } = useTheme();
-  const isGlobalTheme = theme === "global";
+  const { theme: globalTheme } = useTheme();
+  const isGlobalTheme = globalTheme === "global";
 
   const pageBgClass = useMemo(() => {
-    switch (theme) {
+    switch (globalTheme) {
       case "global":
         return "bg-[#07080d]";
       case "glass":
@@ -331,22 +329,24 @@ export default function MangaDetailsClient({
       default:
         return "bg-[#07080d]";
     }
-  }, [theme]);
+  }, [globalTheme]);
 
   return (
     <div
       className={`relative min-h-screen ${pageBgClass} text-foreground pb-24 select-none overflow-x-clip transition-colors duration-500`}
-      style={
-        {
-          "--primary": "42 75% 65%",
-          "--primary-foreground": "210 30% 6%",
-          "--ring": "42 75% 65%",
-          "--accent": "42 75% 65%",
-        } as React.CSSProperties
-      }
+      style={mangaThemeStyle(effectiveType) as React.CSSProperties}
     >
       {/* Ambient Backdrop Glow - changes background color according to media backdrop colors (global theme only) */}
       <AmbientBackdropGlow backdropUrl={mangaBackdropUrl} />
+
+      <div
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background: theme.isManhwa
+            ? "radial-gradient(circle at 18% 8%, rgba(157,3,252,0.16) 0%, transparent 42%), radial-gradient(circle at 85% 22%, rgba(252,3,173,0.10) 0%, transparent 46%)"
+            : "radial-gradient(circle at 18% 8%, rgba(255,255,255,0.07) 0%, transparent 42%), radial-gradient(circle at 85% 22%, rgba(255,255,255,0.035) 0%, transparent 46%)",
+        }}
+      />
 
       <Sidebar />
 
@@ -386,12 +386,29 @@ export default function MangaDetailsClient({
               className="absolute inset-0 bg-cover bg-center opacity-10 blur-3xl scale-125 pointer-events-none"
               style={{ backgroundImage: `url(${effectiveCover})` }}
             />
+            {/* Identity wash */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: theme.isManhwa
+                  ? "linear-gradient(115deg, rgba(157,3,252,0.20) 0%, transparent 42%, rgba(252,3,173,0.14) 100%)"
+                  : "linear-gradient(115deg, rgba(255,255,255,0.10) 0%, transparent 45%, rgba(255,255,255,0.05) 100%)",
+              }}
+            />
+            <div
+              className="absolute inset-x-0 bottom-0 h-[3px]"
+              style={{ background: theme.gradient }}
+            />
 
             <div className="relative w-full px-5 sm:px-8 md:px-12">
               <div className="flex flex-col md:flex-row gap-8 lg:gap-12 items-start">
                 
                 {/* Poster Cover */}
                 <div className="w-48 sm:w-60 md:w-72 aspect-[2/3] shrink-0 rounded-3xl overflow-hidden shadow-2xl border border-white/10 relative group mx-auto md:mx-0">
+                  <div
+                    className="absolute inset-0 z-10 rounded-3xl pointer-events-none"
+                    style={{ boxShadow: `inset 0 0 0 1px ${theme.border}` }}
+                  />
                   <img
                     src={effectiveCover}
                     alt={manga.title}
@@ -407,7 +424,7 @@ export default function MangaDetailsClient({
                     }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className="absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-black/80 backdrop-blur-md text-primary border border-primary/30 shadow-lg">
+                  <div className={`absolute top-3 left-3 z-20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md border shadow-lg ${theme.chipClass}`}>
                     {effectiveType}
                   </div>
                 </div>
@@ -422,9 +439,27 @@ export default function MangaDetailsClient({
                     <span>{effectiveType === "manhwa" ? "All Manhwa" : effectiveType === "manhua" ? "All Manhua" : "All Manga"}</span>
                   </Link>
 
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border"
+                      style={{
+                        color: theme.isManhwa ? theme.text : "#ffffff",
+                        borderColor: theme.isManhwa ? "rgba(200,64,255,0.45)" : "rgba(255,255,255,0.28)",
+                        background: theme.isManhwa ? "rgba(157,3,252,0.14)" : "rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: theme.gradient }} />
+                      {theme.isManhwa ? "Manhwa · Violet → Magenta" : "Manga · Monochrome"}
+                    </span>
+                  </div>
+
                   <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
                     {manga.title}
                   </h1>
+                  <div
+                    className="h-[3px] w-24 rounded-full -mt-2"
+                    style={{ background: theme.gradient }}
+                  />
 
                   {/* Status & Metadata Badges */}
                   <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold">
@@ -493,17 +528,19 @@ export default function MangaDetailsClient({
                     {resumeChapter ? (
                       <Link
                         href={`/manga/${manga.id}/read/${resumeChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(progress?.chapterNumber || "")}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
-                        className="inline-flex items-center gap-2.5 bg-[#E5E5E5] hover:bg-white text-[#090F15] font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation"
+                        style={primaryCtaStyle}
+                        className={`inline-flex items-center gap-2.5 font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation ${primaryCtaClass}`}
                       >
-                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 text-[#090F15]" />
+                        <Play className={`w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 ${theme.isManhwa ? "text-white" : "text-[#090F15]"}`} />
                         <span>Continue Chapter {progress?.chapterNumber}</span>
                       </Link>
                     ) : firstChapter ? (
                       <Link
                         href={`/manga/${manga.id}/read/${firstChapter.id}?title=${encodeURIComponent(manga.title)}&ch=${encodeURIComponent(firstChapter.chapterNumber)}&cover=${encodeURIComponent(effectiveCover)}&type=${encodeURIComponent(effectiveType)}`}
-                        className="inline-flex items-center gap-2.5 bg-[#E5E5E5] hover:bg-white text-[#090F15] font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 shadow-xl shadow-black/40 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation"
+                        style={primaryCtaStyle}
+                        className={`inline-flex items-center gap-2.5 font-extrabold px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-xs sm:text-sm transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer touch-manipulation ${primaryCtaClass}`}
                       >
-                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 text-[#090F15]" />
+                        <Play className={`w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 ${theme.isManhwa ? "text-white" : "text-[#090F15]"}`} />
                         <span>Start Reading (Ch. {firstChapter.chapterNumber})</span>
                       </Link>
                     ) : isChaptersLoading ? (

@@ -74,13 +74,13 @@
     --ring: 278 85% 56%;
   }
 
-  /* Manga Mode: Midnight slate with soft, soothing light warm gold accents */
+  /* Manga Mode: Midnight slate with crisp monochrome (paper white) accents */
   .mode-manga.dark {
     --background: 210 30% 5.5%;
     --card: 210 17% 17%;
-    --primary: 42 75% 65%;
-    --primary-foreground: 210 30% 6%;
-    --ring: 42 75% 65%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+    --ring: 0 0% 100%;
   }
 }
 
@@ -316,9 +316,9 @@
   }
   html.theme-glass.mode-manga.dark {
     --background: 240 16% 8%;
-    --primary: 42 75% 65%;
-    --primary-foreground: 210 30% 6%;
-    --ring: 42 75% 65%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+    --ring: 0 0% 100%;
   }
 }
 
@@ -475,9 +475,9 @@
   html.theme-cinema.mode-manga.dark {
     --background: 348 34% 12%;
     --card: 348 30% 18%;
-    --primary: 42 75% 65%;
-    --primary-foreground: 210 30% 6%;
-    --ring: 42 75% 65%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+    --ring: 0 0% 100%;
   }
 }
 
@@ -578,9 +578,9 @@
   html.theme-wisteria.mode-manga.dark {
     --background: 265 40% 10%;
     --card: 268 35% 15%;
-    --primary: 42 75% 65%;
-    --primary-foreground: 210 30% 6%;
-    --ring: 42 75% 65%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+    --ring: 0 0% 100%;
   }
 }
 
@@ -681,9 +681,9 @@
   html.theme-solaris.mode-manga.dark {
     --background: 55 25% 7%;
     --card: 55 22% 13%;
-    --primary: 42 75% 65%;
-    --primary-foreground: 210 30% 6%;
-    --ring: 42 75% 65%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+    --ring: 0 0% 100%;
   }
 }
 
@@ -846,6 +846,63 @@
   );
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ============ Manga reader ============ */
+
+/* The paged reader owns the whole viewport; cancel the global mobile <main>
+   padding so the 100dvh stage is never pushed off-screen. */
+main.reader-stage {
+  padding: 0 !important;
+}
+
+/* Type-coloured progress / brightness sliders */
+.reader-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  padding: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+  cursor: pointer;
+}
+
+.reader-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--manga-accent, #ffffff);
+  border: 2px solid rgba(0, 0, 0, 0.65);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28);
+  transition: transform 140ms ease;
+}
+
+.reader-range::-webkit-slider-thumb:active {
+  transform: scale(1.18);
+}
+
+.reader-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--manga-accent, #ffffff);
+  border: 2px solid rgba(0, 0, 0, 0.65);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28);
+}
+
+.reader-range::-moz-range-track {
+  background: transparent;
+}
+
+.reader-range::-moz-range-progress {
+  background: transparent;
+}
+
+.reader-range:focus-visible {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22);
 }
 
 @keyframes fade-in-up {
