@@ -14,7 +14,10 @@ import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import {
   DEFAULT_COVER_PALETTE,
   buildPaletteFromColor,
+  buildPaletteFromSeed,
   extractCoverPalette,
+  fetchAniListCoverColor,
+  proxiedImageUrl,
   withAlpha,
   readableTextOn,
   type CoverPalette,
@@ -23,7 +26,7 @@ import { ANIME_API_VERSION, animeEpisodesCacheKey, animeMetaCacheKey, animeMetaU
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
 import { AnimeSeasonSelector, type FranchiseNodeItem } from "@/components/AnimeSeasonSelector";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, Film, CalendarDays, ListVideo, Radio, Clock, Tv, X, Eye, Building2, Sparkles } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, Film, CalendarDays, ListVideo, Radio, Clock, Tv, X, Building2, Sparkles } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -539,12 +542,12 @@ function MetaStat({
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 transition-colors hover:border-white/[0.14] hover:bg-white/[0.055] md:flex-row md:items-center md:justify-between md:gap-3">
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 transition-colors hover:border-white/[0.14] hover:bg-white/[0.055] md:flex-row md:items-center md:justify-between md:gap-3">
       <span className="flex shrink-0 items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-white/35">
         <Icon className="h-3 w-3 text-[color:var(--anime-accent)]" />
         {label}
       </span>
-      <span className="min-w-0 text-sm font-black text-white md:text-right">{value}</span>
+      <span className="min-w-0 text-[13px] font-black text-white md:text-right">{value}</span>
     </div>
   );
 }
@@ -667,11 +670,18 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const displayFormat = getSafeAnimeTitle((currentSeasonInfo as any)?.format || (currentSeasonInfo as any)?.type || anime?.format || anime?.type || "Anime");
   const displayStatus = getSafeAnimeTitle(currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "");
 
-  // Theme the page from the artwork: AniList ships a dominant cover colour, and
-  // we fall back to sampling the poster when that colour is missing.
+  // Theme the page from the artwork: AniList ships a dominant cover colour.
+  // When it is missing (edge hosts are often blocked from AniList) we ask the
+  // API directly from the browser, then sample the poster through our
+  // same-origin image proxy. A deterministic seed covers the first paint so no
+  // page ever flashes the shared default palette.
   const seededPalette = useMemo(
     () => buildPaletteFromColor(anime?.coverColor || null),
     [anime?.coverColor]
+  );
+  const fallbackPalette = useMemo(
+    () => buildPaletteFromSeed(`${anime?.id || id}|${anime?.name || ""}`),
+    [anime?.id, anime?.name, id]
   );
 
   useEffect(() => {
@@ -680,18 +690,32 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       return;
     }
     let cancelled = false;
-    if (!displayPoster) {
-      setCoverPalette(DEFAULT_COVER_PALETTE);
-      return;
-    }
-    setCoverPalette(DEFAULT_COVER_PALETTE);
-    extractCoverPalette(displayPoster).then((palette) => {
-      if (!cancelled && palette) setCoverPalette(palette);
-    });
+    setCoverPalette(fallbackPalette);
+
+    (async () => {
+      // 1. Ask AniList straight from the browser (CORS-enabled, ~1 KB).
+      const direct = buildPaletteFromColor(await fetchAniListCoverColor(anime?.id));
+      if (cancelled) return;
+      if (direct) {
+        setCoverPalette(direct);
+        return;
+      }
+      // 2. Sample the poster via our own origin (never a tainted canvas).
+      const proxied = await extractCoverPalette(proxiedImageUrl(displayPoster));
+      if (cancelled) return;
+      if (proxied) {
+        setCoverPalette(proxied);
+        return;
+      }
+      // 3. Last resort: sample the remote URL directly.
+      const sampled = await extractCoverPalette(displayPoster);
+      if (!cancelled && sampled) setCoverPalette(sampled);
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [displayPoster, seededPalette]);
+  }, [displayPoster, seededPalette, fallbackPalette, anime?.id]);
 
   const accentVars = useMemo(
     () =>
@@ -1770,10 +1794,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const airedRange = formatAiredRange(anime?.startDate, anime?.endDate);
   const studioName = (Array.isArray(anime?.studios) ? anime.studios : []).filter(Boolean)[0] || null;
   const seasonLabel = formatSeasonLabel(anime?.season, anime?.seasonYear);
-  const viewsLabel =
-    typeof anime?.popularity === "number" && anime.popularity > 0
-      ? anime.popularity.toLocaleString("en-US")
-      : null;
   const statusMeta = formatAnimeStatus(displayStatus);
   const statusLabel =
     statusMeta.style === "airing" ? "Ongoing" : statusMeta.style === "upcoming" ? "Upcoming" : "Completed";
@@ -1877,8 +1897,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   </div>
                 )}
 
-                <div className="relative mx-auto w-full max-w-screen-2xl px-4 pb-9 pt-[calc(4.5rem+env(safe-area-inset-top))] sm:px-6 sm:pt-24 md:px-10 md:pt-28 lg:px-12 xl:px-14">
-                  <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] md:items-start md:gap-x-7 md:gap-y-5 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] lg:gap-x-9 xl:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+                <div className="relative mx-auto w-full max-w-screen-2xl px-4 pb-7 pt-[calc(4.5rem+env(safe-area-inset-top))] sm:px-6 sm:pt-20 md:px-10 md:pt-24 lg:px-12 xl:px-14 xl:pt-32">
+                  <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] md:items-start md:gap-x-6 md:gap-y-4 lg:grid-cols-[minmax(0,270px)_minmax(0,1fr)] lg:gap-x-8 xl:grid-cols-[minmax(0,300px)_minmax(0,1fr)_minmax(0,300px)] xl:gap-x-8 2xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_minmax(0,320px)]">
                       {/* Poster */}
                       <div className="relative order-1 shrink-0 self-start md:col-start-1 md:row-start-1 md:w-full">
                         <div
@@ -1890,7 +1910,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                             )} 0%, ${withAlpha(coverPalette.accent2Rgb, 0.26)} 55%, transparent 100%)`,
                           }}
                         />
-                        <div className="relative w-40 overflow-hidden rounded-[1.6rem] border border-white/[0.12] bg-white/[0.03] shadow-[0_28px_80px_-14px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-white/[0.06] sm:w-56 md:w-full">
+                        <div className="relative w-40 overflow-hidden rounded-[1.6rem] border border-white/[0.12] bg-white/[0.03] shadow-[0_28px_80px_-14px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-white/[0.06] sm:w-52 md:w-full">
                           <div className="aspect-[2/3]">
                             <img
                               src={displayPoster}
@@ -1904,31 +1924,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
                         </div>
                         {animeScore > 0 && (
-                          <div className="absolute -bottom-3 -right-2 flex items-center gap-1.5 rounded-2xl border border-amber-400/30 bg-[#0b0d12]/95 px-3 py-2 shadow-xl backdrop-blur-md sm:-right-3">
-                            <Star className="h-4 w-4 fill-current text-amber-300" />
-                            <span className="text-sm font-black text-white">{animeScore.toFixed(1)}</span>
+                          <div className="absolute -bottom-2.5 -right-2 flex items-center gap-1.5 rounded-xl border border-amber-400/30 bg-[#0b0d12]/95 px-2.5 py-1.5 shadow-xl backdrop-blur-md sm:-right-3">
+                            <Star className="h-3.5 w-3.5 fill-current text-amber-300" />
+                            <span className="text-[13px] font-black text-white">{animeScore.toFixed(1)}</span>
                             <span className="text-[10px] font-bold text-white/35">/10</span>
                           </div>
                         )}
                       </div>
 
                       {/* Title & primary actions */}
-                      <div className="order-2 min-w-0 space-y-3 sm:space-y-4 md:col-start-2 md:row-span-2 md:row-start-1 md:self-start md:pt-2">
+                      <div className="order-2 min-w-0 space-y-2.5 sm:space-y-3.5 md:col-start-2 md:row-span-2 md:row-start-1 md:self-start md:pt-1 xl:row-span-1">
                         <div>
                           <h1 className="sr-only">{displayTitle}</h1>
                           {effectiveLogo ? (
-                            <div className="mb-3 max-w-[280px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[460px]">
+                            <div className="mb-2 max-w-[260px] sm:max-w-[320px] md:max-w-[390px] lg:max-w-[430px]">
                               <img
                                 src={effectiveLogo}
                                 alt={displayTitle}
-                                className="max-h-16 w-auto object-contain object-left drop-shadow-[0_6px_30px_rgba(0,0,0,0.95)] sm:max-h-20 md:max-h-24 lg:max-h-28"
+                                className="max-h-14 w-auto object-contain object-left drop-shadow-[0_6px_30px_rgba(0,0,0,0.95)] sm:max-h-16 md:max-h-20 lg:max-h-24"
                               />
                               {displayTitle && anime?.name && displayTitle.toLowerCase() !== getSafeAnimeTitle(anime.name).toLowerCase() ? (
                                 <div className="mt-2 text-sm font-black tracking-wide text-white/90">{displayTitle}</div>
                               ) : null}
                             </div>
                           ) : (
-                            <h1 className="select-text break-words text-3xl font-black leading-[1.02] tracking-tight text-white sm:text-4xl md:text-5xl xl:text-6xl">
+                            <h1 className="select-text break-words text-3xl font-black leading-[1.02] tracking-tight text-white sm:text-4xl lg:text-5xl xl:text-[3.5rem]">
                               {displayTitle}
                             </h1>
                           )}
@@ -2066,7 +2086,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       </div>
 
                     {/* Vertical series info rail */}
-                    <aside className="relative order-3 flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-3.5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl md:col-start-1 md:row-start-2">
+                    <aside className="relative order-3 flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-3 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl md:col-start-1 md:row-start-2 xl:col-start-3 xl:row-start-1 xl:self-stretch">
                       <div
                         className="absolute inset-x-6 top-0 h-px"
                         style={{
@@ -2076,7 +2096,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           )}, transparent)`,
                         }}
                       />
-                      <div className="flex items-center justify-between gap-3 pb-3">
+                      <div className="flex items-center justify-between gap-3 pb-2.5">
                         <div className="flex items-center gap-2">
                           <span
                             className="h-1.5 w-1.5 rounded-full"
@@ -2098,7 +2118,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           {displayYear || displayFormat || "ANIME"}
                         </span>
                       </div>
-                      <div className="grid flex-1 content-center grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-1">
+                      <div className="grid flex-1 content-center grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-1">
                         <MetaStat icon={Tv} label="Format" value={isMovieFormat ? "Movie" : displayFormat} />
                         <MetaStat
                           icon={ListVideo}
@@ -2113,9 +2133,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                         ) : null}
                         {animeScore > 0 ? (
                           <MetaStat icon={Star} label="Score" value={animeScore.toFixed(1)} />
-                        ) : null}
-                        {viewsLabel ? (
-                          <MetaStat icon={Eye} label="Views" value={viewsLabel} />
                         ) : null}
                         {studioName ? (
                           <MetaStat

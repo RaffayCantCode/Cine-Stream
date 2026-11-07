@@ -139,8 +139,9 @@ export function buildPaletteFromColor(hex?: string | null): CoverPalette | null 
   if (!hex || !/^#?[0-9a-f]{6}$/i.test(hex.trim())) return null;
   const rgb = hexToRgb(hex);
   const { h, s, l } = rgbToHsl(rgb);
-  // Reject near-black/near-white/greyscale seeds — they cannot theme a page.
-  if (s < 0.08 || l < 0.08 || l > 0.94) return null;
+  // Greyscale seeds have no meaningful hue — let the caller sample the artwork
+  // instead. Dark/muted seeds are fine: `boost` lifts them into a usable range.
+  if (s < 0.12 || l < 0.03 || l > 0.97) return null;
 
   const hueShift = h >= 30 && h <= 150 ? -32 : 32;
   const accentRgb = boost(rgb);
@@ -152,6 +153,100 @@ export function buildPaletteFromColor(hex?: string | null): CoverPalette | null 
     accentRgb,
     accent2Rgb,
   };
+}
+
+/**
+ * Deterministic palette derived from an anime's id/title.
+ *
+ * Used as the very first paint while the real cover colour is being resolved,
+ * so no page ever flashes the shared default (blue/fuchsia) theme.
+ */
+export function buildPaletteFromSeed(seed: string): CoverPalette {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const hue = Math.abs(hash) % 360;
+  const accentRgb = boost(hslToRgb({ h: hue, s: 0.62, l: 0.58 }));
+  const accent2Rgb = boost(hslToRgb({ h: hue + 38, s: 0.66, l: 0.56 }));
+  return {
+    accent: rgbToHex(accentRgb),
+    accent2: rgbToHex(accent2Rgb),
+    accentRgb,
+    accent2Rgb,
+  };
+}
+
+const ANILIST_COLOR_CACHE_PREFIX = "cs_cover_color_";
+/** De-duplicates concurrent colour lookups for the same title. */
+const colorRequests = new Map<string, Promise<string | null>>();
+
+/**
+ * Fetch a cover's dominant colour straight from AniList in the browser.
+ *
+ * The server-side meta pipeline can be blocked from AniList (edge hosts are
+ * commonly challenged), which used to leave every page on the default palette.
+ * AniList's GraphQL API is CORS-enabled, so the browser can resolve the colour
+ * directly — a tiny request (~1 KB) that runs in parallel with the page.
+ */
+export function fetchAniListCoverColor(mediaId?: string | number | null): Promise<string | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  const raw = String(mediaId ?? "").trim();
+  // Only real AniList ids — Kitsu ids look like "kitsu-123".
+  if (!/^\d+$/.test(raw)) return Promise.resolve(null);
+  const id = parseInt(raw, 10);
+  if (!id) return Promise.resolve(null);
+
+  const cacheKey = `${ANILIST_COLOR_CACHE_PREFIX}${id}`;
+  try {
+    const cached = window.sessionStorage.getItem(cacheKey);
+    if (cached !== null) return Promise.resolve(cached || null);
+  } catch {}
+
+  const inFlight = colorRequests.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const request = (async (): Promise<string | null> => {
+    try {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 4500);
+      const res = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          query: "query ($id: Int) { Media(id: $id, type: ANIME) { coverImage { color } } }",
+          variables: { id },
+        }),
+        signal: controller.signal,
+      });
+      window.clearTimeout(timer);
+      if (!res.ok) return null;
+      const json = await res.json();
+      const color: string | null = json?.data?.Media?.coverImage?.color || null;
+      try {
+        window.sessionStorage.setItem(cacheKey, color || "");
+      } catch {}
+      return color;
+    } catch {
+      return null;
+    } finally {
+      colorRequests.delete(cacheKey);
+    }
+  })();
+
+  colorRequests.set(cacheKey, request);
+  return request;
+}
+
+/**
+ * Route a remote image through our own origin so canvas sampling can never be
+ * CORS-tainted (this is the reliable fallback when AniList's colour is missing
+ * or greyscale).
+ */
+export function proxiedImageUrl(src?: string | null): string | null {
+  if (!src) return null;
+  return `/api/image-proxy?url=${encodeURIComponent(src)}`;
 }
 
 function computePalette(img: HTMLImageElement): CoverPalette | null {

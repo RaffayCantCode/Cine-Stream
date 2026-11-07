@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { PAGE_READY_EVENT, isPageContentLoading } from "@/lib/pageLoad";
 
 /** Minimum time the loader stays fully opaque once a route has committed. */
 const DEFAULT_MIN_HOLD_MS = 350;
@@ -16,6 +17,13 @@ const DEFAULT_MIN_HOLD_MS = 350;
 const BROWSE_MIN_HOLD_MS = 160;
 /** Detail routes already render their own loading shell — keep it brief. */
 const MEDIA_MIN_HOLD_MS = 200;
+/**
+ * Detail pages that fetch their data on the client (anime, manga…) keep the
+ * branded overlay up until they announce their content is ready, so the user
+ * never sees the overlay hand over to a second, in-page spinner. Capped so a
+ * slow/stalled API can never trap the user behind the loading screen.
+ */
+const MEDIA_READY_TIMEOUT_MS = 10000;
 /** Watch routes render the player immediately. */
 const WATCH_MIN_HOLD_MS = 0;
 /** Duration of the overlay fade-out. */
@@ -164,8 +172,10 @@ export function NavigationLoader() {
   }, []);
 
   /* The route has committed: consume the pending mark and keep the overlay up
-     for the route's short hold, then reveal the incoming page (which has
-     already painted its own shell/skeleton). */
+     for the route's short hold. Detail pages that load their primary content
+     on the client then keep the overlay alive until that content announces it
+     is ready — handing over to the page's own spinner read as a second
+     loading screen. */
   useEffect(() => {
     pendingNavRef.current = null;
     if (!visible) return;
@@ -181,12 +191,44 @@ export function NavigationLoader() {
       return;
     }
 
+    let readyListener: (() => void) | null = null;
+    let readyTimer: number | null = null;
+
+    const stopWaiting = () => {
+      if (readyListener) {
+        window.removeEventListener(PAGE_READY_EVENT, readyListener);
+        readyListener = null;
+      }
+      if (readyTimer !== null) {
+        window.clearTimeout(readyTimer);
+        readyTimer = null;
+      }
+    };
+
     hideTimerRef.current = window.setTimeout(() => {
       hideTimerRef.current = null;
-      setVisible(false);
+
+      // Nothing is loading: reveal right away (the page is already painted).
+      if (!isPageContentLoading()) {
+        setVisible(false);
+        return;
+      }
+
+      // Primary content is still in flight — wait for its ready signal, with a
+      // hard cap so the overlay can never block the app indefinitely.
+      readyListener = () => {
+        stopWaiting();
+        setVisible(false);
+      };
+      window.addEventListener(PAGE_READY_EVENT, readyListener);
+      readyTimer = window.setTimeout(() => {
+        stopWaiting();
+        setVisible(false);
+      }, MEDIA_READY_TIMEOUT_MS);
     }, hold);
 
     return () => {
+      stopWaiting();
       if (hideTimerRef.current !== null) {
         window.clearTimeout(hideTimerRef.current);
         hideTimerRef.current = null;

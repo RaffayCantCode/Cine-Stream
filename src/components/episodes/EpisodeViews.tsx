@@ -425,7 +425,7 @@ export const EpisodeGridView = memo(function EpisodeGridView({
   layout = "default",
 }: {
   items: EpisodeItem[];
-  /** "comfortable" renders 2–3 larger cards per row for roomier detail pages. */
+  /** "comfortable" fits four roomier cards per row on detail pages. */
   layout?: "default" | "comfortable";
 }) {
   return (
@@ -433,7 +433,7 @@ export const EpisodeGridView = memo(function EpisodeGridView({
       className={cn(
         "grid w-full",
         layout === "comfortable"
-          ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-3 gap-4 sm:gap-5 md:gap-6"
+          ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-3.5 md:gap-4"
           : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-6 4xl:grid-cols-7 gap-3.5 sm:gap-4 md:gap-5"
       )}
     >

@@ -142,6 +142,21 @@ export const DEFAULT_FETCH_USER_AGENT =
 const ANILIST_API = "https://graphql.anilist.co";
 const FILLER_BASE = "https://www.animefillerlist.com/shows";
 
+/**
+ * Resolve with `fallback` when `promise` takes longer than `ms`.
+ *
+ * Detail pages must never wait on optional enrichment (TMDB artwork, a TMDB id
+ * search on a flaky connection). Those requests can hang for the full fetch
+ * timeout, which used to make first-visit anime pages feel broken.
+ */
+function withDeadline<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise.catch(() => fallback),
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
+
 interface CacheEntry<T> { data: T; expires: number; }
 
 const anilistCache = new Map<string, CacheEntry<any>>();
@@ -825,12 +840,14 @@ export async function getAnimeDetails(
   // Parallel fetch: AniZip + AniList
   const [aniZip, media] = await Promise.all([
     fetch(`https://api.ani.zip/mappings?anilist_id=${numId}`, {
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(2000),
       headers: { "User-Agent": DEFAULT_FETCH_USER_AGENT },
       next: { revalidate: 86400 } as any,
     }).then(r => r.ok ? r.json() : null).catch(() => null),
 
-    anilistQuery(MEDIA_Q, { id: numId }, 2, 86400).then((r: any) => r?.data?.Media || null).catch(() => null),
+    // One attempt only: a stalled AniList (edge hosts are often throttled) used
+    // to burn 3 × 2.5s of retries before the Kitsu fallback even started.
+    anilistQuery(MEDIA_Q, { id: numId }, 0, 86400).then((r: any) => r?.data?.Media || null).catch(() => null),
   ]);
 
   if (!media) {
@@ -855,9 +872,17 @@ export async function getAnimeDetails(
   }
   if (!tmdbId) {
     try {
-      tmdbId = isMovie
-        ? await searchTmdbMovie(anime.name, anime.seasonYear || undefined) || (anime.jname ? await searchTmdbMovie(anime.jname, anime.seasonYear || undefined) : null)
-        : await searchTmdbShow(anime.name, anime.seasonYear || undefined) || (anime.jname ? await searchTmdbShow(anime.jname, anime.seasonYear || undefined) : null);
+      // A TMDB search on a bad connection can hang for the full fetch timeout;
+      // it only affects artwork/episode mapping, never the hero itself.
+      const searchTmdbId = async (): Promise<number | null> => {
+        if (isMovie) {
+          return (await searchTmdbMovie(anime.name, anime.seasonYear || undefined)) ||
+            (anime.jname ? await searchTmdbMovie(anime.jname, anime.seasonYear || undefined) : null);
+        }
+        return (await searchTmdbShow(anime.name, anime.seasonYear || undefined)) ||
+          (anime.jname ? await searchTmdbShow(anime.jname, anime.seasonYear || undefined) : null);
+      };
+      tmdbId = await withDeadline(searchTmdbId(), 2000, null);
     } catch { tmdbId = null; }
   }
 
@@ -934,13 +959,17 @@ export async function getAnimeDetails(
     return { ...s, tmdbId: tid, tmdbSeasonNumber: sNum, episodeOffset: offset, coverImage: s.coverImage || anime.poster, bannerImage: s.bannerImage || anime.bannerImage };
   });
 
-  // Fetch TMDB logo + backdrop in parallel
+  // Fetch TMDB logo + backdrop in parallel (time-boxed: artwork is optional).
   if (tmdbId) {
     try {
-      const [imgRes, showData] = await Promise.all([
-        tmdbFetch(`/${isMovie ? "movie" : "tv"}/${tmdbId}/images`, { include_image_language: "en,null,ja" }).catch(() => null),
-        !anime.bannerImage ? tmdbFetch(`/${isMovie ? "movie" : "tv"}/${tmdbId}`).catch(() => null) : Promise.resolve(null),
-      ]);
+      const [imgRes, showData] = await withDeadline<[any, any]>(
+        Promise.all([
+          tmdbFetch(`/${isMovie ? "movie" : "tv"}/${tmdbId}/images`, { include_image_language: "en,null,ja" }).catch(() => null),
+          !anime.bannerImage ? tmdbFetch(`/${isMovie ? "movie" : "tv"}/${tmdbId}`).catch(() => null) : Promise.resolve(null),
+        ]),
+        1500,
+        [null, null]
+      );
       const logos = (imgRes as any)?.logos || [];
       if (logos.length) {
         const logo = logos.find((l: any) => l.iso_639_1 === "en" && l.file_path)

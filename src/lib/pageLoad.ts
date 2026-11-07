@@ -6,24 +6,31 @@ export const PAGE_LOADING_EVENT = "sv:content-loading";
 /** Dispatched when a page's primary content has finished loading. */
 export const PAGE_READY_EVENT = "sv:content-ready";
 
-let isCurrentPageContentLoading = false;
+let loadingPath: string | null = null;
+
+const normalizePath = (path: string) => path.replace(/\/+$/, "") || "/";
 
 export function declarePageLoading(): void {
-  isCurrentPageContentLoading = true;
+  loadingPath =
+    typeof window !== "undefined" ? normalizePath(window.location.pathname) : null;
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(PAGE_LOADING_EVENT));
   }
 }
 
 export function declarePageReady(): void {
-  isCurrentPageContentLoading = false;
+  loadingPath = null;
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(PAGE_READY_EVENT));
   }
 }
 
 export function isPageContentLoading(): boolean {
-  return isCurrentPageContentLoading;
+  if (!loadingPath) return false;
+  if (typeof window === "undefined") return true;
+  // A loading flag left behind by a route the visitor already left must not
+  // hold the loader on the new page.
+  return loadingPath === normalizePath(window.location.pathname);
 }
 
 /**
