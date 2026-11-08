@@ -2086,7 +2086,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                       </div>
 
                     {/* Vertical series info rail */}
-                    <aside className="relative order-3 flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-3 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl md:col-start-1 md:row-start-2 xl:col-start-3 xl:row-start-1 xl:self-stretch">
+                    <aside className="relative order-3 flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-3 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl md:col-start-1 md:row-start-2 xl:col-start-3 xl:row-start-1 xl:self-start">
                       <div
                         className="absolute inset-x-6 top-0 h-px"
                         style={{
@@ -2118,7 +2118,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                           {displayYear || displayFormat || "ANIME"}
                         </span>
                       </div>
-                      <div className="grid flex-1 content-center grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-1">
+                      <p
+                        className="truncate pb-2.5 text-sm font-bold text-white/90"
+                        title={displayTitle || getSafeAnimeTitle(anime.name)}
+                      >
+                        {displayTitle || getSafeAnimeTitle(anime.name)}
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-1">
                         <MetaStat icon={Tv} label="Format" value={isMovieFormat ? "Movie" : displayFormat} />
                         <MetaStat
                           icon={ListVideo}
