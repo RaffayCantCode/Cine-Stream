@@ -51,9 +51,10 @@ export const MOVIE_SOURCE_KEYS: string[] = getDefaultMovieOrder();
 export const DEFAULT_TAGS: Record<SourceCategory, Record<string, SourceTag>> = {
   movie: {
     embedmaster: "best",
-    vixsrc: "good",
+    vidbolt: "good",
     vidlink: "good",
-    vidsrc: "good",
+    vidrift: "good",
+    vidsrc: "stable",
     autoembed: "backup",
   },
   anime: {
@@ -81,8 +82,10 @@ export function resolveSourceConfig(
   const defaults = DEFAULT_TAGS[category];
 
   const entries = baseKeys.map((key, index) => {
-    // Legacy rows stored under vidlove/bingr carry over to the vixsrc slot.
-    const row = byKey.get(key) || (key === "vixsrc" ? byKey.get("vidlove") || byKey.get("bingr") : undefined);
+    // Legacy rows stored under vixsrc/vidlove/bingr carry over to the vidbolt slot.
+    const row =
+      byKey.get(key) ||
+      (key === "vidbolt" ? byKey.get("vixsrc") || byKey.get("vidlove") || byKey.get("bingr") : undefined);
     return {
       key,
       tag: row && isSourceTag(row.tag) ? row.tag : (defaults[key] ?? "good"),
@@ -92,10 +95,10 @@ export function resolveSourceConfig(
 
   if (category === "movie") {
     const emIdx = entries.findIndex((e) => e.key === "embedmaster");
-    const vixsrcIdx = entries.findIndex((e) => e.key === "vixsrc");
-    if (emIdx !== -1 && vixsrcIdx !== -1 && entries[emIdx].position >= entries[vixsrcIdx].position) {
+    const vidboltIdx = entries.findIndex((e) => e.key === "vidbolt");
+    if (emIdx !== -1 && vidboltIdx !== -1 && entries[emIdx].position >= entries[vidboltIdx].position) {
       entries[emIdx].position = 0;
-      entries[vixsrcIdx].position = 1;
+      entries[vidboltIdx].position = 1;
     }
   }
 

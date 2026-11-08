@@ -29,10 +29,11 @@ const SOURCE_STYLES: Record<string, { bg: string; badge: string }> = {
   embedmaster: { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
   vidlink:     { bg: "bg-violet-600", badge: "bg-violet-500/20 text-violet-300" },
   bingr:       { bg: "bg-amber-600", badge: "bg-amber-500/20 text-amber-300" },
-  vixsrc:      { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
+  vidbolt:     { bg: "bg-teal-600",  badge: "bg-teal-500/20 text-teal-300" },
   autoembed:   { bg: "bg-rose-600",  badge: "bg-rose-500/20 text-rose-300" },
   vidnest:     { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
   vidsrc:      { bg: "bg-blue-600",  badge: "bg-blue-500/20 text-blue-300" },
+  vidrift:     { bg: "bg-fuchsia-600", badge: "bg-fuchsia-500/20 text-fuchsia-300" },
   "123embed":  { bg: "bg-emerald-600", badge: "bg-emerald-500/20 text-emerald-300" },
 };
 
@@ -148,8 +149,9 @@ export function VideoPlayer({ type, id, season, episode, title, startProgress, o
   useEffect(() => {
     const domains = [
       "https://embedmaster.link",
-      "https://vixsrc.to",
+      "https://vidbolt.xyz",
       "https://vidlink.pro",
+      "https://embed.vidrift.net",
       "https://vidsrc.sh",
       "https://autoembed.co",
     ];

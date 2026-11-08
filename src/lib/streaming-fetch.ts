@@ -18,11 +18,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 2",
-    baseUrl: "https://vixsrc.to",
-    type: "vixsrc",
+    baseUrl: "https://vidbolt.xyz",
+    type: "vidbolt",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vixsrc.to",
+    healthCheckUrl: "https://vidbolt.xyz",
   },
   {
     name: "Source 3",
@@ -34,11 +34,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 4",
-    baseUrl: "https://vidsrc.sh",
-    type: "vidsrc",
+    baseUrl: "https://embed.vidrift.net",
+    type: "vidrift",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidsrc.sh",
+    healthCheckUrl: "https://vidrift.net",
   },
   {
     name: "Source 5",
@@ -47,6 +47,14 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
     quality: "Backup",
     supportsNativeFullscreen: true,
     healthCheckUrl: "https://autoembed.co",
+  },
+  {
+    name: "Source 6",
+    baseUrl: "https://vidsrc.sh",
+    type: "vidsrc",
+    quality: "Good",
+    supportsNativeFullscreen: true,
+    healthCheckUrl: "https://vidsrc.sh",
   },
 ];
 
@@ -64,11 +72,15 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       if (type === "movie") return `${api.baseUrl}/watch/movie/${id}`;
       return `${api.baseUrl}/watch/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
-    case "vixsrc":
+    case "vidbolt":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     case "vidlink":
+      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+
+    case "vidrift":
       if (type === "movie") return `${api.baseUrl}/movie/${id}`;
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
@@ -114,9 +126,10 @@ export function getDefaultMovieOrder(): string[] {
 export function getStreamingSources(type: "movie" | "tv", id: number, season?: number, episode?: number, progress?: number): StreamingSource[] {
   const defaultMovieTags: Record<string, string> = {
     embedmaster: "best",
-    vixsrc: "good",
+    vidbolt: "good",
     vidlink: "good",
-    vidsrc: "good",
+    vidrift: "good",
+    vidsrc: "stable",
     autoembed: "backup",
   };
   return STREAMING_APIS.map((api) => ({

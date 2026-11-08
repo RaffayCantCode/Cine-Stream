@@ -275,6 +275,11 @@ export function CinemaPlayer({
     }
   }, []);
 
+  // VidRift's embed ships its own controls in the top-right corner, which would
+  // cover/hide the floating menu button, so the button renders on the left side
+  // when VidRift is the active source.
+  const menuOnLeft = activeServer.type === "vidrift";
+
   const broadcastFullscreenState = useCallback((state?: boolean) => {
     const doc = document as any;
     const isFull = state !== undefined ? state : Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
@@ -934,7 +939,7 @@ export function CinemaPlayer({
       {/* ── Floating Top-Right Menu Button ──
           Mobile: Always visible, toggles controls dropdown
           Desktop: Visible ONLY when top bar is hidden, clicking it restores the top bar fully ── */}
-      <div className={`absolute top-3 right-3 z-50 pointer-events-auto ${showTopBar ? "sm:hidden" : ""}`}>
+      <div className={`absolute top-3 ${menuOnLeft ? "left-3" : "right-3"} z-50 pointer-events-auto ${showTopBar ? "sm:hidden" : ""}`}>
         <button
           data-menu-toggle="true"
           onClick={handleMenuButtonClick}
@@ -955,7 +960,7 @@ export function CinemaPlayer({
         {showDropdownMenu && (
           <div
             ref={dropdownRef}
-            className="sm:hidden absolute top-12 right-0 w-72 sm:w-80 max-h-[85vh] overflow-y-auto rounded-2xl bg-zinc-950/95 border border-white/15 backdrop-blur-2xl shadow-2xl p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 z-50 text-white select-none custom-scrollbar"
+            className={`sm:hidden absolute top-12 ${menuOnLeft ? "left-0" : "right-0"} w-72 sm:w-80 max-h-[85vh] overflow-y-auto rounded-2xl bg-zinc-950/95 border border-white/15 backdrop-blur-2xl shadow-2xl p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 z-50 text-white select-none custom-scrollbar`}
           >
             {/* Media Title & Current Info */}
             <div className="px-2.5 py-2 rounded-xl bg-white/[0.05] border border-white/[0.08]">
