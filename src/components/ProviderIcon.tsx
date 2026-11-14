@@ -1,5 +1,15 @@
 "use client";
 
+import type { IconType } from "react-icons";
+import { SiNetflix, SiAppletv, SiMax, SiParamountplus } from "react-icons/si";
+
+const LOCAL_ICONS: Record<string, IconType> = {
+  "netflix": SiNetflix,
+  "apple-tv-plus": SiAppletv,
+  "hbo-max": SiMax,
+  "paramount-plus": SiParamountplus,
+};
+
 interface ProviderIconProps {
   slug: string;
   className?: string;
@@ -45,17 +55,27 @@ export function ProviderIcon({ slug, className }: ProviderIconProps) {
     return <PeacockIcon className={className} />;
   }
 
-  // Disney+: custom SVG (no simple-icons entry exists)
+  // Disney+: no simple-icons entry — render a local text mark (no external hotlink)
   if (slug === "disney-plus") {
     return (
-      <img
-        src="https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg"
-        alt="Disney+"
-        className={className}
-        style={{ filter: "brightness(0) invert(1)" }}
-        loading="eager"
-      />
+      <svg viewBox="0 0 64 64" className={className} aria-label="Disney+">
+        <text x="30" y="44" textAnchor="middle" fontFamily="Georgia, serif" fontStyle="italic" fontWeight="700" fontSize="34" fill="white">D</text>
+        <text x="50" y="36" textAnchor="middle" fontFamily="Arial, sans-serif" fontWeight="300" fontSize="24" fill="white">+</text>
+      </svg>
     );
+  }
+
+  // Prefer locally bundled icons (react-icons) so nothing depends on a CDN
+  const LocalIcon = LOCAL_ICONS[slug];
+  if (LocalIcon) {
+    return <LocalIcon className={`text-white ${className || ""}`} aria-label={slug} />;
+  }
+
+  if (slug === "prime-video") {
+    return <img src="/prime-logo.svg" alt="Prime Video" className={className} style={{ filter: "brightness(0) invert(1)" }} />;
+  }
+  if (slug === "hulu") {
+    return <img src="/hulu-logo.svg" alt="Hulu" className={className} />;
   }
 
   const iconSlug = SIMPLEICONS[slug];

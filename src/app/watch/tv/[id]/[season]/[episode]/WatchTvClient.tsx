@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -209,45 +209,88 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
     }
   }, [sources, showId]);
 
+  // Cache of fetched season episode lists (per show) so switching seasons in the
+  // player drawer shows episodes and doesn't refetch on every navigation.
+  const seasonEpisodesCacheRef = useRef<{ showId: number; map: Map<number, Episode[]> }>({ showId, map: new Map() });
+  if (seasonEpisodesCacheRef.current.showId !== showId) {
+    seasonEpisodesCacheRef.current = { showId, map: new Map() };
+  }
+
   useEffect(() => {
+    let cancelled = false;
+    const cache = seasonEpisodesCacheRef.current.map;
+
     const loadShowAndSeason = async () => {
       try {
         let activeShow = show;
         if (!activeShow) {
           activeShow = await fetchJson<TvShow>(`/api/tmdb/tv/${showId}`);
+          if (cancelled) return;
           setShow(activeShow);
         }
 
-        let activeSeason = seasonData;
+        let activeSeason: Season | null =
+          seasonData && (seasonData.season_number == null || seasonData.season_number === seasonNumber)
+            ? seasonData
+            : null;
         if (!activeSeason) {
           if ((activeShow as any)?._initialSeasonNum === seasonNumber && (activeShow as any)?._initialSeasonData) {
             activeSeason = (activeShow as any)._initialSeasonData;
+          } else if (cache.has(seasonNumber)) {
+            activeSeason = { id: 0, season_number: seasonNumber, name: `Season ${seasonNumber}`, episodes: cache.get(seasonNumber) };
           } else {
             activeSeason = await fetchJson<Season>(`/api/tmdb/tv/${showId}/season/${seasonNumber}`).catch(() => null);
           }
+          if (cancelled) return;
           if (activeSeason) setSeasonData(activeSeason);
         }
+        if (activeSeason?.episodes?.length) cache.set(seasonNumber, activeSeason.episodes);
 
         // Preload all seasons summary for EpisodeDrawer
         if (activeShow?.seasons) {
-          const formattedSeasons: DrawerSeason[] = activeShow.seasons
-            .filter((s) => s.season_number > 0)
-            .map((s) => ({
+          const drawerSeasons = activeShow.seasons.filter((s) => s.season_number > 0);
+          const buildSeasons = (): DrawerSeason[] =>
+            drawerSeasons.map((s) => ({
               id: s.id,
               season_number: s.season_number,
               name: s.name || `Season ${s.season_number}`,
-              episodes: s.season_number === seasonNumber && activeSeason?.episodes ? activeSeason.episodes : [],
+              episodes: cache.get(s.season_number) || [],
             }));
-          setAllSeasonsData(formattedSeasons);
+          setAllSeasonsData(buildSeasons());
+
+          // Fetch episode lists for the remaining seasons in the background
+          // (adjacent seasons first so prev/next season navigation works quickly).
+          const missing = drawerSeasons
+            .map((s) => s.season_number)
+            .filter((n) => !cache.has(n))
+            .sort((a, b) => Math.abs(a - seasonNumber) - Math.abs(b - seasonNumber));
+
+          const CONCURRENCY = 3;
+          let cursor = 0;
+          const worker = async () => {
+            while (!cancelled && cursor < missing.length) {
+              const n = missing[cursor++];
+              const data = await fetchJson<Season>(`/api/tmdb/tv/${showId}/season/${n}`).catch(() => null);
+              if (cancelled) return;
+              if (data?.episodes) {
+                cache.set(n, data.episodes);
+                setAllSeasonsData(buildSeasons());
+              }
+            }
+          };
+          await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, worker));
         }
       } catch (err) {
-        if (!show) {
+        if (!cancelled && !show) {
           setError(err instanceof Error ? err.message : "Failed to load TV show");
         }
       }
     };
 
     loadShowAndSeason();
+    return () => {
+      cancelled = true;
+    };
   }, [showId, seasonNumber, episodeNumber]);
 
   const currentEpisodeData = useMemo(() => {

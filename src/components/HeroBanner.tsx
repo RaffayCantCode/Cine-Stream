@@ -151,12 +151,14 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
   });
 
   const logoUrl = logoState.url;
+  const [logoImgFailed, setLogoImgFailed] = useState(false);
 
   // Reset load states and load logo & artwork on item change
   useEffect(() => {
     setUsePoster(false);
     setImgFailed(false);
     setImgLoaded(false);
+    setLogoImgFailed(false);
 
     if (!item?.id) {
       setLogoState({ url: null, status: "done" });
@@ -461,7 +463,7 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
           {/* Official ClearArt Logo OR Stylized Cinema Typography */}
           <div className="relative mb-6 sm:mb-7 md:mb-8 flex items-center justify-center md:justify-start min-h-[52px] sm:min-h-[64px] md:min-h-[84px] max-w-[85%] sm:max-w-[380px] md:max-w-[460px]">
             {/* Logo Image */}
-            {logoUrl && (
+            {logoUrl && !logoImgFailed && (
               <img
                 key={`logo-${logoUrl}`}
                 src={logoUrl}
@@ -472,7 +474,19 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
                 loading="eager"
                 fetchPriority="high"
                 decoding="async"
-                onLoad={() => setLogoImgLoaded(true)}
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  if (!img.naturalWidth || !img.naturalHeight) {
+                    setLogoImgFailed(true);
+                    return;
+                  }
+                  setLogoImgLoaded(true);
+                }}
+                onError={() => {
+                  setLogoImgFailed(true);
+                  setLogoImgLoaded(false);
+                  saveLogoToCache(cacheKey, null);
+                }}
               />
             )}
 
@@ -481,8 +495,8 @@ export const HeroBanner = memo(function HeroBanner({ item }: HeroBannerProps) {
               <div className="h-10 sm:h-12 md:h-14 w-48 sm:w-60 md:w-72 rounded-xl skeleton-pulse opacity-40" />
             )}
 
-            {/* Stylized Typography — ONLY visible if logo lookup completed and no logo exists */}
-            {logoState.status === "done" && !logoUrl && (
+            {/* Stylized Typography — shown whenever no usable logo artwork is available */}
+            {logoState.status !== "fetching" && (!logoUrl || logoImgFailed) && title && (
               <h1
                 className="text-white font-black line-clamp-2 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] tracking-tight select-text animate-fade-in"
                 style={{

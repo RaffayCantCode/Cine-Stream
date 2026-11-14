@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { fetchJson } from "@/lib/utils";
 import { MediaCard } from "@/components/MediaCard";
 import { Loader2, Film, Tv, ChevronLeft, ChevronRight } from "lucide-react";
 import { PROVIDERS, Provider } from "@/lib/providers";
-import { ProviderIcon } from "@/components/ProviderIcon";
+import { ProviderLogo } from "@/components/ProviderLogo";
 
 function ProviderScrollRow({ title, items, icon, mediaType }: { title: string; items: any[]; icon: React.ReactNode; mediaType: "movie"|"tv" }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -164,33 +164,7 @@ export function TrendingProvidersHub() {
 
               <div className="relative p-6 flex items-center justify-center h-full w-full">
                 <div className={`transition-transform duration-500 flex items-center justify-center w-full h-full ${isSelected ? "scale-110" : "group-hover:scale-110"}`}>
-                  {p.slug === "netflix" && (
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg" alt="Netflix" className="h-8" />
-                  )}
-                  {p.slug === "disney-plus" && (
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg" alt="Disney+" className="h-12" style={{ filter: "brightness(0) invert(1)" }} />
-                  )}
-                  {p.slug === "prime-video" && (
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png" alt="Prime Video" className="h-16 w-32 object-contain" />
-                  )}
-                  {p.slug === "apple-tv-plus" && (
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg" alt="Apple TV+" className="h-8" style={{ filter: "brightness(0) invert(1)" }} />
-                  )}
-                  {p.slug === "hulu" && (
-                    <img src="/hulu-logo.svg" alt="Hulu" className="h-20 w-auto object-contain scale-110" />
-                  )}
-                  {p.slug === "hbo-max" && (
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg" alt="Max" className="h-7" style={{ filter: "brightness(0) invert(1)" }} />
-                  )}
-                  {p.slug === "paramount-plus" && (
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg" alt="Paramount+" className="h-20 w-auto object-contain scale-110" style={{ filter: "brightness(0) invert(1)" }} />
-                  )}
-                  {p.slug === "peacock" && (
-                    <div className="flex items-center gap-2">
-                      <ProviderIcon slug="peacock" className="w-9 h-9" />
-                      <span className="text-white font-black text-3xl tracking-tighter" style={{ fontFamily: "Arial, sans-serif" }}>peacock</span>
-                    </div>
-                  )}
+                  <ProviderLogo slug={p.slug} name={p.name} />
                 </div>
               </div>
             </button>
