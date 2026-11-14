@@ -5,6 +5,8 @@ import type { EpisodeViewMode } from "@/components/episodes/EpisodeViews";
 
 export interface SiteSettings {
   episodeViewMode: EpisodeViewMode;
+  tvEpisodeViewMode: EpisodeViewMode;
+  animeEpisodeViewMode: EpisodeViewMode;
   autoNextEpisode: boolean;
   autoMarkPreviousWatched: boolean;
 }
@@ -14,9 +16,15 @@ export const WATCHED_EPISODES_KEY = "cinestream_watched_episodes_v1";
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   episodeViewMode: "grid",
+  tvEpisodeViewMode: "grid",
+  animeEpisodeViewMode: "grid",
   autoNextEpisode: true,
   autoMarkPreviousWatched: true,
 };
+
+function isValidViewMode(mode: unknown): mode is EpisodeViewMode {
+  return mode === "list" || mode === "grid" || mode === "numbers";
+}
 
 export function getSiteSettings(): SiteSettings {
   if (typeof window === "undefined") return DEFAULT_SITE_SETTINGS;
@@ -24,12 +32,20 @@ export function getSiteSettings(): SiteSettings {
     const raw = localStorage.getItem(SITE_SETTINGS_KEY);
     if (!raw) return DEFAULT_SITE_SETTINGS;
     const parsed = JSON.parse(raw);
-    const mode = parsed?.episodeViewMode;
+    const fallbackMode: EpisodeViewMode = isValidViewMode(parsed?.episodeViewMode)
+      ? parsed.episodeViewMode
+      : DEFAULT_SITE_SETTINGS.episodeViewMode;
+    const tvEpisodeViewMode: EpisodeViewMode = isValidViewMode(parsed?.tvEpisodeViewMode)
+      ? parsed.tvEpisodeViewMode
+      : fallbackMode;
+    const animeEpisodeViewMode: EpisodeViewMode = isValidViewMode(parsed?.animeEpisodeViewMode)
+      ? parsed.animeEpisodeViewMode
+      : fallbackMode;
+
     return {
-      episodeViewMode:
-        mode === "list" || mode === "grid" || mode === "numbers"
-          ? mode
-          : DEFAULT_SITE_SETTINGS.episodeViewMode,
+      episodeViewMode: tvEpisodeViewMode,
+      tvEpisodeViewMode,
+      animeEpisodeViewMode,
       autoNextEpisode:
         typeof parsed?.autoNextEpisode === "boolean"
           ? parsed.autoNextEpisode

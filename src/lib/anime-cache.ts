@@ -1,4 +1,5 @@
 import { fetchJson } from "@/lib/utils";
+import { resolveAnimeCoverPalette } from "@/lib/cover-palette";
 
 /**
  * Shared anime client-cache configuration.
@@ -119,11 +120,44 @@ export function getAnimePreview(id: string | number): any | null {
   return null;
 }
 
-const IN_FLIGHT_PRELOADS = new Set<string>();
+const IN_FLIGHT_PRELOADS = new Map<string, Promise<void>>();
+
+export function getInFlightAnimePreload(id: string | number): Promise<void> | null {
+  if (!id) return null;
+  const cleanId = String(id).trim();
+  if (!cleanId) return null;
+  return IN_FLIGHT_PRELOADS.get(cleanId) ?? null;
+}
+
+function buildEpisodesPreloadUrl(cleanId: string, metaData: any): { seasonId: string; url: string } {
+  const a = metaData.data.anime;
+  const seasons = a.seasons || [];
+  const activeSeason =
+    seasons.find((s: any) => String(s.id) === cleanId) ||
+    seasons.find((s: any) => s.isCurrent) ||
+    seasons[0];
+  const seasonId = String(activeSeason?.id || metaData.data.openedSeasonId || a.openedSeasonId || a.id || cleanId);
+  const sName = activeSeason?.name || a.name || "";
+  const sTot = activeSeason?.totalEpisodes || a.totalEpisodes || 0;
+  const effectiveTmdbId = activeSeason?.tmdbId ?? a.tmdbId ?? null;
+  const effectiveTmdbSeason = activeSeason?.tmdbSeasonNumber ?? null;
+  const effectiveOffset = activeSeason?.episodeOffset ?? 0;
+
+  const tmdbQ = effectiveTmdbId != null ? `&tmdbId=${effectiveTmdbId}` : "";
+  const tsQ = effectiveTmdbSeason != null ? `&tmdbSeason=${effectiveTmdbSeason}` : "";
+  const offQ = effectiveOffset != null ? `&episodeOffset=${effectiveOffset}` : "";
+  const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
+  const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
+
+  return {
+    seasonId,
+    url: `/api/anime/${encodeURIComponent(cleanId)}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`,
+  };
+}
 
 /**
  * Pre-warms both the anime metadata AND the active season's episode list on card hover/touch/click
- * so that opening `/anime/[id]` renders the hero and episode grid with zero waterfall delay.
+ * so that opening `/anime/[id]` renders the hero, cover palette, and episode grid with zero waterfall delay.
  */
 export function preloadAnimePageData(id: string | number, seedItem?: any): void {
   if (typeof window === "undefined" || !id) return;
@@ -135,76 +169,77 @@ export function preloadAnimePageData(id: string | number, seedItem?: any): void 
   }
 
   if (IN_FLIGHT_PRELOADS.has(cleanId)) return;
-  IN_FLIGHT_PRELOADS.add(cleanId);
+
+  void resolveAnimeCoverPalette({
+    id: cleanId,
+    coverColor: seedItem?.coverColor,
+    posterUrl: seedItem?.poster,
+    seed: `${cleanId}|${seedItem?.name || ""}`,
+  }).catch(() => null);
 
   const metaKey = animeMetaCacheKey(cleanId);
+  let cachedMeta: any = null;
   try {
     const existingMeta = sessionStorage.getItem(metaKey);
     if (existingMeta) {
       const parsed = JSON.parse(existingMeta);
       if (parsed?.success && parsed?.data?.anime && Date.now() - (parsed._cachedAt || 0) < 2 * 60 * 1000) {
-        IN_FLIGHT_PRELOADS.delete(cleanId);
-        return;
+        cachedMeta = parsed;
       }
     }
   } catch {}
 
-  fetchJson<any>(animeMetaUrl(cleanId))
-    .then((metaData) => {
-      if (!metaData?.success || !metaData?.data?.anime) return;
-      try {
-        sessionStorage.setItem(metaKey, JSON.stringify({ ...metaData, _cachedAt: Date.now() }));
-      } catch {}
+  const preloadEpisodesForMeta = (metaData: any) => {
+    const a = metaData.data.anime;
+    const { seasonId, url } = buildEpisodesPreloadUrl(cleanId, metaData);
+    const epKey = animeEpisodesCacheKey(cleanId, seasonId);
 
-      const a = metaData.data.anime;
-      const seasons = a.seasons || [];
-      const activeSeason =
-        seasons.find((s: any) => String(s.id) === cleanId) ||
-        seasons.find((s: any) => s.isCurrent) ||
-        seasons[0];
-      const seasonId = String(activeSeason?.id || metaData.data.openedSeasonId || a.openedSeasonId || a.id || cleanId);
-      const epKey = animeEpisodesCacheKey(cleanId, seasonId);
+    try {
+      if (sessionStorage.getItem(epKey)) return Promise.resolve();
+    } catch {}
 
-      try {
-        if (sessionStorage.getItem(epKey)) return;
-      } catch {}
+    return fetchJson<any>(url).then((epRes) => {
+      const eps = epRes?.data?.episodes;
+      if (epRes?.success && Array.isArray(eps) && eps.length > 0) {
+        try {
+          sessionStorage.setItem(
+            epKey,
+            JSON.stringify({
+              episodes: eps.map((ep: any) => ({ ...ep, seasonId })),
+              seasonOverview: epRes.data?.seasonOverview || null,
+              status: a.status || "",
+              _cachedAt: Date.now(),
+            })
+          );
+        } catch {}
+      }
+    });
+  };
 
-      const sName = activeSeason?.name || a.name || "";
-      const sTot = activeSeason?.totalEpisodes || a.totalEpisodes || 0;
-      const effectiveTmdbId = activeSeason?.tmdbId ?? a.tmdbId ?? null;
-      const effectiveTmdbSeason = activeSeason?.tmdbSeasonNumber ?? null;
-      const effectiveOffset = activeSeason?.episodeOffset ?? 0;
+  const dataPromise = (
+    cachedMeta
+      ? preloadEpisodesForMeta(cachedMeta)
+      : fetchJson<any>(animeMetaUrl(cleanId)).then((metaData) => {
+          if (!metaData?.success || !metaData?.data?.anime) return;
+          try {
+            sessionStorage.setItem(metaKey, JSON.stringify({ ...metaData, _cachedAt: Date.now() }));
+          } catch {}
+          const a = metaData.data.anime;
+          void resolveAnimeCoverPalette({
+            id: cleanId,
+            coverColor: a.coverColor,
+            posterUrl: a.poster,
+            seed: `${cleanId}|${a.name || ""}`,
+          }).catch(() => null);
+          return preloadEpisodesForMeta(metaData);
+        })
+  ).catch(() => {});
 
-      const tmdbQ = effectiveTmdbId != null ? `&tmdbId=${effectiveTmdbId}` : "";
-      const tsQ = effectiveTmdbSeason != null ? `&tmdbSeason=${effectiveTmdbSeason}` : "";
-      const offQ = effectiveOffset != null ? `&episodeOffset=${effectiveOffset}` : "";
-      const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
-      const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
-
-      return fetchJson<any>(
-        `/api/anime/${encodeURIComponent(cleanId)}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`
-      ).then((epRes) => {
-        const eps = epRes?.data?.episodes;
-        if (epRes?.success && Array.isArray(eps) && eps.length > 0) {
-          const hasRealData = eps.some((ep: any) => !ep.isPlaceholder && (ep.title !== `Episode ${ep.episodeNum}` || ep.thumbnail));
-          if (hasRealData) {
-            try {
-              sessionStorage.setItem(
-                epKey,
-                JSON.stringify({
-                  episodes: eps.map((ep: any) => ({ ...ep, seasonId })),
-                  seasonOverview: epRes.data?.seasonOverview || null,
-                  status: a.status || "",
-                  _cachedAt: Date.now(),
-                })
-              );
-            } catch {}
-          }
-        }
-      });
-    })
-    .catch(() => {})
+  const tracked = dataPromise
+    .then(() => undefined)
     .finally(() => {
       IN_FLIGHT_PRELOADS.delete(cleanId);
     });
+
+  IN_FLIGHT_PRELOADS.set(cleanId, tracked);
 }

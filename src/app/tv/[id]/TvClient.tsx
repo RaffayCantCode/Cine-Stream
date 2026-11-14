@@ -124,7 +124,7 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
   const { settings: siteSettings } = useSiteSettings();
-  const tvViewMode = siteSettings.episodeViewMode;
+  const tvViewMode = siteSettings.tvEpisodeViewMode;
   const {
     watchedSet,
     hasWatchedAny,

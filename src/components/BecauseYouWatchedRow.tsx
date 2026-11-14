@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { ChevronDown, ChevronLeft, ChevronRight, Check, Film, Tv, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { MediaCard } from "./MediaCard";
 import { cn } from "@/lib/utils";
 
@@ -283,14 +283,12 @@ export const BecauseYouWatchedRow = memo(function BecauseYouWatchedRow() {
       style={{ animationDuration: "0.45s" }}
     >
       <div className="flex items-center justify-between px-3 md:px-6 lg:px-8 xl:px-10 2xl:px-12 3xl:px-16">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-1 h-6 md:h-8 bg-gradient-to-b from-[#D3D1CE] to-[#6C6D74] rounded-full shrink-0" />
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+          <span className="text-lg sm:text-xl md:text-2xl font-bold text-white/80 tracking-tight">
+            Because you watched
+          </span>
 
-          <div ref={dropdownRef} className="relative flex items-center flex-wrap gap-x-2 gap-y-1">
-            <span className="text-lg sm:text-xl md:text-2xl font-bold text-white/80 tracking-tight">
-              Because you watched
-            </span>
-
+          <div ref={dropdownRef} className="relative inline-flex items-center">
             <button
               type="button"
               onClick={() => setDropdownOpen((prev) => !prev)}
@@ -313,19 +311,10 @@ export const BecauseYouWatchedRow = memo(function BecauseYouWatchedRow() {
             {dropdownOpen && (
               <div
                 role="listbox"
-                className="absolute left-0 top-full mt-2.5 z-50 w-72 sm:w-80 max-h-80 overflow-y-auto rounded-2xl border border-white/15 bg-[#0B0F19]/95 backdrop-blur-2xl p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.85)] animate-in fade-in zoom-in-95 duration-150"
+                className="absolute left-0 top-full mt-2.5 z-50 min-w-[240px] sm:min-w-[270px] max-w-[340px] max-h-80 overflow-y-auto rounded-2xl border border-white/[0.08] bg-[#141416]/75 backdrop-blur-2xl py-2 px-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.75)] animate-in fade-in zoom-in-95 duration-150"
               >
-                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40 border-b border-white/[0.06] mb-1">
-                  Your Recently Watched Titles
-                </div>
                 {seeds.map((seed) => {
                   const isSelected = seed.key === selectedSeed.key;
-                  const TypeIcon =
-                    seed.mediaType === "movie"
-                      ? Film
-                      : seed.mediaType === "anime"
-                      ? Sparkles
-                      : Tv;
                   return (
                     <button
                       key={seed.key}
@@ -340,22 +329,14 @@ export const BecauseYouWatchedRow = memo(function BecauseYouWatchedRow() {
                         }
                       }}
                       className={cn(
-                        "w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer",
+                        "w-full flex items-center justify-between gap-4 px-3.5 py-2.5 rounded-xl text-left text-[15px] transition-colors cursor-pointer",
                         isSelected
-                          ? "bg-white/15 text-white font-bold"
-                          : "text-white/75 hover:bg-white/[0.08] hover:text-white"
+                          ? "text-white font-semibold"
+                          : "text-white/70 hover:text-white hover:bg-white/[0.06] font-medium"
                       )}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <TypeIcon className="w-3.5 h-3.5 text-white/50 shrink-0" />
-                        <span className="truncate">{seed.title}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-white/50 font-bold">
-                          {seed.mediaType}
-                        </span>
-                        {isSelected && <Check className="w-4 h-4 text-emerald-400" />}
-                      </div>
+                      <span className="truncate">{seed.title}</span>
+                      {isSelected && <Check className="w-4 h-4 text-white shrink-0 stroke-[2.25]" />}
                     </button>
                   );
                 })}

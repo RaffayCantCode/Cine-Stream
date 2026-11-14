@@ -110,6 +110,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         prefetch={true}
         onMouseEnter={handlePreload}
         onTouchStart={handlePreload}
+        onPointerDown={handlePreload}
         onClick={handleClick}
         className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none hover:will-change-transform ${
           rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"

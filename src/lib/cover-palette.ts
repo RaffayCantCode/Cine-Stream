@@ -388,3 +388,109 @@ export function extractCoverPalette(src?: string | null): Promise<CoverPalette |
     img.src = src;
   });
 }
+
+const ANIME_PALETTE_CACHE_PREFIX = "cs_anime_palette_v1_";
+const animePaletteCache = new Map<string, CoverPalette>();
+const inFlightPalettes = new Map<string, Promise<CoverPalette>>();
+
+function isValidCoverPalette(val: unknown): val is CoverPalette {
+  if (!val || typeof val !== "object") return false;
+  const p = val as Partial<CoverPalette>;
+  return (
+    typeof p.accent === "string" &&
+    typeof p.accent2 === "string" &&
+    Boolean(p.accentRgb && typeof p.accentRgb.r === "number") &&
+    Boolean(p.accent2Rgb && typeof p.accent2Rgb.r === "number")
+  );
+}
+
+export function getCachedCoverPalette(id?: string | number | null): CoverPalette | null {
+  const key = String(id ?? "").trim();
+  if (!key) return null;
+
+  const mem = animePaletteCache.get(key);
+  if (mem) return mem;
+
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.sessionStorage.getItem(`${ANIME_PALETTE_CACHE_PREFIX}${key}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (isValidCoverPalette(parsed)) {
+          animePaletteCache.set(key, parsed);
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
+
+export function setCachedCoverPalette(id: string | number, palette: CoverPalette): void {
+  const key = String(id ?? "").trim();
+  if (!key || !isValidCoverPalette(palette)) return;
+
+  animePaletteCache.set(key, palette);
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(`${ANIME_PALETTE_CACHE_PREFIX}${key}`, JSON.stringify(palette));
+    } catch {}
+  }
+}
+
+export function resolveAnimeCoverPalette(opts: {
+  id: string | number;
+  coverColor?: string | null;
+  posterUrl?: string | null;
+  seed?: string;
+}): Promise<CoverPalette> {
+  const key = String(opts.id ?? "").trim();
+  if (!key) return Promise.resolve(buildPaletteFromSeed(opts.seed || ""));
+
+  const cached = getCachedCoverPalette(key);
+  if (cached) return Promise.resolve(cached);
+
+  const fromCoverColor = buildPaletteFromColor(opts.coverColor);
+  if (fromCoverColor) {
+    setCachedCoverPalette(key, fromCoverColor);
+    return Promise.resolve(fromCoverColor);
+  }
+
+  const existing = inFlightPalettes.get(key);
+  if (existing) return existing;
+
+  const request = (async (): Promise<CoverPalette> => {
+    try {
+      const direct = buildPaletteFromColor(await fetchAniListCoverColor(key));
+      if (direct) {
+        setCachedCoverPalette(key, direct);
+        return direct;
+      }
+
+      if (opts.posterUrl) {
+        const proxied = await extractCoverPalette(proxiedImageUrl(opts.posterUrl));
+        if (proxied) {
+          setCachedCoverPalette(key, proxied);
+          return proxied;
+        }
+
+        const sampled = await extractCoverPalette(opts.posterUrl);
+        if (sampled) {
+          setCachedCoverPalette(key, sampled);
+          return sampled;
+        }
+      }
+
+      const fallback = buildPaletteFromSeed(opts.seed || key);
+      if (opts.posterUrl) {
+        setCachedCoverPalette(key, fallback);
+      }
+      return fallback;
+    } finally {
+      inFlightPalettes.delete(key);
+    }
+  })();
+
+  inFlightPalettes.set(key, request);
+  return request;
+}

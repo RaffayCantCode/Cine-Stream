@@ -2,56 +2,95 @@ export const runtime = 'edge';
 import { NextRequest } from "next/server";
 import { tmdbFetch, cacheHeaders } from "@/lib/tmdb";
 
-export const revalidate = 3600;
+export const revalidate = 900;
 
-function dailySeededShuffle<T>(array: T[]): T[] {
-  if (!array || array.length === 0) return array;
-  const today = new Date().toISOString().slice(0, 10);
-  let seed = 0;
-  for (let i = 0; i < today.length; i++) {
-    seed = (seed * 31 + today.charCodeAt(i)) >>> 0;
+function shuffleArray<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    const j = Math.floor((seed / 4294967296) * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  return arr;
+}
+
+function pickRandomPages(maxPage: number, count: number, alwaysIncludeFirst = true): string[] {
+  const pages = new Set<number>();
+  if (alwaysIncludeFirst && count > 0) pages.add(1);
+  const target = Math.min(count, maxPage);
+  const candidates: number[] = [];
+  for (let p = alwaysIncludeFirst ? 2 : 1; p <= maxPage; p++) {
+    candidates.push(p);
   }
-  return shuffled;
+  for (const p of shuffleArray(candidates)) {
+    if (pages.size >= target) break;
+    pages.add(p);
+  }
+  return Array.from(pages).map(String);
+}
+
+function dedupeById<T extends { id?: number | string }>(items: T[]): T[] {
+  const seen = new Map<number | string, T>();
+  for (const item of items) {
+    if (item?.id && !seen.has(item.id)) {
+      seen.set(item.id, item);
+    }
+  }
+  return Array.from(seen.values());
 }
 
 export async function GET(_request: NextRequest) {
   try {
-    const results = await Promise.allSettled([
-      tmdbFetch("/trending/all/week", { page: "1", include_adult: "false" }),
-      tmdbFetch("/movie/popular", { page: "1", include_adult: "false" }),
-      // All-time most popular movies across 3 pages (vote_count >= 2000, rating >= 7.0)
-      tmdbFetch("/discover/movie", { sort_by: "vote_count.desc", "vote_count.gte": "2000", "vote_average.gte": "7.0", include_adult: "false", page: "1" }),
-      tmdbFetch("/discover/movie", { sort_by: "vote_count.desc", "vote_count.gte": "2000", "vote_average.gte": "7.0", include_adult: "false", page: "2" }),
-      tmdbFetch("/discover/movie", { sort_by: "vote_count.desc", "vote_count.gte": "2000", "vote_average.gte": "7.0", include_adult: "false", page: "3" }),
-      tmdbFetch("/movie/now_playing", { page: "1", include_adult: "false" }),
-      tmdbFetch("/tv/popular", { page: "1", include_adult: "false" }),
-      // All-time most popular TV shows across 3 pages (vote_count >= 1000, rating >= 7.5)
-      tmdbFetch("/discover/tv", { sort_by: "vote_count.desc", "vote_count.gte": "1000", "vote_average.gte": "7.5", include_adult: "false", page: "1" }),
-      tmdbFetch("/discover/tv", { sort_by: "vote_count.desc", "vote_count.gte": "1000", "vote_average.gte": "7.5", include_adult: "false", page: "2" }),
-      tmdbFetch("/discover/tv", { sort_by: "vote_count.desc", "vote_count.gte": "1000", "vote_average.gte": "7.5", include_adult: "false", page: "3" }),
-      tmdbFetch("/tv/on_the_air", { page: "1", include_adult: "false" }),
-      tmdbFetch("/discover/movie", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
-      tmdbFetch("/discover/tv", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
-      tmdbFetch("/trending/movie/day", { page: "1", include_adult: "false" }),
-      tmdbFetch("/trending/tv/day", { page: "1", include_adult: "false" }),
-      tmdbFetch("/genre/movie/list"),
+    const movieDiscoverPages = pickRandomPages(12, 6);
+    const tvDiscoverPages = pickRandomPages(10, 6);
+
+    const [coreResults, movieDiscoverResults, tvDiscoverResults] = await Promise.all([
+      Promise.allSettled([
+        tmdbFetch("/trending/all/week", { page: "1", include_adult: "false" }),
+        tmdbFetch("/movie/popular", { page: "1", include_adult: "false" }),
+        tmdbFetch("/movie/popular", { page: "2", include_adult: "false" }),
+        tmdbFetch("/movie/now_playing", { page: "1", include_adult: "false" }),
+        tmdbFetch("/tv/popular", { page: "1", include_adult: "false" }),
+        tmdbFetch("/tv/popular", { page: "2", include_adult: "false" }),
+        tmdbFetch("/tv/on_the_air", { page: "1", include_adult: "false" }),
+        tmdbFetch("/discover/movie", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
+        tmdbFetch("/discover/tv", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
+        tmdbFetch("/trending/movie/day", { page: "1", include_adult: "false" }),
+        tmdbFetch("/trending/tv/day", { page: "1", include_adult: "false" }),
+        tmdbFetch("/genre/movie/list"),
+      ]),
+      Promise.allSettled(
+        movieDiscoverPages.map((page) =>
+          tmdbFetch("/discover/movie", {
+            sort_by: "vote_count.desc",
+            "vote_count.gte": "1500",
+            "vote_average.gte": "7.0",
+            include_adult: "false",
+            page,
+          })
+        )
+      ),
+      Promise.allSettled(
+        tvDiscoverPages.map((page) =>
+          tmdbFetch("/discover/tv", {
+            sort_by: "vote_count.desc",
+            "vote_count.gte": "800",
+            "vote_average.gte": "7.4",
+            include_adult: "false",
+            page,
+          })
+        )
+      ),
     ]);
 
-    const extractResults = (res: PromiseSettledResult<unknown>) => {
+    const extractResults = (res: PromiseSettledResult<unknown>): any[] => {
       if (res.status === "fulfilled" && res.value && typeof res.value === "object" && "results" in res.value) {
-        return (res.value as { results?: unknown[] }).results || [];
+        return ((res.value as { results?: unknown[] }).results || []) as any[];
       }
       return [];
     };
 
     // Strip Japanese animated content (anime) from movie/TV result arrays.
-    // The dedicated animeMovies/animeTv keys (results[11], results[12]) are
+    // The dedicated animeMovies/animeTv keys (coreResults[7], coreResults[8]) are
     // intentionally excluded from this filter — they are the anime home row data.
     const excludeAnime = (items: any[]): any[] =>
       items.filter(
@@ -65,53 +104,47 @@ export async function GET(_request: NextRequest) {
           (!Array.isArray(item.genre_ids) || !item.genre_ids.includes(10763))
       );
 
-    const topRatedMoviesRaw = excludeAnime([
-      ...(extractResults(results[2]) as any[]),
-      ...(extractResults(results[3]) as any[]),
-      ...(extractResults(results[4]) as any[]),
-    ]);
-    // Deduplicate top rated / all-time popular movies by ID
-    const uniqueTopRatedMoviesMap = new Map();
-    topRatedMoviesRaw.forEach((item: any) => {
-      if (item?.id && !uniqueTopRatedMoviesMap.has(item.id)) {
-        uniqueTopRatedMoviesMap.set(item.id, item);
-      }
-    });
-    const allTimePopularMovies = Array.from(uniqueTopRatedMoviesMap.values());
+    const popularMovies = dedupeById(
+      excludeAnime([
+        ...extractResults(coreResults[1]),
+        ...extractResults(coreResults[2]),
+      ])
+    );
 
-    const topRatedTvRaw = excludeTvNonShows([
-      ...(extractResults(results[7]) as any[]),
-      ...(extractResults(results[8]) as any[]),
-      ...(extractResults(results[9]) as any[]),
-    ]);
-    // Deduplicate top rated / all-time popular TV by ID
-    const uniqueTopRatedTvMap = new Map();
-    topRatedTvRaw.forEach((item: any) => {
-      if (item?.id && !uniqueTopRatedTvMap.has(item.id)) {
-        uniqueTopRatedTvMap.set(item.id, item);
-      }
-    });
-    const allTimePopularTv = Array.from(uniqueTopRatedTvMap.values());
+    const popularTv = dedupeById(
+      excludeTvNonShows([
+        ...extractResults(coreResults[4]),
+        ...extractResults(coreResults[5]),
+      ])
+    );
 
-    const genresRes = results[15];
+    const allTimePopularMovies = shuffleArray(
+      dedupeById(excludeAnime(movieDiscoverResults.flatMap(extractResults)))
+    );
+
+    const allTimePopularTv = shuffleArray(
+      dedupeById(excludeTvNonShows(tvDiscoverResults.flatMap(extractResults)))
+    );
+
+    const genresRes = coreResults[11];
     const genres = (genresRes.status === "fulfilled" && genresRes.value && typeof genresRes.value === "object" && "genres" in genresRes.value)
       ? (genresRes.value as { genres?: unknown[] }).genres || []
       : [];
 
     return Response.json({
-      trending: { results: extractResults(results[0]) },
-      popularMovies: { results: excludeAnime(extractResults(results[1]) as any[]) },
+      trending: { results: extractResults(coreResults[0]) },
+      popularMovies: { results: popularMovies },
       topRatedMovies: { results: allTimePopularMovies },
-      nowPlaying: { results: excludeAnime(extractResults(results[5]) as any[]) },
-      popularTv: { results: excludeTvNonShows(extractResults(results[6]) as any[]) },
+      nowPlaying: { results: excludeAnime(extractResults(coreResults[3])) },
+      popularTv: { results: popularTv },
       topRatedTv: { results: allTimePopularTv },
-      onTheAir: { results: excludeTvNonShows(extractResults(results[10]) as any[]) },
-      animeMovies: { results: extractResults(results[11]) },
-      animeTv: { results: extractResults(results[12]) },
-      trendingMoviesToday: { results: excludeAnime(extractResults(results[13]) as any[]) },
-      trendingTvToday: { results: excludeTvNonShows(extractResults(results[14]) as any[]) },
+      onTheAir: { results: excludeTvNonShows(extractResults(coreResults[6])) },
+      animeMovies: { results: extractResults(coreResults[7]) },
+      animeTv: { results: extractResults(coreResults[8]) },
+      trendingMoviesToday: { results: excludeAnime(extractResults(coreResults[9])) },
+      trendingTvToday: { results: excludeTvNonShows(extractResults(coreResults[10])) },
       genres: { genres },
-    }, { headers: cacheHeaders(7200) });
+    }, { headers: cacheHeaders(900) });
   } catch (error) {
     console.error("[TMDB Home API Error]:", error);
     return Response.json({ error: "Failed to fetch home media" }, { status: 500 });

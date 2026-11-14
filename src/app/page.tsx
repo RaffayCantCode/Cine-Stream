@@ -77,6 +77,8 @@ let globalHomeCache: {
   topRated: MediaItem[];
   topRatedMovies: MediaItem[];
   topRatedTv: MediaItem[];
+  topRatedMoviesPool?: MediaItem[];
+  topRatedTvPool?: MediaItem[];
   recent: MediaItem[];
   trendingMoviesToday: MediaItem[];
   trendingTvToday: MediaItem[];
@@ -140,23 +142,23 @@ function loadSpotlightFromSession(): { fetched: boolean; spotlight: any | null }
   return null;
 }
 
-const SESSION_HOME_FEED_KEY = "sv_home_feed_v5";
+const SESSION_HOME_FEED_KEY = "sv_home_feed_v6";
 
 function saveHomeFeedToStorage(feed: Partial<NonNullable<typeof globalHomeCache>>): void {
   if (typeof window === "undefined" || !feed) return;
   try {
     const serialized = {
       trending: (feed.trending || []).slice(0, 20),
-      popular: (feed.popular || []).slice(0, 20),
+      popular: (feed.popular || []).slice(0, 40),
       topRated: (feed.topRated || []).slice(0, 20),
-      topRatedMovies: (feed.topRatedMovies || []).slice(0, 20),
-      topRatedTv: (feed.topRatedTv || []).slice(0, 20),
+      topRatedMovies: (feed.topRatedMoviesPool || feed.topRatedMovies || []).slice(0, 80),
+      topRatedTv: (feed.topRatedTvPool || feed.topRatedTv || []).slice(0, 80),
       recent: (feed.recent || []).slice(0, 20),
       trendingMoviesToday: (feed.trendingMoviesToday || []).slice(0, 20),
       trendingTvToday: (feed.trendingTvToday || []).slice(0, 20),
-      popularTv: (feed.popularTv || []).slice(0, 20),
-      trendingAnime: (feed.trendingAnime || []).slice(0, 20),
-      popularAnime: (feed.popularAnime || []).slice(0, 20),
+      popularTv: (feed.popularTv || []).slice(0, 40),
+      trendingAnime: (feed.trendingAnime || []).slice(0, 50),
+      popularAnime: (feed.popularAnime || []).slice(0, 50),
       animeList: (feed.animeList || []).slice(0, 20),
       genres: (feed.genres || []).slice(0, 18),
       heroPool: (feed.heroPool || []).slice(0, 3),
@@ -180,8 +182,8 @@ function loadHomeFeedFromStorage(): Partial<NonNullable<typeof globalHomeCache>>
   return null;
 }
 
-const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v4";
-const HERO_CACHE_TTL = 5 * 60 * 1000; // 5-minute TTL: instant load from cache, fresh entries after 5 minutes
+const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v5";
+const HERO_CACHE_TTL = 5 * 60 * 1000; // 5-minute TTL for SPA back-navigation within a session
 const ANILIST_CACHE_KEY = "sv_home_anilist_items_v2";
 
 function saveCachedAniListItems(items: AnimeItem[]): void {
@@ -189,7 +191,7 @@ function saveCachedAniListItems(items: AnimeItem[]): void {
   try {
     const valid = items.filter((i) => i && i.id && i.name);
     if (valid.length > 0) {
-      localStorage.setItem(ANILIST_CACHE_KEY, JSON.stringify(valid.slice(0, 50)));
+      localStorage.setItem(ANILIST_CACHE_KEY, JSON.stringify(valid.slice(0, 80)));
     }
   } catch {}
 }
@@ -220,23 +222,6 @@ function saveHeroPoolToSession(pool: MediaItem[]): void {
   } catch {}
 }
 
-function loadHeroPoolFromSession(): MediaItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(SESSION_HERO_POOL_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.pool) && parsed.pool.length > 0) {
-        return parsed.pool.slice(0, 3);
-      }
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.slice(0, 3);
-      }
-    }
-  } catch {}
-  return [];
-}
-
 function isHeroSessionStale(): boolean {
   if (typeof window === "undefined") return true;
   try {
@@ -251,36 +236,92 @@ function isHeroSessionStale(): boolean {
   return true;
 }
 
-// Persist seen hero IDs in localStorage as a rolling FIFO queue of the last 80 entries.
-// This prevents repeating the same titles while avoiding a sudden reset when full.
-const SEEN_HERO_KEY = "sv_seen_hero_v3";
-function loadSeenHeroIds(): string[] {
+function shuffleArray<T>(array: T[] | null | undefined): T[] {
+  if (!Array.isArray(array)) return [];
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+const SEEN_HERO_KEY = "sv_seen_hero_v4";
+const SEEN_ALLTIME_MOVIES_KEY = "sv_seen_alltime_movies_v1";
+const SEEN_ALLTIME_TV_KEY = "sv_seen_alltime_tv_v1";
+
+function loadSeenList(storageKey: string): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(SEEN_HERO_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.ids)) {
-        return parsed.ids.map(String).slice(-80);
+        return parsed.ids.map(String);
       }
     }
   } catch {}
   return [];
 }
-function saveSeenHeroIds(ids: string[]): void {
+
+function saveSeenList(storageKey: string, ids: string[], maxLen: number): void {
   if (typeof window === "undefined") return;
   try {
-    const arr = ids.slice(-80);
-    localStorage.setItem(SEEN_HERO_KEY, JSON.stringify({ ids: arr, ts: Date.now() }));
+    localStorage.setItem(storageKey, JSON.stringify({ ids: ids.slice(-maxLen), ts: Date.now() }));
   } catch {}
 }
 
-// Quality score: weighted rating × log10(vote count) to favour acclaimed + well-known entries
-function heroQualityScore(item: MediaItem): number {
-  const rating = item.vote_average || 0;
-  const votes = item.vote_count || 0;
-  if (votes < 50) return 0;
-  return rating * Math.log10(Math.max(votes, 10));
+function pickFreshRowItems<T extends { id: number | string; title?: string; name?: string }>(
+  pool: T[],
+  count: number,
+  seenStorageKey: string
+): T[] {
+  if (!Array.isArray(pool) || pool.length === 0) return [];
+
+  const seenPoolIds = new Set<string>();
+  const seenPoolTitles = new Set<string>();
+  const deduped: T[] = [];
+  for (const item of pool) {
+    if (!item || item.id === undefined || item.id === null) continue;
+    const idStr = String(item.id);
+    const titleKey = (item.title || item.name || "").toLowerCase().trim();
+    if (seenPoolIds.has(idStr) || (titleKey && seenPoolTitles.has(titleKey))) continue;
+    seenPoolIds.add(idStr);
+    if (titleKey) seenPoolTitles.add(titleKey);
+    deduped.push(item);
+  }
+
+  const shuffledPool = shuffleArray(deduped);
+  const history = loadSeenList(seenStorageKey);
+  const historyOrder = new Map<string, number>();
+  history.forEach((entryId, idx) => historyOrder.set(entryId, idx));
+
+  const unseen: T[] = [];
+  const previouslySeen: T[] = [];
+  for (const item of shuffledPool) {
+    if (historyOrder.has(String(item.id))) {
+      previouslySeen.push(item);
+    } else {
+      unseen.push(item);
+    }
+  }
+
+  // If unseen items run short, backfill with the least-recently-seen titles first
+  previouslySeen.sort(
+    (a, b) => (historyOrder.get(String(a.id)) ?? 0) - (historyOrder.get(String(b.id)) ?? 0)
+  );
+
+  const selected = shuffleArray([...unseen, ...previouslySeen].slice(0, count));
+  const selectedIds = selected.map((item) => String(item.id));
+  const selectedIdSet = new Set(selectedIds);
+  const updatedHistory = [
+    ...history.filter((entryId) => !selectedIdSet.has(entryId)),
+    ...selectedIds,
+  ];
+  const cap = Math.max(count * 2, Math.min(90, Math.floor(deduped.length * 0.7)));
+  saveSeenList(seenStorageKey, updatedHistory, cap);
+
+  return selected;
 }
 
 interface HeroPoolSources {
@@ -300,20 +341,26 @@ function buildHeroPool(sources: HeroPoolSources): MediaItem[] {
     if (!i.backdrop_path || !i.poster_path) return false;
     if (!i.overview || i.overview.trim().length < 20) return false;
     if (EXCLUDED_LANGS.has(i.original_language || "")) return false;
+    if ((i.vote_average || 0) < 6.2) return false;
+    if ((i.vote_count || 0) < 80) return false;
     return true;
   };
 
   const cleanMediaList = (list: MediaItem[], filterFn: (m: MediaItem) => boolean): MediaItem[] => {
     if (!Array.isArray(list)) return [];
-    const map = new Map<string | number, MediaItem>();
-    list
-      .filter(isValidHeroCandidate)
-      .filter(filterFn)
-      .sort((a, b) => heroQualityScore(b) - heroQualityScore(a))
-      .forEach((item) => {
-        if (!map.has(item.id)) map.set(item.id, item);
-      });
-    return Array.from(map.values());
+    const seenIds = new Set<string>();
+    const seenTitles = new Set<string>();
+    const filtered: MediaItem[] = [];
+    for (const item of list) {
+      if (!isValidHeroCandidate(item) || !filterFn(item)) continue;
+      const idKey = String(item.id);
+      const titleKey = (item.title || item.name || "").toLowerCase().trim();
+      if (seenIds.has(idKey) || (titleKey && seenTitles.has(titleKey))) continue;
+      seenIds.add(idKey);
+      if (titleKey) seenTitles.add(titleKey);
+      filtered.push(item);
+    }
+    return shuffleArray(filtered);
   };
 
   const isMovieFilter = (i: MediaItem) =>
@@ -326,35 +373,43 @@ function buildHeroPool(sources: HeroPoolSources): MediaItem[] {
     !(i.genre_ids?.includes(16) && i.original_language === "ja") &&
     (i.media_type === "tv" || (!!i.name && !i.title));
 
-  const mapAnimeToMediaItem = (a: AnimeItem): MediaItem => ({
-    id: (Number(a.id) || a.id) as any,
-    anilistId: String(a.id),
-    title: a.name,
-    name: a.name,
-    poster_path: a.poster || a.bannerImage || "",
-    backdrop_path: a.bannerImage || a.poster || "",
-    media_type: "anime" as const,
-    vote_average: a.rating ? parseFloat(a.rating) : 8.5,
-    vote_count: 500,
-    overview: (a.description || "").replace(/<[^>]*>/g, "").trim(),
-    release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
-    original_language: "ja",
-    genre_ids: [16],
-    isTmdbAnime: false,
-  } as unknown as MediaItem);
+  const mapAnimeToMediaItem = (a: AnimeItem): MediaItem => {
+    const parsedRating = a.rating ? parseFloat(a.rating) : NaN;
+    return {
+      id: (Number(a.id) || a.id) as any,
+      anilistId: String(a.id),
+      title: a.name,
+      name: a.name,
+      poster_path: a.poster || a.bannerImage || "",
+      backdrop_path: a.bannerImage || a.poster || "",
+      media_type: "anime" as const,
+      vote_average: Number.isFinite(parsedRating) ? parsedRating : 8.5,
+      vote_count: 500,
+      overview: (a.description || "").replace(/<[^>]*>/g, "").trim(),
+      release_date: a.seasonYear ? `${a.seasonYear}-01-01` : "",
+      original_language: "ja",
+      genre_ids: [16],
+      isTmdbAnime: false,
+    } as unknown as MediaItem;
+  };
 
   const filterAnimeList = (list: AnimeItem[]): MediaItem[] => {
     if (!Array.isArray(list)) return [];
-    const map = new Map<string, MediaItem>();
-    list
-      .filter((a) => a && a.id && a.name && (a.poster || a.bannerImage))
-      .map(mapAnimeToMediaItem)
-      .filter(isValidHeroCandidate)
-      .forEach((item) => {
-        const key = (item.title || item.name || "").toLowerCase().trim();
-        if (key && !map.has(key)) map.set(key, item);
-      });
-    return Array.from(map.values());
+    const seenIds = new Set<string>();
+    const seenTitles = new Set<string>();
+    const filtered: MediaItem[] = [];
+    for (const a of list) {
+      if (!a || !a.id || !a.name || !(a.poster || a.bannerImage)) continue;
+      const mapped = mapAnimeToMediaItem(a);
+      if (!isValidHeroCandidate(mapped)) continue;
+      const idKey = String(mapped.id);
+      const titleKey = (mapped.title || mapped.name || "").toLowerCase().trim();
+      if (seenIds.has(idKey) || (titleKey && seenTitles.has(titleKey))) continue;
+      seenIds.add(idKey);
+      if (titleKey) seenTitles.add(titleKey);
+      filtered.push(mapped);
+    }
+    return shuffleArray(filtered);
   };
 
   // Movie lists
@@ -375,43 +430,64 @@ function buildHeroPool(sources: HeroPoolSources): MediaItem[] {
       sources.fallbackFeed || [],
       (i) => isTmdbAnime(i) || (Boolean(i.genre_ids?.includes(16)) && i.original_language === "ja")
     );
-    if (trendingAnime.length < 2) trendingAnime = [...trendingAnime, ...tmdbAnime.slice(0, 10)];
-    if (popularAnime.length < 2) popularAnime = [...popularAnime, ...tmdbAnime.slice(10)];
+    if (trendingAnime.length < 2) trendingAnime = shuffleArray([...trendingAnime, ...tmdbAnime.slice(0, 10)]);
+    if (popularAnime.length < 2) popularAnime = shuffleArray([...popularAnime, ...tmdbAnime.slice(10)]);
   }
 
-  // Seen-ID tracking (rolling 80-item FIFO queue)
-  const seenIds = loadSeenHeroIds();
-  const seenSet = new Set(seenIds);
+  // Rolling 90-entry FIFO queue (stored as [idKey, titleKey] pairs -> max 180 entries)
+  const seenKeys = loadSeenList(SEEN_HERO_KEY).slice(-180);
+  const seenSet = new Set(seenKeys);
 
-  // 50/50 balance picker between trending and popular for any slide
+  const getHeroSeenKeys = (item: MediaItem): [string, string] => {
+    const idKey = `${item.media_type || "media"}:${item.id}`;
+    const normTitle = (item.title || item.name || "").toLowerCase().trim();
+    const titleKey = normTitle ? `title:${normTitle}` : idKey;
+    return [idKey, titleKey];
+  };
+
+  const isSeen = (item: MediaItem) => {
+    const [idKey, titleKey] = getHeroSeenKeys(item);
+    return seenSet.has(idKey) || seenSet.has(titleKey);
+  };
+
+  // 50/50 balance picker across full unseen pools between trending and popular
   const pick5050 = (trendingCandidates: MediaItem[], popularCandidates: MediaItem[]): MediaItem | null => {
-    // Exact 50% chance Trending vs 50% chance Popular
     const isTrendingTurn = Math.random() < 0.5;
     const primaryBucket = isTrendingTurn ? trendingCandidates : popularCandidates;
     const secondaryBucket = isTrendingTurn ? popularCandidates : trendingCandidates;
 
-    // 1. Try unseen items in primary bucket
-    let pool = primaryBucket.filter((c) => !seenSet.has(String(c.id)));
-
-    // 2. If primary bucket unseen items exhausted, try unseen in secondary bucket
+    let pool = primaryBucket.filter((c) => !isSeen(c));
     if (pool.length === 0) {
-      pool = secondaryBucket.filter((c) => !seenSet.has(String(c.id)));
+      pool = secondaryBucket.filter((c) => !isSeen(c));
     }
 
-    // 3. If all unseen exhausted, fallback to all in primary, then secondary
     if (pool.length === 0) {
+      const bucketResetKeys = new Set<string>();
+      for (const c of [...primaryBucket, ...secondaryBucket]) {
+        const [idKey, titleKey] = getHeroSeenKeys(c);
+        bucketResetKeys.add(idKey);
+        bucketResetKeys.add(titleKey);
+      }
+      for (let idx = seenKeys.length - 1; idx >= 0; idx--) {
+        if (bucketResetKeys.has(seenKeys[idx])) {
+          seenSet.delete(seenKeys[idx]);
+          seenKeys.splice(idx, 1);
+        }
+      }
       pool = primaryBucket.length > 0 ? primaryBucket : secondaryBucket;
     }
 
     if (pool.length === 0) return null;
 
-    // Pick among top 8 candidates in the pool to ensure quality
-    const topCandidates = pool.slice(0, 8);
-    const chosen = topCandidates[Math.floor(Math.random() * topCandidates.length)] || pool[0];
-
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
     if (chosen) {
-      seenIds.push(String(chosen.id));
-      seenSet.add(String(chosen.id));
+      const [idKey, titleKey] = getHeroSeenKeys(chosen);
+      seenKeys.push(idKey);
+      seenSet.add(idKey);
+      if (titleKey !== idKey) {
+        seenKeys.push(titleKey);
+        seenSet.add(titleKey);
+      }
     }
     return chosen;
   };
@@ -420,49 +496,9 @@ function buildHeroPool(sources: HeroPoolSources): MediaItem[] {
   const tvSlide = pick5050(trendingTv, popularTv);
   const animeSlide = pick5050(trendingAnime, popularAnime);
 
-  saveSeenHeroIds(seenIds);
+  saveSeenList(SEEN_HERO_KEY, seenKeys, 180);
 
-  return [movieSlide, tvSlide, animeSlide].filter(Boolean) as MediaItem[];
-}
-
-// ─── Session-stable shuffle ───────────────────────────────────────────────────
-// We want different results every SESSION (new tab / new browser open) but
-// stable within the same session (so a page reload within a tab keeps the same order).
-function getSessionSeed(): number {
-  if (typeof window === "undefined") return 42;
-  try {
-    let seedStr = sessionStorage.getItem("sv_session_seed");
-    if (!seedStr) {
-      seedStr = String(Math.floor(Math.random() * 1_000_000));
-      sessionStorage.setItem("sv_session_seed", seedStr);
-    }
-    return parseInt(seedStr, 10) || 42;
-  } catch {
-    return 42;
-  }
-}
-
-// Seeded pseudo-random number generator (mulberry32)
-function mulberry32(seed: number) {
-  return function () {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function sessionShuffle<T>(array: T[] | null | undefined, salt: string = ""): T[] {
-  if (!Array.isArray(array)) return [];
-  const seed = getSessionSeed() ^ salt.split("").reduce((a, c) => a ^ c.charCodeAt(0), 0);
-  const rng = mulberry32(seed);
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+  return shuffleArray([movieSlide, tvSlide, animeSlide].filter(Boolean) as MediaItem[]);
 }
 
 function LazySection({ children, show, placeholderHeight = 0 }: { children: React.ReactNode; show: boolean; placeholderHeight?: number }) {
@@ -620,8 +656,6 @@ const FranchiseCard = memo(function FranchiseCard({
   );
 });
 
-let lastHeroShuffleTime = Date.now();
-
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
   const { theme } = useTheme();
@@ -650,8 +684,16 @@ export default function Home() {
   const [trending, setTrending] = useState<MediaItem[]>(() => globalHomeCache?.trending || loadHomeFeedFromStorage()?.trending || []);
   const [popular, setPopular] = useState<MediaItem[]>(() => globalHomeCache?.popular || loadHomeFeedFromStorage()?.popular || []);
   const [topRated, setTopRated] = useState<MediaItem[]>(() => globalHomeCache?.topRated || loadHomeFeedFromStorage()?.topRated || []);
-  const [topRatedMovies, setTopRatedMovies] = useState<MediaItem[]>(() => globalHomeCache?.topRatedMovies || loadHomeFeedFromStorage()?.topRatedMovies || []);
-  const [topRatedTv, setTopRatedTv] = useState<MediaItem[]>(() => globalHomeCache?.topRatedTv || loadHomeFeedFromStorage()?.topRatedTv || []);
+  const [topRatedMovies, setTopRatedMovies] = useState<MediaItem[]>(() => {
+    if (globalHomeCache?.topRatedMovies?.length) return globalHomeCache.topRatedMovies;
+    const stored = loadHomeFeedFromStorage()?.topRatedMovies;
+    return stored?.length ? stored.slice(0, 24) : [];
+  });
+  const [topRatedTv, setTopRatedTv] = useState<MediaItem[]>(() => {
+    if (globalHomeCache?.topRatedTv?.length) return globalHomeCache.topRatedTv;
+    const stored = loadHomeFeedFromStorage()?.topRatedTv;
+    return stored?.length ? stored.slice(0, 24) : [];
+  });
   const [recent, setRecent] = useState<MediaItem[]>(() => globalHomeCache?.recent || loadHomeFeedFromStorage()?.recent || []);
   const [trendingMoviesToday, setTrendingMoviesToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingMoviesToday || loadHomeFeedFromStorage()?.trendingMoviesToday || []);
   const [trendingTvToday, setTrendingTvToday] = useState<MediaItem[]>(() => globalHomeCache?.trendingTvToday || loadHomeFeedFromStorage()?.trendingTvToday || []);
@@ -660,30 +702,16 @@ export default function Home() {
   const [heroTopRatedFeed, setHeroTopRatedFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroTopRatedFeed || []);
   const [heroFeed, setHeroFeed] = useState<MediaItem[]>(() => globalHomeCache?.heroFeed || []);
   const [heroPool, setHeroPool] = useState<MediaItem[]>(() => {
-    // 1. In-memory globalHomeCache: back-navigation within the same SPA session (instant)
+    // Only reuse heroPool immediately on SPA back-navigation; fresh reloads build a randomized hero pool.
     if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) {
       return globalHomeCache.heroPool;
-    }
-    // 2. sessionStorage / localStorage hero pool
-    const sessionPool = loadHeroPoolFromSession();
-    if (sessionPool.length > 0) {
-      return sessionPool;
-    }
-    // 3. Persistent home feed storage
-    const storageFeed = loadHomeFeedFromStorage();
-    if (storageFeed?.heroPool && storageFeed.heroPool.length > 0) {
-      return storageFeed.heroPool;
     }
     return [];
   });
   const [recommended, setRecommended] = useState<MediaItem[]>(() => globalHomeCache?.recommended || loadHomeFeedFromStorage()?.recommended || []);
   const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || loadHomeFeedFromStorage()?.genres || []);
   const [isLoading, setIsLoading] = useState(() => {
-    // Zero skeleton if we have a valid cached pool or feed (in-memory or persistent)
     if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) return false;
-    if (loadHeroPoolFromSession().length > 0) return false;
-    const storageFeed = loadHomeFeedFromStorage();
-    if (storageFeed?.heroPool && storageFeed.heroPool.length > 0) return false;
     return true;
   });
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -846,13 +874,13 @@ export default function Home() {
       if (loadError) setLoadError(null);
 
       // Only rebuild hero pool when the localStorage TTL has actually expired — same gate
-      // used by fresh page loads. This prevents back-navigation from changing the hero mid-session.
+      // used by SPA navigation. This prevents back-navigation from changing the hero mid-session.
       if (isHeroSessionStale() && globalHomeCache.heroFeed && globalHomeCache.heroFeed.length > 0) {
         const freshPool = buildHeroPool({
           trendingMovies: [...(globalHomeCache.trendingMoviesToday || []), ...(globalHomeCache.trending || []).filter((i) => i.media_type === "movie")],
-          popularMovies: [...(globalHomeCache.popular || []), ...(globalHomeCache.topRatedMovies || [])],
+          popularMovies: [...(globalHomeCache.popular || []), ...(globalHomeCache.topRatedMoviesPool || globalHomeCache.topRatedMovies || [])],
           trendingTv: [...(globalHomeCache.trendingTvToday || []), ...(globalHomeCache.trending || []).filter((i) => i.media_type === "tv")],
-          popularTv: [...(globalHomeCache.popularTv || []), ...(globalHomeCache.topRatedTv || [])],
+          popularTv: [...(globalHomeCache.popularTv || []), ...(globalHomeCache.topRatedTvPool || globalHomeCache.topRatedTv || [])],
           trendingAnime: globalHomeCache.trendingAnime || [],
           popularAnime: globalHomeCache.popularAnime || globalHomeCache.animeList || loadCachedAniListItems(),
           fallbackFeed: globalHomeCache.heroFeed,
@@ -863,11 +891,7 @@ export default function Home() {
           globalHomeCache.heroPool = freshPool;
         }
       } else {
-        // Cache is still fresh (< 5 mins)! Maintain the EXACT same 3 hero cards!
-        const saved = loadHeroPoolFromSession();
-        const active = saved.length >= 3 ? saved : globalHomeCache.heroPool;
-        setHeroPool(active);
-        globalHomeCache.heroPool = active;
+        setHeroPool(globalHomeCache.heroPool);
       }
       return;
     }
@@ -886,6 +910,8 @@ export default function Home() {
       setLoadError(null);
 
       try {
+        let resolvedTrendingAnime: AnimeItem[] = [];
+        let resolvedPopularAnime: AnimeItem[] = [];
 
         // Consolidated home endpoint for content rows below the hero
         const homePromise = fetchJson<{
@@ -901,7 +927,7 @@ export default function Home() {
           trendingMoviesToday: { results: MediaItem[] };
           trendingTvToday: { results: MediaItem[] };
           genres: { genres: Genre[] };
-        }>("/api/tmdb/home?v=4", { cacheTtlMs: 3600000 }).catch(() => null);
+        }>("/api/tmdb/home?v=5", { cacheTtlMs: 600000 }).catch(() => null);
 
         // Fetch both trending and all-time popular anime
         const trendingAnimePromise = fetchClientAnime("trending", 1).catch(() => ({ items: [] }));
@@ -929,10 +955,12 @@ export default function Home() {
         // Attach background handler for anime so slow AniList queries never block TMDB home rows
         animePromise.then((animeResponse) => {
           if (cancelled) return;
+          resolvedTrendingAnime = (animeResponse as any)?.trending || [];
+          resolvedPopularAnime = (animeResponse as any)?.popular || [];
           const rawDynamicAnime = ((animeResponse as any)?.items && (animeResponse as any).items.length > 0)
             ? (animeResponse as any).items
-            : ((animeResponse as any)?.trending && (animeResponse as any).trending.length > 0)
-              ? (animeResponse as any).trending
+            : (resolvedTrendingAnime.length > 0)
+              ? resolvedTrendingAnime
               : loadCachedAniListItems();
 
           if (rawDynamicAnime.length > 0) {
@@ -945,8 +973,8 @@ export default function Home() {
 
           if (globalHomeCache) {
             globalHomeCache.animeList = finalAnimeList;
-            globalHomeCache.trendingAnime = (animeResponse as any)?.trending || [];
-            globalHomeCache.popularAnime = (animeResponse as any)?.popular || [];
+            globalHomeCache.trendingAnime = resolvedTrendingAnime;
+            globalHomeCache.popularAnime = resolvedPopularAnime;
             saveHomeFeedToStorage(globalHomeCache);
           }
         }).catch(() => {
@@ -1013,13 +1041,12 @@ export default function Home() {
           // Dynamic AniList anime fallback from cache while background query resolves
           const cachedAnime = loadCachedAniListItems();
           const initialAnimeList = (cachedAnime && cachedAnime.length > 0) ? cachedAnime.slice(0, 18) : (globalHomeCache?.animeList || []);
-          if (initialAnimeList.length > 0) {
+          if (initialAnimeList.length > 0 && resolvedTrendingAnime.length === 0) {
             setAnimeList(initialAnimeList);
             setAnimeLoading(false);
           }
 
           const recPool = filterExcludeAnime([...popularSafe, ...heroTopSafe, ...trendingSafe, ...heroRecentSafe]);
-          const daySalt = Math.floor(Date.now() / 86400000).toString();
 
           const fullHeroFeed = [
             ...trendingSafe,
@@ -1035,70 +1062,56 @@ export default function Home() {
             ...trendingTvTodaySafe,
           ];
 
-          // Check if existing 5-minute pool in localStorage is still fresh
-          const existingSaved = loadHeroPoolFromSession();
-          const shouldKeepExisting = !isHeroSessionStale() && existingSaved.length >= 3;
+          const storedFeed = loadHomeFeedFromStorage();
+          const effectiveTrendingAnime =
+            resolvedTrendingAnime.length > 0
+              ? resolvedTrendingAnime
+              : (globalHomeCache?.trendingAnime?.length
+                  ? globalHomeCache.trendingAnime
+                  : (storedFeed?.trendingAnime?.length ? storedFeed.trendingAnime : cachedAnime));
+          const effectivePopularAnime =
+            resolvedPopularAnime.length > 0
+              ? resolvedPopularAnime
+              : (globalHomeCache?.popularAnime?.length
+                  ? globalHomeCache.popularAnime
+                  : (storedFeed?.popularAnime?.length ? storedFeed.popularAnime : cachedAnime));
 
-          let chosenHeroPool: MediaItem[];
-          if (shouldKeepExisting) {
-            chosenHeroPool = existingSaved;
-          } else {
-            // Build fresh hero pool with genuine 50/50 balance between trending & popular for all 3 slides:
-            chosenHeroPool = buildHeroPool({
-              trendingMovies: [...trendingMoviesTodaySafe, ...trendingSafe.filter((i) => i.media_type === "movie")],
-              popularMovies: [...popularSafe, ...topRatedMovieSafe],
-              trendingTv: [...trendingTvTodaySafe, ...trendingSafe.filter((i) => i.media_type === "tv")],
-              popularTv: [...popularTvSafe, ...heroTopSafe, ...onTheAirSafe],
-              trendingAnime: (globalHomeCache?.trendingAnime && globalHomeCache.trendingAnime.length > 0) ? globalHomeCache.trendingAnime : cachedAnime,
-              popularAnime: (globalHomeCache?.popularAnime && globalHomeCache.popularAnime.length > 0) ? globalHomeCache.popularAnime : cachedAnime,
-              fallbackFeed: fullHeroFeed,
-            });
-            if (chosenHeroPool.length >= 3) {
-              saveHeroPoolToSession(chosenHeroPool);
-            }
-          }
+          // Build a fresh randomized hero pool on every full page load
+          const chosenHeroPool = buildHeroPool({
+            trendingMovies: [...trendingMoviesTodaySafe, ...trendingSafe.filter((i) => i.media_type === "movie")],
+            popularMovies: [...popularSafe, ...topRatedMovieSafe],
+            trendingTv: [...trendingTvTodaySafe, ...trendingSafe.filter((i) => i.media_type === "tv")],
+            popularTv: [...popularTvSafe, ...heroTopSafe, ...onTheAirSafe],
+            trendingAnime: effectiveTrendingAnime,
+            popularAnime: effectivePopularAnime,
+            fallbackFeed: fullHeroFeed,
+          });
 
-          const shuffleSalt = Math.floor(Date.now() / 900000);
-          const shuffledMovies = sessionShuffle(topRatedMovieSafe, `alltime-movies-${shuffleSalt}`).slice(0, 24);
-          const shuffledTv = sessionShuffle(heroTopSafe, `alltime-tv-${shuffleSalt}`).slice(0, 24);
+          const pickedAllTimeMovies = pickFreshRowItems(topRatedMovieSafe, 24, SEEN_ALLTIME_MOVIES_KEY);
+          const pickedAllTimeTv = pickFreshRowItems(heroTopSafe, 24, SEEN_ALLTIME_TV_KEY);
+          const shuffledPopularMovies = shuffleArray(popularSafe);
+          const shuffledTopTv = shuffleArray(heroTopSafe);
 
           setTrending(trendingSafe);
-          setPopular(sessionShuffle(popularSafe, "popular"));
-          setTopRated(sessionShuffle(heroTopSafe, "toprated"));
-          setTopRatedMovies(shuffledMovies);
-          setTopRatedTv(shuffledTv);
+          setPopular(shuffledPopularMovies);
+          setTopRated(shuffledTopTv);
+          setTopRatedMovies(pickedAllTimeMovies);
+          setTopRatedTv(pickedAllTimeTv);
           setRecent(heroRecentSafe);
           setTrendingMoviesToday(trendingMoviesTodaySafe);
           setTrendingTvToday(trendingTvTodaySafe);
-          setRecommended(sessionShuffle(recPool, `recommended-${daySalt}`));
+          setRecommended(shuffleArray(recPool));
           setGenres((homeData.genres?.genres || []).slice(0, 18));
           setHeroTrendingFeed([...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe]);
           setHeroPopularFeed([...popularSafe, ...popularTvSafe, ...heroRecentSafe]);
           setHeroTopRatedFeed([...heroTopSafe, ...topRatedMovieSafe]);
-          let finalHeroPool = chosenHeroPool;
-          setHeroPool((current) => {
-            if (shouldKeepExisting && current && current.length > 0 && current[0]) {
-              const stableFirst = current[0];
-              const merged = [
-                stableFirst,
-                chosenHeroPool[1] || current[1],
-                chosenHeroPool[2] || current[2],
-              ].filter(Boolean);
-              saveHeroPoolToSession(merged);
-              if (globalHomeCache) globalHomeCache.heroPool = merged;
-              finalHeroPool = merged;
-              return merged;
-            }
-            saveHeroPoolToSession(chosenHeroPool);
-            if (globalHomeCache) globalHomeCache.heroPool = chosenHeroPool;
-            finalHeroPool = chosenHeroPool;
-            return chosenHeroPool;
-          });
+          saveHeroPoolToSession(chosenHeroPool);
+          setHeroPool(chosenHeroPool);
 
-          if (finalHeroPool.length > 0) {
+          if (chosenHeroPool.length > 0) {
             // Preload hero slide 1 backdrop image immediately
-            if (typeof document !== "undefined" && finalHeroPool[0]?.backdrop_path) {
-              const bg = finalHeroPool[0].backdrop_path;
+            if (typeof document !== "undefined" && chosenHeroPool[0]?.backdrop_path) {
+              const bg = chosenHeroPool[0].backdrop_path;
               const link = document.createElement("link");
               link.rel = "preload";
               link.as = "image";
@@ -1108,7 +1121,7 @@ export default function Home() {
             }
 
             // Pre-warm logos and TMDB artwork for hero items so artwork displays first with 0 delay
-            finalHeroPool.slice(0, 3).forEach((hItem) => {
+            chosenHeroPool.slice(0, 3).forEach((hItem) => {
               const hTitle = hItem.title || hItem.name || "";
               const anilistId = (hItem as any)?.anilistId;
               const isAnime = hItem.media_type === "anime" || !!anilistId || isTmdbAnime(hItem);
@@ -1166,15 +1179,18 @@ export default function Home() {
 
           globalHomeCache = {
             trending: trendingSafe,
-            popular: sessionShuffle(popularSafe, "popular"),
-            topRated: sessionShuffle(heroTopSafe, "toprated"),
-            topRatedMovies: shuffledMovies,
-            topRatedTv: shuffledTv,
+            popular: shuffledPopularMovies,
+            topRated: shuffledTopTv,
+            topRatedMovies: pickedAllTimeMovies,
+            topRatedTv: pickedAllTimeTv,
+            topRatedMoviesPool: topRatedMovieSafe,
+            topRatedTvPool: heroTopSafe,
             recent: heroRecentSafe,
             trendingMoviesToday: trendingMoviesTodaySafe,
             trendingTvToday: trendingTvTodaySafe,
-            trendingAnime: globalHomeCache?.trendingAnime || cachedAnime,
-            popularAnime: globalHomeCache?.popularAnime || cachedAnime,
+            popularTv: popularTvSafe,
+            trendingAnime: effectiveTrendingAnime,
+            popularAnime: effectivePopularAnime,
             heroTrendingFeed: [...trendingSafe, ...trendingMoviesTodaySafe, ...trendingTvTodaySafe],
             heroPopularFeed: [...popularSafe, ...popularTvSafe, ...heroRecentSafe],
             heroTopRatedFeed: [...heroTopSafe, ...topRatedMovieSafe],
@@ -1211,11 +1227,6 @@ export default function Home() {
       clearTimeout(loadingTimeout);
     };
   }, []);
-
-  function pickRandom<T>(arr: T[]): T | null {
-    if (arr.length === 0) return null;
-    return arr[Math.floor(Math.random() * arr.length)];
-  }
 
   const activeHeroCandidate = heroPool[heroIndex] || heroPool[0] || null;
   const hero = spotlightBanner ? {

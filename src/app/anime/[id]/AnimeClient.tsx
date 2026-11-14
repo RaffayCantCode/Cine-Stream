@@ -12,17 +12,23 @@ import { usePageContentReady } from "@/lib/pageLoad";
 import { useMediaLogo } from "@/components/MediaLogo";
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
 import {
-  DEFAULT_COVER_PALETTE,
   buildPaletteFromColor,
   buildPaletteFromSeed,
-  extractCoverPalette,
   fetchAniListCoverColor,
-  proxiedImageUrl,
+  getCachedCoverPalette,
+  setCachedCoverPalette,
+  resolveAnimeCoverPalette,
   withAlpha,
   readableTextOn,
   type CoverPalette,
 } from "@/lib/cover-palette";
-import { ANIME_API_VERSION, animeEpisodesCacheKey, animeMetaCacheKey, animeMetaUrl, getAnimePreview } from "@/lib/anime-cache";
+import {
+  ANIME_API_VERSION,
+  animeEpisodesCacheKey,
+  animeMetaCacheKey,
+  animeMetaUrl,
+  getInFlightAnimePreload,
+} from "@/lib/anime-cache";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
 import { AnimeSeasonSelector, type FranchiseNodeItem } from "@/components/AnimeSeasonSelector";
@@ -184,6 +190,214 @@ function formatSeasonLabel(season?: string | null, year?: number | null): string
   const label = season ? season.charAt(0).toUpperCase() + season.slice(1).toLowerCase() : "";
   return [label, year].filter(Boolean).join(" ") || null;
 }
+
+interface CachedAnimeMetaResult {
+  anime: AnimeDetail;
+  franchiseNodes: FranchiseNode[];
+  openedSeasonId: string;
+  tmdbSeasonMap?: Record<string, number>;
+  fromInitialData?: boolean;
+}
+
+function doesAnimeProgressMatch(
+  routeId: string,
+  animeObj: { id?: string | number | null; idMal?: string | number | null; name?: any; jname?: string | null; title?: any; tmdbId?: any; seasons?: any[] } | null | undefined,
+  nodes: FranchiseNode[] | null | undefined,
+  targetMediaId: string | number | null | undefined,
+  targetTitle?: string | null,
+  extraTitles?: (string | null | undefined)[],
+  extraIds?: (string | number | null | undefined)[]
+): boolean {
+  if (!targetMediaId && !targetTitle) return false;
+  const strTargetId = String(targetMediaId || "").trim();
+  const cleanTargetId = strTargetId.replace(/\D/g, "");
+
+  const allRelatedIds = new Set<string>([
+    String(routeId || "").trim(),
+    String(animeObj?.id || "").trim(),
+    String((animeObj as any)?.tmdbId || "").trim(),
+    String(animeObj?.idMal || "").trim(),
+    ...(extraIds || []).map((v) => String(v || "").trim()),
+    ...(animeObj?.seasons || []).flatMap((s: any) => [String(s.id || "").trim(), String(s.idMal || "").trim(), String(s.tmdbId || "").trim()]),
+    ...(nodes || []).flatMap((n: any) => [String(n.id || "").trim(), String(n.idMal || "").trim(), String(n.tmdbId || "").trim()]),
+  ]);
+  allRelatedIds.delete("");
+
+  if (strTargetId && allRelatedIds.has(strTargetId)) return true;
+  if (cleanTargetId) {
+    for (const rid of allRelatedIds) {
+      const cleanRid = rid.replace(/\D/g, "");
+      if (cleanRid && cleanRid === cleanTargetId) return true;
+    }
+  }
+
+  if (targetTitle) {
+    const cleanTargetTitle = getSafeAnimeTitle(targetTitle).toLowerCase().trim();
+    const candidates = [
+      animeObj?.name,
+      animeObj?.title,
+      animeObj?.jname,
+      ...(extraTitles || []),
+    ]
+      .filter(Boolean)
+      .map((t) => getSafeAnimeTitle(t).toLowerCase().trim());
+
+    for (const cand of candidates) {
+      if (!cand || !cleanTargetTitle) continue;
+      if (cand === cleanTargetTitle) return true;
+      if (cand.length >= 4 && cleanTargetTitle.length >= 4) {
+        if (cand.replace(/[^a-z0-9]/g, "") === cleanTargetTitle.replace(/[^a-z0-9]/g, "")) return true;
+        if (cand.includes(cleanTargetTitle) || cleanTargetTitle.includes(cand)) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function resolveTargetSeasonIdForAnime(
+  routeId: string,
+  animeObj: AnimeDetail | null | undefined,
+  metaOpenedSeasonId?: string | null,
+  tmdbSeasonMap?: Record<string, number>,
+  nodes?: FranchiseNode[]
+): string {
+  const availableSeasons = animeObj?.seasons || [];
+  const isExplicitRouteNode = availableSeasons.some((s: SeasonInfo) => String(s.id) === String(routeId));
+  let targetSeasonId = String(
+    isExplicitRouteNode
+      ? routeId
+      : (metaOpenedSeasonId || animeObj?.openedSeasonId || availableSeasons.find((s: SeasonInfo) => s.isCurrent)?.id || animeObj?.id || routeId)
+  );
+
+  if (typeof window === "undefined") return targetSeasonId;
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlSeasonId = urlParams.get("seasonId");
+  const urlSeasonNum = Number(urlParams.get("season") || "");
+  let effectiveSeasonNum = urlSeasonNum;
+
+  if (!urlSeasonId && !isExplicitRouteNode && effectiveSeasonNum <= 0) {
+    try {
+      const act = localStorage.getItem("cinestream_active_anime_show");
+      if (act) {
+        const p = JSON.parse(act);
+        if (p?.season && Number(p.season) > 1 && doesAnimeProgressMatch(routeId, animeObj, nodes, p?.id || p?.mediaId, p?.title)) {
+          effectiveSeasonNum = Number(p.season);
+        }
+      }
+      if (effectiveSeasonNum <= 0) {
+        const cw = localStorage.getItem("cinestream_cw_cache");
+        if (cw) {
+          const p = JSON.parse(cw);
+          const found = (p?.items || []).find(
+            (it: any) => it.mediaType === "anime" && doesAnimeProgressMatch(routeId, animeObj, nodes, it.mediaId, it.title)
+          );
+          if (found?.season && Number(found.season) > 1) {
+            effectiveSeasonNum = Number(found.season);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (urlSeasonId) {
+    const found = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(urlSeasonId));
+    targetSeasonId = found ? String(found.id) : urlSeasonId;
+  } else if (!isExplicitRouteNode && effectiveSeasonNum > 0) {
+    const tvOnlySeasons = availableSeasons.filter((s: SeasonInfo) => {
+      const lbl = (s.seasonLabel || "").toLowerCase();
+      return !lbl.includes("special") && !lbl.includes("ova") && !lbl.includes("movie");
+    });
+    const entry = Object.entries(tmdbSeasonMap || {}).find(([, num]) => num === effectiveSeasonNum);
+    if (entry) {
+      const found = tvOnlySeasons.find((s: SeasonInfo) => String(s.id) === String(entry[0]));
+      if (found) targetSeasonId = String(found.id);
+    } else {
+      const byLabel = tvOnlySeasons.find((s: SeasonInfo) => {
+        const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
+        return sNum === effectiveSeasonNum;
+      });
+      if (byLabel) targetSeasonId = String(byLabel.id);
+    }
+  }
+
+  return targetSeasonId;
+}
+
+function readCachedAnimeMeta(id: string, initialData?: any): CachedAnimeMetaResult | null {
+  if (!id) return null;
+  if (initialData?.id && !(initialData as any)?._isPreviewSeed) {
+    const nodes = Array.isArray(initialData.franchiseNodes) ? initialData.franchiseNodes : [];
+    const anime = initialData as AnimeDetail;
+    const openedSeasonId = resolveTargetSeasonIdForAnime(id, anime, initialData.openedSeasonId, initialData.tmdbSeasonMap, nodes);
+    return {
+      anime,
+      franchiseNodes: nodes,
+      openedSeasonId,
+      tmdbSeasonMap: initialData.tmdbSeasonMap,
+      fromInitialData: true,
+    };
+  }
+
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(animeMetaCacheKey(id));
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (!p?.success || !p?.data?.anime || (p.data.anime as any)?._isPreviewSeed) return null;
+    if (p._cachedAt) {
+      const age = Date.now() - p._cachedAt;
+      const maxAge = (p.data.anime?.status || "").toUpperCase().includes("RELEASING")
+        ? 2 * 60 * 1000
+        : 5 * 60 * 1000;
+      if (age >= maxAge) {
+        sessionStorage.removeItem(animeMetaCacheKey(id));
+        return null;
+      }
+    }
+    const anime = p.data.anime as AnimeDetail;
+    const nodes = Array.isArray(p.data.franchiseNodes) ? p.data.franchiseNodes : [];
+    const openedSeasonId = resolveTargetSeasonIdForAnime(id, anime, p.data.openedSeasonId, p.data.tmdbSeasonMap, nodes);
+    return {
+      anime,
+      franchiseNodes: nodes,
+      openedSeasonId,
+      tmdbSeasonMap: p.data.tmdbSeasonMap,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readCachedSeasonEpisodes(
+  id: string,
+  seasonId: string
+): { episodes: Episode[]; seasonOverview: string | null } | null {
+  if (typeof window === "undefined" || !id || !seasonId) return null;
+  try {
+    const key = animeEpisodesCacheKey(id, seasonId);
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (p?.episodes?.length && p._cachedAt) {
+      const age = Date.now() - p._cachedAt;
+      const maxAge = (p.status || "").toUpperCase().includes("RELEASING")
+        ? 2 * 60 * 1000
+        : 5 * 60 * 1000;
+      if (age < maxAge) {
+        return {
+          episodes: p.episodes as Episode[],
+          seasonOverview: p.seasonOverview || null,
+        };
+      }
+      sessionStorage.removeItem(key);
+    }
+  } catch {}
+  return null;
+}
+
+const PALETTE_TIMEOUT_MS = 1200;
 
 // Direct browser fallback from residential IP when server API is blocked or unreachable
 async function clientFetchAnimeFallback(
@@ -583,39 +797,61 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
 
   // ── Core state ───────────────────────────────────────────────────────────
-  const [anime, setAnime] = useState<AnimeDetail | null>(() => {
-    if (initialData?.id) return initialData as AnimeDetail;
-    if (typeof window !== "undefined" && id) {
-      try {
-        const cached = sessionStorage.getItem(animeMetaCacheKey(id));
-        if (cached) {
-          const p = JSON.parse(cached);
-          if (p?.success && p?.data?.anime) return p.data.anime as AnimeDetail;
-        }
-      } catch {}
-      const preview = getAnimePreview(id);
-      if (preview?.id) return preview as AnimeDetail;
-    }
-    return null;
-  });
+  const initSnapshotRef = useRef<{
+    meta: CachedAnimeMetaResult | null;
+    targetSeasonId: string;
+    episodesData: { episodes: Episode[]; seasonOverview: string | null } | null;
+    palette: CoverPalette | null;
+  } | null>(null);
 
-  const [isLoading, setIsLoading] = useState(() => {
-    if (initialData?.id) return false;
-    if (typeof window !== "undefined" && id) {
-      try {
-        const cached = sessionStorage.getItem(animeMetaCacheKey(id));
-        if (cached) {
-          const p = JSON.parse(cached);
-          if (p?.success && p?.data?.anime) return false;
-        }
-      } catch {}
-      if (getAnimePreview(id)?.id) return false;
-    }
-    return true;
-  });
+  if (!initSnapshotRef.current) {
+    const meta = readCachedAnimeMeta(id, initialData);
+    const metaNodes = meta?.franchiseNodes?.length
+      ? meta.franchiseNodes
+      : initialData?.franchiseNodes;
+    const targetSeasonId = resolveTargetSeasonIdForAnime(
+      id,
+      meta?.anime || initialData || null,
+      (meta as any)?.openedSeasonId ?? initialData?.openedSeasonId,
+      meta?.tmdbSeasonMap ?? initialData?.tmdbSeasonMap,
+      metaNodes
+    );
+    const episodesData =
+      typeof window !== "undefined" && id && meta?.anime
+        ? readCachedSeasonEpisodes(id, targetSeasonId)
+        : null;
+    const seededFromMeta = meta?.anime?.coverColor
+      ? buildPaletteFromColor(meta.anime.coverColor)
+      : null;
+    const cachedPalette =
+      typeof window !== "undefined" && id ? getCachedCoverPalette(id) : null;
+    initSnapshotRef.current = {
+      meta,
+      targetSeasonId,
+      episodesData,
+      palette: cachedPalette || seededFromMeta,
+    };
+  }
 
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [episodesLoading, setEpisodesLoading] = useState(true);
+  const mountSnapshot = initSnapshotRef.current;
+
+  const [anime, setAnime] = useState<AnimeDetail | null>(
+    () => mountSnapshot.meta?.anime || null
+  );
+  const [settledMetaId, setSettledMetaId] = useState<string | null>(() =>
+    mountSnapshot.meta?.anime ? id : null
+  );
+  const [isLoading, setIsLoading] = useState(() => !mountSnapshot.meta?.anime);
+
+  const [episodes, setEpisodes] = useState<Episode[]>(
+    () => mountSnapshot.episodesData?.episodes || []
+  );
+  const [settledEpisodesId, setSettledEpisodesId] = useState<string | null>(() =>
+    mountSnapshot.episodesData ? id : null
+  );
+  const [episodesLoading, setEpisodesLoading] = useState(
+    () => !mountSnapshot.episodesData
+  );
   const [error, setError] = useState<string | null>(null);
   const [selectedEp, setSelectedEp] = useState<Episode | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -623,17 +859,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [descExpanded, setDescExpanded] = useState(false);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [franchiseNodes, setFranchiseNodes] = useState<FranchiseNode[]>(() => {
+    const nodes = mountSnapshot.meta?.franchiseNodes;
+    if (nodes && nodes.length > 1) return nodes;
     if (initialData?.franchiseNodes?.length > 1) return initialData.franchiseNodes;
     return [];
   });
-  const [currentSeasonId, setCurrentSeasonId] = useState<string>(() => {
-    return initialData?.openedSeasonId || initialData?.seasons?.find((s: any) => s.isCurrent)?.id || initialData?.id || id;
-  });
-  const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
+  const [currentSeasonId, setCurrentSeasonId] = useState<string>(
+    () => mountSnapshot.targetSeasonId || id
+  );
+  const [seasonOverview, setSeasonOverview] = useState<string | null>(
+    () => mountSnapshot.episodesData?.seasonOverview || null
+  );
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
   const { settings: siteSettings } = useSiteSettings();
-  const episodeView: EpisodeViewMode = siteSettings.episodeViewMode;
+  const episodeView: EpisodeViewMode = siteSettings.animeEpisodeViewMode;
   const activeSeasonWatchedId = String(currentSeasonId || anime?.id || id);
   const {
     isWatched: isEpisodeMarkedWatched,
@@ -643,11 +883,33 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   } = useWatchedEpisodes("anime", activeSeasonWatchedId, 1);
   const [episodePage, setEpisodePage] = useState(1);
   const [listChunkIndex, setListChunkIndex] = useState(0);
-  const [coverPalette, setCoverPalette] = useState<CoverPalette>(DEFAULT_COVER_PALETTE);
+  const [paletteState, setPaletteState] = useState<{
+    id: string;
+    palette: CoverPalette;
+    ready: boolean;
+  }>(() => ({
+    id,
+    palette:
+      mountSnapshot.palette ||
+      buildPaletteFromSeed(`${id}|${mountSnapshot.meta?.anime?.name || ""}`),
+    ready: Boolean(mountSnapshot.palette),
+  }));
+  const paletteReady = Boolean(id && paletteState.id === id && paletteState.ready);
+  const coverPalette =
+    paletteState.id === id
+      ? paletteState.palette
+      : buildPaletteFromSeed(`${id}|${anime?.name || ""}`);
+  const [revealedId, setRevealedId] = useState<string | null>(null);
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const prevIdRef = useRef<string | null>(null);
-  const loadedSeasonIds = useRef<Set<string>>(new Set());
+  const loadedSeasonIds = useRef<Set<string>>(
+    new Set(
+      mountSnapshot.episodesData?.episodes?.length
+        ? [String(mountSnapshot.targetSeasonId || id)]
+        : []
+    )
+  );
   const animeStatusRef = useRef<string | null>(null);
   // Refs mirror the latest meta so async loaders never read a stale render closure.
   const animeRef = useRef<AnimeDetail | null>(anime);
@@ -700,55 +962,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const displayFormat = getSafeAnimeTitle((currentSeasonInfo as any)?.format || (currentSeasonInfo as any)?.type || anime?.format || anime?.type || "Anime");
   const displayStatus = getSafeAnimeTitle(currentSeason?.status || (currentSeasonInfo as any)?.status || anime?.status || "");
 
-  // Theme the page from the artwork: AniList ships a dominant cover colour.
-  // When it is missing (edge hosts are often blocked from AniList) we ask the
-  // API directly from the browser, then sample the poster through our
-  // same-origin image proxy. A deterministic seed covers the first paint so no
-  // page ever flashes the shared default palette.
-  const seededPalette = useMemo(
-    () => buildPaletteFromColor(anime?.coverColor || null),
-    [anime?.coverColor]
-  );
-  const fallbackPalette = useMemo(
-    () => buildPaletteFromSeed(`${anime?.id || id}|${anime?.name || ""}`),
-    [anime?.id, anime?.name, id]
-  );
-
-  useEffect(() => {
-    if (seededPalette) {
-      setCoverPalette(seededPalette);
-      return;
-    }
-    setCoverPalette(fallbackPalette);
-    if (!anime?.id || (anime as any)?._isPreviewSeed) {
-      return;
-    }
-    let cancelled = false;
-
-    (async () => {
-      // 1. Ask AniList straight from the browser (CORS-enabled, ~1 KB).
-      const direct = buildPaletteFromColor(await fetchAniListCoverColor(anime?.id));
-      if (cancelled) return;
-      if (direct) {
-        setCoverPalette(direct);
-        return;
-      }
-      // 2. Sample the poster via our own origin (never a tainted canvas).
-      const proxied = await extractCoverPalette(proxiedImageUrl(displayPoster));
-      if (cancelled) return;
-      if (proxied) {
-        setCoverPalette(proxied);
-        return;
-      }
-      // 3. Last resort: sample the remote URL directly.
-      const sampled = await extractCoverPalette(displayPoster);
-      if (!cancelled && sampled) setCoverPalette(sampled);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [displayPoster, seededPalette, fallbackPalette, anime?.id]);
+  // Page palette is resolved together with metadata/episodes before reveal so
+  // colors never flash after first paint.
 
   const accentVars = useMemo(
     () =>
@@ -775,7 +990,23 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     [coverPalette]
   );
 
-  const isPageReady = Boolean(!isLoading || error || (anime as any)?.isHidden);
+  const effectiveError = settledMetaId === id ? error : null;
+  const metaReady = Boolean(!isLoading && settledMetaId === id && anime);
+  const episodesReady = Boolean(!episodesLoading && settledEpisodesId === id);
+  const isInitialLoadDone = Boolean(
+    id &&
+      ((metaReady && episodesReady && paletteReady) ||
+        effectiveError ||
+        (anime && settledMetaId === id && (anime as any)?.isHidden))
+  );
+
+  useEffect(() => {
+    if (isInitialLoadDone && revealedId !== id) {
+      setRevealedId(id);
+    }
+  }, [isInitialLoadDone, revealedId, id]);
+
+  const isPageReady = Boolean(id && (isInitialLoadDone || revealedId === id));
   usePageContentReady(isPageReady);
 
   // ── Episodes for current season ───────────────────────────────────────────
@@ -878,55 +1109,21 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
   // ── Anime Progress Matcher ────────────────────────────────────────────────
   const isAnimeMatching = useCallback((targetMediaId: string | number | null | undefined, targetTitle?: string | null) => {
-    if (!targetMediaId && !targetTitle) return false;
-    const strTargetId = String(targetMediaId || "").trim();
-    const cleanTargetId = strTargetId.replace(/\D/g, "");
-
-    const allRelatedIds = new Set<string>([
-      String(id || "").trim(),
-      String(anime?.id || "").trim(),
-      String(initialData?.id || "").trim(),
-      String(currentSeasonId || "").trim(),
-      String((anime as any)?.tmdbId || "").trim(),
-      String((initialData as any)?.tmdbId || "").trim(),
-      String(anime?.idMal || "").trim(),
-      String(initialData?.idMal || "").trim(),
-      ...(anime?.seasons || []).flatMap((s: any) => [String(s.id || "").trim(), String(s.idMal || "").trim(), String(s.tmdbId || "").trim()]),
-      ...(initialData?.seasons || []).flatMap((s: any) => [String(s.id || "").trim(), String(s.idMal || "").trim(), String(s.tmdbId || "").trim()]),
-      ...(franchiseNodes || []).flatMap((n: any) => [String(n.id || "").trim(), String(n.idMal || "").trim(), String(n.tmdbId || "").trim()]),
-    ]);
-    allRelatedIds.delete("");
-
-    if (strTargetId && allRelatedIds.has(strTargetId)) return true;
-    if (cleanTargetId) {
-      for (const rid of allRelatedIds) {
-        const cleanRid = rid.replace(/\D/g, "");
-        if (cleanRid && cleanRid === cleanTargetId) return true;
-      }
-    }
-
-    if (targetTitle) {
-      const cleanTargetTitle = getSafeAnimeTitle(targetTitle).toLowerCase().trim();
-      const candidates = [
-        anime?.name,
-        (anime as any)?.title,
-        anime?.jname,
-        initialData?.name,
-        (initialData as any)?.title,
-        displayTitle,
-      ].filter(Boolean).map(t => getSafeAnimeTitle(t).toLowerCase().trim());
-
-      for (const cand of candidates) {
-        if (!cand || !cleanTargetTitle) continue;
-        if (cand === cleanTargetTitle) return true;
-        if (cand.length >= 4 && cleanTargetTitle.length >= 4) {
-          if (cand.replace(/[^a-z0-9]/g, "") === cleanTargetTitle.replace(/[^a-z0-9]/g, "")) return true;
-          if (cand.includes(cleanTargetTitle) || cleanTargetTitle.includes(cand)) return true;
-        }
-      }
-    }
-
-    return false;
+    return doesAnimeProgressMatch(
+      id,
+      anime,
+      franchiseNodes,
+      targetMediaId,
+      targetTitle,
+      [displayTitle, initialData?.name, (initialData as any)?.title],
+      [
+        currentSeasonId,
+        initialData?.id,
+        (initialData as any)?.tmdbId,
+        initialData?.idMal,
+        ...(initialData?.seasons || []).flatMap((s: any) => [s.id, s.idMal, s.tmdbId]),
+      ]
+    );
   }, [id, anime, initialData, currentSeasonId, franchiseNodes, displayTitle]);
 
   // ── Load active progress from URL, active tracker, CW cache & server ──────
@@ -1114,7 +1311,30 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     force = false,
     hints: SeasonLoadHints = {}
   ) => {
-    if (!force && loadedSeasonIds.current.has(seasonId)) return;
+    if (!force && loadedSeasonIds.current.has(seasonId)) {
+      setEpisodesLoading(false);
+      setSettledEpisodesId(id);
+      return;
+    }
+
+    const EP_KEY = animeEpisodesCacheKey(id, seasonId);
+    // Serve a fresh session copy before toggling loading state so cached seasons render immediately.
+    if (!force) {
+      const cachedEpData = readCachedSeasonEpisodes(id, seasonId);
+      if (cachedEpData?.episodes?.length) {
+        ++episodeRequestRef.current;
+        episodeAbortRef.current?.abort();
+        setEpisodes(prev => {
+          const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
+          return [...other, ...cachedEpData.episodes].sort((a, b) => a.episodeNum - b.episodeNum);
+        });
+        setSeasonOverview(cachedEpData.seasonOverview || null);
+        loadedSeasonIds.current.add(seasonId);
+        setEpisodesLoading(false);
+        setSettledEpisodesId(id);
+        return;
+      }
+    }
 
     // Every load supersedes any in-flight one. Older responses are ignored so a
     // slow season can never overwrite the season the user is currently viewing.
@@ -1133,31 +1353,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       meta?.seasons?.find(s => String(s.id) === String(seasonId)) ||
       (initialData?.seasons || []).find((s: any) => String(s.id) === String(seasonId)) ||
       nodes?.find(n => String(n.id) === String(seasonId));
-
-    // Serve a fresh session copy first (works for revisits and back-navigation).
-    const EP_KEY = animeEpisodesCacheKey(id, seasonId);
-    try {
-      const cached = sessionStorage.getItem(EP_KEY);
-      if (cached) {
-        const p = JSON.parse(cached);
-        const hasRealData = p?.episodes?.some((e: any) => !e.isPlaceholder && (e.title !== `Episode ${e.episodeNum}` || e.thumbnail));
-        if (p?.episodes?.length && p._cachedAt && hasRealData) {
-          const age = Date.now() - p._cachedAt;
-          const maxAge = (p.status || "").toUpperCase().includes("RELEASING") ? 2 * 60 * 1000 : 5 * 60 * 1000;
-          if (age < maxAge) {
-            setEpisodes(prev => {
-              const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
-              return [...other, ...p.episodes].sort((a, b) => a.episodeNum - b.episodeNum);
-            });
-            if (p.seasonOverview) setSeasonOverview(p.seasonOverview);
-            loadedSeasonIds.current.add(seasonId);
-            setEpisodesLoading(false);
-            return;
-          }
-          sessionStorage.removeItem(EP_KEY);
-        }
-      }
-    } catch {}
 
     let timedOut = false;
     const timeout = setTimeout(() => {
@@ -1193,6 +1388,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         setSeasonOverview(data.data?.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
         setEpisodesLoading(false);
+        setSettledEpisodesId(id);
         return;
       }
 
@@ -1213,8 +1409,8 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         setSeasonOverview(data.data.seasonOverview || null);
         loadedSeasonIds.current.add(seasonId);
         setEpisodesLoading(false);
-        const hasRealData = sorted.some(ep => !ep.isPlaceholder && (ep.title !== `Episode ${ep.episodeNum}` || ep.thumbnail));
-        if (hasRealData) {
+        setSettledEpisodesId(id);
+        if (sorted.length > 0) {
           safeSessionSet(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
         }
         return;
@@ -1265,6 +1461,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
               });
               loadedSeasonIds.current.add(seasonId);
               setEpisodesLoading(false);
+              setSettledEpisodesId(id);
               return;
             }
           }
@@ -1294,11 +1491,12 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     });
     loadedSeasonIds.current.add(seasonId);
     setEpisodesLoading(false);
+    setSettledEpisodesId(id);
   }, [id, initialData]);
 
   // ── MAIN DATA LOADING EFFECT ─────────────────────────────────────────────
-  // One clean sequential effect: meta → episodes → background extras
-  // Prevents ALL race conditions from the old 4-effect system.
+  // Resolves meta, episodes, and cover palette together before revealing the
+  // page so neither theme colors nor episode lists pop in after first paint.
   useEffect(() => {
     if (!id) return;
     // A repeated invocation for the same id (React StrictMode/Fast Refresh)
@@ -1306,113 +1504,120 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     // aborted first request would leave the page stuck on its loading state.
     const isFirstMount = prevIdRef.current === null || prevIdRef.current === id;
     prevIdRef.current = id;
+    const initialForRoute = isFirstMount ? initialData : undefined;
 
-    // On first mount with valid initial data — skip meta fetch, just load episodes
-    if (isFirstMount && initialData) {
-      animeStatusRef.current = initialData.status || null;
-      const cachedNodes = FRANCHISE_CACHE.get(String(id));
-      const effectiveNodes = (initialData.franchiseNodes && initialData.franchiseNodes.length > 1)
-        ? initialData.franchiseNodes
-        : (cachedNodes && cachedNodes.length > 1 ? cachedNodes : []);
-      if (effectiveNodes.length > 1) {
-        setFranchiseNodes(effectiveNodes);
-        for (const n of effectiveNodes) {
-          FRANCHISE_CACHE.set(String(n.id), effectiveNodes);
-          if ((n as any).idMal) FRANCHISE_CACHE.set(String((n as any).idMal), effectiveNodes);
-        }
-      }
-      const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-      let urlSeasonNum = Number(urlParams.get("season") || "");
-      let seasonIdParam = urlParams.get("seasonId");
-
-      if (!seasonIdParam && urlSeasonNum <= 0 && typeof window !== "undefined") {
-        try {
-          const act = localStorage.getItem("cinestream_active_anime_show");
-          if (act) {
-            const p = JSON.parse(act);
-            if (p?.season && Number(p.season) > 1 && isAnimeMatching(p?.id || p?.mediaId, p?.title)) {
-              urlSeasonNum = Number(p.season);
-            }
-          }
-          if (urlSeasonNum <= 0) {
-            const cw = localStorage.getItem("cinestream_cw_cache");
-            if (cw) {
-              const p = JSON.parse(cw);
-              const found = (p?.items || []).find((it: any) => it.mediaType === "anime" && isAnimeMatching(it.mediaId, it.title));
-              if (found?.season && Number(found.season) > 1) {
-                urlSeasonNum = Number(found.season);
-              }
-            }
-          }
-        } catch {}
-      }
-
-      if (!seasonIdParam && urlSeasonNum > 0) {
-        const byNum = (initialData.seasons || []).find((s: SeasonInfo) => {
-          const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
-          return sNum === urlSeasonNum;
-        });
-        if (byNum) seasonIdParam = byNum.id;
-      }
-      const effectiveSeasonId = seasonIdParam || initialData.openedSeasonId || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent)?.id || initialData.id || id;
-      setCurrentSeasonId(effectiveSeasonId);
-      animeRef.current = initialData as AnimeDetail;
-      const matchSeason = (initialData.seasons || []).find((s: SeasonInfo) => String(s.id) === String(effectiveSeasonId)) || initialData.seasons?.find((s: SeasonInfo) => s.isCurrent) || initialData.seasons?.[0];
-      loadSeasonEpisodes(matchSeason?.id || effectiveSeasonId, true, {
-        tmdbId: matchSeason?.tmdbId,
-        tmdbSeason: matchSeason?.tmdbSeasonNumber,
-        episodeOffset: matchSeason?.episodeOffset,
-        seasonName: matchSeason?.name,
-        totalEpisodes: matchSeason?.totalEpisodes,
-        isUpcoming: Boolean(initialData.isUpcoming),
-        isUnavailable: Boolean(initialData.isUnavailable),
-      });
-      return;
-    }
-
-    // Navigating to a new anime: reset state first, using preview seed if available for instant paint
+    // Navigating to a new anime: sync from session cache if available, else reset to loading
     if (!isFirstMount) {
-      // Invalidate any episode request still in flight for the previous anime.
       episodeRequestRef.current += 1;
       episodeAbortRef.current?.abort();
-      const nextPreview = getAnimePreview(id);
-      animeRef.current = nextPreview ? (nextPreview as AnimeDetail) : null;
-      setAnime(nextPreview ? (nextPreview as AnimeDetail) : null);
-      setEpisodes([]);
+      loadedSeasonIds.current.clear();
+
+      const nextCachedMeta = readCachedAnimeMeta(id, initialForRoute);
+      const nextPalette = getCachedCoverPalette(id) ||
+        (nextCachedMeta?.anime?.coverColor ? buildPaletteFromColor(nextCachedMeta.anime.coverColor) : null);
+
       setSelectedEp(null);
       setIsPlaying(false);
-      setSeasonOverview(null);
       setRecommendations([]);
-      setFranchiseNodes([]);
-      franchiseNodesRef.current = [];
-      setIsLoading(!nextPreview);
-      setEpisodesLoading(true);
       setError(null);
-      loadedSeasonIds.current.clear();
+
+      if (nextCachedMeta?.anime) {
+        const nextNodes = nextCachedMeta.franchiseNodes?.length > 1 ? nextCachedMeta.franchiseNodes : [];
+        const nextEps = readCachedSeasonEpisodes(id, nextCachedMeta.openedSeasonId);
+        animeRef.current = nextCachedMeta.anime;
+        animeStatusRef.current = nextCachedMeta.anime.status || null;
+        setAnime(nextCachedMeta.anime);
+        setSettledMetaId(id);
+        setIsLoading(false);
+
+        franchiseNodesRef.current = nextNodes;
+        setFranchiseNodes(nextNodes);
+        setCurrentSeasonId(nextCachedMeta.openedSeasonId || id);
+
+        if (nextEps?.episodes?.length) {
+          loadedSeasonIds.current.add(String(nextCachedMeta.openedSeasonId || id));
+          setEpisodes(nextEps.episodes);
+          setSeasonOverview(nextEps.seasonOverview || null);
+          setEpisodesLoading(false);
+          setSettledEpisodesId(id);
+        } else {
+          setEpisodes([]);
+          setSeasonOverview(null);
+          setEpisodesLoading(true);
+          setSettledEpisodesId(null);
+        }
+
+        setPaletteState(
+          nextPalette
+            ? { id, palette: nextPalette, ready: true }
+            : { id, palette: buildPaletteFromSeed(`${id}|${nextCachedMeta.anime.name || ""}`), ready: false }
+        );
+      } else {
+        animeRef.current = null;
+        animeStatusRef.current = null;
+        setAnime(null);
+        setSettledMetaId(null);
+        setIsLoading(true);
+        setEpisodes([]);
+        setSettledEpisodesId(null);
+        setEpisodesLoading(true);
+        setSeasonOverview(null);
+        setFranchiseNodes([]);
+        franchiseNodesRef.current = [];
+        setCurrentSeasonId(id);
+        setPaletteState(
+          nextPalette
+            ? { id, palette: nextPalette, ready: true }
+            : { id, palette: buildPaletteFromSeed(String(id)), ready: false }
+        );
+      }
     }
 
     let cancelled = false;
     const abortController = new AbortController();
 
     const run = async () => {
-      // 1) Fetch authoritative meta (fetchJson cache is warmed on card hover).
       const META_KEY = animeMetaCacheKey(id);
+      let cachedMeta = readCachedAnimeMeta(id, initialForRoute);
+      const cachedSeasonEps = cachedMeta?.anime
+        ? readCachedSeasonEpisodes(id, cachedMeta.openedSeasonId)
+        : null;
+      const inFlightPreload = getInFlightAnimePreload(id);
+
+      const hasReadyPaletteNow = Boolean(
+        getCachedCoverPalette(id) || cachedMeta?.anime?.coverColor
+      );
+      const earlyColorPromise =
+        !hasReadyPaletteNow && /^\d+$/.test(String(id))
+          ? fetchAniListCoverColor(id).catch(() => null)
+          : Promise.resolve(null);
+
+      // If card hover/press preload is still warming meta/episodes, wait briefly so we reuse its results.
+      if (inFlightPreload && (!cachedMeta?.anime || !cachedSeasonEps?.episodes?.length)) {
+        await Promise.race([
+          inFlightPreload.catch(() => {}),
+          new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+        ]);
+        if (cancelled) return;
+        cachedMeta = readCachedAnimeMeta(id, initialForRoute) || cachedMeta;
+      }
+
       let metaData: any = null;
-      try {
-        const cached = sessionStorage.getItem(META_KEY);
-        if (cached) {
-          const p = JSON.parse(cached);
-          if (p?.success && p?.data?.anime && p._cachedAt) {
-            const age = Date.now() - p._cachedAt;
-            const maxAge = (p.data.anime?.status || "").toUpperCase().includes("RELEASING") ? 2 * 60 * 1000 : 5 * 60 * 1000;
-            if (age < maxAge) metaData = p;
-          } else sessionStorage.removeItem(META_KEY);
-        }
-      } catch {}
+      if (cachedMeta?.anime) {
+        metaData = {
+          success: true,
+          data: {
+            anime: cachedMeta.anime,
+            franchiseNodes: cachedMeta.franchiseNodes,
+            openedSeasonId: cachedMeta.openedSeasonId,
+            tmdbSeasonMap: cachedMeta.tmdbSeasonMap,
+          },
+        };
+      }
 
       if (!metaData) {
         try {
-          metaData = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; tmdbSeasonMap?: Record<string, number> } }>(
+          metaData = await fetchJson<{ success: boolean; data: { anime: AnimeDetail; franchiseNodes?: FranchiseNode[]; openedSeasonId?: string; tmdbSeasonMap?: Record<string, number> } }>(
             animeMetaUrl(id),
             { signal: abortController.signal }
           );
@@ -1420,7 +1625,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             safeSessionSet(META_KEY, JSON.stringify({ ...metaData, _cachedAt: Date.now() }));
           }
         } catch {
-          // Try direct anime API as fallback
           try {
             const direct = await fetchJson<{ success: boolean; data: AnimeDetail }>(`/api/anime/${id}`, { signal: abortController.signal });
             if (direct?.success && direct.data) metaData = { success: true, data: { anime: direct.data } };
@@ -1428,7 +1632,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       }
 
-      // 2) Direct residential browser fallback when server edge APIs fail or are blocked
+      // Direct residential browser fallback when server edge APIs fail or are blocked
       if (!metaData?.success || !metaData?.data?.anime) {
         try {
           const directFallback = await clientFetchAnimeFallback(id, abortController.signal);
@@ -1452,8 +1656,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       if (!metaData?.success || !metaData?.data?.anime) {
         setError("Anime not found");
+        setSettledMetaId(id);
+        setSettledEpisodesId(id);
         setIsLoading(false);
         setEpisodesLoading(false);
+        setPaletteState((prev) =>
+          prev.id === id && prev.ready ? prev : { id, palette: buildPaletteFromSeed(String(id)), ready: true }
+        );
         return;
       }
 
@@ -1461,14 +1670,16 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       if (!a.logoUrl && effectiveLogo) a.logoUrl = effectiveLogo;
       animeStatusRef.current = a.status || null;
 
-      // Update the ref before any async episode work so loadSeasonEpisodes reads
-      // the same complete meta that is about to render.
       animeRef.current = a;
       setAnime(a);
+      setSettledMetaId(id);
       setIsLoading(false);
 
-      // Update franchise nodes if available
-      const newNodes = metaData.data.franchiseNodes;
+      const cachedNodes = FRANCHISE_CACHE.get(String(id));
+      const newNodes =
+        metaData.data.franchiseNodes?.length > 1
+          ? metaData.data.franchiseNodes
+          : (cachedNodes && cachedNodes.length > 1 ? cachedNodes : []);
       if (newNodes?.length > 1) {
         franchiseNodesRef.current = newNodes;
         setFranchiseNodes(newNodes);
@@ -1478,71 +1689,62 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         }
       }
 
-      // 3) Determine which season to load and load episodes ONCE
-      const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-      const urlSeasonId = urlParams.get("seasonId");
-      const urlSeasonNum = Number(urlParams.get("season") || "");
-      const availableSeasons = a.seasons || [];
-      const tmdbSeasonMap = metaData.data.tmdbSeasonMap || {};
-
-      const isExplicitRouteNode = availableSeasons.some((s: SeasonInfo) => String(s.id) === String(id));
-      const defaultSeasonId = isExplicitRouteNode ? String(id) : (metaData.data.openedSeasonId || a.openedSeasonId || (availableSeasons.find((s: SeasonInfo) => s.isCurrent)?.id) || a.id || id);
-      let targetSeasonId = defaultSeasonId;
-      let effectiveSeasonNum = urlSeasonNum;
-
-      if (!urlSeasonId && !isExplicitRouteNode && effectiveSeasonNum <= 0 && typeof window !== "undefined") {
-        try {
-          const act = localStorage.getItem("cinestream_active_anime_show");
-          if (act) {
-            const p = JSON.parse(act);
-            if (p?.season && Number(p.season) > 1 && isAnimeMatching(p?.id || p?.mediaId, p?.title)) {
-              effectiveSeasonNum = Number(p.season);
-            }
-          }
-          if (effectiveSeasonNum <= 0) {
-            const cw = localStorage.getItem("cinestream_cw_cache");
-            if (cw) {
-              const p = JSON.parse(cw);
-              const found = (p?.items || []).find((it: any) => it.mediaType === "anime" && isAnimeMatching(it.mediaId, it.title));
-              if (found?.season && Number(found.season) > 1) {
-                effectiveSeasonNum = Number(found.season);
-              }
-            }
-          }
-        } catch {}
-      }
-
-      if (urlSeasonId) {
-        const found = availableSeasons.find((s: SeasonInfo) => String(s.id) === String(urlSeasonId));
-        if (found) targetSeasonId = found.id;
-        else targetSeasonId = urlSeasonId;
-      } else if (!isExplicitRouteNode && effectiveSeasonNum > 0) {
-        // Strictly filter to TV series seasons only — NEVER match specials, OVAs or movies
-        const tvOnlySeasons = availableSeasons.filter((s: SeasonInfo) => {
-          const lbl = (s.seasonLabel || "").toLowerCase();
-          return !lbl.includes("special") && !lbl.includes("ova") && !lbl.includes("movie");
-        });
-        const entry = Object.entries(tmdbSeasonMap).find(([, num]) => num === effectiveSeasonNum);
-        if (entry) {
-          const found = tvOnlySeasons.find((s: SeasonInfo) => String(s.id) === String(entry[0]));
-          if (found) targetSeasonId = found.id;
-        } else {
-          const byLabel = tvOnlySeasons.find((s: SeasonInfo) => {
-            const sNum = s.tmdbSeasonNumber || (s.seasonLabel?.match(/season\s*(\d+)/i) ? parseInt(RegExp.$1, 10) : null);
-            return sNum === effectiveSeasonNum;
-          });
-          if (byLabel) targetSeasonId = byLabel.id;
-        }
-      }
-
+      const targetSeasonId = resolveTargetSeasonIdForAnime(
+        id,
+        a,
+        metaData.data.openedSeasonId,
+        metaData.data.tmdbSeasonMap,
+        newNodes
+      );
       if (!cancelled) setCurrentSeasonId(targetSeasonId);
 
+      const availableSeasons = a.seasons || [];
+      const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+      const urlSeasonId = urlParams.get("seasonId");
       const targetSeason =
         availableSeasons.find((s: SeasonInfo) => String(s.id) === String(targetSeasonId)) ||
         (!urlSeasonId ? (availableSeasons.find((s: SeasonInfo) => s.isCurrent) || availableSeasons[0]) : undefined);
-      await loadSeasonEpisodes(
+
+      // Resolve cover palette in parallel with initial episodes, capped so slow artwork never stalls reveal.
+      const posterForPalette = (targetSeason as any)?.coverImage || a.poster || "";
+      const paletteSeed = `${a.id || id}|${a.name || ""}`;
+      const fallbackSeedPalette = buildPaletteFromSeed(paletteSeed);
+
+      const resolvePaletteTask = async (): Promise<CoverPalette> => {
+        const cached = getCachedCoverPalette(id);
+        if (cached) return cached;
+        if (a.coverColor) {
+          const fromMeta = buildPaletteFromColor(a.coverColor);
+          if (fromMeta) {
+            setCachedCoverPalette(id, fromMeta);
+            return fromMeta;
+          }
+        }
+        const earlyHex = await earlyColorPromise;
+        return resolveAnimeCoverPalette({
+          id,
+          coverColor: earlyHex || null,
+          posterUrl: posterForPalette,
+          seed: paletteSeed,
+        });
+      };
+
+      const palettePromise = Promise.race([
+        resolvePaletteTask(),
+        new Promise<CoverPalette>((resolve) =>
+          setTimeout(() => resolve(fallbackSeedPalette), PALETTE_TIMEOUT_MS)
+        ),
+      ]).then((resolved) => {
+        if (!cancelled) {
+          setPaletteState((prev) =>
+            prev.id === id && prev.ready ? prev : { id, palette: resolved, ready: true }
+          );
+        }
+      });
+
+      const episodesPromise = loadSeasonEpisodes(
         targetSeason?.id || targetSeasonId,
-        true,
+        false,
         {
           tmdbId: targetSeason?.tmdbId,
           tmdbSeason: targetSeason?.tmdbSeasonNumber,
@@ -1553,13 +1755,20 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           isUnavailable: Boolean((a as any).isUnavailable),
         }
       );
+
+      await Promise.all([episodesPromise, palettePromise]);
     };
 
-    run().catch(e => {
+    run().catch((e) => {
       if (!cancelled) {
         setError(e instanceof Error ? e.message : "Failed to load anime");
+        setSettledMetaId(id);
+        setSettledEpisodesId(id);
         setIsLoading(false);
         setEpisodesLoading(false);
+        setPaletteState((prev) =>
+          prev.id === id && prev.ready ? prev : { id, palette: buildPaletteFromSeed(String(id)), ready: true }
+        );
       }
     });
 
@@ -1713,12 +1922,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const sId = String(season.id);
     if (sId === String(currentSeasonId)) return;
     setCurrentSeasonId(sId);
-    setEpisodesLoading(true);
     setIsPlaying(false);
     setSelectedEp(null);
     setEpisodeNotice(null);
     setSeasonOverview(null);
-    loadSeasonEpisodes(sId, true, {
+    loadSeasonEpisodes(sId, false, {
       tmdbId: (season as any).tmdbId,
       tmdbSeason: (season as any).tmdbSeasonNumber,
       episodeOffset: (season as any).episodeOffset,
@@ -1874,11 +2082,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
             <div className="min-h-screen w-full flex items-center justify-center">
               <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-[#7288AE] animate-spin" />
             </div>
-          ) : (error || !anime || (anime as any)?.isHidden) ? (
+          ) : (effectiveError || !anime || (anime as any)?.isHidden) ? (
             <div className="px-5 md:px-12 max-w-screen-2xl mx-auto pt-16">
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl max-w-lg mx-auto space-y-3">
                 <div className="text-xl font-bold text-white mb-2">Title Unavailable</div>
-                <div className="text-sm text-white/50 mb-4">{error || "This anime is currently not available to view. Please check back later or explore other anime."}</div>
+                <div className="text-sm text-white/50 mb-4">{effectiveError || "This anime is currently not available to view. Please check back later or explore other anime."}</div>
                 <Link href="/anime" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4B5694] hover:bg-[#5a67ad] text-white rounded-xl text-sm font-bold transition-all">
                   <ArrowLeft className="w-4 h-4" /> Back to Anime
                 </Link>
