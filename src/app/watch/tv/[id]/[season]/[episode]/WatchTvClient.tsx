@@ -12,6 +12,7 @@ import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceTag, type SourceConfig
 import { fetchJson } from "@/lib/utils";
 import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
 import { declarePageReady } from "@/lib/pageLoad";
+import { markEpisodesWatchedUpTo } from "@/lib/user-settings";
 
 interface Episode {
   id: number;
@@ -348,6 +349,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
       const filtered = items.filter((it) => !(it.mediaId === (show.id || showId) && it.mediaType === "tv"));
       filtered.unshift(updatedItem);
       localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+      window.dispatchEvent(new Event("cinestream_watch_history_updated"));
 
       // Also update active tv tracker for the details page
       localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
@@ -355,6 +357,7 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
         season: seasonNumber,
         episode: episodeNumber,
       }));
+      markEpisodesWatchedUpTo("tv", show.id || showId, episodeNumber, seasonNumber);
     } catch {}
   }, [show, showId, seasonNumber, episodeNumber, currentEpisodeData?.name]);
 
@@ -382,12 +385,14 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
           const filtered = items.filter((it) => !(it.mediaId === (show.id || showId) && it.mediaType === "tv"));
           filtered.unshift(updatedItem);
           localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+          window.dispatchEvent(new Event("cinestream_watch_history_updated"));
 
           localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
             id: String(show.id || showId),
             season: newSeason,
             episode: newEpisode,
           }));
+          markEpisodesWatchedUpTo("tv", show.id || showId, newEpisode, newSeason);
         } catch {}
       }
       const sourceIndex = sources.findIndex((s) => s.type === activeSource.type);

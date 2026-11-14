@@ -16,6 +16,7 @@ export interface DrawerEpisode {
   runtime?: number;
   vote_average?: number;
   isFiller?: boolean;
+  isReleased?: boolean;
 }
 
 export interface DrawerSeason {
@@ -173,6 +174,7 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
 
   const isEpisodeUpcomingFn = useCallback((ep: DrawerEpisode, allEpisodes: DrawerEpisode[]): boolean => {
     if (!ep) return false;
+    if (ep.isReleased === false) return true;
     if (ep.air_date && isEpisodeUpcoming(ep.air_date)) return true;
 
     const epNum = Number(ep.episode_number);
@@ -180,21 +182,21 @@ export const EpisodeDrawer = memo(function EpisodeDrawer({
     if (idx > 0) {
       for (let i = 0; i < idx; i++) {
         const prev = allEpisodes[i];
-        if (prev?.air_date && isEpisodeUpcoming(prev.air_date)) {
+        if (prev?.isReleased === false || (prev?.air_date && isEpisodeUpcoming(prev.air_date))) {
           return true;
         }
       }
     }
 
-    if (!ep.air_date && !ep.still_path) {
-      const hasUpcomingInSeason = allEpisodes.some(
-        (e) => e.air_date && isEpisodeUpcoming(e.air_date) && Number(e.episode_number) <= epNum
-      );
-      if (hasUpcomingInSeason) return true;
+    if (!ep.air_date) {
+      // If other episodes in this season have air_date values, an episode missing air_date is unscheduled/unreleased
+      const seasonHasAirDates = allEpisodes.some((e) => Boolean(e.air_date));
+      if (seasonHasAirDates && !ep.still_path) return true;
+      if (!isAnime && !ep.still_path && !ep.runtime) return true;
     }
 
     return false;
-  }, []);
+  }, [isAnime]);
 
   const nextEpisodeInfo = useMemo(() => {
     if (!seasons || seasons.length === 0) return null;

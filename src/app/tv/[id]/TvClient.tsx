@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { MediaRow } from "@/components/MediaRow";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
-import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film, Layers } from "lucide-react";
+import { Play, Star, Calendar, CheckCircle2, Loader2, Users, Film, Layers, RotateCcw } from "lucide-react";
 import { CinematicHero, useCinematicHero } from "@/components/CinematicHero";
 
 
@@ -28,7 +28,7 @@ function TvHeroTrailerButton() {
   );
 }
 import { GridMediaCard } from "@/components/GridMediaCard";
-import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeChunkBar, EpisodePagination, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
+import { EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodeChunkBar, EpisodePagination, type EpisodeItem } from "@/components/episodes/EpisodeViews";
 import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { format } from "date-fns";
@@ -36,6 +36,7 @@ import { CastRow } from "@/components/CastRow";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { useTheme } from "@/context/ThemeContext";
+import { useSiteSettings, useWatchedEpisodes } from "@/lib/user-settings";
 
 const TV_CHUNK_SIZE = 10;
 
@@ -122,7 +123,15 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
   const [hasActiveProgress, setHasActiveProgress] = useState(false);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
-  const [tvViewMode, setTvViewMode] = useState<EpisodeViewMode>("list");
+  const { settings: siteSettings } = useSiteSettings();
+  const tvViewMode = siteSettings.episodeViewMode;
+  const {
+    watchedSet,
+    hasWatchedAny,
+    wasReset,
+    markWatchedUpTo,
+    resetWatched,
+  } = useWatchedEpisodes("tv", id, selectedSeason);
   const activeLogo = useMemo(() => {
     const logos = (show as any)?.images?.logos;
     if (!logos || !Array.isArray(logos) || logos.length === 0) return null;
@@ -168,8 +177,34 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
 
   const [gridEpisodePage, setGridEpisodePage] = useState(1);
 
-  const handleTvViewChange = (view: EpisodeViewMode) => {
-    setTvViewMode(view);
+  // Sync existing active progress into watched episodes unless the user explicitly reset it
+  useEffect(() => {
+    if (
+      hasActiveProgress &&
+      Number(playingSeason) === Number(selectedSeason) &&
+      playingEpisode > 0 &&
+      !wasReset &&
+      !hasWatchedAny
+    ) {
+      markWatchedUpTo(playingEpisode, selectedSeason);
+    }
+  }, [hasActiveProgress, playingSeason, selectedSeason, playingEpisode, wasReset, hasWatchedAny, markWatchedUpTo]);
+
+  const handleResetWatched = () => {
+    resetWatched(false);
+    if (Number(playingSeason) === Number(selectedSeason)) {
+      setHasActiveProgress(false);
+      setPlayingEpisode(1);
+      try {
+        const raw = localStorage.getItem("cinestream_active_tv_show");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (String(parsed?.id) === String(id) && Number(parsed?.season) === Number(selectedSeason)) {
+            localStorage.removeItem("cinestream_active_tv_show");
+          }
+        }
+      } catch {}
+    }
   };
 
   useEffect(() => {
@@ -499,16 +534,19 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
     setPlayingSeason(season);
     setPlayingEpisode(episodeNumber);
     setHasActiveProgress(true);
+    markWatchedUpTo(episodeNumber, season);
 
-    if (status === "authenticated" && show) {
+    if (show) {
       const actualPoster = season === selectedSeason && seasonData?.poster_path 
         ? seasonData.poster_path 
         : show.poster_path;
 
-      fetch("/api/watch-history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      try {
+        const saved = localStorage.getItem("cinestream_cw_cache");
+        const parsed = saved ? JSON.parse(saved) : { items: [] };
+        const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+        const updatedItem = {
+          id: show.id,
           mediaId: show.id,
           mediaType: "tv",
           title: show.name,
@@ -516,9 +554,31 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
           backdropPath: show.backdrop_path ?? null,
           season,
           episode: episodeNumber,
-          episodeName: episodeName ?? null,
-        }),
-      }).catch(() => {});
+          episodeName: episodeName ?? `Episode ${episodeNumber}`,
+          watchedAt: new Date().toISOString(),
+        };
+        const filtered = items.filter((it) => !(it.mediaId === show.id && it.mediaType === "tv"));
+        filtered.unshift(updatedItem);
+        localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+        window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+      } catch {}
+
+      if (status === "authenticated") {
+        fetch("/api/watch-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mediaId: show.id,
+            mediaType: "tv",
+            title: show.name,
+            posterPath: actualPoster ?? null,
+            backdropPath: show.backdrop_path ?? null,
+            season,
+            episode: episodeNumber,
+            episodeName: episodeName ?? null,
+          }),
+        }).catch(() => {});
+      }
     }
 
     router.push(`/watch/tv/${id}/${season}/${episodeNumber}`);
@@ -575,6 +635,7 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
   const episodeToItem = (episode: Episode): EpisodeItem => {
     const isWatching = hasActiveProgress && Number(playingSeason) === Number(selectedSeason) && Number(playingEpisode) === Number(episode.episode_number);
     const isUpcoming = isUpcomingEpisode(episode);
+    const isEpWatched = !isUpcoming && watchedSet.has(Number(episode.episode_number));
     return {
       key: String(episode.id),
       number: episode.episode_number,
@@ -589,6 +650,7 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
       isReleased: !isUpcoming,
       isSelected: isWatching,
       isPlaying: false,
+      isWatched: isEpWatched,
       portrait: false,
       onClick: () => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name),
     };
@@ -764,8 +826,16 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              {seasonData?.episodes && seasonData.episodes.length > 0 && (
-                <EpisodeViewSelector mode={tvViewMode} onChange={handleTvViewChange} views={["list", "grid"]} />
+              {(hasWatchedAny || (hasActiveProgress && Number(playingSeason) === Number(selectedSeason))) && (
+                <button
+                  type="button"
+                  onClick={handleResetWatched}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-rose-500/15 text-white/75 hover:text-rose-300 border border-white/10 hover:border-rose-500/30 text-xs font-extrabold transition-all cursor-pointer active:scale-95"
+                  title="Reset watched episodes for this season"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset Watched</span>
+                </button>
               )}
 
               {seasons.length > 0 && (
@@ -795,6 +865,20 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
             {!seasonLoading && seasonData && (() => {
               const allEpisodes = seasonData.episodes || [];
               const totalEpisodes = allEpisodes.length;
+
+              if (tvViewMode === "numbers") {
+                return (
+                  <div key={`numbers-${selectedSeason}`}>
+                    {allEpisodes.length > 0 ? (
+                      <EpisodeNumbersView items={allEpisodes.map(episodeToItem)} />
+                    ) : (
+                      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-white/40">
+                        No episodes available for this season.
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               if (tvViewMode === "grid") {
                 const gridPageSize = totalEpisodes > 500 ? 50 : 25;

@@ -15,6 +15,7 @@ import { MediaRow } from "@/components/MediaRow";
 import { AnimeRow } from "@/components/AnimeRow";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { ContinueWatching } from "@/components/ContinueWatching";
+import { BecauseYouWatchedRow } from "@/components/BecauseYouWatchedRow";
 import { Sidebar } from "@/components/Sidebar";
 import { TrendingProvidersHub } from "@/components/TrendingProvidersHub";
 import { FRANCHISES } from "@/lib/franchises";
@@ -1614,7 +1615,8 @@ export default function Home() {
             />
           </LazySection>
 
-
+          {/* ─── BECAUSE YOU WATCHED (MIXED MOVIES & TV) ─── */}
+          <BecauseYouWatchedRow />
 
           {/* ─── 2. ALL-TIME POPULAR MOVIES ─── */}
           <LazySection show={revealedSections >= 2} placeholderHeight={360}>

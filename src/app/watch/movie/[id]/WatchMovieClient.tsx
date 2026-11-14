@@ -174,20 +174,22 @@ export default function WatchMovieClient({ movieId }: { movieId: number }) {
         }
 
         // Record watch history
-        if (session?.user && activeMovie) {
-          fetch("/api/watch-history", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mediaId: activeMovie.id,
-              mediaType: "movie",
-              title: activeMovie.title,
-              posterPath: activeMovie.poster_path ?? null,
-              backdropPath: activeMovie.backdrop_path ?? null,
-            }),
-          }).catch(() => {});
+        if (activeMovie) {
+          if (session?.user) {
+            fetch("/api/watch-history", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mediaId: activeMovie.id,
+                mediaType: "movie",
+                title: activeMovie.title,
+                posterPath: activeMovie.poster_path ?? null,
+                backdropPath: activeMovie.backdrop_path ?? null,
+              }),
+            }).catch(() => {});
+          }
 
-          // Optimistically update localStorage cache for Continue Watching with 0ms delay
+          // Optimistically update localStorage cache for Continue Watching & Because You Watched
           try {
             const saved = localStorage.getItem("cinestream_cw_cache");
             const parsed = saved ? JSON.parse(saved) : { items: [] };

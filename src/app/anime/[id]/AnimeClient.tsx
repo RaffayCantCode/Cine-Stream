@@ -26,7 +26,8 @@ import { ANIME_API_VERSION, animeEpisodesCacheKey, animeMetaCacheKey, animeMetaU
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
 import { AnimeSeasonSelector, type FranchiseNodeItem } from "@/components/AnimeSeasonSelector";
-import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, Film, CalendarDays, ListVideo, Radio, Clock, Tv, X, Building2, Sparkles } from "lucide-react";
+import { Star, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Play, Film, CalendarDays, ListVideo, Radio, Clock, Tv, X, Building2, Sparkles, RotateCcw } from "lucide-react";
+import { useSiteSettings, useWatchedEpisodes } from "@/lib/user-settings";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -631,7 +632,15 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   const [seasonOverview, setSeasonOverview] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
-  const [episodeView, setEpisodeView] = useState<EpisodeViewMode>("grid");
+  const { settings: siteSettings } = useSiteSettings();
+  const episodeView: EpisodeViewMode = siteSettings.episodeViewMode;
+  const activeSeasonWatchedId = String(currentSeasonId || anime?.id || id);
+  const {
+    isWatched: isEpisodeMarkedWatched,
+    hasWatchedAny,
+    markWatchedUpTo,
+    resetWatched,
+  } = useWatchedEpisodes("anime", activeSeasonWatchedId, 1);
   const [episodePage, setEpisodePage] = useState(1);
   const [listChunkIndex, setListChunkIndex] = useState(0);
   const [coverPalette, setCoverPalette] = useState<CoverPalette>(DEFAULT_COVER_PALETTE);
@@ -1739,6 +1748,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setPlayingEpisode(ep.episodeNum);
     setHasActiveProgress(true);
     setSelectedEp(ep);
+    if (siteSettings.autoMarkPreviousWatched !== false) {
+      markWatchedUpTo(ep.episodeNum);
+    }
     try {
       localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
         id: String(anime?.id || id),
@@ -1759,21 +1771,24 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       }
     } catch {}
     router.push(`/watch/anime/${target}/${ep.episodeNum}${seasonQuery}`);
-  }, [anime, currentSeasonId, currentSeasonNumber, displayTitle, id, router]);
-
-  const handleViewChange = useCallback((view: EpisodeViewMode) => setEpisodeView(view), []);
+  }, [anime, currentSeasonId, currentSeasonNumber, displayTitle, id, markWatchedUpTo, router, siteSettings.autoMarkPreviousWatched]);
 
   // ── Episode list conversion ───────────────────────────────────────────────
   const episodeToItem = useCallback((ep: Episode): EpisodeItem => {
     const unreleased = ep.isReleased === false;
     const backdropFallback = (anime as any)?.bannerImage || initialData?.bannerImage || displayPoster || null;
     const thumbSrc = unreleased ? (ep.thumbnail || null) : (ep.thumbnail || (isSingleItem && displayPoster) || backdropFallback);
+    const isSameSeason = Number(playingSeason) === Number(currentSeasonNumber) || !playingSeason;
     const isWatching = Boolean(
       hasActiveProgress &&
-      (Number(playingSeason) === Number(currentSeasonNumber) || !playingSeason) &&
+      isSameSeason &&
       Number(playingEpisode) === Number(ep.episodeNum)
     );
-    const isSelected = isWatching || (Boolean(selectedEp) && (selectedEp?.episodeId === ep.episodeId || Number(selectedEp?.episodeNum) === Number(ep.episodeNum)) && Number(playingSeason) === Number(currentSeasonNumber));
+    const isSelected = isWatching || (Boolean(selectedEp) && (selectedEp?.episodeId === ep.episodeId || Number(selectedEp?.episodeNum) === Number(ep.episodeNum)) && isSameSeason);
+    const isWatched = !unreleased && (
+      isEpisodeMarkedWatched(ep.episodeNum) ||
+      Boolean(hasActiveProgress && isSameSeason && Number(playingEpisode) >= Number(ep.episodeNum))
+    );
     return {
       key: `${currentSeasonId}-${ep.episodeNum}-${ep.episodeId || "ep"}`,
       number: ep.episodeNum,
@@ -1788,10 +1803,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       isReleased: ep.isReleased !== false,
       isSelected,
       isPlaying: isPlaying && isSelected,
+      isWatched,
       portrait: isSingleItem,
       onClick: () => handleWatchEpisode(ep),
     };
-  }, [anime, currentSeasonId, currentSeasonNumber, displayPoster, displayTitle, handleWatchEpisode, hasActiveProgress, isPlaying, isSingleItem, playingEpisode, playingSeason, selectedEp]);
+  }, [anime, currentSeasonId, currentSeasonNumber, displayPoster, displayTitle, handleWatchEpisode, hasActiveProgress, initialData?.bannerImage, isEpisodeMarkedWatched, isPlaying, isSingleItem, playingEpisode, playingSeason, selectedEp]);
 
   const episodeItems = useMemo(() => dedupedCurrentEps.map(episodeToItem), [dedupedCurrentEps, episodeToItem]);
 
@@ -2235,7 +2251,31 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     <h2 className="text-2xl font-black text-white tracking-tight">Episodes</h2>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap max-w-xl justify-end">
-                    {dedupedCurrentEps.length > 0 && <EpisodeViewSelector mode={episodeView} onChange={handleViewChange} views={["list", "grid", "numbers"]} />}
+                    {(hasWatchedAny || (hasActiveProgress && (Number(playingSeason) === Number(currentSeasonNumber) || !playingSeason) && Number(playingEpisode) > 0)) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetWatched();
+                          setHasActiveProgress(false);
+                          setPlayingEpisode(1);
+                          setSelectedEp(null);
+                          try {
+                            const raw = localStorage.getItem("cinestream_active_anime_show");
+                            if (raw) {
+                              const parsed = JSON.parse(raw);
+                              if (String(parsed?.id) === String(anime?.id || id)) {
+                                localStorage.removeItem("cinestream_active_anime_show");
+                              }
+                            }
+                          } catch {}
+                        }}
+                        title="Reset watched episode badges for this season"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.09] hover:border-white/20 text-xs font-semibold text-white/75 hover:text-white transition-all cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Reset Watched</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

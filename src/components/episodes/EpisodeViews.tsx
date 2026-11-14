@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, memo, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { List, LayoutGrid, Hash, Play, Lock, Star, Clock } from "lucide-react";
+import { List, LayoutGrid, Hash, Play, Lock, Star, Clock, Check } from "lucide-react";
 
 export type EpisodeViewMode = "list" | "grid" | "numbers";
 
@@ -20,6 +20,7 @@ export interface EpisodeItem {
   isReleased: boolean;
   isSelected?: boolean;
   isPlaying?: boolean;
+  isWatched?: boolean;
   portrait?: boolean;
   onClick: () => void;
 }
@@ -225,13 +226,18 @@ export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: E
           E{item.number}
         </div>
 
-        {/* Selected / Current pill badge on thumbnail */}
-        {item.isSelected && (
+        {/* Selected / Current / Watched pill badge on thumbnail */}
+        {item.isSelected ? (
           <div className="absolute top-2.5 left-2.5 z-20 px-2 py-0.5 rounded-md bg-emerald-500 text-black text-[9px] font-black uppercase tracking-wider shadow-lg flex items-center gap-1 border border-emerald-300">
             <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
             Current
           </div>
-        )}
+        ) : item.isWatched && !isUpcoming ? (
+          <div className="absolute top-2.5 left-2.5 z-20 px-2 py-0.5 rounded-md bg-sky-500/90 text-black text-[9px] font-black uppercase tracking-wider shadow-lg flex items-center gap-1 border border-sky-300">
+            <Check className="w-2.5 h-2.5 stroke-[3]" />
+            Watched
+          </div>
+        ) : null}
 
         {/* Runtime badge */}
         {item.runtime && item.runtime > 0 && (
@@ -274,13 +280,18 @@ export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: E
             )}
           </div>
 
-          {/* Selected / Playing pill */}
-          {item.isSelected && (
+          {/* Selected / Playing / Watched pill */}
+          {item.isSelected ? (
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500 text-black text-[10px] font-black tracking-wider uppercase shadow-lg shadow-emerald-500/30 border border-emerald-300">
               <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
               <span>{item.isPlaying ? "Playing" : "Current"}</span>
             </div>
-          )}
+          ) : item.isWatched && !isUpcoming ? (
+            <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 text-[10px] font-black tracking-wider uppercase border border-sky-400/30">
+              <Check className="w-3 h-3 stroke-[2.5]" />
+              <span>Watched</span>
+            </div>
+          ) : null}
         </div>
 
         {/* Full Plot Description across the row */}
@@ -379,13 +390,18 @@ export const EpisodeGridCard = memo(function EpisodeGridCard({ item }: { item: E
           </span>
         )}
 
-        {/* Selected / playing badge */}
-        {item.isSelected && (
+        {/* Selected / playing / watched badge */}
+        {item.isSelected ? (
           <div className="absolute top-2 right-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-500 text-black text-[9px] font-black tracking-wider uppercase shadow-xl border border-emerald-300">
             <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
             <span>{item.isPlaying ? "Playing" : "Current"}</span>
           </div>
-        )}
+        ) : item.isWatched && !isUpcoming ? (
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-500/90 text-black text-[9px] font-black tracking-wider uppercase shadow-xl border border-sky-300">
+            <Check className="w-2.5 h-2.5 stroke-[3]" />
+            <span>Watched</span>
+          </div>
+        ) : null}
 
         {/* Play overlay */}
         {!isUpcoming && (
@@ -592,17 +608,23 @@ export const EpisodeNumbersView = memo(function EpisodeNumbersView({ items }: { 
                   ? "bg-emerald-500 text-black font-black shadow-lg shadow-emerald-500/30 scale-105 ring-2 ring-emerald-300 z-10"
                   : isUpcoming
                   ? "bg-white/[0.03] text-white/20 border border-white/[0.05] cursor-not-allowed"
+                  : item.isWatched
+                  ? "bg-sky-500/20 text-sky-200 border border-sky-400/40 hover:bg-sky-500/30 hover:text-white"
                   : item.isFiller
                   ? "bg-white/[0.05] text-amber-300/90 border border-amber-400/25 hover:bg-amber-400/15 hover:text-amber-200 hover:border-amber-400/40"
                   : "bg-white/[0.06] text-white/70 border border-white/[0.07] hover:bg-white/[0.12] hover:text-white hover:border-white/20"
               )}
             >
               {item.number}
-              {item.isSelected && (
+              {item.isSelected ? (
                 <span className="absolute -top-1.5 -right-1.5 z-20 px-1 py-0.2 rounded-full bg-emerald-400 text-black text-[7px] font-black uppercase tracking-tight shadow-md border border-emerald-300">
                   Cur
                 </span>
-              )}
+              ) : item.isWatched && !isUpcoming ? (
+                <span className="absolute -top-1 -right-1 z-10 w-3.5 h-3.5 rounded-full bg-sky-400 text-black flex items-center justify-center shadow border border-sky-200">
+                  <Check className="w-2 h-2 stroke-[3.5]" />
+                </span>
+              ) : null}
               {isUpcoming ? (
                 <Lock className={cn("absolute text-white/35", config.lockIconClass)} />
               ) : item.isFiller && !item.isSelected ? (

@@ -14,16 +14,14 @@ import {
   LogIn, 
   LogOut, 
   Compass, 
-  Bug, 
   ShieldCheck, 
   Bookmark, 
-  Info,
+  Settings,
 } from "lucide-react";
 import { memo, useEffect, useState, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { ThemeButton } from "@/components/ThemeButton";
 import { useWatchlist } from "@/context/WatchlistContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getTheme } from "@/lib/themes";
@@ -315,29 +313,20 @@ export const Sidebar = memo(function Sidebar() {
                   )}
                 </Link>
 
-                {/* Themes Trigger */}
-                <div className="flex items-center px-1">
-                  <ThemeButton compact className="w-7 h-7 border-white/15 bg-white/5 hover:bg-white/15 rounded-full" />
-                </div>
-
-                {/* Info / Landing Page */}
+                {/* Settings Page */}
                 <Link
-                  href="/landing"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
-                  title="Landing Info Page"
+                  href="/settings"
+                  style={pathname === "/settings" ? themeNavStyles.activeLinkStyle : undefined}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all",
+                    pathname === "/settings"
+                      ? themeNavStyles.activeLink
+                      : "text-white/70 hover:text-white hover:bg-white/[0.08]"
+                  )}
+                  title="Site Settings"
                 >
-                  <Info className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Info</span>
-                </Link>
-
-                {/* Report Issue */}
-                <Link
-                  href="/contact"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
-                  title="Report Issue"
-                >
-                  <Bug className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Report</span>
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Settings</span>
                 </Link>
 
                 {/* Admin Panel Button if Admin or Owner */}
@@ -453,8 +442,6 @@ export const Sidebar = memo(function Sidebar() {
             )}
           </Link>
 
-          <ThemeButton compact className="w-8 h-8 rounded-xl border-white/10 bg-white/5" />
-
           {/* Mobile Account Button */}
           <button
             type="button"
@@ -515,20 +502,12 @@ export const Sidebar = memo(function Sidebar() {
               <span>Wishlist ({watchlistCount})</span>
             </Link>
             <Link
-              href="/landing"
+              href="/settings"
               onClick={() => setAccountOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-colors"
             >
-              <Info className="w-4 h-4 text-cyan-400" />
-              <span>Info</span>
-            </Link>
-            <Link
-              href="/contact"
-              onClick={() => setAccountOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              <Bug className="w-4 h-4 text-rose-400" />
-              <span>Report Issue</span>
+              <Settings className="w-4 h-4 text-primary" />
+              <span>Settings</span>
             </Link>
             {isAdmin && (
               <button

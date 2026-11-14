@@ -26,6 +26,7 @@ import { ServerOption } from "./ServerSelectorModal";
 import { SOURCE_TAG_LABELS, TAG_STYLES, type SourceTag } from "@/lib/streaming-config";
 import { DrawerSeason, DrawerEpisode } from "./EpisodeDrawer";
 import { useAmbientColor } from "@/hooks/useAmbientColor";
+import { getSiteSettings, useWatchedEpisodes } from "@/lib/user-settings";
 
 export interface CinemaPlayerMetadata {
   title: string;
@@ -499,6 +500,7 @@ export function CinemaPlayer({
   // Helper to check if an episode is upcoming/unreleased
   const isEpisodeUpcomingFn = useCallback((ep: DrawerEpisode, allEpisodes: DrawerEpisode[]): boolean => {
     if (!ep) return false;
+    if (ep.isReleased === false) return true;
     if (ep.air_date && isEpisodeUpcoming(ep.air_date)) return true;
 
     const epNum = Number(ep.episode_number);
@@ -506,21 +508,21 @@ export function CinemaPlayer({
     if (idx > 0) {
       for (let i = 0; i < idx; i++) {
         const prev = allEpisodes[i];
-        if (prev?.air_date && isEpisodeUpcoming(prev.air_date)) {
+        if (prev?.isReleased === false || (prev?.air_date && isEpisodeUpcoming(prev.air_date))) {
           return true;
         }
       }
     }
 
-    if (!ep.air_date && !ep.still_path) {
-      const hasUpcomingInSeason = allEpisodes.some(
-        (e) => e.air_date && isEpisodeUpcoming(e.air_date) && Number(e.episode_number) <= epNum
-      );
-      if (hasUpcomingInSeason) return true;
+    if (!ep.air_date) {
+      // If other episodes in this season have air_date values, an episode missing air_date is unscheduled/unreleased
+      const seasonHasAirDates = allEpisodes.some((e) => Boolean(e.air_date));
+      if (seasonHasAirDates && !ep.still_path) return true;
+      if (!isAnime && !ep.still_path && !ep.runtime) return true;
     }
 
     return false;
-  }, []);
+  }, [isAnime]);
 
   // Determine if there is a next episode available (and not upcoming)
   const nextEpisodeInfo = useMemo(() => {
@@ -617,6 +619,96 @@ export function CinemaPlayer({
 
     return null;
   }, [seasons, metadata.season, metadata.episode, isAnime, activeSeasonData]);
+
+  // ── Watched Episodes & Source 1 ("Next Episode") Sync ──
+  const resolvedMediaKey = useMemo(() => {
+    if (metadata.tmdbId) return String(metadata.tmdbId);
+    const parts = (metadata.backUrl || "").split("/").filter(Boolean);
+    return parts[parts.length - 1] || "";
+  }, [metadata.tmdbId, metadata.backUrl]);
+
+  const { watchedSet } = useWatchedEpisodes(
+    isAnime ? "anime" : "tv",
+    resolvedMediaKey,
+    selectedSeasonNum
+  );
+
+  const hasAdvancedRef = useRef(false);
+  const embedDurRef = useRef(0);
+  const [showUpNextPill, setShowUpNextPill] = useState(false);
+
+  useEffect(() => {
+    hasAdvancedRef.current = false;
+    embedDurRef.current = 0;
+    setShowUpNextPill(false);
+  }, [metadata.season, metadata.episode, activeServer.key, activeServer.type, reloadKey]);
+
+  useEffect(() => {
+    if (!nextEpisodeInfo || !onSelectEpisode) {
+      setShowUpNextPill(false);
+      return;
+    }
+
+    const advanceToNext = (force: boolean = false) => {
+      if (hasAdvancedRef.current) return;
+      if (!force && !getSiteSettings().autoNextEpisode) return;
+      hasAdvancedRef.current = true;
+      setShowUpNextPill(false);
+      onSelectEpisode(nextEpisodeInfo.season, nextEpisodeInfo.episode);
+    };
+
+    const handleIframeNext = () => {
+      // User clicked "Next episode" inside Source 1 or episode ended in source
+      advanceToNext(true);
+    };
+
+    const handlePlayerEvents = (e: MessageEvent) => {
+      if (!e.data) return;
+      let data = e.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (!data || typeof data !== "object") return;
+
+      if (data.source === "embedmaster_player") {
+        if (data.event === "duration" && typeof data.info === "number" && data.info > 0) {
+          embedDurRef.current = data.info;
+        } else if (data.event === "time" && typeof data.info === "number") {
+          const dur = embedDurRef.current;
+          const t = data.info;
+          if (dur > 180 && t >= Math.max(dur * 0.94, dur - 90)) {
+            setShowUpNextPill(true);
+          } else if (dur > 180 && t < dur - 120) {
+            setShowUpNextPill(false);
+          }
+        } else if (data.event === "ended") {
+          advanceToNext(false);
+        }
+        return;
+      }
+
+      const evtType = String(data.type || data.event || "");
+      if (
+        evtType === "video.ended" ||
+        evtType === "video.next" ||
+        evtType === "MEDIA_ENDED" ||
+        (data.type === "PLAYER_EVENT" && data.data?.event === "ended")
+      ) {
+        advanceToNext(evtType === "video.next");
+      }
+    };
+
+    window.addEventListener("cinestream:iframe-next-episode", handleIframeNext);
+    window.addEventListener("message", handlePlayerEvents);
+    return () => {
+      window.removeEventListener("cinestream:iframe-next-episode", handleIframeNext);
+      window.removeEventListener("message", handlePlayerEvents);
+    };
+  }, [nextEpisodeInfo, onSelectEpisode]);
 
   // Episode chunk ranges for large seasons (e.g. 50, 100, 1000+ anime episodes)
   const episodeRanges = useMemo(() => {
@@ -827,6 +919,29 @@ export function CinemaPlayer({
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-black/90 border border-white/20 backdrop-blur-md text-xs font-bold text-white flex items-center gap-2 shadow-2xl animate-fade-in pointer-events-none">
             <RotateCcw className="w-4 h-4 animate-spin text-primary" />
             <span>Reloading current source...</span>
+          </div>
+        )}
+
+        {/* Site-Side Floating "Next Episode" Pill (syncs Cine-Stream directly during end credits) */}
+        {showUpNextPill && nextEpisodeInfo && onSelectEpisode && (
+          <div className="absolute bottom-20 right-4 sm:bottom-24 sm:right-6 z-40 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-3 duration-200 pointer-events-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setShowUpNextPill(false);
+                onSelectEpisode(nextEpisodeInfo.season, nextEpisodeInfo.episode);
+              }}
+              className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 active:scale-95 text-primary-foreground font-black text-xs sm:text-sm shadow-[0_12px_32px_rgba(0,0,0,0.85)] border border-white/25 backdrop-blur-xl cursor-pointer group transition-all"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>
+                Next Episode{" "}
+                <span className="opacity-85 font-bold">
+                  ({isAnime ? `EP ${nextEpisodeInfo.episode}` : `S${nextEpisodeInfo.season}:E${nextEpisodeInfo.episode}`})
+                </span>
+              </span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </button>
           </div>
         )}
       </main>
@@ -1229,6 +1344,7 @@ export function CinemaPlayer({
                   ? Number(metadata.episode) === Number(ep.episode_number)
                   : Number(metadata.season || 1) === Number(selectedSeasonNum) && Number(metadata.episode) === Number(ep.episode_number);
                 const isUpcoming = isEpisodeUpcomingFn(ep, activeSeasonData?.episodes || []);
+                const isEpWatched = !isUpcoming && !isCurrentPlaying && watchedSet.has(Number(ep.episode_number));
                 const thumbUrl = ep.still_path
                   ? ep.still_path.startsWith("http")
                     ? ep.still_path
@@ -1253,6 +1369,8 @@ export function CinemaPlayer({
                         ? "bg-[#18181b]/50 border-white/5 opacity-60 cursor-not-allowed"
                         : isCurrentPlaying
                         ? "bg-emerald-950/40 border-emerald-500/80 ring-2 ring-emerald-500/60 shadow-xl shadow-emerald-500/20 cursor-pointer"
+                        : isEpWatched
+                        ? "bg-[#22262b]/80 border-sky-500/35 hover:border-sky-400/50 cursor-pointer"
                         : "bg-[#27272a]/70 border-white/10 hover:bg-[#27272a] hover:border-white/20 cursor-pointer"
                     }`}
                   >
@@ -1273,17 +1391,22 @@ export function CinemaPlayer({
                         </div>
                       )}
 
-                      {/* Pill Badge on Thumbnail (Current + Season/Ep) */}
+                      {/* Pill Badge on Thumbnail (Current + Watched + Season/Ep) */}
                       <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap max-w-[calc(100%-1rem)]">
                         <span className="px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md text-[10px] font-extrabold text-white uppercase tracking-wider border border-white/15 shadow">
                           {isAnime ? `EP ${ep.episode_number}` : `S${selectedSeasonNum}E${ep.episode_number}`}
                         </span>
-                        {isCurrentPlaying && (
+                        {isCurrentPlaying ? (
                           <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-black text-[9px] font-black uppercase tracking-wider shadow-md flex items-center gap-1 border border-emerald-400">
                             <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
                             Current
                           </span>
-                        )}
+                        ) : isEpWatched ? (
+                          <span className="px-2 py-0.5 rounded-md bg-sky-500/90 text-black text-[9px] font-black uppercase tracking-wider shadow-md flex items-center gap-1 border border-sky-300">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            Watched
+                          </span>
+                        ) : null}
                       </div>
 
                       {/* Filler Tag Badge */}

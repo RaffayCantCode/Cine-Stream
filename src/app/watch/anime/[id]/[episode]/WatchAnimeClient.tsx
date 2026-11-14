@@ -11,6 +11,8 @@ import { NativeHlsPlayer } from "@/components/player/NativeHlsPlayer";
 import { usePageContentReady, declarePageReady } from "@/lib/pageLoad";
 import { fetchSourceConfig, SOURCE_TAG_LABELS, type SourceConfigEntry, type SourceTag, type SourceCategory } from "@/lib/streaming-config";
 import type { SeasonInfo } from "@/lib/anime-fetch";
+import { markEpisodesWatchedUpTo } from "@/lib/user-settings";
+import { isEpisodeUpcoming } from "@/lib/episode-availability";
 
 function buildAnimeIframeUrl(
   provider: string,
@@ -492,6 +494,10 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         season: currentSeasonNum,
         episodeNum: episodeNumber,
       }));
+      markEpisodesWatchedUpTo("anime", String(animeId), episodeNumber, 1);
+      if (anime.id && String(anime.id) !== String(animeId)) {
+        markEpisodesWatchedUpTo("anime", String(anime.id), episodeNumber, currentSeasonNum);
+      }
     } catch {}
   }, [anime, animeId, episodeNumber, currentEpDetail?.title]);
 
@@ -531,6 +537,10 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
             season: currentSeasonNum,
             episodeNum: newEp,
           }));
+          markEpisodesWatchedUpTo("anime", String(animeId), newEp, 1);
+          if (anime.id && String(anime.id) !== String(animeId)) {
+            markEpisodesWatchedUpTo("anime", String(anime.id), newEp, currentSeasonNum);
+          }
         } catch {}
       }
       const serverIdx = servers.findIndex((s) => s.key === forcedSource);
@@ -540,11 +550,38 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
     [router, animeId, anime, forcedSource, servers]
   );
 
-  const handleAutoNext = useCallback(() => {
-    if (episodeNumber < totalEps) {
-      handleSelectEpisode(episodeNumber + 1);
+  const releasedEpisodeCount = useMemo(() => {
+    if (cappedEpisodes.length > 0) {
+      const released = cappedEpisodes.filter((ep) => ep.isReleased !== false);
+      return released.length;
     }
-  }, [episodeNumber, totalEps, handleSelectEpisode]);
+    if (anime?.episodes?.sub && anime.episodes.sub > 0) {
+      return anime.episodes.sub;
+    }
+    const statusStr = String(anime?.status || "").toLowerCase();
+    const isOngoing =
+      statusStr.includes("releasing") ||
+      statusStr.includes("ongoing") ||
+      statusStr.includes("airing");
+    if (isOngoing) {
+      return episodeNumber;
+    }
+    return totalEps;
+  }, [cappedEpisodes, anime?.episodes?.sub, anime?.status, episodeNumber, totalEps]);
+
+  const handleAutoNext = useCallback(() => {
+    const nextEpNum = episodeNumber + 1;
+    const nextEpObj = cappedEpisodes.find((e) => Number(e.episodeNum) === nextEpNum);
+    if (nextEpObj) {
+      if (nextEpObj.isReleased === false) return;
+      if (nextEpObj.releasedDate && isEpisodeUpcoming(nextEpObj.releasedDate)) return;
+      handleSelectEpisode(nextEpNum);
+      return;
+    }
+    if (episodeNumber < releasedEpisodeCount) {
+      handleSelectEpisode(nextEpNum);
+    }
+  }, [episodeNumber, cappedEpisodes, releasedEpisodeCount, handleSelectEpisode]);
 
   const metadata: CinemaPlayerMetadata = useMemo(() => {
     if (!anime) {
@@ -594,15 +631,17 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
               runtime: ep.runtime || undefined,
               vote_average: ep.vote_average || undefined,
               air_date: ep.releasedDate || undefined,
+              isReleased: ep.isReleased !== false,
             }))
           : Array.from({ length: totalEps }).map((_, idx) => ({
               id: idx + 1,
               episode_number: idx + 1,
               name: `Episode ${idx + 1}`,
+              isReleased: idx + 1 <= releasedEpisodeCount,
             })),
       },
     ];
-  }, [cappedEpisodes, totalEps]);
+  }, [cappedEpisodes, totalEps, releasedEpisodeCount]);
 
   const activeIframeUrl = useMemo(() => {
     return buildAnimeIframeUrl(

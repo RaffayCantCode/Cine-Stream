@@ -350,6 +350,74 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
     }
   }, [mediaType, useIframeFallback, onModeChange]);
 
+  // ── Track EmbedMaster / Iframe Playback State to Detect Internal "Next Episode" Clicks ──
+  const hasEmbedBootedRef = useRef(false);
+  const lastEmbedTimeRef = useRef(0);
+  const embedDurationRef = useRef(0);
+  const effectiveIframeUrl = liveIframeUrl || fallbackIframeUrl;
+
+  useEffect(() => {
+    hasEmbedBootedRef.current = false;
+    lastEmbedTimeRef.current = 0;
+    embedDurationRef.current = 0;
+  }, [effectiveIframeUrl, mediaId, season, episode, server]);
+
+  useEffect(() => {
+    if (!useIframeFallback || mediaType === "movie") return;
+
+    const handleEmbedMessage = (e: MessageEvent) => {
+      if (!e.data) return;
+      let data = e.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (!data || typeof data !== "object") return;
+
+      // Source 1 (EmbedMaster) emits { source: "embedmaster_player", event: "...", info: ... }
+      if (data.source === "embedmaster_player") {
+        const evt = String(data.event || "");
+        if (evt === "play" || evt === "duration") {
+          hasEmbedBootedRef.current = true;
+        }
+        if (evt === "duration" && typeof data.info === "number" && data.info > 0) {
+          embedDurationRef.current = data.info;
+        }
+        if (evt === "time" && typeof data.info === "number") {
+          const t = data.info;
+          if (t > 2) {
+            hasEmbedBootedRef.current = true;
+          }
+          // If the user was near the end of the episode and the iframe reset to 0 on a new episode
+          const prevT = lastEmbedTimeRef.current;
+          const dur = embedDurationRef.current;
+          if (
+            prevT > 120 &&
+            ((dur > 0 && prevT >= Math.max(dur * 0.85, dur - 180)) || prevT > 900) &&
+            t >= 0 &&
+            t < 10
+          ) {
+            lastEmbedTimeRef.current = 0;
+            window.dispatchEvent(new CustomEvent("cinestream:iframe-next-episode"));
+            if (onEnded) onEnded();
+            return;
+          }
+          lastEmbedTimeRef.current = t;
+        }
+        if (evt === "ended") {
+          window.dispatchEvent(new CustomEvent("cinestream:iframe-next-episode"));
+          if (onEnded) onEnded();
+        }
+      }
+    };
+
+    window.addEventListener("message", handleEmbedMessage);
+    return () => window.removeEventListener("message", handleEmbedMessage);
+  }, [useIframeFallback, mediaType, onEnded]);
+
   // ── Fallback Iframe Mode ──
   if (useIframeFallback && fallbackIframeUrl) {
     if (isAnimePlaySource && !isClickUnlocked) {
@@ -391,8 +459,6 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
       );
     }
 
-    const effectiveIframeUrl = liveIframeUrl || fallbackIframeUrl;
-
     return (
       <div
         className="absolute inset-0 w-full h-full bg-black flex items-center justify-center overflow-hidden"
@@ -409,6 +475,17 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
             referrerPolicy="no-referrer-when-downgrade"
             title={title || "Video Stream"}
             onLoad={(e) => {
+              // If the embedded player had already booted and been playing this episode,
+              // a subsequent top-level iframe load means the user clicked the source's
+              // internal "Next episode" button. Advance Cine-Stream to stay in sync.
+              if (mediaType !== "movie" && hasEmbedBootedRef.current && lastEmbedTimeRef.current > 30) {
+                hasEmbedBootedRef.current = false;
+                lastEmbedTimeRef.current = 0;
+                window.dispatchEvent(new CustomEvent("cinestream:iframe-next-episode"));
+                if (onEnded) onEnded();
+                return;
+              }
+
               const iframe = e.currentTarget;
               if (iframe?.contentWindow) {
                 const doc = typeof document !== "undefined" ? (document as any) : {};
