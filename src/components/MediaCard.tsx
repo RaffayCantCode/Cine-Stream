@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Star, Play, Film, Tv } from "lucide-react";
 import { isTmdbAnime, fetchJson } from "@/lib/utils";
 import { cacheMediaPreview } from "@/lib/media-preview-cache";
+import { preloadAnimePageData, cacheAnimePreview } from "@/lib/anime-cache";
 
 interface MediaItem {
   id: number;
@@ -34,7 +35,7 @@ const CARD_WRAPPER_STYLE: React.CSSProperties = {
   animation: "fade-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both",
 };
 
-export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = false }: MediaCardProps) {
+export const MediaCard = memo(function MediaCard({ item, index = 0, rank, priority, showMediaBadge = false }: MediaCardProps) {
   const router = useRouter();
   const isPerson = item.media_type === "person";
   const isManga = item.media_type === "manga" || item.media_type === "manhwa";
@@ -95,6 +96,11 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       // Warm the detail API too. The page and the API share tmdbFetch's cache,
       // so the click usually lands on data that is already in flight/cached.
       void fetchJson(`/api/tmdb/${previewType}/${item.id}`).catch(() => {});
+    } else if (link.startsWith("/anime/")) {
+      const animeTargetId = link.replace("/anime/", "").split("?")[0];
+      if (animeTargetId) {
+        preloadAnimePageData(animeTargetId, item);
+      }
     }
 
     router.prefetch(link);
@@ -134,7 +140,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
 
   // Network-adaptive fallback: If w500 takes more than 4s on slow internet, try lighter w342
   useEffect(() => {
-    if (isLoaded || hasError || !imgSrc) return;
+    if (isLoaded || hasError || !imgSrc || !imgSrc.includes("/w500/")) return;
     const timer = setTimeout(() => {
       if (!isLoaded && !hasError && imgSrc.includes("/w500/")) {
         setImgSrc((prev) => prev ? prev.replace("/w500/", "/w342/") : null);
@@ -191,7 +197,7 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               WebkitTextStroke: "1px rgba(255,255,255,0.2)",
-              filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.95)) drop-shadow(0 0 16px rgba(211,209,206,0.15))"
+              filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.85))"
             }}
           >
             {rank}
@@ -321,4 +327,4 @@ export function MediaCard({ item, index = 0, rank, priority, showMediaBadge = fa
       </Link>
     </div>
   );
-}
+});

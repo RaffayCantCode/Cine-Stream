@@ -852,6 +852,8 @@ export const FRANCHISES: FranchiseDefinition[] = [
       { id: 21450, media_type: "anime", anilist_id: 21450, title: "Diamond is Unbreakable (Part 4)", episodes: 39, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21450-D7XFwEQjZ5GA.jpg", tmdb_id: 45790, tmdb_season_number: 3, episode_offset: 0, release_date: "2016-04-02" },
       { id: 102883, media_type: "anime", anilist_id: 102883, title: "Golden Wind (Part 5)", episodes: 39, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx102883-S9KzdMJhDswJ.png", tmdb_id: 45790, tmdb_season_number: 4, episode_offset: 0, release_date: "2018-10-06" },
       { id: 131942, media_type: "anime", anilist_id: 131942, title: "Stone Ocean (Part 6)", episodes: 38, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131942-rermlZ9lplHX.png", tmdb_id: 45790, tmdb_season_number: 5, episode_offset: 0, release_date: "2021-12-01" },
+      { id: 190327, media_type: "anime", anilist_id: 190327, title: "Steel Ball Run - 1st STAGE (Part 7)", episodes: 1, poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx190327-cGC3efBM2e55.jpg", tmdb_id: 45790, tmdb_season_number: 6, episode_offset: 0, release_date: "2026-03-19" },
+      { id: 210482, media_type: "anime", anilist_id: 210482, title: "Steel Ball Run - 2nd & 3rd STAGE (Part 7)", episodes: 11, status: "RELEASING", poster_path: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx210482-eW9yabU2Y59K.jpg", tmdb_id: 45790, tmdb_season_number: 6, episode_offset: 1, release_date: "2026-09-25" },
     ]
   },
   {
@@ -913,7 +915,7 @@ const ANIME_FRANCHISE_ALIASES: Record<string, string[]> = {
   "bleach": ["bleach", "sennen kessen", "thousand-year blood war"],
   "pokemon": ["pokemon", "pokémon", "pocket monsters"],
   "fate-series": ["fate", "stay night", "unlimited blade works", "heaven's feel", "apocrypha", "grand order", "fate/zero"],
-  "jojo": ["jojo", "stardust crusaders", "diamond is unbreakable", "golden wind", "stone ocean", "phantom blood"],
+  "jojo": ["jojo", "stardust crusaders", "diamond is unbreakable", "golden wind", "stone ocean", "phantom blood", "steel ball run"],
 };
 
 export function getFranchiseAnimeItem(idOrTmdbId: number | string): FranchiseItem | null {

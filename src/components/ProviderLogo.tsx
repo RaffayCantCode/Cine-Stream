@@ -1,6 +1,6 @@
 "use client";
 
-import { SiNetflix, SiAppletv, SiMax, SiParamountplus } from "react-icons/si";
+import { SiNetflix, SiAppletv, SiParamountplus } from "react-icons/si";
 import { ProviderIcon } from "@/components/ProviderIcon";
 
 /**
@@ -54,7 +54,34 @@ export function ProviderLogo({ slug, name }: { slug: string; name: string }) {
     case "hulu":
       return <img src="/hulu-logo.svg" alt="Hulu" className="h-20 w-auto object-contain scale-110" />;
     case "hbo-max":
-      return <SiMax className="w-20 h-20 text-white" aria-label="Max" />;
+      return (
+        <svg viewBox="0 0 220 56" className="h-11 w-auto" fill="none" aria-label="HBO Max">
+          {/* H */}
+          <path d="M8 10H20V23H30V10H42V46H30V33H20V46H8V10Z" fill="white" />
+          {/* B */}
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M46 10H67C74.5 10 79 13.8 79 19.2C79 23.1 76.6 26.1 72.8 27.2C77.4 28.2 80.2 31.5 80.2 36.2C80.2 42.3 75.3 46 67.2 46H46V10ZM57.5 23.5H64.8C67.3 23.5 68.8 22.2 68.8 20.1C68.8 18 67.3 16.8 64.8 16.8H57.5V23.5ZM57.5 39.2H65.5C68.3 39.2 70 37.8 70 35.5C70 33.2 68.3 31.8 65.5 31.8H57.5V39.2Z"
+            fill="white"
+          />
+          {/* O with signature HBO bullseye */}
+          <circle cx="101" cy="28" r="18.5" stroke="white" strokeWidth="9" />
+          <circle cx="101" cy="28" r="6" fill="white" />
+          {/* max */}
+          <text
+            x="128"
+            y="43"
+            fill="white"
+            fontFamily="'Inter', 'Helvetica Neue', Arial, sans-serif"
+            fontWeight="900"
+            fontSize="38"
+            letterSpacing="-1.5"
+          >
+            max
+          </text>
+        </svg>
+      );
     case "paramount-plus":
       return (
         <div className="flex flex-col items-center text-white" aria-label="Paramount+">

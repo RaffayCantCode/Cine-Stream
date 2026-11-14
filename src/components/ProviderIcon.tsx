@@ -1,12 +1,11 @@
 "use client";
 
 import type { IconType } from "react-icons";
-import { SiNetflix, SiAppletv, SiMax, SiParamountplus } from "react-icons/si";
+import { SiNetflix, SiAppletv, SiParamountplus } from "react-icons/si";
 
 const LOCAL_ICONS: Record<string, IconType> = {
   "netflix": SiNetflix,
   "apple-tv-plus": SiAppletv,
-  "hbo-max": SiMax,
   "paramount-plus": SiParamountplus,
 };
 
@@ -65,7 +64,21 @@ export function ProviderIcon({ slug, className }: ProviderIconProps) {
     );
   }
 
-  // Prefer locally bundled icons (react-icons) so nothing depends on a CDN
+  if (slug === "hbo-max") {
+    return (
+      <svg viewBox="0 0 120 48" fill="none" className={className} aria-label="HBO Max">
+        <path d="M4 8H15V20H24V8H35V40H24V29H15V40H4V8Z" fill="white" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M39 8H58C64.8 8 69 11.4 69 16.2C69 19.8 66.8 22.4 63.4 23.4C67.5 24.3 70 27.2 70 31.4C70 36.8 65.5 40 58.2 40H39V8ZM49.5 20H56C58.2 20 59.6 18.9 59.6 17C59.6 15.1 58.2 14 56 14H49.5V20ZM49.5 34H56.6C59.1 34 60.6 32.8 60.6 30.7C60.6 28.6 59.1 27.4 56.6 27.4H49.5V34Z"
+          fill="white"
+        />
+        <circle cx="92" cy="24" r="14.5" stroke="white" strokeWidth="7.5" />
+        <circle cx="92" cy="24" r="4.8" fill="white" />
+      </svg>
+    );
+  }
   const LocalIcon = LOCAL_ICONS[slug];
   if (LocalIcon) {
     return <LocalIcon className={`text-white ${className || ""}`} aria-label={slug} />;

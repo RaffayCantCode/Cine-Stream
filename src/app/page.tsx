@@ -29,6 +29,22 @@ const INITIAL_COLLECTIONS = FRANCHISES.map(f => ({
   backdrop_path: f.backdrop_path,
 }));
 
+const TRENDING_ACCENT_ICON = <TrendingUp className="w-5 h-5 text-red-500" />;
+const STAR_ACCENT_ICON = <Star className="w-5 h-5 text-amber-400 fill-amber-400" />;
+
+const MOOD_CATEGORIES = [
+  { id: 'k-dramas',        name: 'K-Dramas',       color: '#C4006E', icon: '🌸', iconBg: '#E91E8C' },
+  { id: 'superhero',       name: 'Superheroes',    color: '#1565C0', icon: '⚡', iconBg: '#2979FF' },
+  { id: 'action-packed',   name: 'Adrenaline',     color: '#B74300', icon: '💥', iconBg: '#F4511E' },
+  { id: 'horror-thriller', name: 'Horror',         color: '#6A0000', icon: '👁️', iconBg: '#B71C1C' },
+  { id: 'sci-fi-fantasy',  name: 'Sci-Fi',         color: '#00607A', icon: '🛸', iconBg: '#0097A7' },
+  { id: 'rom-com',         name: 'Romance',        color: '#880037', icon: '💋', iconBg: '#E91E63' },
+  { id: 'fantasy-magic',   name: 'Fantasy',        color: '#1B5E20', icon: '🧙', iconBg: '#2E7D32' },
+  { id: 'feel-good-comedy',name: 'Comedy',         color: '#E65100', icon: '😂', iconBg: '#FF9800' },
+  { id: 'true-crime',      name: 'True Crime',     color: '#1A237E', icon: '🔪', iconBg: '#283593' },
+  { id: 'documentary',     name: 'Documentary',    color: '#4E342E', icon: '🎥', iconBg: '#6D4C41' },
+] as const;
+
 // Languages to exclude from home page (Indian content — most don't have working sources)
 const EXCLUDED_LANGS = new Set(["hi", "te", "ta", "ml", "kn", "bn", "mr", "gu", "pa", "ur"]);
 
@@ -1118,14 +1134,16 @@ export default function Home() {
                     if (d.backdropUrl) {
                       const bImg = new Image();
                       bImg.src = d.backdropUrl;
-                      // Update heroPool item so background and ambient glow immediately use the TMDB backdrop
-                      setHeroPool((prev) =>
-                        prev.map((item) =>
+                      // Update heroPool item only if backdrop_path actually changed
+                      setHeroPool((prev) => {
+                        const target = prev.find((item) => item.id === hItem.id);
+                        if (!target || target.backdrop_path === d.backdropUrl) return prev;
+                        return prev.map((item) =>
                           item.id === hItem.id
                             ? { ...item, backdrop_path: d.backdropUrl, poster_path: d.posterUrl || item.poster_path }
                             : item
-                        )
-                      );
+                        );
+                      });
                     }
                   }
                 })
@@ -1336,7 +1354,7 @@ export default function Home() {
     };
   }, [heroPool, timerReset]);
 
-  const activeBackdropUrl = hero?.backdrop_path
+  const rawActiveBackdropUrl = hero?.backdrop_path
     ? hero.backdrop_path.startsWith("http")
       ? hero.backdrop_path
       : `https://image.tmdb.org/t/p/w300${hero.backdrop_path}`
@@ -1344,6 +1362,9 @@ export default function Home() {
     ? hero.poster_path.startsWith("http")
       ? hero.poster_path
       : `https://image.tmdb.org/t/p/w342${hero.poster_path}`
+    : null;
+  const activeBackdropUrl = rawActiveBackdropUrl
+    ? rawActiveBackdropUrl.replace(/\/t\/p\/(original|w1280|w780)\//, "/t/p/w300/")
     : null;
 
   // Smooth ambient backdrop & color crossfading
@@ -1417,26 +1438,19 @@ export default function Home() {
   // ── Modular Progressive Hydration of Sections Below the Hero ─────────
   useEffect(() => {
     if (heroArtworkReady) {
-      const t1 = setTimeout(() => setRevealedSections(4), 50);
-      const t2 = setTimeout(() => setRevealedSections(6), 150);
-      const t3 = setTimeout(() => setRevealedSections(8), 300);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
+      const raf = requestAnimationFrame(() => setRevealedSections(8));
+      return () => cancelAnimationFrame(raf);
     }
   }, [heroArtworkReady]);
 
   return (
-    <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip transition-colors duration-500`}>
+    <div className={`relative min-h-screen ${pageBgClass} text-foreground pb-20 overflow-x-clip`}>
       {/* Ambient Hero Backdrop Glow — ONLY active for the "global" theme! */}
       {isGlobalTheme && (ambientBackdrop.current || ambientBackdrop.previous) && (
         <div
           className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
           style={{
             transform: "translate3d(0, 0, 0)",
-            willChange: "transform",
             contain: "strict",
             backfaceVisibility: "hidden",
           }}
@@ -1445,9 +1459,9 @@ export default function Home() {
             <img
               src={ambientBackdrop.previous}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover blur-[60px] opacity-0 scale-125 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none"
+              decoding="async"
+              className="absolute top-0 left-0 w-[25%] h-[25%] origin-top-left object-cover blur-[16px] opacity-0 scale-[4.5] saturate-[1.85] transition-opacity duration-1000 ease-in-out pointer-events-none"
               style={{
-                transform: "translate3d(0, 0, 0)",
                 backfaceVisibility: "hidden",
               }}
               aria-hidden
@@ -1458,16 +1472,16 @@ export default function Home() {
               key={ambientBackdrop.current}
               src={ambientBackdrop.current}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover blur-[60px] opacity-[0.78] scale-125 saturate-[2.2] brightness-[1.02] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
+              decoding="async"
+              className="absolute top-0 left-0 w-[25%] h-[25%] origin-top-left object-cover blur-[16px] opacity-[0.76] scale-[4.5] saturate-[1.85] transition-opacity duration-1000 ease-in-out pointer-events-none animate-in fade-in duration-1000"
               style={{
-                transform: "translate3d(0, 0, 0)",
                 backfaceVisibility: "hidden",
               }}
               aria-hidden
             />
           )}
           {/* Subtle uniform overlay allowing light and vibrant hero colors to permeate the entire home page */}
-          <div className="absolute inset-0 bg-[#07080d]/25 transition-colors duration-1000" />
+          <div className="absolute inset-0 bg-[#07080d]/25" />
         </div>
       )}
 
@@ -1574,7 +1588,7 @@ export default function Home() {
               items={trendingMoviesToday}
               isLoading={isLoading}
               isTop10={true}
-              accentIcon={<TrendingUp className="w-5 h-5 text-red-500" />}
+              accentIcon={TRENDING_ACCENT_ICON}
             />
           </LazySection>
 
@@ -1585,7 +1599,7 @@ export default function Home() {
               items={trendingTvToday}
               isLoading={isLoading}
               isTop10={true}
-              accentIcon={<TrendingUp className="w-5 h-5 text-red-500" />}
+              accentIcon={TRENDING_ACCENT_ICON}
             />
           </LazySection>
 
@@ -1610,7 +1624,7 @@ export default function Home() {
               isLoading={isLoading}
               largeTitle={true}
               seeAllHref="/browse/movies/popular"
-              accentIcon={<Star className="w-5 h-5 text-amber-400 fill-amber-400" />}
+              accentIcon={STAR_ACCENT_ICON}
             />
           </LazySection>
 
@@ -1622,7 +1636,7 @@ export default function Home() {
               isLoading={isLoading}
               largeTitle={true}
               seeAllHref="/browse/tv/popular"
-              accentIcon={<Star className="w-5 h-5 text-amber-400 fill-amber-400" />}
+              accentIcon={STAR_ACCENT_ICON}
             />
           </LazySection>
 
@@ -1635,18 +1649,7 @@ export default function Home() {
           <LazySection show={revealedSections >= 5} placeholderHeight={220}>
             <SectionHeading title="Browse by Mood" subtitle="Pick your vibe" />
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-10 gap-2.5 md:gap-3">
-              {[
-                { id: 'k-dramas',        name: 'K-Dramas',       color: '#C4006E', icon: '🌸', iconBg: '#E91E8C' },
-                { id: 'superhero',       name: 'Superheroes',    color: '#1565C0', icon: '⚡', iconBg: '#2979FF' },
-                { id: 'action-packed',   name: 'Adrenaline',     color: '#B74300', icon: '💥', iconBg: '#F4511E' },
-                { id: 'horror-thriller', name: 'Horror',         color: '#6A0000', icon: '👁️', iconBg: '#B71C1C' },
-                { id: 'sci-fi-fantasy',  name: 'Sci-Fi',         color: '#00607A', icon: '🛸', iconBg: '#0097A7' },
-                { id: 'rom-com',         name: 'Romance',        color: '#880037', icon: '💋', iconBg: '#E91E63' },
-                { id: 'fantasy-magic',   name: 'Fantasy',        color: '#1B5E20', icon: '🧙', iconBg: '#2E7D32' },
-                { id: 'feel-good-comedy',name: 'Comedy',         color: '#E65100', icon: '😂', iconBg: '#FF9800' },
-                { id: 'true-crime',      name: 'True Crime',     color: '#1A237E', icon: '🔪', iconBg: '#283593' },
-                { id: 'documentary',     name: 'Documentary',    color: '#4E342E', icon: '🎥', iconBg: '#6D4C41' },
-              ].map((g) => (
+              {MOOD_CATEGORIES.map((g) => (
                 <Link
                   key={g.id}
                   href={`/browse/theme/${g.id}?shuffle=1${moodSeed ? `&seed=${encodeURIComponent(moodSeed)}` : ""}`}

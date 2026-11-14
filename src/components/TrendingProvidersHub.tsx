@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { fetchJson } from "@/lib/utils";
 import { MediaCard } from "@/components/MediaCard";
 import { Loader2, Film, Tv, ChevronLeft, ChevronRight } from "lucide-react";
@@ -79,7 +79,7 @@ function ProviderScrollRow({ title, items, icon, mediaType }: { title: string; i
   );
 }
 
-export function TrendingProvidersHub() {
+export const TrendingProvidersHub = memo(function TrendingProvidersHub() {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [movies, setMovies] = useState<any[]>([]);
   const [shows, setShows] = useState<any[]>([]);
@@ -208,4 +208,4 @@ export function TrendingProvidersHub() {
       )}
     </div>
   );
-}
+});

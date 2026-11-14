@@ -22,7 +22,7 @@ import {
   readableTextOn,
   type CoverPalette,
 } from "@/lib/cover-palette";
-import { ANIME_API_VERSION, animeEpisodesCacheKey, animeMetaCacheKey, animeMetaUrl } from "@/lib/anime-cache";
+import { ANIME_API_VERSION, animeEpisodesCacheKey, animeMetaCacheKey, animeMetaUrl, getAnimePreview } from "@/lib/anime-cache";
 import type { SeasonInfo } from "@/lib/anime-fetch";
 import { useTheme } from "@/context/ThemeContext";
 import { AnimeSeasonSelector, type FranchiseNodeItem } from "@/components/AnimeSeasonSelector";
@@ -584,11 +584,32 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   // ── Core state ───────────────────────────────────────────────────────────
   const [anime, setAnime] = useState<AnimeDetail | null>(() => {
     if (initialData?.id) return initialData as AnimeDetail;
+    if (typeof window !== "undefined" && id) {
+      try {
+        const cached = sessionStorage.getItem(animeMetaCacheKey(id));
+        if (cached) {
+          const p = JSON.parse(cached);
+          if (p?.success && p?.data?.anime) return p.data.anime as AnimeDetail;
+        }
+      } catch {}
+      const preview = getAnimePreview(id);
+      if (preview?.id) return preview as AnimeDetail;
+    }
     return null;
   });
 
   const [isLoading, setIsLoading] = useState(() => {
     if (initialData?.id) return false;
+    if (typeof window !== "undefined" && id) {
+      try {
+        const cached = sessionStorage.getItem(animeMetaCacheKey(id));
+        if (cached) {
+          const p = JSON.parse(cached);
+          if (p?.success && p?.data?.anime) return false;
+        }
+      } catch {}
+      if (getAnimePreview(id)?.id) return false;
+    }
     return true;
   });
 
@@ -689,8 +710,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       setCoverPalette(seededPalette);
       return;
     }
-    let cancelled = false;
     setCoverPalette(fallbackPalette);
+    if (!anime?.id || (anime as any)?._isPreviewSeed) {
+      return;
+    }
+    let cancelled = false;
 
     (async () => {
       // 1. Ask AniList straight from the browser (CORS-enabled, ~1 KB).
@@ -1337,13 +1361,14 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       return;
     }
 
-    // Navigating to a new anime: reset state first
+    // Navigating to a new anime: reset state first, using preview seed if available for instant paint
     if (!isFirstMount) {
       // Invalidate any episode request still in flight for the previous anime.
       episodeRequestRef.current += 1;
       episodeAbortRef.current?.abort();
-      animeRef.current = null;
-      setAnime(null);
+      const nextPreview = getAnimePreview(id);
+      animeRef.current = nextPreview ? (nextPreview as AnimeDetail) : null;
+      setAnime(nextPreview ? (nextPreview as AnimeDetail) : null);
       setEpisodes([]);
       setSelectedEp(null);
       setIsPlaying(false);
@@ -1351,7 +1376,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       setRecommendations([]);
       setFranchiseNodes([]);
       franchiseNodesRef.current = [];
-      setIsLoading(true);
+      setIsLoading(!nextPreview);
       setEpisodesLoading(true);
       setError(null);
       loadedSeasonIds.current.clear();

@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { Star, Play } from "lucide-react";
 import { memo, useCallback, useState, useEffect, useRef } from "react";
-import { fetchJson } from "@/lib/utils";
-import { animeMetaUrl } from "@/lib/anime-cache";
+import { preloadAnimePageData, cacheAnimePreview } from "@/lib/anime-cache";
 
 export interface AnimeItem {
   id: string;
@@ -67,7 +66,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
 
   // Network-adaptive fallback: If high-res w780 takes more than 5s on slow internet, try lighter w500
   useEffect(() => {
-    if (isLoaded || imageError || !imgSrc) return;
+    if (isLoaded || imageError || !imgSrc || !imgSrc.includes("/w780/")) return;
     const timer = setTimeout(() => {
       if (!isLoaded && !imageError && imgSrc.includes("/w780/")) {
         setImgSrc((prev) => prev ? prev.replace("/w780/", "/w500/") : undefined);
@@ -92,12 +91,14 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
     if (typeof window === "undefined" || !item?.id) return;
     if (preloadingRef.current === item.id) return;
     preloadingRef.current = item.id;
-    // Warm the same fetchJson cache entry AnimeClient reads, so the details page
-    // opens with the authoritative full meta instead of list-card seed data.
-    fetchJson(animeMetaUrl(item.id)).catch(() => {
-      preloadingRef.current = null;
-    });
-  }, [item.id]);
+    preloadAnimePageData(item.id, item);
+  }, [item]);
+
+  const handleClick = useCallback(() => {
+    if (item?.id) {
+      cacheAnimePreview(item.id, item);
+    }
+  }, [item]);
 
   return (
     <div
@@ -109,6 +110,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
         prefetch={true}
         onMouseEnter={handlePreload}
         onTouchStart={handlePreload}
+        onClick={handleClick}
         className={`group relative block shrink-0 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-2 hover:z-20 focus:outline-none hover:will-change-transform ${
           rank ? "w-[155px] sm:w-[185px] md:w-[212px] lg:w-[230px]" : "w-full"
         }`}
@@ -130,7 +132,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               WebkitTextStroke: "1px rgba(255,255,255,0.2)",
-              filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.95)) drop-shadow(0 0 16px rgba(211,209,206,0.15))"
+              filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.85))"
             }}
           >
             {rank}

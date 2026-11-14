@@ -275,10 +275,12 @@ export interface TmdbSeason {
 export function getCleanBaseTitle(title: string): string {
   let base = title
     .replace(/\s+(?:[0-9]+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+season\b/i, "")
+    .replace(/\s+[0-9]+(?:st|nd|rd|th)\s*(?:[-–—&]\s*[0-9]+(?:st|nd|rd|th)\s+)?stage\b/i, "")
     .replace(/\s+season\s+[0-9]+\b/i, "")
     .replace(/\s+s[0-9]+\b/i, "")
     .replace(/\s+part\s+[0-9]+\b/i, "")
     .replace(/\s+cour\s+[0-9]+\b/i, "")
+    .replace(/\s+stage\s+[0-9]+\b/i, "")
     .replace(/\s+final\s+season\b/i, "")
     .replace(/\s+第\s*[0-9]+\s*期/g, "")
     .trim();
@@ -319,14 +321,21 @@ function nameMatches(searchName: string, tmdbName: string): boolean {
 export async function searchTmdbShow(name: string, year?: number): Promise<number | null> {
   try {
     const baseTitle = getCleanBaseTitle(name);
-    const queries = [baseTitle, name];
+    const queries: string[] = [baseTitle, name];
+    const words = baseTitle.replace(/[^\p{L}\p{N}\s]/gu, "").trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 5) {
+      queries.push(words.slice(0, 3).join(" "));
+      queries.push(words.slice(-3).join(" "));
+    }
+    const seenQ = new Set<string>();
     let results: any[] = [];
     let queryUsed = "";
 
     for (const query of queries) {
       if (!query) continue;
       const cleanQuery = query.replace(/[^\p{L}\p{N}\s]/gu, "").trim();
-      if (!cleanQuery) continue;
+      if (!cleanQuery || seenQ.has(cleanQuery.toLowerCase())) continue;
+      seenQ.add(cleanQuery.toLowerCase());
       
       const params: Record<string, string> = { query: cleanQuery, language: "en-US" };
       const data = await tmdbFetch("/search/tv", params) as { results?: any[] };

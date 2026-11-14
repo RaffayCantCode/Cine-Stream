@@ -146,21 +146,22 @@ export function AnimeSeasonSelector({
         itemId === cleanCurr ||
         (itemAnilistId && itemAnilistId === cleanCurr) ||
         (item.idMal && String(item.idMal).toLowerCase() === cleanCurr);
-      const hasExplicitSeason = /\b(season\s*\d+|\d+(?:st|nd|rd|th)\s+season|final\s+season)\b/i.test(title);
+      const hasExplicitSeason = /\b(season\s*\d+|\d+(?:st|nd|rd|th)\s+season|final\s+season|\d+(?:st|nd|rd|th)\s+stage|part\s*\d+|cour\s*\d+)\b/i.test(title);
       const isChibiOrMini = (duration > 0 && duration <= 15);
+      const isCuratedMain = Boolean((item as any).curated && ((item as any).tmdbSeasonNumber || item.matchingSeason?.tmdbSeasonNumber));
 
       // 1. Specials (OVAs, Chibis, side stories, short ONAs, recaps, mini-series, collabs)
       const isSpecialFmt = fmt === "OVA" || fmt === "SPECIAL" || fmt === "TV_SHORT";
       const isSpecialLabel = label.startsWith("ova") || label.startsWith("special");
       const isSpecialTitle = SPECIAL_REGEX.test(title);
-      const isShortOna = fmt === "ONA" && (duration <= 15 || !hasExplicitSeason || (eps > 0 && eps <= 4));
-      const isShortSpecial = eps > 0 && eps <= 2 && duration > 0 && duration <= 25 && fmt !== "MOVIE";
-      const isCollabTitle = /\b(collab|crossover|\bx\b)\b/i.test(title);
+      const isShortOna = fmt === "ONA" && ((duration > 0 && duration <= 15) || (!hasExplicitSeason && !isCuratedMain && eps > 0 && eps <= 2 && (duration === 0 || duration <= 25)));
+      const isShortSpecial = eps > 0 && eps <= 2 && duration > 0 && duration <= 25 && fmt !== "MOVIE" && !hasExplicitSeason && !isCuratedMain;
+      const isCollabTitle = /\b(collab|crossover|\bx\b)\b/i.test(title) && !/hunter\s*x\s*hunter|spy\s*x\s*family|high\s*school\s*dxd|kiss\s*x\s*sis/i.test(title);
 
       // A clearly-labelled spin-off/OVA/special stays a special even when it is a
       // 12-episode TV production (e.g. "Attack on Titan: Junior High"). Only an
       // explicit "Season N" in the title can promote it back to the main run.
-      const isClassedSpecial = !hasExplicitSeason && (
+      const isClassedSpecial = !hasExplicitSeason && !isCuratedMain && (
         isSpecialFmt || isSpecialLabel || isSpecialTitle || isShortOna || isShortSpecial || isCollabTitle || isChibiOrMini
       );
 
@@ -295,7 +296,8 @@ export function AnimeSeasonSelector({
       }
 
       // Check offset for split parts (e.g. JoJo Egypt offset 24 -> P2, Pokemon offset -> P2)
-      if (!forcePart && (item as any).episodeOffset && (item as any).episodeOffset > 0) {
+      const itemOffset = (item as any).episodeOffset ?? item.matchingSeason?.episodeOffset ?? 0;
+      if (!forcePart && itemOffset > 0) {
         forcePart = 2;
       }
 
