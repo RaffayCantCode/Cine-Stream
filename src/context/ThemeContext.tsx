@@ -248,24 +248,40 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       try {
         const res = await fetch("/api/preferences/theme", { cache: "no-store" });
         if (!res.ok) return;
-        const data: { theme?: string } = await res.json();
+        const data: {
+          theme?: string;
+          updatedAt?: number;
+          hasSavedPreferences?: boolean;
+        } = await res.json();
         const serverTheme = isThemeId(data.theme) ? data.theme : null;
+        const serverUpdatedAt = Number(data.updatedAt || 0);
+        let localUpdatedAt = 0;
+        try {
+          localUpdatedAt = Number(window.localStorage.getItem("cinestream_theme_updated_at") || 0);
+        } catch {}
+        const currentLocal = readLocalTheme();
 
-        if (serverTheme) {
+        if (
+          data.hasSavedPreferences &&
+          serverTheme &&
+          (localUpdatedAt === 0 || serverUpdatedAt >= localUpdatedAt)
+        ) {
           setThemeState(serverTheme);
           try {
             window.localStorage.setItem(THEME_STORAGE_KEY, serverTheme);
+            if (serverUpdatedAt > 0) {
+              window.localStorage.setItem("cinestream_theme_updated_at", String(serverUpdatedAt));
+            }
           } catch {}
-        } else {
-          // If server has no theme saved yet, save current local theme
-          const currentLocal = readLocalTheme();
-          if (currentLocal !== DEFAULT_THEME) {
-            await fetch("/api/preferences/theme", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ theme: currentLocal }),
-            });
-          }
+        } else if (currentLocal !== DEFAULT_THEME || localUpdatedAt > 0) {
+          // Server has no saved preferences yet or local theme is newer — persist local theme to account
+          setThemeState(currentLocal);
+          await fetch("/api/preferences/theme", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            keepalive: true,
+            body: JSON.stringify({ theme: currentLocal }),
+          }).catch(() => {});
         }
       } catch {} finally {
         setSynced(true);
@@ -279,19 +295,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     (next: ThemeId) => {
       setPreviewingTheme(null);
       setThemeState(next);
+      const now = Date.now();
       try {
         window.localStorage.setItem(THEME_STORAGE_KEY, next);
+        window.localStorage.setItem("cinestream_theme_updated_at", String(now));
       } catch {}
 
-      if (isAuthed && userId) {
-        fetch("/api/preferences/theme", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ theme: next }),
-        }).catch(() => {});
-      }
+      fetch("/api/preferences/theme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({ theme: next }),
+      }).catch(() => {});
     },
-    [isAuthed, userId]
+    []
   );
 
   return (

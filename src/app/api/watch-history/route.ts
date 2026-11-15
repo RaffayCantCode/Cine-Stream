@@ -42,7 +42,10 @@ export async function GET() {
     return true;
   });
 
-  return Response.json({ items: deduped.slice(0, 20) });
+  return Response.json(
+    { items: deduped.slice(0, 20) },
+    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
+  );
 }
 
 export async function POST(request: Request) {
@@ -72,6 +75,19 @@ export async function POST(request: Request) {
     progress,
     duration,
   } = parsed.data;
+
+  // Remove previous episode entries for this same media item so only the latest episode remains
+  try {
+    await db
+      .delete(watchHistory)
+      .where(
+        and(
+          eq(watchHistory.userId, session.user.id),
+          eq(watchHistory.mediaId, mediaId),
+          eq(watchHistory.mediaType, mediaType)
+        )
+      );
+  } catch {}
 
   await db
     .insert(watchHistory)
@@ -108,5 +124,8 @@ export async function POST(request: Request) {
       },
     });
 
-  return Response.json({ success: true });
+  return Response.json(
+    { success: true },
+    { headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
 }

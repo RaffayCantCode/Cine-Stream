@@ -22,54 +22,169 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   autoMarkPreviousWatched: true,
 };
 
+let memorySettings: SiteSettings | null = null;
+let memoryUpdatedAt = 0;
+let serverSyncInFlight: Promise<void> | null = null;
+let lastServerSyncTs = 0;
+
 function isValidViewMode(mode: unknown): mode is EpisodeViewMode {
   return mode === "list" || mode === "grid" || mode === "numbers";
+}
+
+function normalizeSettingsObject(parsed: any): SiteSettings {
+  const fallbackMode: EpisodeViewMode = isValidViewMode(parsed?.episodeViewMode)
+    ? parsed.episodeViewMode
+    : DEFAULT_SITE_SETTINGS.episodeViewMode;
+  const tvEpisodeViewMode: EpisodeViewMode = isValidViewMode(parsed?.tvEpisodeViewMode)
+    ? parsed.tvEpisodeViewMode
+    : fallbackMode;
+  const animeEpisodeViewMode: EpisodeViewMode = isValidViewMode(parsed?.animeEpisodeViewMode)
+    ? parsed.animeEpisodeViewMode
+    : fallbackMode;
+
+  return {
+    episodeViewMode: tvEpisodeViewMode,
+    tvEpisodeViewMode,
+    animeEpisodeViewMode,
+    autoNextEpisode:
+      typeof parsed?.autoNextEpisode === "boolean"
+        ? parsed.autoNextEpisode
+        : DEFAULT_SITE_SETTINGS.autoNextEpisode,
+    autoMarkPreviousWatched:
+      typeof parsed?.autoMarkPreviousWatched === "boolean"
+        ? parsed.autoMarkPreviousWatched
+        : DEFAULT_SITE_SETTINGS.autoMarkPreviousWatched,
+  };
+}
+
+function getLocalSettingsUpdatedAt(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = localStorage.getItem(SITE_SETTINGS_KEY);
+    if (!raw) return memoryUpdatedAt;
+    const parsed = JSON.parse(raw);
+    const ts = Number(parsed?.updatedAt || 0);
+    return Number.isFinite(ts) && ts > 0 ? ts : memoryUpdatedAt;
+  } catch {
+    return memoryUpdatedAt;
+  }
 }
 
 export function getSiteSettings(): SiteSettings {
   if (typeof window === "undefined") return DEFAULT_SITE_SETTINGS;
   try {
     const raw = localStorage.getItem(SITE_SETTINGS_KEY);
-    if (!raw) return DEFAULT_SITE_SETTINGS;
+    if (!raw) {
+      return memorySettings || DEFAULT_SITE_SETTINGS;
+    }
     const parsed = JSON.parse(raw);
-    const fallbackMode: EpisodeViewMode = isValidViewMode(parsed?.episodeViewMode)
-      ? parsed.episodeViewMode
-      : DEFAULT_SITE_SETTINGS.episodeViewMode;
-    const tvEpisodeViewMode: EpisodeViewMode = isValidViewMode(parsed?.tvEpisodeViewMode)
-      ? parsed.tvEpisodeViewMode
-      : fallbackMode;
-    const animeEpisodeViewMode: EpisodeViewMode = isValidViewMode(parsed?.animeEpisodeViewMode)
-      ? parsed.animeEpisodeViewMode
-      : fallbackMode;
-
-    return {
-      episodeViewMode: tvEpisodeViewMode,
-      tvEpisodeViewMode,
-      animeEpisodeViewMode,
-      autoNextEpisode:
-        typeof parsed?.autoNextEpisode === "boolean"
-          ? parsed.autoNextEpisode
-          : DEFAULT_SITE_SETTINGS.autoNextEpisode,
-      autoMarkPreviousWatched:
-        typeof parsed?.autoMarkPreviousWatched === "boolean"
-          ? parsed.autoMarkPreviousWatched
-          : DEFAULT_SITE_SETTINGS.autoMarkPreviousWatched,
-    };
+    const normalized = normalizeSettingsObject(parsed);
+    memorySettings = normalized;
+    if (typeof parsed?.updatedAt === "number" && parsed.updatedAt > 0) {
+      memoryUpdatedAt = parsed.updatedAt;
+    }
+    return normalized;
   } catch {
-    return DEFAULT_SITE_SETTINGS;
+    return memorySettings || DEFAULT_SITE_SETTINGS;
   }
 }
 
 export function updateSiteSettings(partial: Partial<SiteSettings>): SiteSettings {
   const current = getSiteSettings();
-  const next: SiteSettings = { ...current, ...partial };
+  const merged: Partial<SiteSettings> = { ...partial };
+  if (merged.tvEpisodeViewMode && !merged.episodeViewMode) {
+    merged.episodeViewMode = merged.tvEpisodeViewMode;
+  } else if (merged.episodeViewMode && !merged.tvEpisodeViewMode) {
+    merged.tvEpisodeViewMode = merged.episodeViewMode;
+  }
+
+  const next: SiteSettings = normalizeSettingsObject({ ...current, ...merged });
+  const now = Date.now();
+  memorySettings = next;
+  memoryUpdatedAt = now;
+
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(next));
+      localStorage.setItem(
+        SITE_SETTINGS_KEY,
+        JSON.stringify({ ...next, updatedAt: now })
+      );
       window.dispatchEvent(new CustomEvent("cinestream_settings_updated", { detail: next }));
     } catch {}
+
+    // Persist to user account when authenticated (no-op 401 when signed out)
+    fetch("/api/preferences/theme", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({ settings: next }),
+    }).catch(() => {});
   }
   return next;
+}
+
+async function syncSiteSettingsWithServer(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (serverSyncInFlight) return serverSyncInFlight;
+  if (Date.now() - lastServerSyncTs < 5000) return;
+
+  serverSyncInFlight = (async () => {
+    try {
+      const res = await fetch("/api/preferences/theme", { cache: "no-store" });
+      if (!res.ok) return; // 401 when signed out — keep localStorage settings intact
+      lastServerSyncTs = Date.now();
+      const data: {
+        settings?: Partial<SiteSettings> | null;
+        updatedAt?: number;
+        hasSavedPreferences?: boolean;
+      } = await res.json();
+
+      const localUpdatedAt = getLocalSettingsUpdatedAt();
+      const serverUpdatedAt = Number(data?.updatedAt || 0);
+
+      if (data?.hasSavedPreferences && data?.settings) {
+        if (localUpdatedAt === 0 || serverUpdatedAt >= localUpdatedAt) {
+          const normalized = normalizeSettingsObject(data.settings);
+          const effectiveTs = serverUpdatedAt > 0 ? serverUpdatedAt : Date.now();
+          memorySettings = normalized;
+          memoryUpdatedAt = effectiveTs;
+          try {
+            localStorage.setItem(
+              SITE_SETTINGS_KEY,
+              JSON.stringify({ ...normalized, updatedAt: effectiveTs })
+            );
+            window.dispatchEvent(
+              new CustomEvent("cinestream_settings_updated", { detail: normalized })
+            );
+          } catch {}
+        } else if (localUpdatedAt > serverUpdatedAt) {
+          // Local browser settings are newer than server — push to account
+          const current = getSiteSettings();
+          await fetch("/api/preferences/theme", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            keepalive: true,
+            body: JSON.stringify({ settings: current }),
+          }).catch(() => {});
+        }
+      } else if (localUpdatedAt > 0) {
+        // User has customized settings locally and server has none yet — push to account
+        const current = getSiteSettings();
+        await fetch("/api/preferences/theme", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify({ settings: current }),
+        }).catch(() => {});
+      }
+    } catch {
+      // Ignore network errors; local settings remain active
+    } finally {
+      serverSyncInFlight = null;
+    }
+  })();
+
+  return serverSyncInFlight;
 }
 
 export function useSiteSettings() {
@@ -77,14 +192,22 @@ export function useSiteSettings() {
 
   useEffect(() => {
     setSettings(getSiteSettings());
+    void syncSiteSettingsWithServer();
+
     const handleUpdate = () => {
       setSettings(getSiteSettings());
     };
+    const handleFocus = () => {
+      setSettings(getSiteSettings());
+      void syncSiteSettingsWithServer();
+    };
     window.addEventListener("cinestream_settings_updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
+    window.addEventListener("focus", handleFocus);
     return () => {
       window.removeEventListener("cinestream_settings_updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 

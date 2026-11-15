@@ -142,7 +142,27 @@ function loadSpotlightFromSession(): { fetched: boolean; spotlight: any | null }
   return null;
 }
 
-const SESSION_HOME_FEED_KEY = "sv_home_feed_v6";
+const SESSION_HOME_FEED_KEY = "sv_home_feed_v7";
+
+function orderHeroPool(pool: MediaItem[]): MediaItem[] {
+  if (!Array.isArray(pool) || pool.length <= 1) return pool || [];
+  const getRank = (item: MediaItem): number => {
+    const anilistId = (item as any)?.anilistId;
+    const isAnime =
+      item?.media_type === "anime" ||
+      Boolean(anilistId) ||
+      isTmdbAnime(item) ||
+      (Boolean(item?.genre_ids?.includes(16)) && item?.original_language === "ja");
+    if (isAnime) return 2; // 3rd: Anime
+    const isTv =
+      item?.media_type === "tv" ||
+      (Boolean(item?.first_air_date) && !item?.release_date) ||
+      (Boolean(item?.name) && !item?.title);
+    if (isTv) return 1; // 2nd: TV Show
+    return 0; // 1st: Movie
+  };
+  return [...pool].sort((a, b) => getRank(a) - getRank(b));
+}
 
 function saveHomeFeedToStorage(feed: Partial<NonNullable<typeof globalHomeCache>>): void {
   if (typeof window === "undefined" || !feed) return;
@@ -182,7 +202,7 @@ function loadHomeFeedFromStorage(): Partial<NonNullable<typeof globalHomeCache>>
   return null;
 }
 
-const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v5";
+const SESSION_HERO_POOL_KEY = "sv_home_hero_pool_v6";
 const HERO_CACHE_TTL = 5 * 60 * 1000; // 5-minute TTL for SPA back-navigation within a session
 const ANILIST_CACHE_KEY = "sv_home_anilist_items_v2";
 
@@ -498,7 +518,7 @@ function buildHeroPool(sources: HeroPoolSources): MediaItem[] {
 
   saveSeenList(SEEN_HERO_KEY, seenKeys, 180);
 
-  return shuffleArray([movieSlide, tvSlide, animeSlide].filter(Boolean) as MediaItem[]);
+  return orderHeroPool([movieSlide, tvSlide, animeSlide].filter(Boolean) as MediaItem[]);
 }
 
 function LazySection({ children, show, placeholderHeight = 0 }: { children: React.ReactNode; show: boolean; placeholderHeight?: number }) {
@@ -704,7 +724,7 @@ export default function Home() {
   const [heroPool, setHeroPool] = useState<MediaItem[]>(() => {
     // Only reuse heroPool immediately on SPA back-navigation; fresh reloads build a randomized hero pool.
     if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) {
-      return globalHomeCache.heroPool;
+      return orderHeroPool(globalHomeCache.heroPool);
     }
     return [];
   });
@@ -866,7 +886,7 @@ export default function Home() {
       if (isLoading) setIsLoading(false);
       if (animeLoading) setAnimeLoading(false);
       if (heroPool.length === 0) {
-        setHeroPool(globalHomeCache.heroPool);
+        setHeroPool(orderHeroPool(globalHomeCache.heroPool));
       }
       if (globalHomeCache.customSections && globalHomeCache.customSections.length > 0) {
         setCustomSections(globalHomeCache.customSections);
@@ -891,7 +911,7 @@ export default function Home() {
           globalHomeCache.heroPool = freshPool;
         }
       } else {
-        setHeroPool(globalHomeCache.heroPool);
+        setHeroPool(orderHeroPool(globalHomeCache.heroPool));
       }
       return;
     }

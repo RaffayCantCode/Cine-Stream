@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { mutate } from "swr";
 import { CinemaPlayer, type CinemaPlayerMetadata } from "@/components/player/CinemaPlayer";
 import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { DrawerSeason } from "@/components/player/EpisodeDrawer";
@@ -454,14 +455,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       episodeName: currentEpDetail?.title || `Episode ${episodeNumber}`,
     };
 
-    // 1. Post to database
-    fetch("/api/watch-history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-
-    // 2. Optimistically update localStorage cache for Continue Watching with 0ms delay
+    // 1. Optimistically update localStorage cache & SWR for Continue Watching with 0ms delay
     try {
       const saved = localStorage.getItem("cinestream_cw_cache");
       const parsed = saved ? JSON.parse(saved) : { items: [] };
@@ -470,7 +464,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       const updatedItem = {
         id: numericId,
         mediaId: numericId,
-        mediaType: "anime",
+        mediaType: "anime" as const,
         title: anime.name,
         posterPath: anime.poster ?? null,
         backdropPath: anime.bannerImage ?? null,
@@ -480,74 +474,133 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
         watchedAt: new Date().toISOString(),
       };
 
-      const filtered = items.filter((it) => !(it.mediaId === numericId && it.mediaType === "anime"));
+      const filtered = items.filter(
+        (it) => !(Number(it.mediaId) === numericId && it.mediaType === "anime")
+      );
       filtered.unshift(updatedItem);
-      localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
-
+      const nextItems = filtered.slice(0, 30);
+      localStorage.setItem(
+        "cinestream_cw_cache",
+        JSON.stringify({ items: nextItems, cachedAt: Date.now() })
+      );
+      mutate("/api/watch-history", { items: nextItems }, false);
       window.dispatchEvent(new Event("cinestream_watch_history_updated"));
 
       // Also update active anime tracker for the details page
-      localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
-        id: String(anime.id || animeId),
-        mediaId: numericId,
-        title: anime.name,
-        season: currentSeasonNum,
-        episodeNum: episodeNumber,
-      }));
+      localStorage.setItem(
+        "cinestream_active_anime_show",
+        JSON.stringify({
+          id: String(anime.id || animeId),
+          mediaId: numericId,
+          title: anime.name,
+          season: currentSeasonNum,
+          episodeNum: episodeNumber,
+        })
+      );
       markEpisodesWatchedUpTo("anime", String(animeId), episodeNumber, 1);
       if (anime.id && String(anime.id) !== String(animeId)) {
         markEpisodesWatchedUpTo("anime", String(anime.id), episodeNumber, currentSeasonNum);
       }
     } catch {}
+
+    // 2. Post to database with keepalive and revalidate SWR when finished
+    fetch("/api/watch-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify(payload),
+    })
+      .then(() => {
+        mutate("/api/watch-history");
+        window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+      })
+      .catch(() => {});
   }, [anime, animeId, episodeNumber, currentEpDetail?.title]);
 
   const handleSelectEpisode = useCallback(
     (newEp: number) => {
       if (anime) {
+        const currentSeasonNum = anime.seasonNumber || 1;
+        const numericId =
+          Number(anime.id) || (anime.tmdbId ? Number(anime.tmdbId) : parseInt(animeId, 10) || 0);
+        const targetEpDetail = cappedEpisodes.find((e) => Number(e.episodeNum) === Number(newEp));
+        const epTitle = targetEpDetail?.title || `Episode ${newEp}`;
+
+        const payload = {
+          mediaId: numericId,
+          mediaType: "anime" as const,
+          title: anime.name,
+          posterPath: anime.poster ?? null,
+          backdropPath: anime.bannerImage ?? null,
+          season: currentSeasonNum,
+          episode: newEp,
+          episodeName: epTitle,
+        };
+
         try {
           const saved = localStorage.getItem("cinestream_cw_cache");
           const parsed = saved ? JSON.parse(saved) : { items: [] };
           const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
-          const currentSeasonNum = anime.seasonNumber || 1;
-          const numericId = Number(anime.id) || (anime.tmdbId ? Number(anime.tmdbId) : parseInt(animeId, 10) || 0);
 
           const updatedItem = {
             id: numericId,
             mediaId: numericId,
-            mediaType: "anime",
+            mediaType: "anime" as const,
             title: anime.name,
             posterPath: anime.poster ?? null,
             backdropPath: anime.bannerImage ?? null,
             season: currentSeasonNum,
             episode: newEp,
-            episodeName: `Episode ${newEp}`,
+            episodeName: epTitle,
             watchedAt: new Date().toISOString(),
           };
 
-          const filtered = items.filter((it) => !(it.mediaId === numericId && it.mediaType === "anime"));
+          const filtered = items.filter(
+            (it) => !(Number(it.mediaId) === numericId && it.mediaType === "anime")
+          );
           filtered.unshift(updatedItem);
-          localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
-
+          const nextItems = filtered.slice(0, 30);
+          localStorage.setItem(
+            "cinestream_cw_cache",
+            JSON.stringify({ items: nextItems, cachedAt: Date.now() })
+          );
+          mutate("/api/watch-history", { items: nextItems }, false);
           window.dispatchEvent(new Event("cinestream_watch_history_updated"));
 
-          localStorage.setItem("cinestream_active_anime_show", JSON.stringify({
-            id: String(anime.id || animeId),
-            mediaId: numericId,
-            title: anime.name,
-            season: currentSeasonNum,
-            episodeNum: newEp,
-          }));
+          localStorage.setItem(
+            "cinestream_active_anime_show",
+            JSON.stringify({
+              id: String(anime.id || animeId),
+              mediaId: numericId,
+              title: anime.name,
+              season: currentSeasonNum,
+              episodeNum: newEp,
+            })
+          );
           markEpisodesWatchedUpTo("anime", String(animeId), newEp, 1);
           if (anime.id && String(anime.id) !== String(animeId)) {
             markEpisodesWatchedUpTo("anime", String(anime.id), newEp, currentSeasonNum);
           }
         } catch {}
+
+        // Persist immediately with keepalive so navigating away never drops the new episode
+        fetch("/api/watch-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify(payload),
+        })
+          .then(() => {
+            mutate("/api/watch-history");
+            window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+          })
+          .catch(() => {});
       }
       const serverIdx = servers.findIndex((s) => s.key === forcedSource);
       const sourceNum = serverIdx >= 0 ? serverIdx + 1 : 1;
       router.push(`/watch/anime/${animeId}/${newEp}?source=${sourceNum}`);
     },
-    [router, animeId, anime, forcedSource, servers]
+    [router, animeId, anime, forcedSource, servers, cappedEpisodes]
   );
 
   const releasedEpisodeCount = useMemo(() => {

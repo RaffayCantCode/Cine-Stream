@@ -134,18 +134,86 @@ interface WatchHistoryItem {
   episodeName?: string;
   progress?: number;
   duration?: number;
+  watchedAt?: string | number | Date;
 }
 
 const CACHE_KEY = "cinestream_cw_cache";
 
+function getWatchedTimestamp(item: WatchHistoryItem): number {
+  if (!item?.watchedAt) return 0;
+  if (typeof item.watchedAt === "number") return item.watchedAt;
+  const parsed = new Date(item.watchedAt).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mergeWatchHistoryItems(
+  localItems: WatchHistoryItem[],
+  serverItems: WatchHistoryItem[]
+): WatchHistoryItem[] {
+  if (!Array.isArray(serverItems) || serverItems.length === 0) {
+    return Array.isArray(localItems) ? localItems : [];
+  }
+  if (!Array.isArray(localItems) || localItems.length === 0) {
+    return serverItems;
+  }
+
+  const map = new Map<string, WatchHistoryItem>();
+  for (const sItem of serverItems) {
+    if (!sItem?.mediaId) continue;
+    map.set(`${sItem.mediaType}-${Number(sItem.mediaId)}`, sItem);
+  }
+
+  for (const lItem of localItems) {
+    if (!lItem?.mediaId) continue;
+    const key = `${lItem.mediaType}-${Number(lItem.mediaId)}`;
+    const existing = map.get(key);
+    if (!existing) {
+      // Only keep local-only item if it was watched very recently (within last 60s, e.g. POST still in flight)
+      const lTime = getWatchedTimestamp(lItem);
+      if (lTime > 0 && Date.now() - lTime < 60_000) {
+        map.set(key, lItem);
+      }
+      continue;
+    }
+
+    const lTime = getWatchedTimestamp(lItem);
+    const sTime = getWatchedTimestamp(existing);
+    const lSeason = Number(lItem.season || 0);
+    const sSeason = Number(existing.season || 0);
+    const lEp = Number(lItem.episode || 0);
+    const sEp = Number(existing.episode || 0);
+
+    // Prefer local item if its timestamp is newer or if it was updated to a later episode within the last 5 minutes
+    const isLocalNewerEpisode =
+      lTime > 0 &&
+      Date.now() - lTime < 5 * 60_000 &&
+      (lSeason > sSeason || (lSeason === sSeason && lEp > sEp));
+
+    if (lTime > sTime || isLocalNewerEpisode) {
+      map.set(key, {
+        ...existing,
+        ...lItem,
+        posterPath: lItem.posterPath || existing.posterPath,
+      });
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => getWatchedTimestamp(b) - getWatchedTimestamp(a));
+}
+
 const fetcher = async (url: string) => {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return { items: [] };
     const json = await res.json();
     if (json?.items && typeof window !== "undefined") {
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ ...json, cachedAt: Date.now() }));
+        const raw = localStorage.getItem(CACHE_KEY);
+        const localParsed = raw ? JSON.parse(raw) : null;
+        const localItems: WatchHistoryItem[] = Array.isArray(localParsed?.items) ? localParsed.items : [];
+        const merged = mergeWatchHistoryItems(localItems, json.items);
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ items: merged, cachedAt: Date.now() }));
+        return { ...json, items: merged };
       } catch {}
     }
     return json;
@@ -262,7 +330,7 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
 
   // Keep Continue Watching cache and UI updated in real-time across tabs / page navigations
   useEffect(() => {
-    const handleSync = () => {
+    const syncLocal = () => {
       try {
         const saved = localStorage.getItem(CACHE_KEY);
         const parsed = saved ? JSON.parse(saved) : null;
@@ -270,18 +338,29 @@ export function ContinueWatching({ filterType = "all" }: ContinueWatchingProps =
           setCachedItems(parsed.items);
         }
       } catch {}
+    };
+
+    syncLocal();
+
+    const handleSync = () => {
+      syncLocal();
       mutate("/api/watch-history");
     };
 
     window.addEventListener("cinestream_watch_history_updated", handleSync);
     window.addEventListener("storage", handleSync);
+    window.addEventListener("focus", syncLocal);
     return () => {
       window.removeEventListener("cinestream_watch_history_updated", handleSync);
       window.removeEventListener("storage", handleSync);
+      window.removeEventListener("focus", syncLocal);
     };
   }, []);
 
-  const rawItems: WatchHistoryItem[] = (data?.items && Array.isArray(data.items)) ? data.items : cachedItems;
+  const rawItems: WatchHistoryItem[] =
+    data?.items && Array.isArray(data.items)
+      ? mergeWatchHistoryItems(cachedItems, data.items)
+      : cachedItems;
 
   const filteredItems = rawItems.filter((item: WatchHistoryItem) => {
     if (!item || !item.mediaId) return false;

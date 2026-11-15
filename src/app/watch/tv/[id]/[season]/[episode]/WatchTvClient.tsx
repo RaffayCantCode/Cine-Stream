@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { mutate } from "swr";
 import { CinemaPlayer, type CinemaPlayerMetadata } from "@/components/player/CinemaPlayer";
 import { ServerOption } from "@/components/player/ServerSelectorModal";
 import { DrawerSeason } from "@/components/player/EpisodeDrawer";
@@ -228,6 +229,11 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
           activeShow = await fetchJson<TvShow>(`/api/tmdb/tv/${showId}`);
           if (cancelled) return;
           setShow(activeShow);
+          if (activeShow) {
+            try {
+              sessionStorage.setItem(`cinestream_tv_${showId}`, JSON.stringify(activeShow));
+            } catch {}
+          }
         }
 
         let activeSeason: Season | null =
@@ -309,8 +315,9 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
   useEffect(() => {
     if (!show || !showId) return;
 
+    const numericShowId = Number(show.id || showId);
     const payload = {
-      mediaId: show.id || showId,
+      mediaId: numericShowId,
       mediaType: "tv" as const,
       title: show.name,
       posterPath: show.poster_path ?? null,
@@ -320,23 +327,16 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
       episodeName: currentEpisodeData?.name || `Episode ${episodeNumber}`,
     };
 
-    // 1. Post to database
-    fetch("/api/watch-history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-
-    // 2. Optimistically update localStorage cache for Continue Watching with 0ms delay
+    // 1. Optimistically update localStorage cache & SWR for Continue Watching with 0ms delay
     try {
       const saved = localStorage.getItem("cinestream_cw_cache");
       const parsed = saved ? JSON.parse(saved) : { items: [] };
       const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
 
       const updatedItem = {
-        id: show.id || showId,
-        mediaId: show.id || showId,
-        mediaType: "tv",
+        id: numericShowId,
+        mediaId: numericShowId,
+        mediaType: "tv" as const,
         title: show.name,
         posterPath: show.poster_path ?? null,
         backdropPath: show.backdrop_path ?? null,
@@ -346,60 +346,131 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
         watchedAt: new Date().toISOString(),
       };
 
-      const filtered = items.filter((it) => !(it.mediaId === (show.id || showId) && it.mediaType === "tv"));
+      const filtered = items.filter(
+        (it) => !(Number(it.mediaId) === numericShowId && it.mediaType === "tv")
+      );
       filtered.unshift(updatedItem);
-      localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+      const nextItems = filtered.slice(0, 30);
+      localStorage.setItem(
+        "cinestream_cw_cache",
+        JSON.stringify({ items: nextItems, cachedAt: Date.now() })
+      );
+      mutate("/api/watch-history", { items: nextItems }, false);
       window.dispatchEvent(new Event("cinestream_watch_history_updated"));
 
       // Also update active tv tracker for the details page
-      localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
-        id: String(show.id || showId),
-        season: seasonNumber,
-        episode: episodeNumber,
-      }));
-      markEpisodesWatchedUpTo("tv", show.id || showId, episodeNumber, seasonNumber);
+      localStorage.setItem(
+        "cinestream_active_tv_show",
+        JSON.stringify({
+          id: String(numericShowId),
+          mediaId: numericShowId,
+          title: show.name,
+          season: seasonNumber,
+          episode: episodeNumber,
+        })
+      );
+      markEpisodesWatchedUpTo("tv", numericShowId, episodeNumber, seasonNumber);
     } catch {}
+
+    // 2. Post to database with keepalive and revalidate SWR when finished
+    fetch("/api/watch-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify(payload),
+    })
+      .then(() => {
+        mutate("/api/watch-history");
+        window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+      })
+      .catch(() => {});
   }, [show, showId, seasonNumber, episodeNumber, currentEpisodeData?.name]);
 
   const handleSelectEpisode = useCallback(
     (newSeason: number, newEpisode: number) => {
       if (show) {
+        const numericShowId = Number(show.id || showId);
+        const targetSeasonEps =
+          allSeasonsData.find((s) => Number(s.season_number) === Number(newSeason))?.episodes ||
+          (Number(seasonData?.season_number) === Number(newSeason) ? seasonData?.episodes : []) ||
+          [];
+        const targetEpData = targetSeasonEps.find(
+          (e) => Number(e.episode_number) === Number(newEpisode)
+        );
+        const epTitle = targetEpData?.name || `Episode ${newEpisode}`;
+
+        const payload = {
+          mediaId: numericShowId,
+          mediaType: "tv" as const,
+          title: show.name,
+          posterPath: show.poster_path ?? null,
+          backdropPath: show.backdrop_path ?? null,
+          season: newSeason,
+          episode: newEpisode,
+          episodeName: epTitle,
+        };
+
         try {
           const saved = localStorage.getItem("cinestream_cw_cache");
           const parsed = saved ? JSON.parse(saved) : { items: [] };
           const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
 
           const updatedItem = {
-            id: show.id || showId,
-            mediaId: show.id || showId,
-            mediaType: "tv",
+            id: numericShowId,
+            mediaId: numericShowId,
+            mediaType: "tv" as const,
             title: show.name,
             posterPath: show.poster_path ?? null,
             backdropPath: show.backdrop_path ?? null,
             season: newSeason,
             episode: newEpisode,
-            episodeName: `Episode ${newEpisode}`,
+            episodeName: epTitle,
             watchedAt: new Date().toISOString(),
           };
 
-          const filtered = items.filter((it) => !(it.mediaId === (show.id || showId) && it.mediaType === "tv"));
+          const filtered = items.filter(
+            (it) => !(Number(it.mediaId) === numericShowId && it.mediaType === "tv")
+          );
           filtered.unshift(updatedItem);
-          localStorage.setItem("cinestream_cw_cache", JSON.stringify({ items: filtered.slice(0, 30) }));
+          const nextItems = filtered.slice(0, 30);
+          localStorage.setItem(
+            "cinestream_cw_cache",
+            JSON.stringify({ items: nextItems, cachedAt: Date.now() })
+          );
+          mutate("/api/watch-history", { items: nextItems }, false);
           window.dispatchEvent(new Event("cinestream_watch_history_updated"));
 
-          localStorage.setItem("cinestream_active_tv_show", JSON.stringify({
-            id: String(show.id || showId),
-            season: newSeason,
-            episode: newEpisode,
-          }));
-          markEpisodesWatchedUpTo("tv", show.id || showId, newEpisode, newSeason);
+          localStorage.setItem(
+            "cinestream_active_tv_show",
+            JSON.stringify({
+              id: String(numericShowId),
+              mediaId: numericShowId,
+              title: show.name,
+              season: newSeason,
+              episode: newEpisode,
+            })
+          );
+          markEpisodesWatchedUpTo("tv", numericShowId, newEpisode, newSeason);
         } catch {}
+
+        // Persist immediately with keepalive so navigating away never drops the new episode
+        fetch("/api/watch-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify(payload),
+        })
+          .then(() => {
+            mutate("/api/watch-history");
+            window.dispatchEvent(new Event("cinestream_watch_history_updated"));
+          })
+          .catch(() => {});
       }
       const sourceIndex = sources.findIndex((s) => s.type === activeSource.type);
       const sourceNum = sourceIndex >= 0 ? sourceIndex + 1 : 1;
       router.push(`/watch/tv/${showId}/${newSeason}/${newEpisode}?source=${sourceNum}`);
     },
-    [router, show, showId, sources, activeSource.type]
+    [router, show, showId, sources, activeSource.type, allSeasonsData, seasonData]
   );
 
   // Preconnect embed domains early for lightning-fast iframe startup
