@@ -12,10 +12,10 @@ export interface AnimeBrowseFilters {
   sort?: string | null;
 }
 
-const BROWSE_QUERY = `query ($page: Int, $genre: String, $q: String, $year: Int, $format: MediaFormat, $status: MediaStatus, $season: MediaSeason, $sort: [MediaSort]) {
+const BROWSE_QUERY = `query ($page: Int, $genre: String, $q: String, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt, $format: MediaFormat, $status: MediaStatus, $season: MediaSeason, $sort: [MediaSort]) {
   Page(page: $page, perPage: 50) {
     pageInfo { hasNextPage }
-    media(type: ANIME, isAdult: false, sort: $sort, genre: $genre, search: $q, seasonYear: $year, format: $format, status: $status, season: $season) {
+    media(type: ANIME, isAdult: false, sort: $sort, genre: $genre, search: $q, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser, format: $format, status: $status, season: $season) {
       id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
       episodes genres averageScore description status type format season seasonYear duration
     }
@@ -141,7 +141,7 @@ async function clientAnilistQuery(query: string, variables: Record<string, any>,
 
 const clientAnimeCache = new Map<string, { data: { items: AnimeItem[]; hasMore: boolean }; expires: number }>();
 const CLIENT_ANIME_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const CLIENT_CACHE_VERSION = "v32-anime-section-update";
+const CLIENT_CACHE_VERSION = "v33-anime-filters-fix";
 
 export function invalidateClientAnimeCache(): void {
   clientAnimeCache.clear();
@@ -220,8 +220,6 @@ export async function fetchClientAnime(
       if (hasAdvancedFilters || category === "top_rated" || category === "newest" || category === "upcoming") {
         let sortArr: string[] = ["POPULARITY_DESC"];
         let resolvedStatus = fStatus;
-        let resolvedSeason = fSeason;
-        let resolvedYear = fYear;
 
         if (q) {
           sortArr = ["SEARCH_MATCH", "POPULARITY_DESC"];
@@ -241,33 +239,55 @@ export async function fetchClientAnime(
           resolvedStatus = "NOT_YET_RELEASED";
         }
 
-        const data = await clientAnilistQuery(BROWSE_QUERY, {
+        // AniList GraphQL treats explicit `null` enum/int variables as matching NULL values (returning 0 results).
+        // Only include variables that are actually set!
+        const vars: Record<string, any> = {
           page,
-          genre: genre || null,
-          q: q || null,
-          year: resolvedYear || null,
-          format: fFormat || null,
-          status: resolvedStatus || null,
-          season: resolvedSeason || null,
           sort: sortArr,
-        });
+        };
+        if (genre) vars.genre = genre;
+        if (q) vars.q = q;
+        if (fFormat) vars.format = fFormat;
+        if (resolvedStatus) vars.status = resolvedStatus;
+        if (fSeason) vars.season = fSeason;
+
+        if (fYear && Number.isFinite(fYear)) {
+          // FuzzyDateInt range covers TV, Movies, OVAs, ONAs, and Specials from that year
+          vars.startDateGreater = fYear * 10000;
+          vars.startDateLesser = fYear * 10000 + 9999;
+        } else if ((fSort === "START_DATE_DESC" || category === "newest") && resolvedStatus !== "NOT_YET_RELEASED") {
+          // Cap "Newest" to already-released anime instead of future unannounced years
+          const now = new Date();
+          vars.startDateLesser =
+            now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+        }
+
+        const data = await clientAnilistQuery(BROWSE_QUERY, vars);
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
         hasNextPage = Boolean(data?.data?.Page?.pageInfo?.hasNextPage ?? items.length >= 20);
       } else if (category === "search" || q) {
-        const data = await clientAnilistQuery(SEARCH_QUERY, { page, q, genre: genre || null });
+        const vars: Record<string, any> = { page, q };
+        if (genre) vars.genre = genre;
+        const data = await clientAnilistQuery(SEARCH_QUERY, vars);
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
         hasNextPage = items.length >= 20;
       } else if (category === "airing") {
         const { season, year } = getCurrentSeason();
-        const data = await clientAnilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
+        const vars: Record<string, any> = { page, season, year };
+        if (genre) vars.genre = genre;
+        const data = await clientAnilistQuery(AIRING_QUERY, vars);
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
         hasNextPage = items.length >= 20;
       } else if (category === "trending") {
-        const data = await clientAnilistQuery(TRENDING_QUERY, { page, genre: genre || null });
+        const vars: Record<string, any> = { page };
+        if (genre) vars.genre = genre;
+        const data = await clientAnilistQuery(TRENDING_QUERY, vars);
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
         hasNextPage = items.length >= 20;
       } else {
-        const data = await clientAnilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
+        const vars: Record<string, any> = { page };
+        if (genre) vars.genre = genre;
+        const data = await clientAnilistQuery(LIST_QUERY, vars);
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
         hasNextPage = items.length >= 20;
       }

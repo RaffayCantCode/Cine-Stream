@@ -122,7 +122,8 @@ function FilterDropdown({
       {isOpen && (
         <div
           role="listbox"
-          className="absolute right-0 sm:left-0 mt-2 min-w-[190px] max-w-[240px] max-h-72 overflow-y-auto rounded-2xl bg-[#121620]/98 backdrop-blur-2xl border border-white/[0.14] shadow-2xl shadow-black/80 p-1.5 z-[100] animate-in fade-in zoom-in-95 duration-150"
+          style={{ backgroundColor: "#11151f" }}
+          className="absolute right-0 sm:left-0 mt-2 min-w-[200px] max-w-[250px] max-h-72 overflow-y-auto rounded-2xl bg-[#11151f] border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.95)] p-1.5 z-[100] animate-in fade-in zoom-in-95 duration-150"
         >
           {config.options.map((opt) => {
             const active = opt.value === config.value;

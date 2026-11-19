@@ -1117,7 +1117,10 @@ export default function MangaReaderClient({
             className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm"
             onClick={() => setChapterPickerOpen(false)}
           />
-          <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[340px] flex-col border-l border-white/12 bg-[#0b0d12]/98 p-4 shadow-[0_0_80px_rgba(0,0,0,0.95)] backdrop-blur-2xl">
+          <aside
+            style={{ backgroundColor: "#0b0d12" }}
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[340px] flex-col border-l border-white/15 bg-[#0b0d12] p-4 shadow-[0_0_80px_rgba(0,0,0,0.95)]"
+          >
             <div className="mb-3 flex shrink-0 items-center justify-between border-b border-white/10 pb-3">
               <div>
                 <span className="text-xs font-black uppercase tracking-wider text-white">
@@ -1242,7 +1245,10 @@ export default function MangaReaderClient({
             className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm"
             onClick={() => setSettingsOpen(false)}
           />
-          <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[350px] flex-col gap-5 overflow-y-auto border-l border-white/12 bg-[#0b0d12]/98 p-5 shadow-[0_0_80px_rgba(0,0,0,0.95)] backdrop-blur-2xl">
+          <aside
+            style={{ backgroundColor: "#0b0d12" }}
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[350px] flex-col gap-5 overflow-y-auto border-l border-white/15 bg-[#0b0d12] p-5 shadow-[0_0_80px_rgba(0,0,0,0.95)]"
+          >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <PanelRight className="h-4 w-4 text-white/60" />
