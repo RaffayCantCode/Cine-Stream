@@ -1740,11 +1740,11 @@ export default function Home() {
                   );
                 })}
               </div>
-                                {collections.length > 0 && (
-                <div className="mt-8 flex justify-center">
+              {collections.length > 0 && (
+                <div className="mt-7 pb-8 pt-1 flex justify-center">
                   <Link
                     href="/browse/franchises"
-                    className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-[#262E36] hover:bg-white/15 backdrop-blur-xl border border-white/20 text-[#D3D1CE] hover:text-white text-sm font-extrabold tracking-wide shadow-xl shadow-black/50 hover:shadow-black/70 hover:border-white/35 hover:scale-[1.03] active:scale-95 transition-all duration-300 overflow-hidden sheen-wrapper cursor-pointer"
+                    className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-[#262E36]/95 hover:bg-white/15 backdrop-blur-xl border border-white/20 text-[#D3D1CE] hover:text-white text-sm font-extrabold tracking-wide shadow-[0_8px_24px_rgba(0,0,0,0.45)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.6)] hover:border-white/35 hover:scale-[1.03] active:scale-95 transition-all duration-300 overflow-hidden sheen-wrapper cursor-pointer"
                   >
                     <Layers className="w-4 h-4 text-[#D3D1CE] transition-transform duration-300" />
                     <span>View More Franchises</span>

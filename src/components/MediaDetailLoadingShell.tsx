@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { declarePageReady } from "@/lib/pageLoad";
+import { useTheme } from "@/context/ThemeContext";
 import {
   getMediaPreview,
   type MediaPreview,
@@ -31,7 +32,29 @@ export function MediaDetailLoadingShell({
 }) {
   const params = useParams();
   const id = String(params?.id ?? "");
-  const [preview, setPreview] = useState<MediaPreview | null>(null);
+  const { theme } = useTheme();
+  const [preview, setPreview] = useState<MediaPreview | null>(() =>
+    typeof window !== "undefined" ? getMediaPreview(mediaType, id) : null
+  );
+
+  const pageBgClass = useMemo(() => {
+    switch (theme) {
+      case "global":
+        return "bg-[#07080d]";
+      case "glass":
+        return "bg-transparent";
+      case "oled":
+        return "bg-[#000000]";
+      case "cinema":
+        return "bg-[#140509]";
+      case "wisteria":
+        return "bg-[#0e071c]";
+      case "solaris":
+        return "bg-[#100b05]";
+      default:
+        return "bg-[#07080d]";
+    }
+  }, [theme]);
 
   useEffect(() => {
     setPreview(getMediaPreview(mediaType, id));
@@ -47,7 +70,7 @@ export function MediaDetailLoadingShell({
   const year = preview?.releaseDate ? preview.releaseDate.slice(0, 4) : null;
 
   return (
-    <div className="min-h-screen bg-[#07080d] text-white pb-24 overflow-x-clip">
+    <div className={`min-h-screen ${pageBgClass} text-white pb-24 overflow-x-clip`}>
       <Sidebar />
 
       <main className="relative z-10 w-full bleed-header">

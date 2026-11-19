@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
   const watchRegion = searchParams.get("watchRegion");
   const minVote = searchParams.get("minVote");
   const year = searchParams.get("year");
+  const country = searchParams.get("country");
+  const releaseDateGte = searchParams.get("releaseDateGte");
+  const releaseDateLte = searchParams.get("releaseDateLte");
   const maxRuntime = searchParams.get("maxRuntime");
   const minRuntime = searchParams.get("minRuntime");
   // Per-provider monetization override (defaults to "flatrate")
@@ -25,8 +28,19 @@ export async function GET(request: NextRequest) {
   if (genreId) params.with_genres = genreId;
   if (minVote) params["vote_average.gte"] = minVote;
   if (year) params.primary_release_year = year;
+  if (country) params.with_origin_country = country;
+  if (releaseDateGte) params["primary_release_date.gte"] = releaseDateGte;
+  if (releaseDateLte) params["primary_release_date.lte"] = releaseDateLte;
   if (maxRuntime) params["with_runtime.lte"] = maxRuntime;
   if (minRuntime) params["with_runtime.gte"] = minRuntime;
+
+  // Ensure Top Rated shows genuinely acclaimed movies instead of 1-vote obscure entries
+  if (sortBy === "vote_average.desc") {
+    params["vote_count.gte"] = "250";
+  } else if (sortBy === "primary_release_date.desc" && !releaseDateLte && !releaseDateGte) {
+    params["primary_release_date.lte"] = new Date().toISOString().split("T")[0];
+    params["vote_count.gte"] = "20";
+  }
 
   if (withProviders) {
     params.with_watch_providers = withProviders;

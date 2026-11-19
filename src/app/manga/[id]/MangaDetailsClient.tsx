@@ -185,15 +185,27 @@ export default function MangaDetailsClient({
     window.addEventListener("storage", handleImmediateUpdate);
 
     let isMountedLocal = true;
+    let savedTitleHint = "";
+    try {
+      savedTitleHint = sessionStorage.getItem(`cs_manga_title_${id}`) || "";
+    } catch {}
+    const titleQs = savedTitleHint ? `title=${encodeURIComponent(savedTitleHint)}` : "";
 
-    // 1. Fetch metadata/details if not provided
+    // 1. Fetch metadata/details if not provided (passes title hint for cross-source failover)
     if (!initialManga) {
       setIsDetailsLoading(true);
-      fetchJson<{ success: boolean; item: MangaItem }>(`/api/manga/details/${id}`)
+      fetchJson<{ success: boolean; item: MangaItem }>(
+        `/api/manga/details/${id}${titleQs ? `?${titleQs}` : ""}`
+      )
         .then((data) => {
           if (!isMountedLocal) return;
           if (data.success && data.item) {
             setManga(data.item);
+            if (data.item.title) {
+              try {
+                sessionStorage.setItem(`cs_manga_title_${id}`, data.item.title);
+              } catch {}
+            }
           } else {
             setError("Failed to load manga details");
           }
@@ -208,10 +220,12 @@ export default function MangaDetailsClient({
         });
     }
 
-    // 2. Fetch chapters if not provided
+    // 2. Fetch chapters if not provided (passes title hint for cross-source failover)
     if (initialChapters.length === 0) {
       setIsChaptersLoading(true);
-      fetchJson<{ success: boolean; chapters: MangaChapter[] }>(`/api/manga/chapters/${id}?order=asc&limit=500`)
+      fetchJson<{ success: boolean; chapters: MangaChapter[] }>(
+        `/api/manga/chapters/${id}?order=asc&limit=500${titleQs ? `&${titleQs}` : ""}`
+      )
         .then((data) => {
           if (!isMountedLocal) return;
           if (data.success && data.chapters) {
@@ -237,6 +251,35 @@ export default function MangaDetailsClient({
       window.removeEventListener("storage", handleImmediateUpdate);
     };
   }, [id, initialManga, initialChapters.length, refreshProgress]);
+
+  // Smart chapter failover retry: if initial chapter fetch returned 0 (e.g. direct bookmark without session title hint),
+  // retry once with the resolved manga.title so the server can pull chapters from an alternate source!
+  const chapterFailoverTriedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isChaptersLoading || chapters.length > 0 || !manga?.title) return;
+    if (chapterFailoverTriedRef.current === id) return;
+    chapterFailoverTriedRef.current = id;
+
+    let active = true;
+    setIsChaptersLoading(true);
+    fetchJson<{ success: boolean; chapters: MangaChapter[] }>(
+      `/api/manga/chapters/${id}?order=asc&limit=500&title=${encodeURIComponent(manga.title)}`,
+      { skipCache: true }
+    )
+      .then((data) => {
+        if (active && data.success && Array.isArray(data.chapters) && data.chapters.length > 0) {
+          setChapters(data.chapters);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setIsChaptersLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id, isChaptersLoading, chapters.length, manga?.title]);
 
   // Filter and sort chapters in strict descending (latest to oldest) or ascending order
   const filteredChapters = useMemo(() => {

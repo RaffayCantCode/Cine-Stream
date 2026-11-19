@@ -55,15 +55,46 @@ export const MangaCard = memo(function MangaCard({
         theme.cardHoverClass
       )}
     >
-      {/* Full-Bleed Poster Image */}
+      {/* Full-Bleed Poster Image with Smart 3-Tier Source Failover */}
       <img
-        src={item.coverImage}
+        src={item.coverImage || "/icon-512.png"}
         alt={item.title}
         referrerPolicy="no-referrer"
         loading={priority ? "eager" : "lazy"}
         decoding="async"
         onError={(e) => {
           const target = e.currentTarget;
+          const original = item.coverImage || "";
+          // Tier 1: Retry failed direct CDN cover via Edge image-proxy
+          if (original.startsWith("https://") && !target.dataset.proxyTried) {
+            target.dataset.proxyTried = "1";
+            target.src = `/api/image-proxy?url=${encodeURIComponent(original)}`;
+            return;
+          }
+          // Tier 2: Ask another manga source (WeebCentral / MangaKatana / Asura) for this title's cover
+          if (item.title && !target.dataset.altSourceTried) {
+            target.dataset.altSourceTried = "1";
+            const srcParam = item.source ? `&excludeSource=${encodeURIComponent(item.source)}` : "";
+            fetch(`/api/manga/cover-fallback?title=${encodeURIComponent(item.title)}${srcParam}`)
+              .then((res) => (res.ok ? res.json() : null))
+              .then((data) => {
+                if (data?.coverUrl && typeof data.coverUrl === "string") {
+                  try {
+                    sessionStorage.setItem(`cs_manga_cover_${item.id}`, data.coverUrl);
+                  } catch {}
+                  target.src = data.coverUrl;
+                } else if (!target.src.includes("icon-512.png")) {
+                  target.src = "/icon-512.png";
+                }
+              })
+              .catch(() => {
+                if (!target.src.includes("icon-512.png")) {
+                  target.src = "/icon-512.png";
+                }
+              });
+            return;
+          }
+          // Tier 3: Final placeholder fallback
           if (!target.src.includes("icon-512.png")) {
             target.src = "/icon-512.png";
           }

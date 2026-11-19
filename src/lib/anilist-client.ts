@@ -4,6 +4,24 @@ import { fetchKitsuClientAnime } from "@/lib/kitsu";
 
 const ANILIST_API = "https://graphql.anilist.co";
 
+export interface AnimeBrowseFilters {
+  year?: number | null;
+  format?: string | null;
+  status?: string | null;
+  season?: string | null;
+  sort?: string | null;
+}
+
+const BROWSE_QUERY = `query ($page: Int, $genre: String, $q: String, $year: Int, $format: MediaFormat, $status: MediaStatus, $season: MediaSeason, $sort: [MediaSort]) {
+  Page(page: $page, perPage: 50) {
+    pageInfo { hasNextPage }
+    media(type: ANIME, isAdult: false, sort: $sort, genre: $genre, search: $q, seasonYear: $year, format: $format, status: $status, season: $season) {
+      id idMal isAdult title { romaji english native } coverImage { large extraLarge } bannerImage
+      episodes genres averageScore description status type format season seasonYear duration
+    }
+  }
+}`;
+
 
 const LIST_QUERY = `query ($page: Int, $genre: String, $q: String) {
   Page(page: $page, perPage: 50) {
@@ -149,8 +167,24 @@ function isCacheFromPrimarySources(items: AnimeItem[]): boolean {
   });
 }
 
-export async function fetchClientAnime(category: string, page = 1, genre = "", q = ""): Promise<{ items: AnimeItem[], hasMore: boolean }> {
-  const cacheKey = `anime_${category}_${page}_${genre}_${q}`;
+export async function fetchClientAnime(
+  category: string,
+  page = 1,
+  genre = "",
+  q = "",
+  filters?: AnimeBrowseFilters
+): Promise<{ items: AnimeItem[]; hasMore: boolean }> {
+  const fYear = filters?.year ? Number(filters.year) : null;
+  const fFormat = filters?.format || null;
+  const fStatus = filters?.status || null;
+  const fSeason = filters?.season || null;
+  const fSort = filters?.sort || null;
+  const hasAdvancedFilters = Boolean(fYear || fFormat || fStatus || fSeason || fSort);
+
+  const filterKey = hasAdvancedFilters
+    ? `_y${fYear || ""}_f${fFormat || ""}_st${fStatus || ""}_se${fSeason || ""}_so${fSort || ""}`
+    : "";
+  const cacheKey = `anime_${category}_${page}_${genre}_${q}${filterKey}`;
   const versionedKey = `sv_client_${CLIENT_CACHE_VERSION}_${cacheKey}`;
 
   // 1) In-memory cache check (only if items exist from primary sources!)
@@ -181,28 +215,72 @@ export async function fetchClientAnime(category: string, page = 1, genre = "", q
   if (typeof window !== "undefined") {
     try {
       let items: AnimeItem[] = [];
-      if (category === "search" || q) {
+      let hasNextPage = true;
+
+      if (hasAdvancedFilters || category === "top_rated" || category === "newest" || category === "upcoming") {
+        let sortArr: string[] = ["POPULARITY_DESC"];
+        let resolvedStatus = fStatus;
+        let resolvedSeason = fSeason;
+        let resolvedYear = fYear;
+
+        if (q) {
+          sortArr = ["SEARCH_MATCH", "POPULARITY_DESC"];
+        } else if (fSort === "TRENDING_DESC" || category === "trending") {
+          sortArr = ["TRENDING_DESC", "POPULARITY_DESC"];
+        } else if (fSort === "SCORE_DESC" || category === "top_rated") {
+          sortArr = ["SCORE_DESC", "POPULARITY_DESC"];
+        } else if (fSort === "START_DATE_DESC" || category === "newest") {
+          sortArr = ["START_DATE_DESC", "POPULARITY_DESC"];
+        } else if (fSort === "FAVOURITES_DESC") {
+          sortArr = ["FAVOURITES_DESC", "POPULARITY_DESC"];
+        }
+
+        if (category === "airing" && !resolvedStatus) {
+          resolvedStatus = "RELEASING";
+        } else if (category === "upcoming" && !resolvedStatus) {
+          resolvedStatus = "NOT_YET_RELEASED";
+        }
+
+        const data = await clientAnilistQuery(BROWSE_QUERY, {
+          page,
+          genre: genre || null,
+          q: q || null,
+          year: resolvedYear || null,
+          format: fFormat || null,
+          status: resolvedStatus || null,
+          season: resolvedSeason || null,
+          sort: sortArr,
+        });
+        items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+        hasNextPage = Boolean(data?.data?.Page?.pageInfo?.hasNextPage ?? items.length >= 20);
+      } else if (category === "search" || q) {
         const data = await clientAnilistQuery(SEARCH_QUERY, { page, q, genre: genre || null });
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+        hasNextPage = items.length >= 20;
       } else if (category === "airing") {
         const { season, year } = getCurrentSeason();
         const data = await clientAnilistQuery(AIRING_QUERY, { page, genre: genre || null, season, year });
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+        hasNextPage = items.length >= 20;
       } else if (category === "trending") {
         const data = await clientAnilistQuery(TRENDING_QUERY, { page, genre: genre || null });
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+        hasNextPage = items.length >= 20;
       } else {
         const data = await clientAnilistQuery(LIST_QUERY, { page, genre: genre || null, q: null });
         items = (data?.data?.Page?.media || []).map(transformAniList).filter(Boolean) as AnimeItem[];
+        hasNextPage = items.length >= 20;
       }
-      
+
       items = filterUnreleased(deduplicateAnime(items));
-      if (items.length > 0) {
-        const result = { items, hasMore: items.length > 0 };
-        clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
-        try {
-          sessionStorage.setItem(versionedKey, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
-        } catch {}
+      if (items.length > 0 || hasAdvancedFilters) {
+        const result = { items, hasMore: hasNextPage && items.length > 0 };
+        if (items.length > 0) {
+          clientAnimeCache.set(cacheKey, { data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL });
+          try {
+            sessionStorage.setItem(versionedKey, JSON.stringify({ data: result, expires: Date.now() + CLIENT_ANIME_CACHE_TTL }));
+          } catch {}
+        }
         return result;
       }
     } catch (e) {

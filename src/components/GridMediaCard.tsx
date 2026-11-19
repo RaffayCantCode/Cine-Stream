@@ -81,6 +81,30 @@ export function GridMediaCard({ item, index = 0, action, className }: GridMediaC
     if (previewType) {
       cacheMediaPreview(item, previewType);
       void fetchJson(`/api/tmdb/${previewType}/${item.id}`).catch(() => {});
+
+      if (previewType === "tv" && item.id) {
+        let targetSeason = 1;
+        try {
+          const cwRaw = localStorage.getItem("cinestream_cw_cache");
+          if (cwRaw) {
+            const cw = JSON.parse(cwRaw);
+            const found = (cw?.items || []).find(
+              (it: any) => String(it.mediaId) === String(item.id) && it.mediaType === "tv"
+            );
+            if (found?.season && Number(found.season) > 0) {
+              targetSeason = Number(found.season);
+            }
+          }
+        } catch {}
+        void fetchJson(`/api/tmdb/tv/${item.id}/season/${targetSeason}`).catch(() => {});
+      }
+
+      if (item.backdrop_path && typeof window !== "undefined") {
+        const img = new window.Image();
+        img.src = item.backdrop_path.startsWith("http")
+          ? item.backdrop_path
+          : `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`;
+      }
     }
 
     router.prefetch(link);

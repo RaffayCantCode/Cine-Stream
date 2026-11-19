@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
   const watchRegion = searchParams.get("watchRegion");
   const minVote = searchParams.get("minVote");
   const year = searchParams.get("year");
+  const country = searchParams.get("country");
+  const airDateGte = searchParams.get("airDateGte");
+  const airDateLte = searchParams.get("airDateLte");
   const maxRuntime = searchParams.get("maxRuntime");
   const minRuntime = searchParams.get("minRuntime");
   // Per-provider monetization override (defaults to "flatrate")
@@ -25,8 +28,19 @@ export async function GET(request: NextRequest) {
   if (genreId) params.with_genres = genreId;
   if (minVote) params["vote_average.gte"] = minVote;
   if (year) params.first_air_date_year = year;
+  if (country) params.with_origin_country = country;
+  if (airDateGte) params["first_air_date.gte"] = airDateGte;
+  if (airDateLte) params["first_air_date.lte"] = airDateLte;
   if (maxRuntime) params["with_runtime.lte"] = maxRuntime;
   if (minRuntime) params["with_runtime.gte"] = minRuntime;
+
+  // Ensure Top Rated shows genuinely acclaimed TV series instead of 1-vote obscure entries
+  if (sortBy === "vote_average.desc") {
+    params["vote_count.gte"] = "150";
+  } else if (sortBy === "first_air_date.desc" && !airDateLte && !airDateGte) {
+    params["first_air_date.lte"] = new Date().toISOString().split("T")[0];
+    params["vote_count.gte"] = "15";
+  }
 
   if (withProviders) {
     params.with_watch_providers = withProviders;

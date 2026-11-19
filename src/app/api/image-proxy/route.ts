@@ -20,6 +20,11 @@ const ALLOWED_HOSTS = [
   "kitsu.io",
   "myanimelist.net",
   "gogoanime.org",
+  "asurascans.com",
+  "asuracomic.net",
+  "compsci88.com",
+  "weebcentral.com",
+  "mangakatana.com",
 ];
 
 function isAllowedHost(hostname: string): boolean {
@@ -65,8 +70,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const fetchHeaders: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "image/avif,image/webp,image/png,image/jpeg,image/*",
+    };
+    if (parsed.hostname.endsWith("asurascans.com") || parsed.hostname.endsWith("asuracomic.net")) {
+      fetchHeaders["Referer"] = "https://asuracomic.net/";
+    } else if (parsed.hostname.endsWith("mangakatana.com")) {
+      fetchHeaders["Referer"] = "https://mangakatana.com/";
+    } else if (parsed.hostname.endsWith("weebcentral.com") || parsed.hostname.endsWith("compsci88.com")) {
+      fetchHeaders["Referer"] = "https://weebcentral.com/";
+    }
+
     const upstream = await fetch(smallVariant(parsed).href, {
-      headers: { Accept: "image/avif,image/webp,image/png,image/jpeg,image/*" },
+      headers: fetchHeaders,
       redirect: "follow",
     });
 

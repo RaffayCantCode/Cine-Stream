@@ -1021,7 +1021,15 @@ export async function getAnimeDetails(
       const startKey = String(1 + aniZipStartOffset);
       const epStart = aniZip.episodes[startKey] || aniZip.episodes["1"];
       if (epStart) {
-        if (epStart.seasonNumber !== undefined && sNum === null) sNum = epStart.seasonNumber;
+        const parsedTitleSeason = parseSeasonNumberFromTitle(s.name);
+        if (epStart.seasonNumber !== undefined && sNum === null) {
+          // Never let AniZip's default seasonNumber=1 overwrite an explicit Season 2+ title
+          if (parsedTitleSeason && parsedTitleSeason > 1 && Number(epStart.seasonNumber) === 1) {
+            sNum = parsedTitleSeason;
+          } else {
+            sNum = epStart.seasonNumber;
+          }
+        }
         if (epStart.episodeNumber !== undefined && offset === 0) offset = Math.max(epStart.episodeNumber - 1, 0);
         else if (aniZipStartOffset > 0 && offset === 0) offset = aniZipStartOffset;
       }

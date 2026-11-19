@@ -9,6 +9,7 @@ import {
   getMangaDetails,
   getMangaChapters,
   getChapterPages,
+  findAlternativeMangaCover,
 } from "@/lib/manga-fetch";
 
 function jsonWithCache(data: any, sMaxAge = 1800, staleWhileRevalidate = 86400, status = 200) {
@@ -96,10 +97,26 @@ export async function GET(
     }
   }
 
+  if (action === "cover-fallback") {
+    try {
+      const title = searchParams.get("title") || "";
+      const excludeSource = searchParams.get("excludeSource") || undefined;
+      if (!title.trim()) {
+        return jsonWithCache({ success: false, coverUrl: null }, 300);
+      }
+      const coverUrl = await findAlternativeMangaCover(title, excludeSource);
+      return jsonWithCache({ success: Boolean(coverUrl), coverUrl }, coverUrl ? 3600 : 120);
+    } catch (err: any) {
+      console.error("[API/Manga] cover-fallback error:", err);
+      return jsonWithCache({ success: false, coverUrl: null }, 60);
+    }
+  }
+
   if (action === "details" && route[1]) {
     try {
       const id = route[1];
-      const item = await getMangaDetails(id);
+      const titleHint = searchParams.get("title") || undefined;
+      const item = await getMangaDetails(id, titleHint);
       if (!item) {
         return NextResponse.json({ success: false, error: "Manga not found" }, { status: 404 });
       }
@@ -126,8 +143,9 @@ export async function GET(
       const order = (searchParams.get("order") || "asc") as "asc" | "desc";
       const limit = parseInt(searchParams.get("limit") || "500", 10);
       const offset = parseInt(searchParams.get("offset") || "0", 10);
+      const titleHint = searchParams.get("title") || undefined;
 
-      const data = await getMangaChapters(id, { order, limit, offset });
+      const data = await getMangaChapters(id, { order, limit, offset, title: titleHint });
       return jsonWithCache({ success: true, ...data }, 900);
     } catch (err: any) {
       console.error("[API/Manga] chapters error:", err);

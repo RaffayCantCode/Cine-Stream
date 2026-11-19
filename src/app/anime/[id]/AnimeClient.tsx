@@ -1592,11 +1592,13 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
           ? fetchAniListCoverColor(id).catch(() => null)
           : Promise.resolve(null);
 
-      // If card hover/press preload is still warming meta/episodes, wait briefly so we reuse its results.
-      if (inFlightPreload && (!cachedMeta?.anime || !cachedSeasonEps?.episodes?.length)) {
+      // If card hover/press preload is still warming meta, wait briefly so we reuse its result.
+      // When meta is already cached, proceed immediately — loadSeasonEpisodes automatically
+      // deduplicates against the in-flight episodes fetchJson promise while palette resolves in parallel.
+      if (inFlightPreload && !cachedMeta?.anime) {
         await Promise.race([
           inFlightPreload.catch(() => {}),
-          new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+          new Promise<void>((resolve) => setTimeout(resolve, 900)),
         ]);
         if (cancelled) return;
         cachedMeta = readCachedAnimeMeta(id, initialForRoute) || cachedMeta;
@@ -1707,6 +1709,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       // Resolve cover palette in parallel with initial episodes, capped so slow artwork never stalls reveal.
       const posterForPalette = (targetSeason as any)?.coverImage || a.poster || "";
+      const heroBannerForWarm = (targetSeason as any)?.bannerImage || a.bannerImage || a.backdrop || "";
+      if (typeof window !== "undefined") {
+        if (heroBannerForWarm) {
+          const bannerImg = new window.Image();
+          bannerImg.src = heroBannerForWarm;
+        }
+        if (posterForPalette) {
+          const posterImg = new window.Image();
+          posterImg.src = posterForPalette;
+        }
+      }
       const paletteSeed = `${a.id || id}|${a.name || ""}`;
       const fallbackSeedPalette = buildPaletteFromSeed(paletteSeed);
 

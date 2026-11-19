@@ -29,7 +29,7 @@ function TvHeroTrailerButton() {
 }
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodeChunkBar, EpisodePagination, type EpisodeItem } from "@/components/episodes/EpisodeViews";
-import { cn, fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
+import { cn, fetchJson, peekCachedJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { format } from "date-fns";
 import { CastRow } from "@/components/CastRow";
@@ -97,17 +97,53 @@ function cacheTvForWatch(data: TvShow) {
   } catch {}
 }
 
+function resolveInitialTvSeason(id: number, show: TvShow | null): number {
+  if (typeof window !== "undefined" && id) {
+    try {
+      const urlSeason = Number(new URLSearchParams(window.location.search).get("season") || 0);
+      if (urlSeason > 0) return urlSeason;
+
+      const activeRaw = localStorage.getItem("cinestream_active_tv_show");
+      if (activeRaw) {
+        const parsed = JSON.parse(activeRaw);
+        if (String(parsed?.id) === String(id) && Number(parsed?.season) > 0) {
+          return Number(parsed.season);
+        }
+      }
+
+      const cwRaw = localStorage.getItem("cinestream_cw_cache");
+      if (cwRaw) {
+        const cw = JSON.parse(cwRaw);
+        const found = (cw?.items || []).find(
+          (it: any) => String(it.mediaId) === String(id) && it.mediaType === "tv"
+        );
+        if (found?.season && Number(found.season) > 0) {
+          return Number(found.season);
+        }
+      }
+    } catch {}
+  }
+  return (
+    Number(show?._initialSeasonNum) ||
+    show?.seasons?.find((season) => season.season_number > 0)?.season_number ||
+    1
+  );
+}
+
 export default function TvClient({ initialData, initialHidden = false }: TvClientProps) {
   const router = useRouter();
   const params = useParams();
   const id = Number(params.id);
   const { data: session, status } = useSession();
-  const initialShow = initialData && Number(initialData.id) === id ? initialData : null;
-  const initialSeasonNum =
-    Number(initialShow?._initialSeasonNum) ||
-    initialShow?.seasons?.find((season) => season.season_number > 0)?.season_number ||
-    1;
-  const initialSeasonData = initialShow?._initialSeasonData ?? null;
+  const initialShow = initialData && Number(initialData.id) === id
+    ? initialData
+    : (typeof window !== "undefined" && id ? peekCachedJson<TvShow>(`/api/tmdb/tv/${id}`) : null);
+  const initialSeasonNum = resolveInitialTvSeason(id, initialShow);
+  const initialSeasonData =
+    initialShow?._initialSeasonData ??
+    (typeof window !== "undefined" && id
+      ? peekCachedJson<Season>(`/api/tmdb/tv/${id}/season/${initialSeasonNum}`)
+      : null);
   const seasonCacheRef = useRef<Map<number, Season>>(
     initialSeasonData && initialSeasonNum
       ? new Map([[initialSeasonNum, initialSeasonData]])
@@ -359,13 +395,26 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
       return;
     }
 
+    const cachedShow = id ? peekCachedJson<TvShow>(`/api/tmdb/tv/${id}`) : null;
+    if (cachedShow && Number(cachedShow.id) === id) {
+      setShow(cachedShow);
+      setError(null);
+      setIsLoading(false);
+      cacheTvForWatch(cachedShow);
+      if (cachedShow._initialSeasonData && cachedShow._initialSeasonNum) {
+        const sNum = Number(cachedShow._initialSeasonNum);
+        seasonCacheRef.current.set(sNum, cachedShow._initialSeasonData);
+      }
+      return;
+    }
+
     const controller = new AbortController();
     let cancelled = false;
+    let preloadLink: HTMLLinkElement | null = null;
 
     const fetchShow = async () => {
       setIsLoading(true);
       setShow(null);
-      setSeasonData(null);
       setError(null);
       try {
         const data = await fetchJson<TvShow>(`/api/tmdb/tv/${id}`, {
@@ -378,11 +427,12 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
           : null;
         // Preload backdrop immediately via <link rel=preload> for fastest paint
         if (backdropSrc) {
-          const link = document.createElement("link");
-          link.rel = "preload"; link.as = "image";
-          link.href = backdropSrc;
-          link.fetchPriority = "high";
-          document.head.appendChild(link);
+          preloadLink = document.createElement("link");
+          preloadLink.rel = "preload";
+          preloadLink.as = "image";
+          preloadLink.href = backdropSrc;
+          preloadLink.fetchPriority = "high";
+          document.head.appendChild(preloadLink);
         }
         // Set show data first so React can start rendering
         setShow(data);
@@ -417,6 +467,9 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
     return () => {
       cancelled = true;
       controller.abort();
+      if (preloadLink && preloadLink.parentNode) {
+        preloadLink.parentNode.removeChild(preloadLink);
+      }
     };
   }, [id, initialData, initialHidden]);
 
@@ -486,10 +539,18 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
   }, [id, show, playingSeason, playingEpisode, status, isStateLoaded, hasActiveProgress]);
 
   useEffect(() => {
-    if (!selectedSeason || isLoading) return;
+    if (!id || !selectedSeason || initialHidden) return;
 
     if (seasonCacheRef.current.has(selectedSeason)) {
       setSeasonData(seasonCacheRef.current.get(selectedSeason)!);
+      setSeasonLoading(false);
+      return;
+    }
+
+    const cachedSeason = peekCachedJson<Season>(`/api/tmdb/tv/${id}/season/${selectedSeason}`);
+    if (cachedSeason) {
+      seasonCacheRef.current.set(selectedSeason, cachedSeason);
+      setSeasonData(cachedSeason);
       setSeasonLoading(false);
       return;
     }
@@ -516,7 +577,7 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
 
     fetchSeason();
     return () => { isActive = false; };
-  }, [id, selectedSeason, isLoading]);
+  }, [id, selectedSeason, initialHidden]);
 
   const handleWatchEpisode = async (season: number, episodeNumber: number, episodeName?: string) => {
     const targetEpisode = season === selectedSeason

@@ -84,6 +84,36 @@ function getSmartTtlMs(urlStr: string): number {
   return 1_800_000; // 30 minutes default
 }
 
+export function peekCachedJson<T = unknown>(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): T | null {
+  const method = init?.method ?? "GET";
+  if (method.toUpperCase() !== "GET") return null;
+  const cacheKey = getCacheKey(input, init);
+  const now = Date.now();
+
+  const cached = requestCache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return cached.data as T;
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const stored = sessionStorage.getItem(`fj_${cacheKey}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.expires > now) {
+          requestCache.set(cacheKey, parsed);
+          return parsed.data as T;
+        }
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
 export async function fetchJson<T = unknown>(
   input: RequestInfo | URL,
   init?: FetchJsonOptions

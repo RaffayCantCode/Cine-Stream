@@ -65,9 +65,11 @@ export function MangaPageItem({
       const retries = parseInt(img.dataset.retryCount || "0", 10);
       if (retries < 3) {
         img.dataset.retryCount = String(retries + 1);
-        const delay = retries < 2 ? 800 : 2000;
+        const delay = retries === 0 ? 250 : retries === 1 ? 900 : 1800;
         window.setTimeout(() => {
-          if (retries === 2 && dataSaverUrl) {
+          if (retries === 0 && url.startsWith("https://")) {
+            img.src = `/api/image-proxy?url=${encodeURIComponent(url)}`;
+          } else if (retries === 2 && dataSaverUrl) {
             img.src = dataSaverUrl;
           } else {
             img.src = `${url}${url.includes("?") ? "&" : "?"}_r=${retries + 1}_${Date.now()}`;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Film, Sparkles, ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SeasonInfo } from "@/lib/anime-fetch";
+import { preloadAnimePageData } from "@/lib/anime-cache";
 
 export interface FranchiseNodeItem {
   id: string | number;
@@ -186,9 +187,26 @@ export function AnimeSeasonSelector({
       rawSeasons.push(item);
     }
 
-    // Filter out unreleased placeholder seasons with 0 episodes from future years or without release dates
+    // Helper to check if a node corresponds to the currently opened anime/season
+    const cleanCurrId = String(currentAnimeId || "").trim().toLowerCase();
+    const cleanCurrSeasonId = String(currentSeasonId || "").trim().toLowerCase();
+    const isNodeActive = (item: FranchiseNodeItem): boolean => {
+      const ids = [
+        item.id ? String(item.id).trim().toLowerCase() : "",
+        item.anilistId ? String(item.anilistId).trim().toLowerCase() : "",
+        item.idMal ? String(item.idMal).trim().toLowerCase() : "",
+      ].filter(Boolean);
+      return Boolean(
+        (cleanCurrId && ids.includes(cleanCurrId)) ||
+        (cleanCurrSeasonId && ids.includes(cleanCurrSeasonId))
+      );
+    };
+
+    // Filter out unreleased placeholder seasons with 0 episodes from future years or without release dates,
+    // NEVER dropping the currently opened anime/season so S2+ never falls back to the S1 box.
     const currentYear = new Date().getFullYear();
     const validSeasons = rawSeasons.filter((item) => {
+      if (isNodeActive(item)) return true;
       const status = String((item as any).status || "").toUpperCase();
       const eps = item.totalEpisodes || item.episodes || 0;
       const yr = item.seasonYear;
@@ -252,21 +270,46 @@ export function AnimeSeasonSelector({
     // Label seasons with clean TV-style badges: S1, S2, S3, S3 P2, S4, S4 P2...
     let seasonCounter = 0;
     let lastMainSeasonNum = 0;
+    let lastSeasonYear: number | null = null;
+    const usedLabels = new Set<string>();
 
-    const labeledSeasons = validSeasons.map((item) => {
+    const finalSeasons: FranchiseNodeItem[] = validSeasons.map((item) => {
       const title = getSafeTitle(item.title).toLowerCase();
       const explicitSeason = title.match(/season\s*(\d+)/i) || title.match(/(\d+)(?:st|nd|rd|th)\s+season/i);
       const explicitPart = title.match(/(?:part|cour)\s*(\d+)/i);
       const partNum = explicitPart ? parseInt(explicitPart[1], 10) : null;
       const isFinalSeason = /\b(final\s+season|the\s+final)\b/i.test(title);
+      const itemOffset = (item as any).episodeOffset ?? item.matchingSeason?.episodeOffset ?? 0;
 
-      // Curated / TMDB season number takes precedence if explicitly mapped (e.g. JoJo, Fate, Pokemon)
-      let sNum: number | null = item.matchingSeason?.tmdbSeasonNumber || (item as any).tmdbSeasonNumber || null;
+      // Curated / TMDB season number takes precedence ONLY when it doesn't contradict
+      // an explicit "Season 2+" in the title or collide as a merged TMDB Season 1 on a later sequel.
+      const rawTmdbSeasonNum: number | null =
+        item.matchingSeason?.tmdbSeasonNumber || (item as any).tmdbSeasonNumber || null;
+      const explicitSeasonNum = explicitSeason ? parseInt(explicitSeason[1], 10) : null;
+
+      let sNum: number | null = rawTmdbSeasonNum;
       let forcePart: number | null = null;
 
+      if (explicitSeasonNum && (!sNum || (sNum === 1 && explicitSeasonNum > 1))) {
+        sNum = explicitSeasonNum;
+      }
+
+      // If TMDB merged a subsequent season into Season 1 (tmdbSeasonNumber=1) without an episodeOffset or Part/Cour marker,
+      // don't let it overwrite S1 — treat it as the next sequential season instead.
+      if (
+        sNum !== null &&
+        sNum === lastMainSeasonNum &&
+        !partNum &&
+        itemOffset <= 0 &&
+        !isFinalSeason &&
+        usedLabels.has(`S${sNum}`)
+      ) {
+        sNum = null;
+      }
+
       if (!sNum) {
-        if (explicitSeason) {
-          sNum = parseInt(explicitSeason[1], 10);
+        if (explicitSeasonNum) {
+          sNum = explicitSeasonNum;
           if (partNum && partNum > 1) {
             forcePart = partNum;
           }
@@ -296,35 +339,44 @@ export function AnimeSeasonSelector({
       }
 
       // Check offset for split parts (e.g. JoJo Egypt offset 24 -> P2, Pokemon offset -> P2)
-      const itemOffset = (item as any).episodeOffset ?? item.matchingSeason?.episodeOffset ?? 0;
       if (!forcePart && itemOffset > 0) {
         forcePart = 2;
       }
 
-      lastMainSeasonNum = sNum;
-      seasonCounter = Math.max(seasonCounter, sNum);
+      let shortLabel = forcePart && forcePart > 1 ? `S${sNum} P${forcePart}` : `S${sNum}`;
 
-      let shortLabel = `S${sNum}`;
-      if (forcePart && forcePart > 1) {
-        shortLabel += ` P${forcePart}`;
+      // Never silently drop a real season on label collision: disambiguate into the next Part or Season
+      if (usedLabels.has(shortLabel)) {
+        const isLikelyCour =
+          Boolean(partNum && partNum > 1) ||
+          itemOffset > 0 ||
+          (item.seasonYear != null && lastSeasonYear != null && Math.abs(item.seasonYear - lastSeasonYear) <= 1 && isFinalSeason);
+
+        if (isLikelyCour) {
+          let nextPart = Math.max((forcePart || 1) + 1, 2);
+          while (usedLabels.has(`S${sNum} P${nextPart}`)) {
+            nextPart++;
+          }
+          forcePart = nextPart;
+          shortLabel = `S${sNum} P${nextPart}`;
+        } else {
+          seasonCounter = Math.max(seasonCounter, sNum) + 1;
+          sNum = seasonCounter;
+          forcePart = null;
+          shortLabel = `S${sNum}`;
+        }
       }
+
+      usedLabels.add(shortLabel);
+      lastMainSeasonNum = sNum;
+      if (item.seasonYear) lastSeasonYear = item.seasonYear;
+      seasonCounter = Math.max(seasonCounter, sNum);
 
       return {
         ...item,
         shortLabel,
       };
     });
-
-    // Deduplicate by shortLabel so duplicate seasons (e.g. two S1 or two S2) can never appear
-    const finalSeasons: FranchiseNodeItem[] = [];
-    const seenLabels = new Set<string>();
-    for (const s of labeledSeasons) {
-      if (s.shortLabel && seenLabels.has(s.shortLabel)) {
-        continue;
-      }
-      if (s.shortLabel) seenLabels.add(s.shortLabel);
-      finalSeasons.push(s);
-    }
 
     // Sort movies and specials chronologically, preserving source order when years are equal
     moviesList.sort((a, b) => {
@@ -350,7 +402,7 @@ export function AnimeSeasonSelector({
       movies: moviesList,
       specials: specialsList,
     };
-  }, [franchiseNodes, currentSeasons]);
+  }, [franchiseNodes, currentSeasons, currentAnimeId, currentSeasonId]);
 
   // If there are no multi-part entries to switch between (e.g. standalone movie or single 1-season show with no specials/movies), don't show the bar
   const totalEntries = seasons.length + movies.length + specials.length;
@@ -420,6 +472,12 @@ export function AnimeSeasonSelector({
             key={`season-pill-${s.id}`}
             href={`/anime/${targetId}`}
             title={getSafeTitle(s.title)}
+            onMouseEnter={() => {
+              if (!isCurrentShow) preloadAnimePageData(targetId, s);
+            }}
+            onPointerDown={() => {
+              if (!isCurrentShow) preloadAnimePageData(targetId, s);
+            }}
             onClick={(e) => {
               if (isCurrentShow && onSelectSeason) {
                 e.preventDefault();

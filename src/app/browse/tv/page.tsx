@@ -1,14 +1,19 @@
 "use client";
 export const runtime = 'edge';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/Sidebar";
 import { MediaCard } from "@/components/MediaCard";
-import { Search, Shuffle, Loader2 } from "lucide-react";
-import { cn, fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime, filterExcludeNews } from "@/lib/utils";
+import { BrowseFilterBar, ScrollToTopButton, type FilterDropdownConfig } from "@/components/BrowseFilterBar";
+import { Loader2 } from "lucide-react";
+import { fetchJson, shuffleArray, filterReleasedSafeContent, filterExcludeAnime, filterExcludeNews } from "@/lib/utils";
 import { getBrowseStartPage } from "@/lib/browse-prefetch";
-const ContinueWatching = dynamic(() => import("@/components/ContinueWatching").then(m => m.ContinueWatching), { ssr: false });
+
+const ContinueWatching = dynamic(
+  () => import("@/components/ContinueWatching").then((m) => m.ContinueWatching),
+  { ssr: false }
+);
 
 interface Genre {
   id: number;
@@ -20,6 +25,7 @@ interface TvShow {
   title?: string;
   name?: string;
   poster_path?: string;
+  backdrop_path?: string | null;
   media_type?: string;
   release_date?: string;
   first_air_date?: string;
@@ -28,23 +34,113 @@ interface TvShow {
   genre_ids?: number[];
 }
 
+type TvBrowseType = "popular" | "top_rated" | "newest" | "most_voted" | "upcoming";
+
+const TV_TYPE_OPTIONS = [
+  { value: "popular", label: "Popular" },
+  { value: "top_rated", label: "Top Rated" },
+  { value: "newest", label: "Newest" },
+  { value: "most_voted", label: "Most Voted" },
+  { value: "upcoming", label: "Upcoming" },
+];
+
+const PROVIDER_OPTIONS = [
+  { value: "", label: "All Providers" },
+  { value: "8", label: "Netflix" },
+  { value: "337", label: "Disney+" },
+  { value: "9", label: "Prime Video" },
+  { value: "350", label: "Apple TV+" },
+  { value: "15", label: "Hulu" },
+  { value: "1899", label: "Max" },
+  { value: "531", label: "Paramount+" },
+  { value: "386", label: "Peacock" },
+];
+
+const COUNTRY_OPTIONS = [
+  { value: "", label: "All Countries" },
+  { value: "US", label: "United States", badge: "US" },
+  { value: "GB", label: "United Kingdom", badge: "UK" },
+  { value: "KR", label: "South Korea", badge: "KR" },
+  { value: "IN", label: "India", badge: "IN" },
+  { value: "FR", label: "France", badge: "FR" },
+  { value: "ES", label: "Spain", badge: "ES" },
+  { value: "DE", label: "Germany", badge: "DE" },
+  { value: "CA", label: "Canada", badge: "CA" },
+  { value: "IT", label: "Italy", badge: "IT" },
+  { value: "AU", label: "Australia", badge: "AU" },
+  { value: "MX", label: "Mexico", badge: "MX" },
+  { value: "BR", label: "Brazil", badge: "BR" },
+];
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [
+  { value: "", label: "All Years" },
+  ...Array.from({ length: CURRENT_YEAR - 1979 }, (_, i) => {
+    const y = String(CURRENT_YEAR - i);
+    return { value: y, label: y };
+  }),
+];
+
+function buildTvDiscoverParams(
+  browseType: TvBrowseType,
+  genreId: string,
+  year: string,
+  provider: string,
+  country: string,
+  pageNum: number
+): URLSearchParams {
+  const params = new URLSearchParams();
+  params.set("page", String(pageNum));
+
+  const today = new Date().toISOString().split("T")[0];
+
+  if (browseType === "top_rated") {
+    params.set("sortBy", "vote_average.desc");
+  } else if (browseType === "newest") {
+    params.set("sortBy", "first_air_date.desc");
+    params.set("airDateLte", today);
+  } else if (browseType === "most_voted") {
+    params.set("sortBy", "vote_count.desc");
+  } else if (browseType === "upcoming") {
+    params.set("sortBy", "popularity.desc");
+    params.set("airDateGte", today);
+  } else {
+    params.set("sortBy", "popularity.desc");
+  }
+
+  if (genreId) params.set("genreId", genreId);
+  if (year) params.set("year", year);
+  if (provider) {
+    params.set("withProviders", provider);
+    params.set("watchRegion", "US");
+  }
+  if (country) params.set("country", country);
+
+  return params;
+}
+
 export default function BrowseTvPage() {
-  const [selectedGenre, setSelectedGenre] = useState<number | undefined>(undefined);
   const [genres, setGenres] = useState<Genre[]>([]);
-  const [shows, setShows] = useState<TvShow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState("popularity.desc");
-  // Resolve the randomised start page synchronously so the first request can
-  // start on mount instead of waiting for an extra effect/render pass. The
-  // value is kept for the tab session, which makes repeat visits cache hits.
-  const [page, setPage] = useState<number>(() => getBrowseStartPage("tv"));
-  const [loadKey, setLoadKey] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [selectedGenre, setSelectedGenre] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string>("");
+  const [browseType, setBrowseType] = useState<TvBrowseType>("popular");
+  const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const initialLoad = useRef(true);
-  const nextBatchRef = useRef<number>(page + 1);
+
+  const [shows, setShows] = useState<TvShow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isShuffling, setIsShuffling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadTrigger, setLoadTrigger] = useState(0);
+
+  const initialStartPageRef = useRef<number>(getBrowseStartPage("tv"));
+  const nextPageRef = useRef<number>(initialStartPageRef.current);
+  const isInitialDefaultRef = useRef<boolean>(true);
+  const requestIdRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const isLoadingRef = useRef(false);
@@ -54,137 +150,149 @@ export default function BrowseTvPage() {
   isLoadingRef.current = isLoading;
   hasMoreRef.current = hasMore;
 
+  const hasActiveFilters = Boolean(
+    selectedGenre || selectedYear || selectedProvider || selectedCountry || browseType !== "popular"
+  );
+
+  // Debounce search query
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 150);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 180);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const handleShuffleShows = async () => {
-    if (debouncedSearch.trim()) return;
-    setIsLoading(true);
-    const rng = Math.floor(Math.random() * 100) + 1;
-    try {
-      const params = new URLSearchParams();
-      if (selectedGenre) params.append("genreId", selectedGenre.toString());
-      params.append("sortBy", sortBy);
-      params.append("page", rng.toString());
-      const data = await fetchJson<{ results: TvShow[] }>(`/api/tmdb/discover/tv?${params}`);
-      const validResults = (data.results || []).filter(s => Boolean(s.poster_path));
-      setShows(shuffleArray(filterExcludeNews(filterExcludeAnime(filterReleasedSafeContent(validResults)))));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to shuffle");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Fetch TV genres once
   useEffect(() => {
-    const fetchGenres = async () => {
-      setError(null);
-      try {
-        const data = await fetchJson<{ genres: Genre[] }>("/api/tmdb/genres/tv");
-        setGenres(data.genres || []);
-      } catch (error) {
-        setGenres([]);
-        setError(error instanceof Error ? error.message : "Failed to fetch genres");
-      }
+    let active = true;
+    fetchJson<{ genres: Genre[] }>("/api/tmdb/genres/tv")
+      .then((data) => {
+        if (active) setGenres((data.genres || []).filter((g) => g.id !== 10763));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
     };
-
-    fetchGenres();
   }, []);
 
-  useEffect(() => {
-    if (initialLoad.current) return;
-    setShows([]);
-    setHasMore(true);
-    nextBatchRef.current = 1;
-    setPage(1);
-    setLoadKey(k => k + 1);
-  }, [selectedGenre, sortBy, debouncedSearch]);
+  const fetchBatch = useCallback(
+    async (replace: boolean, customStartPage?: number) => {
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const reqId = ++requestIdRef.current;
 
-  useEffect(() => {
-    const fetchShows = async () => {
       setIsLoading(true);
       setError(null);
+
       try {
-        const pagesToFetch = initialLoad.current
-          ? [page]
-          : [nextBatchRef.current, nextBatchRef.current + 1];
+        const isSearch = Boolean(debouncedSearch.trim());
+        const startP = customStartPage ?? nextPageRef.current;
+        const pagesToFetch = replace && isInitialDefaultRef.current && !hasActiveFilters && !isSearch
+          ? [startP]
+          : [startP, startP + 1];
 
         const results = await Promise.all(
           pagesToFetch.map(async (p) => {
-            if (debouncedSearch.trim()) {
+            if (isSearch) {
               const params = new URLSearchParams();
-              params.append("type", "tv");
-              params.append("query", debouncedSearch.trim());
-              params.append("page", p.toString());
+              params.set("type", "tv");
+              params.set("query", debouncedSearch.trim());
+              params.set("page", String(p));
               return await fetchJson<{
                 results: TvShow[];
                 page?: number;
                 total_pages?: number;
-              }>(`/api/tmdb/search?${params}`);
-            } else {
-              const params = new URLSearchParams();
-              if (selectedGenre) params.append("genreId", selectedGenre.toString());
-              params.append("sortBy", sortBy);
-              params.append("page", p.toString());
-              return await fetchJson<{
-                results: TvShow[];
-                page?: number;
-                total_pages?: number;
-              }>(`/api/tmdb/discover/tv?${params}`);
+              }>(`/api/tmdb/search?${params}`, { signal: controller.signal });
             }
+
+            const params = buildTvDiscoverParams(
+              browseType,
+              selectedGenre,
+              selectedYear,
+              selectedProvider,
+              selectedCountry,
+              p
+            );
+            return await fetchJson<{
+              results: TvShow[];
+              page?: number;
+              total_pages?: number;
+            }>(`/api/tmdb/discover/tv?${params}`, { signal: controller.signal });
           })
         );
 
+        if (reqId !== requestIdRef.current || controller.signal.aborted) return;
+
+        const allowUnreleased = isSearch || browseType === "upcoming";
         const allItems = results.flatMap((r) => {
-          const raw = (r.results || []).filter((s) => debouncedSearch.trim() ? true : Boolean(s.poster_path));
-          return filterExcludeNews(filterExcludeAnime(filterReleasedSafeContent(raw, !!debouncedSearch.trim())));
+          const raw = (r.results || []).filter((s) => (isSearch ? true : Boolean(s.poster_path)));
+          return filterExcludeNews(filterExcludeAnime(filterReleasedSafeContent(raw, allowUnreleased)));
         });
 
-        // No eager w780 poster preloading here: the visible cards already
-        // request w500, so preloading a larger copy of the same images doubled
-        // bandwidth and competed with the actual grid.
+        const shouldShuffleInitial =
+          replace && isInitialDefaultRef.current && !hasActiveFilters && !isSearch && !customStartPage;
 
         setShows((prev) => {
-          const combined = initialLoad.current ? shuffleArray(allItems) : [...prev, ...allItems];
-          const seenIds = new Set();
-          return combined.filter((item) => {
+          const base = replace ? (shouldShuffleInitial ? shuffleArray(allItems) : allItems) : [...prev, ...allItems];
+          const seen = new Set<string>();
+          return base.filter((item) => {
             if (!item || !item.id) return false;
             const key = `${item.media_type || "tv"}-${item.id}`;
-            if (seenIds.has(key)) return false;
-            seenIds.add(key);
+            if (seen.has(key)) return false;
+            seen.add(key);
             return true;
           });
         });
 
         const last = results[results.length - 1];
         const totalPages = last?.total_pages ?? 1;
-        setHasMore(results[0]?.page ? results[0].page < totalPages : true);
-
-        if (!initialLoad.current) {
-          nextBatchRef.current += 2;
-        } else {
-          nextBatchRef.current = page + 1;
-        }
-      } catch (error) {
-        if (page <= 3) setShows([]);
-        setError(error instanceof Error ? error.message : "Failed to fetch TV shows");
+        const lastFetchedPage = pagesToFetch[pagesToFetch.length - 1];
+        setHasMore(lastFetchedPage < totalPages && allItems.length > 0);
+        nextPageRef.current = lastFetchedPage + 1;
+      } catch (err) {
+        if (reqId !== requestIdRef.current || controller.signal.aborted) return;
+        if (replace) setShows([]);
+        setError(err instanceof Error ? err.message : "Failed to load TV shows");
         setHasMore(false);
       } finally {
-        setIsLoading(false);
-        initialLoad.current = false;
+        if (reqId === requestIdRef.current) {
+          setIsLoading(false);
+          setIsShuffling(false);
+          isInitialDefaultRef.current = false;
+        }
       }
+    },
+    [browseType, selectedGenre, selectedYear, selectedProvider, selectedCountry, debouncedSearch, hasActiveFilters]
+  );
+
+  // Reset and fetch whenever any filter/sort/search changes
+  useEffect(() => {
+    const startP =
+      isInitialDefaultRef.current && !hasActiveFilters && !debouncedSearch.trim()
+        ? initialStartPageRef.current
+        : 1;
+    nextPageRef.current = startP;
+    setShows([]);
+    setHasMore(true);
+    void fetchBatch(true, startP);
+
+    return () => {
+      abortControllerRef.current?.abort();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browseType, selectedGenre, selectedYear, selectedProvider, selectedCountry, debouncedSearch]);
 
-    fetchShows();
-  }, [page, loadKey]);
+  // Infinite scroll trigger
+  useEffect(() => {
+    if (loadTrigger === 0) return;
+    void fetchBatch(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadTrigger]);
 
-  // ── Scroll-to-load-more: Intersection Observer ──
+  // Intersection Observer for infinite scroll
   useEffect(() => {
     const check = () => {
       if (isLoadingRef.current || !hasMoreRef.current) return;
-      setLoadKey((k) => k + 1);
+      setLoadTrigger((k) => k + 1);
     };
     triggerLoadRef.current = check;
 
@@ -204,14 +312,116 @@ export default function BrowseTvPage() {
     return () => observer.disconnect();
   }, []);
 
-  // Re-check after shows change
   useEffect(() => {
     if (!sentinelRef.current) return;
     const rect = sentinelRef.current.getBoundingClientRect();
-    if (rect.top <= window.innerHeight + 1400) {
+    if (rect.top <= window.innerHeight + 1400 && shows.length > 0) {
       triggerLoadRef.current?.();
     }
   }, [shows.length]);
+
+  const handleShuffle = useCallback(async () => {
+    if (debouncedSearch.trim()) {
+      setSearchQuery("");
+      setDebouncedSearch("");
+    }
+    setIsShuffling(true);
+    const maxPage = hasActiveFilters ? 15 : 80;
+    const rng = Math.floor(Math.random() * maxPage) + 1;
+    nextPageRef.current = rng;
+    setShows([]);
+    setHasMore(true);
+    await fetchBatch(true, rng);
+  }, [debouncedSearch, hasActiveFilters, fetchBatch]);
+
+  const handleResetFilters = useCallback(() => {
+    setSelectedGenre("");
+    setSelectedYear("");
+    setBrowseType("popular");
+    setSelectedProvider("");
+    setSelectedCountry("");
+    setSearchQuery("");
+  }, []);
+
+  const filterConfigs = useMemo<FilterDropdownConfig[]>(
+    () => [
+      {
+        id: "genre",
+        label: "Genre",
+        value: selectedGenre,
+        defaultValue: "",
+        options: [
+          { value: "", label: "All Genres" },
+          ...genres.map((g) => ({ value: String(g.id), label: g.name })),
+        ],
+        onChange: (val) => {
+          setSearchQuery("");
+          setSelectedGenre(val);
+        },
+      },
+      {
+        id: "year",
+        label: "Year",
+        value: selectedYear,
+        defaultValue: "",
+        options: YEAR_OPTIONS,
+        onChange: (val) => {
+          setSearchQuery("");
+          setSelectedYear(val);
+        },
+      },
+      {
+        id: "type",
+        label: "Popular",
+        value: browseType,
+        defaultValue: "popular",
+        showActiveDot: true,
+        options: TV_TYPE_OPTIONS,
+        onChange: (val) => {
+          setSearchQuery("");
+          setBrowseType(val as TvBrowseType);
+        },
+      },
+      {
+        id: "provider",
+        label: "Provider",
+        value: selectedProvider,
+        defaultValue: "",
+        options: PROVIDER_OPTIONS,
+        onChange: (val) => {
+          setSearchQuery("");
+          setSelectedProvider(val);
+        },
+      },
+      {
+        id: "country",
+        label: "Country",
+        value: selectedCountry,
+        defaultValue: "",
+        options: COUNTRY_OPTIONS,
+        onChange: (val) => {
+          setSearchQuery("");
+          setSelectedCountry(val);
+        },
+      },
+    ],
+    [genres, selectedGenre, selectedYear, browseType, selectedProvider, selectedCountry]
+  );
+
+  const activeSubtitle = useMemo(() => {
+    if (debouncedSearch.trim()) return `Search results for "${debouncedSearch.trim()}"`;
+    const parts: string[] = [];
+    const typeLabel = TV_TYPE_OPTIONS.find((t) => t.value === browseType)?.label;
+    if (typeLabel) parts.push(typeLabel);
+    const genreLabel = genres.find((g) => String(g.id) === selectedGenre)?.name;
+    if (genreLabel) parts.push(genreLabel);
+    if (selectedYear) parts.push(selectedYear);
+    const provLabel = PROVIDER_OPTIONS.find((p) => p.value === selectedProvider)?.label;
+    if (selectedProvider && provLabel) parts.push(`on ${provLabel}`);
+    const countryLabel = COUNTRY_OPTIONS.find((c) => c.value === selectedCountry)?.label;
+    if (selectedCountry && countryLabel) parts.push(countryLabel);
+    return parts.join(" · ");
+  }, [debouncedSearch, browseType, genres, selectedGenre, selectedYear, selectedProvider, selectedCountry]);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -219,138 +429,100 @@ export default function BrowseTvPage() {
 
       <main className="w-full pt-8 md:pt-24 lg:pt-28">
         <ContinueWatching filterType="tv" />
-        <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-            <div>
-              <h1 className="text-4xl font-black text-white tracking-tight">TV Shows</h1>
-              <p className="text-sm text-emerald-400/90 font-bold tracking-wide mt-2">
-                Discover the latest episodes, timeless classics, and hidden gems.
-              </p>
-            </div>
-            {!debouncedSearch.trim() && (
-              <div className="flex items-center gap-3">
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="h-10 px-3 rounded-xl bg-[#0d1c16] border border-emerald-500/30 text-white text-sm font-bold appearance-none cursor-pointer hover:border-emerald-500/60 transition-colors outline-none shadow-md shadow-emerald-950/20"
-                  aria-label="Sort by"
-                  style={{ colorScheme: "dark", backgroundColor: "#0d1c16", backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2310b981' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
-                >
-                  <option value="popularity.desc" className="bg-[#0d1c16] text-white">Most Popular</option>
-                  <option value="vote_average.desc" className="bg-[#0d1c16] text-white">Top Rated</option>
-                  <option value="first_air_date.desc" className="bg-[#0d1c16] text-white">Newest</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={handleShuffleShows}
-                  className="h-10 px-4 rounded-xl bg-[#0d1c16] border border-emerald-500/30 text-emerald-200 text-sm font-bold hover:border-emerald-500/60 hover:text-white transition flex items-center gap-2 shadow-md shadow-emerald-950/20"
-                >
-                  <Shuffle className="w-4 h-4 text-emerald-400" /> Shuffle
-                </button>
-              </div>
-            )}
-          </div>
 
-          <div className="relative mb-6 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400/40" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search TV shows..."
-              className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/[0.05] border border-emerald-500/20 text-white text-sm outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-colors"
+        <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
+          {/* Header + Sleek Filter Bar */}
+          <div className="flex flex-col gap-5 mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">TV Shows</h1>
+                <p className="text-xs sm:text-sm text-white/50 font-medium mt-1">
+                  {activeSubtitle}
+                </p>
+              </div>
+            </div>
+
+            <BrowseFilterBar
+              filters={filterConfigs}
+              onShuffle={handleShuffle}
+              isShuffling={isShuffling}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="Search TV shows..."
+              isSearching={Boolean(searchQuery.trim()) && (searchQuery !== debouncedSearch || isLoading)}
+              hasActiveFilters={hasActiveFilters || Boolean(searchQuery.trim())}
+              onResetFilters={handleResetFilters}
+              accentColor="emerald"
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-semibold"
-              >
-                Clear
-              </button>
-            )}
           </div>
 
           {error && (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/80 mb-10">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/80 mb-8">
               <div className="text-sm font-semibold text-white mb-1">Couldn&apos;t load TV shows</div>
               <div className="text-xs text-white/50 break-words">{error}</div>
             </div>
           )}
 
-          {!debouncedSearch.trim() && (
-            <div className="flex flex-wrap gap-2 mb-10">
-              <button
-                onClick={() => setSelectedGenre(undefined)}
-                className={cn(
-                  "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                  selectedGenre === undefined
-                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/35 border border-emerald-400/30"
-                    : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
-                )}
-              >
-                All TV Shows
-              </button>
-              {genres.map((genre) => (
+          {!isLoading && shows.length === 0 && !error && (
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-12 text-center space-y-3 my-6">
+              <p className="text-white/60 text-sm font-semibold">
+                {debouncedSearch.trim()
+                  ? `No TV shows found for "${debouncedSearch.trim()}"`
+                  : "No TV shows match these filters."}
+              </p>
+              {(hasActiveFilters || searchQuery.trim()) && (
                 <button
-                  key={genre.id}
-                  onClick={() => setSelectedGenre(genre.id)}
-                  className={cn(
-                    "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                    selectedGenre === genre.id
-                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/35 border border-emerald-400/30"
-                      : "bg-white/[0.05] text-white/60 hover:bg-white/[0.09] hover:text-white"
-                  )}
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-colors cursor-pointer"
                 >
-                  {genre.name}
+                  Reset Filters
                 </button>
-              ))}
-          </div>
-        )}
-
-        {debouncedSearch.trim() && !isLoading && shows.length === 0 && (
-          <div className="p-10 text-center text-white/30 text-sm">
-            No TV shows found for &ldquo;{debouncedSearch}&rdquo;
-          </div>
-        )}
-
-        {isLoading && shows.length === 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
-            {Array.from({ length: 15 }).map((_, i) => (
-              <div key={i} className="aspect-[2/3] w-full rounded-lg bg-white/[0.03] animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
-            {shows.map((item, i) => (
-              <div key={item.id} className="w-full h-full flex justify-center">
-                <MediaCard item={{ ...item, media_type: "tv" }} index={i} priority={i < 10} />
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div
-          ref={sentinelRef}
-          style={{ overflowAnchor: "none" }}
-          className="w-full py-16 flex flex-col items-center justify-center gap-3 text-white/40 min-h-[100px]"
-        >
-          {isLoading && shows.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-[#7288AE]" />
-              <span className="text-sm font-medium text-white/50">Loading more...</span>
+              )}
             </div>
-          ) : shows.length > 0 && hasMore ? (
-            <button
-              onClick={() => triggerLoadRef.current?.()}
-              className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer"
-            >
-              Load More
-            </button>
-          ) : shows.length > 0 && !hasMore ? (
-            <span className="text-xs text-white/20">No more results</span>
-          ) : null}
+          )}
+
+          {isLoading && shows.length === 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="aspect-[2/3] w-full rounded-xl bg-white/[0.04] animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6">
+              {shows.map((item, i) => (
+                <div key={item.id} className="w-full h-full flex justify-center">
+                  <MediaCard item={{ ...item, media_type: "tv" }} index={i} priority={i < 10} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div
+            ref={sentinelRef}
+            style={{ overflowAnchor: "none" }}
+            className="w-full py-16 flex flex-col items-center justify-center gap-3 text-white/40 min-h-[100px]"
+          >
+            {isLoading && shows.length > 0 ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                <span className="text-sm font-medium text-white/50">Loading more...</span>
+              </div>
+            ) : shows.length > 0 && hasMore ? (
+              <button
+                onClick={() => triggerLoadRef.current?.()}
+                className="text-sm font-semibold hover:text-white transition-colors py-2 px-6 bg-white/5 hover:bg-white/10 rounded-full cursor-pointer"
+              >
+                Load More
+              </button>
+            ) : shows.length > 0 && !hasMore ? (
+              <span className="text-xs text-white/25">End of results</span>
+            ) : null}
+          </div>
         </div>
-      </div>
       </main>
+
+      <ScrollToTopButton />
     </div>
   );
 }

@@ -17,7 +17,7 @@ import { MediaDetailLoadingShell } from "@/components/MediaDetailLoadingShell";
 
 
 import { usePageContentReady } from "@/lib/pageLoad";
-import { fetchJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
+import { fetchJson, peekCachedJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -71,7 +71,9 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
   const params = useParams();
   const id = Number(params.id);
   const { status } = useSession();
-  const initialMovie = initialData && Number(initialData.id) === id ? initialData : null;
+  const initialMovie = initialData && Number(initialData.id) === id
+    ? initialData
+    : (typeof window !== "undefined" && id ? peekCachedJson<Movie>(`/api/tmdb/movie/${id}`) : null);
   const [movie, setMovie] = useState<Movie | null>(initialMovie);
   const [isLoading, setIsLoading] = useState(!initialMovie && !initialHidden);
   const [error, setError] = useState<string | null>(null);
@@ -136,8 +138,18 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
       return;
     }
 
+    const cached = id ? peekCachedJson<Movie>(`/api/tmdb/movie/${id}`) : null;
+    if (cached && Number(cached.id) === id) {
+      setMovie(cached);
+      setError(null);
+      setIsLoading(false);
+      cacheMovieForWatch(cached);
+      return;
+    }
+
     const controller = new AbortController();
     let cancelled = false;
+    let preloadLink: HTMLLinkElement | null = null;
 
     const fetchMovie = async () => {
       setIsLoading(true);
@@ -154,11 +166,12 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
           : null;
         // Preload backdrop immediately — starts download before React renders
         if (backdropSrc) {
-          const link = document.createElement("link");
-          link.rel = "preload"; link.as = "image";
-          link.href = backdropSrc;
-          link.fetchPriority = "high";
-          document.head.appendChild(link);
+          preloadLink = document.createElement("link");
+          preloadLink.rel = "preload";
+          preloadLink.as = "image";
+          preloadLink.href = backdropSrc;
+          preloadLink.fetchPriority = "high";
+          document.head.appendChild(preloadLink);
         }
         setMovie(data);
         cacheMovieForWatch(data);
@@ -175,6 +188,9 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
     return () => {
       cancelled = true;
       controller.abort();
+      if (preloadLink && preloadLink.parentNode) {
+        preloadLink.parentNode.removeChild(preloadLink);
+      }
     };
   }, [id, initialData, initialHidden]);
 

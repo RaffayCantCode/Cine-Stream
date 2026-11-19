@@ -13,6 +13,7 @@ interface MediaItem {
   title?: string;
   name?: string;
   poster_path?: string;
+  backdrop_path?: string | null;
   media_type?: string;
   release_date?: string;
   first_air_date?: string;
@@ -96,6 +97,30 @@ export const MediaCard = memo(function MediaCard({ item, index = 0, rank, priori
       // Warm the detail API too. The page and the API share tmdbFetch's cache,
       // so the click usually lands on data that is already in flight/cached.
       void fetchJson(`/api/tmdb/${previewType}/${item.id}`).catch(() => {});
+
+      if (previewType === "tv" && item.id) {
+        let targetSeason = 1;
+        try {
+          const cwRaw = localStorage.getItem("cinestream_cw_cache");
+          if (cwRaw) {
+            const cw = JSON.parse(cwRaw);
+            const found = (cw?.items || []).find(
+              (it: any) => String(it.mediaId) === String(item.id) && it.mediaType === "tv"
+            );
+            if (found?.season && Number(found.season) > 0) {
+              targetSeason = Number(found.season);
+            }
+          }
+        } catch {}
+        void fetchJson(`/api/tmdb/tv/${item.id}/season/${targetSeason}`).catch(() => {});
+      }
+
+      if (item.backdrop_path && typeof window !== "undefined") {
+        const img = new window.Image();
+        img.src = item.backdrop_path.startsWith("http")
+          ? item.backdrop_path
+          : `https://image.tmdb.org/t/p/w1280${item.backdrop_path}`;
+      }
     } else if (link.startsWith("/anime/")) {
       const animeTargetId = link.replace("/anime/", "").split("?")[0];
       if (animeTargetId) {
