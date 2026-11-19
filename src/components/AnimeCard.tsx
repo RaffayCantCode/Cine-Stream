@@ -102,7 +102,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
 
   return (
     <div
-      className="relative hover:z-30 pt-2 -mt-2"
+      className={rank ? "relative hover:z-30 pt-2 -mt-2" : "relative w-full hover:z-30 pt-2 -mt-2"}
       style={{ ...CARD_WRAPPER_STYLE, animationDelay: `${Math.min((index % 20) * 0.025, 0.35)}s` }}
     >
       <Link
@@ -157,7 +157,7 @@ export const AnimeCard = memo(function AnimeCard({ item, index = 0, rank }: Anim
               className={`w-full h-full object-cover transition-opacity duration-500 ease-out ${
                 isLoaded ? "opacity-100" : "opacity-0"
               }`}
-              loading={index < 4 ? "eager" : "lazy"}
+              loading={index < 10 ? "eager" : "lazy"}
               decoding="async"
               onLoad={() => setIsLoaded(true)}
               onError={handleImageError}

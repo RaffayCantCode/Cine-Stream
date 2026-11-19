@@ -388,7 +388,7 @@ export default function AnimeBrowsePage() {
 
         <div className="px-5 md:px-10 lg:px-12 3xl:px-16 w-full max-w-[1460px] 3xl:max-w-none mx-auto">
           {/* Header + Sleek Filter Bar */}
-          <div className="flex flex-col gap-5 mb-8">
+          <div className="relative z-30 flex flex-col gap-5 mb-8">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
               <div>
                 <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Anime</h1>
@@ -441,12 +441,12 @@ export default function AnimeBrowsePage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6 pt-3 -mt-3">
+          <div className="relative z-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 3xl:grid-cols-7 4xl:grid-cols-9 ultrawide:grid-cols-12 gap-4 sm:gap-5 md:gap-6 pt-3 -mt-3">
             {isLoading && items.length === 0 && Array.from({ length: 15 }).map((_, i) => (
               <div key={i} className="aspect-[2/3] rounded-xl bg-white/[0.04] animate-pulse" />
             ))}
             {items.map((item, i) => (
-              <div key={`${item.id}-${i}`} className="w-full h-full flex justify-center">
+              <div key={`${item.id}-${i}`} className="w-full">
                 <AnimeCard item={item} index={i} />
               </div>
             ))}

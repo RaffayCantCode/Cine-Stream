@@ -122,7 +122,7 @@ function FilterDropdown({
       {isOpen && (
         <div
           role="listbox"
-          className="absolute right-0 sm:left-0 mt-2 min-w-[190px] max-w-[240px] max-h-72 overflow-y-auto rounded-2xl bg-[#121620]/95 backdrop-blur-2xl border border-white/[0.12] shadow-2xl shadow-black/70 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150"
+          className="absolute right-0 sm:left-0 mt-2 min-w-[190px] max-w-[240px] max-h-72 overflow-y-auto rounded-2xl bg-[#121620]/98 backdrop-blur-2xl border border-white/[0.14] shadow-2xl shadow-black/80 p-1.5 z-[100] animate-in fade-in zoom-in-95 duration-150"
         >
           {config.options.map((opt) => {
             const active = opt.value === config.value;
@@ -206,7 +206,7 @@ export function BrowseFilterBar({
   }, [onShuffle]);
 
   return (
-    <div ref={containerRef} className="flex flex-col gap-3 w-full">
+    <div ref={containerRef} className="relative z-40 flex flex-col gap-3 w-full">
       <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 justify-between">
         {/* Search pill (compact) */}
         {onSearchChange && (
@@ -241,7 +241,7 @@ export function BrowseFilterBar({
         )}
 
         {/* Glass Pill Filter Dock */}
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl sm:rounded-full bg-white/[0.04] border border-white/[0.08] backdrop-blur-xl shadow-lg shadow-black/30">
+        <div className="relative z-40 flex flex-wrap items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl sm:rounded-full bg-white/[0.04] border border-white/[0.08] backdrop-blur-xl shadow-lg shadow-black/30">
           {onShuffle && (
             <button
               type="button"
