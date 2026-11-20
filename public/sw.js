@@ -1,7 +1,7 @@
 // CineStream Service Worker
 // Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
 // CACHE_VERSION is updated to bust previous worker cache.
-const CACHE_VERSION = 'v34-static-cache-first';
+const CACHE_VERSION = 'v35-same-origin-safe';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
@@ -53,11 +53,31 @@ self.addEventListener('fetch', (event) => {
   if (
     request.method !== 'GET' ||
     url.pathname.startsWith('/api/auth') ||
-    url.pathname.startsWith('/api/watch-history') ||
-    url.hostname.includes('youtube') ||
-    url.hostname.includes('vidsrc') ||
-    url.hostname.includes('embed')
+    url.pathname.startsWith('/api/watch-history')
   ) {
+    return;
+  }
+
+  // Cache-first for explicit media image CDNs only; NEVER intercept any other cross-origin requests (embeds, video streams, etc.)
+  if (url.origin !== self.location.origin) {
+    const isImageDomain =
+      url.hostname === 'image.tmdb.org' ||
+      url.hostname === 's4.anilist.co' ||
+      url.hostname.includes('myanimelist.net');
+
+    if (!isImageDomain) {
+      return;
+    }
+
+    event.respondWith(
+      caches.open(IMAGE_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const response = await fetch(request);
+        if (response && response.ok) cache.put(request, response.clone());
+        return response;
+      })
+    );
     return;
   }
 
@@ -158,9 +178,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for all other requests with cache fallback
+  // Network-first for all other same-origin requests with safe cache fallback
   event.respondWith(
-    fetch(request).catch(() => caches.match(request))
+    fetch(request).catch(async () => {
+      const cached = await caches.match(request);
+      return cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+    })
   );
 });
 

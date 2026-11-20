@@ -196,18 +196,11 @@ export default function WatchTvClient({ showId, seasonNumber, episodeNumber }: W
         selected = sources[0];
       }
 
-      setActiveSource(selected);
-
-      // Clean up / normalize URL to show source as a number
-      const selectedIndex = sources.findIndex((s) => s.type === selected.type);
-      const sourceNumber = selectedIndex >= 0 ? selectedIndex + 1 : 1;
-      try {
-        const url = new URL(window.location.href);
-        if (url.searchParams.get("source") !== String(sourceNumber)) {
-          url.searchParams.set("source", String(sourceNumber));
-          window.history.replaceState(null, "", url.toString());
-        }
-      } catch {}
+      setActiveSource((prev) =>
+        prev.type === selected!.type && prev.url === selected!.url && prev.name === selected!.name
+          ? prev
+          : selected!
+      );
     }
   }, [sources, showId]);
 

@@ -228,18 +228,7 @@ export default function WatchAnimeClient({ animeId, episodeNumber }: WatchAnimeC
       }
 
       const activeKey = resolvedKey || servers[0].key;
-      setForcedSource(activeKey);
-
-      // Clean up / normalize URL to show source as a number
-      const serverIdx = servers.findIndex((s) => s.key === activeKey);
-      const sourceNum = serverIdx >= 0 ? serverIdx + 1 : 1;
-      try {
-        const url = new URL(window.location.href);
-        if (url.searchParams.get("source") !== String(sourceNum)) {
-          url.searchParams.set("source", String(sourceNum));
-          window.history.replaceState(null, "", url.toString());
-        }
-      } catch {}
+      setForcedSource((prev) => (prev === activeKey ? prev : activeKey));
     }
   }, [servers, animeId]);
 

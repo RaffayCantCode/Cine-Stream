@@ -38,19 +38,37 @@ function dedupeById<T extends { id?: number | string }>(items: T[]): T[] {
   return Array.from(seen.values());
 }
 
+function compactHomeItem(item: any) {
+  return {
+    id: item?.id,
+    title: item?.title,
+    name: item?.name,
+    overview: typeof item?.overview === "string" ? item.overview.slice(0, 260) : "",
+    poster_path: item?.poster_path ?? null,
+    backdrop_path: item?.backdrop_path ?? null,
+    media_type: item?.media_type,
+    release_date: item?.release_date,
+    first_air_date: item?.first_air_date,
+    vote_average: item?.vote_average,
+    vote_count: item?.vote_count,
+    original_language: item?.original_language,
+    genre_ids: item?.genre_ids,
+  };
+}
+
 export async function GET(_request: NextRequest) {
   try {
-    const movieDiscoverPages = pickRandomPages(12, 6);
-    const tvDiscoverPages = pickRandomPages(10, 6);
+    // Keep outbound TMDB fan-out compact (14 calls instead of 24) so Cloudflare Edge
+    // never queues 4 waves of subrequests or triggers TMDB burst throttling.
+    const movieDiscoverPages = pickRandomPages(6, 2);
+    const tvDiscoverPages = pickRandomPages(6, 2);
 
     const [coreResults, movieDiscoverResults, tvDiscoverResults] = await Promise.all([
       Promise.allSettled([
         tmdbFetch("/trending/all/week", { page: "1", include_adult: "false" }),
         tmdbFetch("/movie/popular", { page: "1", include_adult: "false" }),
-        tmdbFetch("/movie/popular", { page: "2", include_adult: "false" }),
         tmdbFetch("/movie/now_playing", { page: "1", include_adult: "false" }),
         tmdbFetch("/tv/popular", { page: "1", include_adult: "false" }),
-        tmdbFetch("/tv/popular", { page: "2", include_adult: "false" }),
         tmdbFetch("/tv/on_the_air", { page: "1", include_adult: "false" }),
         tmdbFetch("/discover/movie", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
         tmdbFetch("/discover/tv", { page: "1", with_original_language: "ja", with_genres: "16", include_adult: "false" }),
@@ -89,9 +107,6 @@ export async function GET(_request: NextRequest) {
       return [];
     };
 
-    // Strip Japanese animated content (anime) from movie/TV result arrays.
-    // The dedicated animeMovies/animeTv keys (coreResults[7], coreResults[8]) are
-    // intentionally excluded from this filter — they are the anime home row data.
     const excludeAnime = (items: any[]): any[] =>
       items.filter(
         (item) => !(item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16))
@@ -104,47 +119,36 @@ export async function GET(_request: NextRequest) {
           (!Array.isArray(item.genre_ids) || !item.genre_ids.includes(10763))
       );
 
-    const popularMovies = dedupeById(
-      excludeAnime([
-        ...extractResults(coreResults[1]),
-        ...extractResults(coreResults[2]),
-      ])
-    );
-
-    const popularTv = dedupeById(
-      excludeTvNonShows([
-        ...extractResults(coreResults[4]),
-        ...extractResults(coreResults[5]),
-      ])
-    );
+    const popularMovies = dedupeById(excludeAnime(extractResults(coreResults[1]))).map(compactHomeItem);
+    const popularTv = dedupeById(excludeTvNonShows(extractResults(coreResults[3]))).map(compactHomeItem);
 
     const allTimePopularMovies = shuffleArray(
       dedupeById(excludeAnime(movieDiscoverResults.flatMap(extractResults)))
-    );
+    ).map(compactHomeItem);
 
     const allTimePopularTv = shuffleArray(
       dedupeById(excludeTvNonShows(tvDiscoverResults.flatMap(extractResults)))
-    );
+    ).map(compactHomeItem);
 
-    const genresRes = coreResults[11];
+    const genresRes = coreResults[9];
     const genres = (genresRes.status === "fulfilled" && genresRes.value && typeof genresRes.value === "object" && "genres" in genresRes.value)
       ? (genresRes.value as { genres?: unknown[] }).genres || []
       : [];
 
     return Response.json({
-      trending: { results: extractResults(coreResults[0]) },
+      trending: { results: extractResults(coreResults[0]).map(compactHomeItem) },
       popularMovies: { results: popularMovies },
       topRatedMovies: { results: allTimePopularMovies },
-      nowPlaying: { results: excludeAnime(extractResults(coreResults[3])) },
+      nowPlaying: { results: excludeAnime(extractResults(coreResults[2])).map(compactHomeItem) },
       popularTv: { results: popularTv },
       topRatedTv: { results: allTimePopularTv },
-      onTheAir: { results: excludeTvNonShows(extractResults(coreResults[6])) },
-      animeMovies: { results: extractResults(coreResults[7]) },
-      animeTv: { results: extractResults(coreResults[8]) },
-      trendingMoviesToday: { results: excludeAnime(extractResults(coreResults[9])) },
-      trendingTvToday: { results: excludeTvNonShows(extractResults(coreResults[10])) },
+      onTheAir: { results: excludeTvNonShows(extractResults(coreResults[4])).map(compactHomeItem) },
+      animeMovies: { results: extractResults(coreResults[5]).map(compactHomeItem) },
+      animeTv: { results: extractResults(coreResults[6]).map(compactHomeItem) },
+      trendingMoviesToday: { results: excludeAnime(extractResults(coreResults[7])).map(compactHomeItem) },
+      trendingTvToday: { results: excludeTvNonShows(extractResults(coreResults[8])).map(compactHomeItem) },
       genres: { genres },
-    }, { headers: cacheHeaders(900) });
+    }, { headers: cacheHeaders(1800) });
   } catch (error) {
     console.error("[TMDB Home API Error]:", error);
     return Response.json({ error: "Failed to fetch home media" }, { status: 500 });

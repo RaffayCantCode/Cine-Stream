@@ -472,7 +472,7 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
             style={{ width: "100%", height: "100%", minWidth: "100%", minHeight: "100%", border: 0 }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen *; gyroscope; picture-in-picture; web-share"
             allowFullScreen
-            referrerPolicy="no-referrer-when-downgrade"
+            referrerPolicy="origin"
             title={title || "Video Stream"}
             onLoad={(e) => {
               // If the embedded player had already booted and been playing this episode,

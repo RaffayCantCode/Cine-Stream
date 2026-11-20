@@ -34,11 +34,11 @@ const STREAMING_APIS: StreamingAPIConfig[] = [
   },
   {
     name: "Source 4",
-    baseUrl: "https://embed.vidrift.net",
+    baseUrl: "https://vidfast.pro",
     type: "vidrift",
     quality: "Good",
     supportsNativeFullscreen: true,
-    healthCheckUrl: "https://vidrift.net",
+    healthCheckUrl: "https://vidfast.pro",
   },
   {
     name: "Source 5",
@@ -81,8 +81,8 @@ function buildEmbedUrl(api: StreamingAPIConfig, type: "movie" | "tv", id: number
       return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     case "vidrift":
-      if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
-      return `${api.baseUrl}/embed/tv/${id}/${season ?? 1}/${episode ?? 1}`;
+      if (type === "movie") return `${api.baseUrl}/movie/${id}`;
+      return `${api.baseUrl}/tv/${id}/${season ?? 1}/${episode ?? 1}`;
 
     case "vidsrc":
       if (type === "movie") return `${api.baseUrl}/embed/movie/${id}`;
