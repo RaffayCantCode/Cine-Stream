@@ -319,10 +319,13 @@ async function getEnrichedEpisodesList(
   let seasonEps: any[] = [];
   const cleanSeasonName = seasonName.replace(/\s*\([^)]*\)\s*/g, "").trim() || seasonName;
 
-  // 1. AniZip + AFL in parallel
+  // 1. AniZip + AFL in parallel (time-box AFL so a slow scrape never stalls long-anime page loads)
   const [az, fillerLookup] = await Promise.all([
     fetchEpisodesFromAniZip(seasonId, totalEpisodes, idMal, startDateIso).catch(() => null),
-    fetchFillerLookupFromAnimeFillerList(cleanSeasonName, totalEpisodes).catch(() => null),
+    Promise.race([
+      fetchFillerLookupFromAnimeFillerList(cleanSeasonName, totalEpisodes).catch(() => null),
+      new Promise<null>((r) => setTimeout(() => r(null), 1800)),
+    ]),
   ]);
 
   if (az && az.length > 0) {
@@ -397,6 +400,9 @@ export async function GET(
   const page = parseInt(searchParams.get("page") || "1", 10);
   const seasonId = searchParams.get("seasonId") || null;
   const seasonNumParam = parseInt(searchParams.get("seasonNum") || "", 10);
+  const epStartParam = parseInt(searchParams.get("epStart") || "", 10);
+  const epEndParam = parseInt(searchParams.get("epEnd") || "", 10);
+  const isRangeRequest = !isNaN(epStartParam) && !isNaN(epEndParam) && epStartParam >= 1 && epEndParam >= epStartParam;
 
   try {
     const override = (await getMediaOverride("anime", seasonId || id).catch(() => null)) ||
@@ -560,8 +566,30 @@ export async function GET(
         }
       }
 
-      // 2. Recover TMDB mapping from AniZip (including mal_id fallback) if missing or defaulted
-      if (tmdbId == null || tmdbSeasonNum == null || isNaN(tmdbSeasonNum) || (tmdbSeasonNum === 1 && episodeOffset === 0)) {
+      // 2. Curated franchise mapping check FIRST — curated mappings (e.g. Naruto Shippuden = tmdb 31910 S1)
+      // are authoritative and must never be overwritten by AniZip defaults or franchise list index!
+      const curatedNodes = getCuratedAnimeFranchiseNodes(
+        Number(season.id) || Number(targetSeasonId) || Number(id),
+        season.name || meta?.anime?.name
+      );
+      const curatedItem = curatedNodes?.find((n: any) =>
+        String(n.id) === String(season.id) ||
+        String(n.anilistId) === String(season.id) ||
+        String(n.id) === String(targetSeasonId) ||
+        String(n.anilistId) === String(targetSeasonId)
+      );
+      if (curatedItem) {
+        if (curatedItem.tmdbId) tmdbId = curatedItem.tmdbId;
+        if (curatedItem.tmdbSeasonNumber != null) {
+          tmdbSeasonNum = curatedItem.tmdbSeasonNumber;
+        }
+        if (curatedItem.episodeOffset != null) {
+          episodeOffset = curatedItem.episodeOffset;
+        }
+      }
+
+      // 3. Recover TMDB mapping from AniZip (including mal_id fallback) only if not authoritatively set by curated franchise
+      if (!curatedItem && (tmdbId == null || tmdbSeasonNum == null || isNaN(tmdbSeasonNum) || (tmdbSeasonNum === 1 && episodeOffset === 0))) {
         try {
           const resolved = await resolveTmdbMappingFromAniZip(season.id || targetSeasonId, effectiveMalId, startDateIso);
           if (resolved) {
@@ -574,27 +602,6 @@ export async function GET(
             }
           }
         } catch {}
-      }
-
-      // 3. Curated franchise mapping check
-      const curatedNodes = getCuratedAnimeFranchiseNodes(
-        Number(season.id) || Number(targetSeasonId) || Number(id),
-        season.name || meta?.anime?.name
-      );
-      const curatedItem = curatedNodes?.find((n: any) =>
-        String(n.id) === String(season.id) ||
-        String(n.anilistId) === String(season.id) ||
-        String(n.id) === String(targetSeasonId) ||
-        String(n.anilistId) === String(targetSeasonId)
-      );
-      if (curatedItem) {
-        if (!tmdbId && curatedItem.tmdbId) tmdbId = curatedItem.tmdbId;
-        if ((tmdbSeasonNum == null || isNaN(tmdbSeasonNum) || tmdbSeasonNum === 1) && curatedItem.tmdbSeasonNumber != null) {
-          tmdbSeasonNum = curatedItem.tmdbSeasonNumber;
-        }
-        if (episodeOffset === 0 && curatedItem.episodeOffset != null) {
-          episodeOffset = curatedItem.episodeOffset;
-        }
       }
 
       // 4. Title search fallback for TMDB ID using cleanTitleForTmdbSearch
@@ -630,8 +637,11 @@ export async function GET(
         }
       }
 
-      // 6. If tmdbSeasonNum is still missing but seasonNumFromList > 1 and it's a TV series under the same show:
-      if ((tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) && seasonNumFromList > 1) {
+      // 6. Only infer tmdbSeasonNum from seasonNumFromList if this season shares the SAME tmdbId
+      // as the first season (never apply list index 2 to a separate TMDB show like Naruto Shippuden!).
+      const firstSeasonTmdbId = meta?.seasons?.[0]?.tmdbId ?? null;
+      const sharesSameTmdbShow = Boolean(tmdbId && firstSeasonTmdbId && String(tmdbId) === String(firstSeasonTmdbId));
+      if ((tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) && seasonNumFromList > 1 && sharesSameTmdbShow) {
         tmdbSeasonNum = seasonNumFromList;
       }
 
@@ -639,6 +649,7 @@ export async function GET(
         tmdbSeasonNum = 1;
       }
 
+      let resolvedTotalEpisodes: number | null = null;
       const isTMDBReady = tmdbId != null && !isNaN(tmdbId) && tmdbSeasonNum != null && !isNaN(tmdbSeasonNum);
       let seasonEps: any[] = [];
       let seasonOverview: string | null = null;
@@ -772,21 +783,44 @@ export async function GET(
           dynamicTotalEpisodes = Math.max(totalTmdbShowEpisodes > 0 ? totalTmdbShowEpisodes : 0, 24);
         }
 
+        resolvedTotalEpisodes = dynamicTotalEpisodes;
+
+        const loopStart = isRangeRequest ? Math.max(1, epStartParam) : 1;
+        const loopEnd = isRangeRequest ? Math.min(dynamicTotalEpisodes, epEndParam) : dynamicTotalEpisodes;
+
         const tmdbEpisodes = primaryEpisodes;
 
-        // If split-cour offset spans beyond primary season or anime spans multiple TMDB seasons, fetch secondary seasons
+        // Build O(1) lookup map for overlayEps (avoids O(N^2) .find() on 500-1100 episode shows!)
+        const overlayByNum = new Map<number, any>();
+        for (const ep of overlayEps || []) {
+          if (ep && typeof ep.episodeNum === "number" && !overlayByNum.has(ep.episodeNum)) {
+            overlayByNum.set(ep.episodeNum, ep);
+          }
+        }
+
+        const overlayHasRichCoverage =
+          dynamicTotalEpisodes > 60 &&
+          overlayByNum.size >= Math.min(Math.floor(dynamicTotalEpisodes * 0.55), 50) &&
+          Boolean(overlayByNum.get(1)?.thumbnail || overlayByNum.get(2)?.thumbnail);
+
+        // Fetch ONLY the TMDB seasons required for [loopStart..loopEnd].
+        // For modular paginated range requests (e.g. epStart=251&epEnd=300), this fetches just 1–2 TMDB seasons!
         const neededSeasons = new Set<number>();
-        for (let i = 1; i <= Math.min(dynamicTotalEpisodes, 1500); i++) {
+        const maxSecondarySeasons = isRangeRequest ? 4 : (overlayHasRichCoverage ? 2 : 8);
+        for (let i = loopStart; i <= Math.min(loopEnd, 1500); i++) {
           const mapped = mapRelativeToTmdb(episodeOffset + i, primarySeasonNum, tmdbSeasonsList);
           if (mapped.seasonNumber !== primarySeasonNum) {
             neededSeasons.add(mapped.seasonNumber);
+            if (neededSeasons.size >= maxSecondarySeasons) break;
           }
         }
         if (neededSeasons.size > 0) {
           try {
-            // Fetch up to 25 secondary seasons to cover massive shows like Naruto Shippuden (20 seasons on TMDB)
-            const seasonsToFetch = Array.from(neededSeasons).slice(0, 25);
-            const extraEpisodes = await fetchTmdbEpisodeData(tmdbId, seasonsToFetch);
+            const seasonsToFetch = Array.from(neededSeasons).slice(0, maxSecondarySeasons);
+            const extraEpisodes = await Promise.race([
+              fetchTmdbEpisodeData(tmdbId, seasonsToFetch),
+              new Promise<Map<string, any>>((r) => setTimeout(() => r(new Map()), 2200)),
+            ]);
             for (const [k, v] of extraEpisodes.entries()) {
               tmdbEpisodes.set(k, v);
             }
@@ -801,12 +835,21 @@ export async function GET(
             }
             if (kitsuEps && kitsuEps.length > 0) {
               overlayEps = kitsuEps;
+              overlayByNum.clear();
+              for (const ep of overlayEps) {
+                if (ep && typeof ep.episodeNum === "number" && !overlayByNum.has(ep.episodeNum)) {
+                  overlayByNum.set(ep.episodeNum, ep);
+                }
+              }
             }
           } catch {}
         }
 
         if (tmdbEpisodes.size === 0 && overlayEps.length > 0) {
-          seasonEps = overlayEps.map((ep) => {
+          const filteredOverlay = isRangeRequest
+            ? overlayEps.filter((ep) => ep.episodeNum >= loopStart && ep.episodeNum <= loopEnd)
+            : overlayEps;
+          seasonEps = filteredOverlay.map((ep) => {
             const mapped = mapRelativeToTmdb(episodeOffset + ep.episodeNum, primarySeasonNum, tmdbSeasonsList);
             return {
               episodeId: ep.episodeId || `${season.id}-${ep.episodeNum}`,
@@ -825,8 +868,8 @@ export async function GET(
             };
           });
         } else if (tmdbEpisodes.size > 0) {
-          for (let i = 1; i <= dynamicTotalEpisodes; i++) {
-            const matchEp = overlayEps.find(j => j.episodeNum === i);
+          for (let i = loopStart; i <= loopEnd; i++) {
+            const matchEp = overlayByNum.get(i);
             const mapped = mapRelativeToTmdb(episodeOffset + i, primarySeasonNum, tmdbSeasonsList);
             const tmdbSeason = mapped.seasonNumber;
             const tmdbEpisode = mapped.episodeNumber;
@@ -860,13 +903,13 @@ export async function GET(
             });
           }
 
-          if (overlayEps && overlayEps.length > 0) {
+          if (!isRangeRequest && overlayEps && overlayEps.length > 0) {
             const capLimit = knownEpisodeCount && knownEpisodeCount > 1 ? knownEpisodeCount : (isMovieOrSpecial ? 1 : 1500);
             const maxOverlayNum = Math.min(Math.max(...overlayEps.map(e => e.episodeNum || 0)), capLimit);
             const currentMaxNum = seasonEps.length;
             if (maxOverlayNum > currentMaxNum) {
               for (let i = currentMaxNum + 1; i <= maxOverlayNum; i++) {
-                const matchEp = overlayEps.find(j => j.episodeNum === i);
+                const matchEp = overlayByNum.get(i);
                 if (matchEp) {
                   const mapped = mapRelativeToTmdb(episodeOffset + i, primarySeasonNum, tmdbSeasonsList);
                   seasonEps.push({
@@ -891,10 +934,17 @@ export async function GET(
           }
         }
 
-        if (tmdbEpisodes.size > 0) {
+        // Reuse season overview from already-fetched showData when available instead of doing another sequential TMDB call
+        const matchedShowSeason = (showData as any)?.seasons?.find((s: any) => s.season_number === primarySeasonNum);
+        if (matchedShowSeason?.overview) {
+          seasonOverview = matchedShowSeason.overview;
+        } else if (tmdbEpisodes.size > 0 && dynamicTotalEpisodes <= 60) {
           try {
-            const tmdbSeasonData = await tmdbFetch(`/tv/${tmdbId}/season/${tmdbSeasonNum}`) as { overview?: string };
-            if (tmdbSeasonData) seasonOverview = tmdbSeasonData.overview || null;
+            const tmdbSeasonData = await Promise.race([
+              tmdbFetch(`/tv/${tmdbId}/season/${primarySeasonNum}`) as Promise<{ overview?: string }>,
+              new Promise<null>((r) => setTimeout(() => r(null), 1000)),
+            ]);
+            if (tmdbSeasonData?.overview) seasonOverview = tmdbSeasonData.overview;
           } catch {}
         }
       } else {
@@ -1002,11 +1052,25 @@ export async function GET(
         seasonEps = seasonEps.filter((ep: any) => ep.episodeNum <= finalKnownCount);
       }
 
+      const fullTotalEpisodes =
+        resolvedTotalEpisodes ??
+        finalKnownCount ??
+        (season?.totalEpisodes && season.totalEpisodes < 1499 ? season.totalEpisodes : null) ??
+        (meta?.totalEpisodes && meta.totalEpisodes < 1499 ? meta.totalEpisodes : null) ??
+        seasonEps.length;
+
+      if (isRangeRequest && !isExplicitMovieFinal) {
+        seasonEps = seasonEps.filter((ep: any) => ep.episodeNum >= epStartParam && ep.episodeNum <= epEndParam);
+      }
+
       const resPayload = {
         success: true,
         data: {
           episodes: seasonEps,
-          totalEpisodes: season?.totalEpisodes ?? meta?.totalEpisodes ?? seasonEps.length,
+          totalEpisodes: Math.max(fullTotalEpisodes, seasonEps.length),
+          isPaginated: isRangeRequest,
+          rangeStart: isRangeRequest ? epStartParam : 1,
+          rangeEnd: isRangeRequest ? Math.min(epEndParam, Math.max(fullTotalEpisodes, seasonEps.length)) : Math.max(fullTotalEpisodes, seasonEps.length),
           seasonOverview,
         },
       };

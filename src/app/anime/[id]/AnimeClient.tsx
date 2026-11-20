@@ -883,6 +883,10 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   } = useWatchedEpisodes("anime", activeSeasonWatchedId, 1);
   const [episodePage, setEpisodePage] = useState(1);
   const [listChunkIndex, setListChunkIndex] = useState(0);
+  const [seasonTotalEpisodes, setSeasonTotalEpisodes] = useState<number | null>(null);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const loadedRangesRef = useRef<Set<string>>(new Set());
+  const inFlightRangesRef = useRef<Set<string>>(new Set());
   const [paletteState, setPaletteState] = useState<{
     id: string;
     palette: CoverPalette;
@@ -1087,7 +1091,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   }, [displayTitle]);
 
   useEffect(() => { setDescExpanded(false); }, [currentSeasonId, seasonOverview]);
-  useEffect(() => { setEpisodePage(1); setListChunkIndex(0); }, [currentSeasonId]);
+  useEffect(() => { setEpisodePage(1); setListChunkIndex(0); setSeasonTotalEpisodes(null); }, [currentSeasonId]);
 
   // ── Compute active numeric season number ──────────────────────────────────
   const currentSeasonNumber = useMemo(() => {
@@ -1365,6 +1369,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         hints.seasonName || (matchingSeason as any)?.name || (matchingSeason as any)?.title || meta?.name || ""
       );
       const sTot = hints.totalEpisodes || (matchingSeason as any)?.totalEpisodes || (matchingSeason as any)?.episodes || meta?.totalEpisodes || 0;
+      const isLongAnime = sTot > 60;
       const effectiveTmdbId = hints.tmdbId ?? (matchingSeason as any)?.tmdbId ?? meta?.tmdbId ?? null;
       const effectiveTmdbSeason = hints.tmdbSeason ?? (matchingSeason as any)?.tmdbSeasonNumber ?? null;
       const effectiveOffset = hints.episodeOffset ?? (matchingSeason as any)?.episodeOffset ?? 0;
@@ -1373,8 +1378,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       const offQ = effectiveOffset != null ? `&episodeOffset=${effectiveOffset}` : "";
       const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
       const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
-      const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean } }>(
-        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`,
+      const rangeQ = isLongAnime ? `&epStart=1&epEnd=50` : "";
+      const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; totalEpisodes?: number; isPaginated?: boolean; seasonOverview?: string | null; isUpcoming?: boolean; isUnavailable?: boolean } }>(
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}${rangeQ}&v=${ANIME_API_VERSION}`,
         { signal: controller.signal, skipCache: force }
       );
       clearTimeout(timeout);
@@ -1394,6 +1400,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
 
       if (data.success && data.data?.episodes?.length) {
         const sorted = data.data.episodes.sort((a, b) => a.episodeNum - b.episodeNum);
+        const totalFromApi = data.data.totalEpisodes && data.data.totalEpisodes > sorted.length ? data.data.totalEpisodes : (sTot > sorted.length ? sTot : sorted.length);
+        setSeasonTotalEpisodes(totalFromApi);
+        if (isLongAnime) {
+          loadedRangesRef.current.add(`${seasonId}:1-50`);
+        }
         setEpisodes(prev => {
           const other = prev.filter(e => String(e.seasonId) !== String(seasonId));
           const seen = new Set<number>();
@@ -1410,7 +1421,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
         loadedSeasonIds.current.add(seasonId);
         setEpisodesLoading(false);
         setSettledEpisodesId(id);
-        if (sorted.length > 0) {
+        if (sorted.length > 0 && !isLongAnime) {
           safeSessionSet(EP_KEY, JSON.stringify({ episodes: sorted.map(ep => ({ ...ep, seasonId: String(seasonId) })), seasonOverview: data.data.seasonOverview || null, status: animeStatusRef.current || "", _cachedAt: Date.now() }));
         }
         return;
@@ -1494,6 +1505,124 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     setSettledEpisodesId(id);
   }, [id, initialData]);
 
+  // ── MODULAR BATCH LOADER FOR LONG ANIME (loads 50 episodes per batch on page/chunk change) ──
+  const loadEpisodeBatch = useCallback(async (
+    seasonId: string,
+    epStart: number,
+    epEnd: number,
+    background = false
+  ) => {
+    const rangeKey = `${seasonId}:${epStart}-${epEnd}`;
+    if (loadedRangesRef.current.has(rangeKey) || inFlightRangesRef.current.has(rangeKey)) return;
+    inFlightRangesRef.current.add(rangeKey);
+    if (!background) setRangeLoading(true);
+
+    const meta = animeRef.current;
+    const nodes = franchiseNodesRef.current;
+    const matchingSeason =
+      meta?.seasons?.find(s => String(s.id) === String(seasonId)) ||
+      (initialData?.seasons || []).find((s: any) => String(s.id) === String(seasonId)) ||
+      nodes?.find(n => String(n.id) === String(seasonId));
+
+    try {
+      const sName = getSafeAnimeTitle(
+        (matchingSeason as any)?.name || (matchingSeason as any)?.title || meta?.name || ""
+      );
+      const sTot = seasonTotalEpisodes || (matchingSeason as any)?.totalEpisodes || (matchingSeason as any)?.episodes || meta?.totalEpisodes || 0;
+      const effectiveTmdbId = (matchingSeason as any)?.tmdbId ?? meta?.tmdbId ?? null;
+      const effectiveTmdbSeason = (matchingSeason as any)?.tmdbSeasonNumber ?? null;
+      const effectiveOffset = (matchingSeason as any)?.episodeOffset ?? 0;
+      const tmdbQ = effectiveTmdbId != null ? `&tmdbId=${effectiveTmdbId}` : "";
+      const tsQ = effectiveTmdbSeason != null ? `&tmdbSeason=${effectiveTmdbSeason}` : "";
+      const offQ = effectiveOffset != null ? `&episodeOffset=${effectiveOffset}` : "";
+      const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
+      const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
+
+      const data = await fetchJson<{ success: boolean; data: { episodes: Episode[]; totalEpisodes?: number } }>(
+        `/api/anime/${id}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&epStart=${epStart}&epEnd=${epEnd}&v=${ANIME_API_VERSION}`
+      );
+
+      if (data.success && data.data?.episodes?.length) {
+        const batchEps = data.data.episodes;
+        if (data.data.totalEpisodes && data.data.totalEpisodes > 0) {
+          setSeasonTotalEpisodes(prev => Math.max(prev || 0, data.data.totalEpisodes || 0));
+        }
+        setEpisodes(prev => {
+          const byKey = new Map<string, Episode>();
+          for (const ep of prev) {
+            byKey.set(`${String(ep.seasonId)}:${ep.episodeNum}`, ep);
+          }
+          for (const ep of batchEps) {
+            byKey.set(`${String(seasonId)}:${ep.episodeNum}`, { ...ep, seasonId: String(seasonId) });
+          }
+          return Array.from(byKey.values()).sort((a, b) => {
+            if ((a.seasonNum || 1) !== (b.seasonNum || 1)) return (a.seasonNum || 1) - (b.seasonNum || 1);
+            return a.episodeNum - b.episodeNum;
+          });
+        });
+        loadedRangesRef.current.add(rangeKey);
+      }
+    } catch (err) {
+      if (!background) console.warn(`[AnimeClient] Batch ${epStart}-${epEnd} failed:`, err);
+    } finally {
+      inFlightRangesRef.current.delete(rangeKey);
+      if (!background) setRangeLoading(false);
+    }
+  }, [id, initialData, seasonTotalEpisodes]);
+
+  // Trigger modular batch fetch + next-batch background prefetch when navigating pages/chunks on long anime
+  useEffect(() => {
+    const knownSeasonTotal =
+      seasonTotalEpisodes ||
+      ((currentSeasonInfo as any)?.totalEpisodes && (currentSeasonInfo as any).totalEpisodes < 1499
+        ? (currentSeasonInfo as any).totalEpisodes
+        : 0);
+    if (!currentSeasonId || episodesLoading || knownSeasonTotal <= 60) return;
+
+    const BATCH = 50;
+    let firstVisibleEp = 1;
+    if (episodeView === "grid") {
+      const gridSize = knownSeasonTotal > 500 ? 50 : 25;
+      firstVisibleEp = (episodePage - 1) * gridSize + 1;
+    } else if (episodeView === "list") {
+      firstVisibleEp = listChunkIndex * 10 + 1;
+    } else {
+      return;
+    }
+
+    const batchStart = Math.floor((firstVisibleEp - 1) / BATCH) * BATCH + 1;
+    const batchEnd = Math.min(batchStart + BATCH - 1, knownSeasonTotal);
+    const hasLoadedThisBatch = dedupedCurrentEps.some(
+      (ep) => ep.episodeNum >= batchStart && ep.episodeNum <= batchEnd
+    );
+
+    if (!hasLoadedThisBatch) {
+      void loadEpisodeBatch(currentSeasonId, batchStart, batchEnd, false);
+    }
+
+    // Silently prefetch the next 50-episode batch so clicking "Next ->" is instant
+    const nextStart = batchEnd + 1;
+    if (nextStart <= knownSeasonTotal) {
+      const nextEnd = Math.min(nextStart + BATCH - 1, knownSeasonTotal);
+      const hasNextBatch = dedupedCurrentEps.some(
+        (ep) => ep.episodeNum >= nextStart && ep.episodeNum <= nextEnd
+      );
+      if (!hasNextBatch) {
+        void loadEpisodeBatch(currentSeasonId, nextStart, nextEnd, true);
+      }
+    }
+  }, [
+    currentSeasonId,
+    episodesLoading,
+    seasonTotalEpisodes,
+    currentSeasonInfo,
+    episodeView,
+    episodePage,
+    listChunkIndex,
+    dedupedCurrentEps,
+    loadEpisodeBatch,
+  ]);
+
   // ── MAIN DATA LOADING EFFECT ─────────────────────────────────────────────
   // Resolves meta, episodes, and cover palette together before revealing the
   // page so neither theme colors nor episode lists pop in after first paint.
@@ -1511,6 +1640,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       episodeRequestRef.current += 1;
       episodeAbortRef.current?.abort();
       loadedSeasonIds.current.clear();
+      loadedRangesRef.current.clear();
+      inFlightRangesRef.current.clear();
+      setSeasonTotalEpisodes(null);
 
       const nextCachedMeta = readCachedAnimeMeta(id, initialForRoute);
       const nextPalette = getCachedCoverPalette(id) ||
@@ -2553,36 +2685,95 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     );
                   }
 
+                  const effectiveTotalEps = Math.max(
+                    seasonTotalEpisodes || 0,
+                    (currentSeasonInfo as any)?.totalEpisodes && (currentSeasonInfo as any).totalEpisodes < 1499
+                      ? (currentSeasonInfo as any).totalEpisodes
+                      : 0,
+                    episodeItems.length
+                  );
+
                   if (episodeView === "numbers") {
-                    return <div key={`numbers-${currentSeasonId}`}><EpisodeNumbersView items={episodeItems} /></div>;
+                    let numberItems = episodeItems;
+                    if (effectiveTotalEps > episodeItems.length) {
+                      const byNum = new Map(episodeItems.map((it) => [it.number, it]));
+                      numberItems = Array.from({ length: effectiveTotalEps }, (_, idx) => {
+                        const n = idx + 1;
+                        const existing = byNum.get(n);
+                        if (existing) return existing;
+                        return {
+                          key: `${currentSeasonId}-${n}-lazy`,
+                          number: n,
+                          title: `Episode ${n}`,
+                          isReleased: true,
+                          isWatched: isEpisodeMarkedWatched(n),
+                          isPlaying: hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) && playingEpisode === n,
+                          onClick: () => handleWatchEpisode({
+                            episodeId: `${currentSeasonId}-${n}`,
+                            episodeNum: n,
+                            title: `Episode ${n}`,
+                            seasonId: String(currentSeasonId),
+                            isReleased: true,
+                          }),
+                        };
+                      });
+                    }
+                    return <div key={`numbers-${currentSeasonId}`}><EpisodeNumbersView items={numberItems} /></div>;
                   }
 
                   if (episodeView === "grid") {
-                    const gridSize = episodeItems.length > 500 ? 50 : 25;
-                    const totalPages = Math.ceil(episodeItems.length / gridSize);
+                    const gridSize = effectiveTotalEps > 500 ? 50 : 25;
+                    const totalPages = Math.ceil(effectiveTotalEps / gridSize);
                     const activePage = Math.min(Math.max(1, episodePage), Math.max(1, totalPages));
-                    const sliced = episodeItems.slice((activePage - 1) * gridSize, activePage * gridSize);
+                    const startEp = (activePage - 1) * gridSize + 1;
+                    const endEp = Math.min(activePage * gridSize, effectiveTotalEps);
+                    const sliced = effectiveTotalEps > episodeItems.length
+                      ? episodeItems.filter((it) => it.number >= startEp && it.number <= endEp)
+                      : episodeItems.slice((activePage - 1) * gridSize, activePage * gridSize);
                     const onPageChange = (p: number) => { setEpisodePage(p); document.getElementById("anime-episodes-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
                     return (
                       <div key={`grid-${currentSeasonId}-${activePage}`}>
-                        {totalPages > 1 && <div className="mb-6"><EpisodePagination currentPage={activePage} totalPages={totalPages} totalItems={episodeItems.length} itemsPerPage={gridSize} onPageChange={onPageChange} /></div>}
-                        <EpisodeGridView items={sliced} layout="comfortable" />
-                        {totalPages > 1 && <div className="mt-8"><EpisodePagination currentPage={activePage} totalPages={totalPages} totalItems={episodeItems.length} itemsPerPage={gridSize} onPageChange={onPageChange} /></div>}
+                        {totalPages > 1 && <div className="mb-6"><EpisodePagination currentPage={activePage} totalPages={totalPages} totalItems={effectiveTotalEps} itemsPerPage={gridSize} onPageChange={onPageChange} /></div>}
+                        {sliced.length === 0 && rangeLoading ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+                            {Array.from({ length: Math.min(gridSize, 12) }).map((_, idx) => (
+                              <div key={idx} className="space-y-2">
+                                <div className="aspect-video w-full rounded-xl bg-white/[0.04] animate-pulse" />
+                                <div className="h-3.5 w-3/4 rounded bg-white/[0.04] animate-pulse" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <EpisodeGridView items={sliced} layout="comfortable" />
+                        )}
+                        {totalPages > 1 && <div className="mt-8"><EpisodePagination currentPage={activePage} totalPages={totalPages} totalItems={effectiveTotalEps} itemsPerPage={gridSize} onPageChange={onPageChange} /></div>}
                       </div>
                     );
                   }
 
                   const CHUNK = 10;
-                  const totalChunks = Math.ceil(episodeItems.length / CHUNK);
+                  const totalChunks = Math.ceil(effectiveTotalEps / CHUNK);
                   const activeChunk = Math.min(Math.max(0, listChunkIndex), Math.max(0, totalChunks - 1));
-                  const slicedChunk = episodeItems.slice(activeChunk * CHUNK, activeChunk * CHUNK + CHUNK);
+                  const chunkStartEp = activeChunk * CHUNK + 1;
+                  const chunkEndEp = Math.min((activeChunk + 1) * CHUNK, effectiveTotalEps);
+                  const slicedChunk = effectiveTotalEps > episodeItems.length
+                    ? episodeItems.filter((it) => it.number >= chunkStartEp && it.number <= chunkEndEp)
+                    : episodeItems.slice(activeChunk * CHUNK, activeChunk * CHUNK + CHUNK);
                   const onChunkChange = (c: number) => { setListChunkIndex(c); document.getElementById("anime-episodes-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
 
                   return (
                     <div key={`list-${currentSeasonId}-${activeChunk}`}>
-                      {episodeItems.length > CHUNK && <div className="flex justify-end mt-2 mb-6"><EpisodeChunkBar totalEpisodes={episodeItems.length} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) ? playingEpisode : selectedEp?.episodeNum} /></div>}
-                      <EpisodeListView items={slicedChunk} />
-                      {episodeItems.length > CHUNK && <div className="flex justify-end mt-8 pt-4 border-t border-white/[0.06]"><EpisodeChunkBar totalEpisodes={episodeItems.length} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) ? playingEpisode : selectedEp?.episodeNum} /></div>}
+                      {effectiveTotalEps > CHUNK && <div className="flex justify-end mt-2 mb-6"><EpisodeChunkBar totalEpisodes={effectiveTotalEps} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) ? playingEpisode : selectedEp?.episodeNum} /></div>}
+                      {slicedChunk.length === 0 && rangeLoading ? (
+                        <div className="space-y-3">
+                          {Array.from({ length: CHUNK }).map((_, idx) => (
+                            <div key={idx} className="h-24 w-full rounded-xl bg-white/[0.04] animate-pulse" />
+                          ))}
+                        </div>
+                      ) : (
+                        <EpisodeListView items={slicedChunk} />
+                      )}
+                      {effectiveTotalEps > CHUNK && <div className="flex justify-end mt-8 pt-4 border-t border-white/[0.06]"><EpisodeChunkBar totalEpisodes={effectiveTotalEps} chunkSize={CHUNK} activeChunkIndex={activeChunk} onChunkChange={onChunkChange} activeEpisodeNumber={hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) ? playingEpisode : selectedEp?.episodeNum} /></div>}
                     </div>
                   );
                 })()}

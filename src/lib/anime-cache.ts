@@ -8,7 +8,7 @@ import { resolveAnimeCoverPalette } from "@/lib/cover-palette";
  * changes. It is part of every anime fetch URL, so old browser/CDN entries are
  * never mixed with new data.
  */
-export const ANIME_API_VERSION = "v62-fast-episodes";
+export const ANIME_API_VERSION = "v64-modular-episodes";
 
 export function animeMetaUrl(id: string): string {
   return `/api/anime/${encodeURIComponent(id)}/meta?v=${ANIME_API_VERSION}`;
@@ -148,10 +148,11 @@ function buildEpisodesPreloadUrl(cleanId: string, metaData: any): { seasonId: st
   const offQ = effectiveOffset != null ? `&episodeOffset=${effectiveOffset}` : "";
   const nameQ = sName ? `&seasonName=${encodeURIComponent(sName)}` : "";
   const totQ = sTot > 0 ? `&totalEpisodes=${sTot}` : "";
+  const rangeQ = sTot > 60 ? `&epStart=1&epEnd=50` : "";
 
   return {
     seasonId,
-    url: `/api/anime/${encodeURIComponent(cleanId)}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}&v=${ANIME_API_VERSION}`,
+    url: `/api/anime/${encodeURIComponent(cleanId)}/episodes?seasonId=${encodeURIComponent(seasonId)}${tmdbQ}${tsQ}${offQ}${nameQ}${totQ}${rangeQ}&v=${ANIME_API_VERSION}`,
   };
 }
 
