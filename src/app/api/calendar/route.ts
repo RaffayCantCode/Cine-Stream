@@ -59,7 +59,11 @@ function addDaysIso(iso: string, days: number): string | null {
 
 function isAnimeTmdb(item: any): boolean {
   if (!item) return false;
-  if (item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16)) {
+  if (
+    item.original_language === "ja" &&
+    Array.isArray(item.genre_ids) &&
+    item.genre_ids.includes(16)
+  ) {
     return true;
   }
   return false;
@@ -68,13 +72,25 @@ function isAnimeTmdb(item: any): boolean {
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const now = new Date();
-  const yearParam = parseInt(searchParams.get("year") || String(now.getUTCFullYear()), 10);
-  const monthParam = parseInt(searchParams.get("month") || String(now.getUTCMonth() + 1), 10); // 1-12
+  const yearParam = parseInt(
+    searchParams.get("year") || String(now.getUTCFullYear()),
+    10
+  );
+  const monthParam = parseInt(
+    searchParams.get("month") || String(now.getUTCMonth() + 1),
+    10
+  ); // 1-12
 
-  const year = Number.isFinite(yearParam) && yearParam >= 2020 && yearParam <= 2030 ? yearParam : now.getUTCFullYear();
-  const month = Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12 ? monthParam : now.getUTCMonth() + 1;
+  const year =
+    Number.isFinite(yearParam) && yearParam >= 2020 && yearParam <= 2030
+      ? yearParam
+      : now.getUTCFullYear();
+  const month =
+    Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12
+      ? monthParam
+      : now.getUTCMonth() + 1;
 
-  const cacheKey = `${year}-${String(month).padStart(2, "0")}`;
+  const cacheKey = `v2-${year}-${String(month).padStart(2, "0")}`;
   const cached = CALENDAR_CACHE.get(cacheKey);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return Response.json({ items: cached.items }, { headers: cacheHeaders(1800) });
@@ -88,189 +104,387 @@ export async function GET(request: NextRequest) {
   const startUnix = Math.floor(firstDate.getTime() / 1000);
   const endUnix = Math.floor(lastDate.getTime() / 1000);
 
-  const collected: CalendarApiItem[] = [];
+  const tvCollected: CalendarApiItem[] = [];
+  const movieCollected: CalendarApiItem[] = [];
+  const animeCollected: CalendarApiItem[] = [];
 
-  // ── 1. TV SHOWS: Ongoing Trending + Monthly Airing + Weekly Recurring Projection ──
+  // ── 1. TV SHOWS: Exact Season Episodes in [firstIso..lastIso] + Ongoing Weekly Projection ──
   const tvTask = (async () => {
     try {
-      const [trendingTv, onTheAir1, onTheAir2, disc1, disc2, disc3] = await Promise.allSettled([
-        tmdbFetch("/trending/tv/week") as Promise<any>,
-        tmdbFetch("/tv/on_the_air", { page: "1" }) as Promise<any>,
-        tmdbFetch("/tv/on_the_air", { page: "2" }) as Promise<any>,
-        tmdbFetch("/discover/tv", {
-          "air_date.gte": firstIso,
-          "air_date.lte": lastIso,
-          sort_by: "popularity.desc",
-          without_keywords: "210024",
-          without_original_language: "ja",
-          without_genres: "10763,10767,10764",
-          "vote_count.gte": "10",
-          page: "1",
-        }) as Promise<any>,
-        tmdbFetch("/discover/tv", {
-          "air_date.gte": firstIso,
-          "air_date.lte": lastIso,
-          sort_by: "popularity.desc",
-          without_keywords: "210024",
-          without_original_language: "ja",
-          without_genres: "10763,10767,10764",
-          "vote_count.gte": "5",
-          page: "2",
-        }) as Promise<any>,
-        tmdbFetch("/discover/tv", {
-          "air_date.gte": firstIso,
-          "air_date.lte": lastIso,
-          sort_by: "popularity.desc",
-          without_keywords: "210024",
-          without_original_language: "ja",
-          without_genres: "10763,10767,10764",
-          page: "3",
-        }) as Promise<any>,
+      const [
+        discAir1,
+        discAir2,
+        discAir3,
+        discAir4,
+        discPremiere1,
+        discPremiere2,
+        trendingTv,
+        onTheAir1,
+      ] = await Promise.allSettled([
+        tmdbFetch(
+          "/discover/tv",
+          {
+            "air_date.gte": firstIso,
+            "air_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            without_genres: "10763,10767,10764",
+            page: "1",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/tv",
+          {
+            "air_date.gte": firstIso,
+            "air_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            without_genres: "10763,10767,10764",
+            page: "2",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/tv",
+          {
+            "air_date.gte": firstIso,
+            "air_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            without_genres: "10763,10767,10764",
+            page: "3",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/tv",
+          {
+            "air_date.gte": firstIso,
+            "air_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            without_genres: "10763,10767,10764",
+            page: "4",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/tv",
+          {
+            "first_air_date.gte": firstIso,
+            "first_air_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            without_genres: "10763,10767,10764",
+            page: "1",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/tv",
+          {
+            "first_air_date.gte": firstIso,
+            "first_air_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            without_genres: "10763,10767,10764",
+            page: "2",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch("/trending/tv/week", undefined, { allowFuture: true }) as Promise<any>,
+        tmdbFetch("/tv/on_the_air", { page: "1" }, { allowFuture: true }) as Promise<any>,
       ]);
 
-      const trendingIds = new Set<number>();
-      const onTheAirIds = new Set<number>();
-      const candidateMap = new Map<number, any>();
-
-      const addCandidates = (res: PromiseSettledResult<any>, markSet?: Set<number>) => {
+      // Shows explicitly returned by TMDB as airing in [firstIso..lastIso]
+      const monthlyAiringMap = new Map<number, any>();
+      const addMonthly = (res: PromiseSettledResult<any>) => {
         if (res.status !== "fulfilled" || !Array.isArray(res.value?.results)) return;
         for (const show of res.value.results) {
           if (!show?.id || isAnimeTmdb(show)) continue;
           if (!show.poster_path && !show.backdrop_path) continue;
-          if ( Array.isArray(show.genre_ids) && (show.genre_ids.includes(10763) || show.genre_ids.includes(10767)) ) continue;
-          if (markSet) markSet.add(Number(show.id));
-          if (!candidateMap.has(Number(show.id))) {
-            candidateMap.set(Number(show.id), show);
+          if (
+            Array.isArray(show.genre_ids) &&
+            (show.genre_ids.includes(10763) ||
+              show.genre_ids.includes(10767) ||
+              show.genre_ids.includes(10764))
+          ) {
+            continue;
+          }
+          if (!monthlyAiringMap.has(Number(show.id))) {
+            monthlyAiringMap.set(Number(show.id), show);
           }
         }
       };
 
-      addCandidates(trendingTv, trendingIds);
-      addCandidates(onTheAir1, onTheAirIds);
-      addCandidates(onTheAir2, onTheAirIds);
-      addCandidates(disc1);
-      addCandidates(disc2);
-      addCandidates(disc3);
+      addMonthly(discAir1);
+      addMonthly(discAir2);
+      addMonthly(discAir3);
+      addMonthly(discAir4);
+      addMonthly(discPremiere1);
+      addMonthly(discPremiere2);
 
-      const allCandidates = Array.from(candidateMap.values()).sort(
+      // Also include top trending/on-the-air shows so ongoing weekly shows are checked
+      const trendingBonusMap = new Map<number, any>();
+      for (const res of [trendingTv, onTheAir1]) {
+        if (res.status !== "fulfilled" || !Array.isArray(res.value?.results)) continue;
+        for (const show of res.value.results) {
+          if (!show?.id || isAnimeTmdb(show)) continue;
+          if (!show.poster_path && !show.backdrop_path) continue;
+          if (
+            Array.isArray(show.genre_ids) &&
+            (show.genre_ids.includes(10763) ||
+              show.genre_ids.includes(10767) ||
+              show.genre_ids.includes(10764))
+          ) {
+            continue;
+          }
+          if (!monthlyAiringMap.has(Number(show.id))) {
+            trendingBonusMap.set(Number(show.id), show);
+          }
+        }
+      }
+
+      const monthlySorted = Array.from(monthlyAiringMap.values()).sort(
         (a, b) => Number(b.popularity || 0) - Number(a.popularity || 0)
       );
+      const trendingSorted = Array.from(trendingBonusMap.values())
+        .sort((a, b) => Number(b.popularity || 0) - Number(a.popularity || 0))
+        .slice(0, 14);
 
-      // Top 26 shows get full `/tv/{id}` detail enrichment to project exact season/episode weekly schedule
-      const topToEnrich = allCandidates.slice(0, 26);
-      const restCandidates = allCandidates.slice(26, 75);
+      const candidatesToEnrich = [...monthlySorted.slice(0, 34), ...trendingSorted].slice(0, 42);
+      const remainingMonthly = monthlySorted.slice(34, 80);
 
-      const enrichedDetails = await Promise.allSettled(
-        topToEnrich.map((show) => tmdbFetch(`/tv/${show.id}`) as Promise<any>)
+      // Step A: Fetch `/tv/{id}` details in parallel for the top 42 candidates
+      const detailResults = await Promise.allSettled(
+        candidatesToEnrich.map(
+          (show) => tmdbFetch(`/tv/${show.id}`, undefined, { allowFuture: true }) as Promise<any>
+        )
+      );
+
+      // Step B: Determine which season of each show is airing in [firstIso..lastIso] and fetch `/tv/{id}/season/{sNum}`
+      interface ShowEnrichPlan {
+        base: any;
+        detail: any;
+        targetSeasonNum: number;
+      }
+      const seasonPlans: ShowEnrichPlan[] = [];
+
+      for (let i = 0; i < candidatesToEnrich.length; i++) {
+        const base = candidatesToEnrich[i];
+        const dRes = detailResults[i];
+        const detail = dRes?.status === "fulfilled" ? dRes.value : null;
+        if (!detail) continue;
+
+        const statusStr = String(detail.status || "").toLowerCase();
+        const isEnded =
+          statusStr === "ended" ||
+          statusStr === "canceled" ||
+          statusStr === "cancelled";
+
+        const nextEp = detail.next_episode_to_air;
+        const lastEp = detail.last_episode_to_air;
+
+        // If the series is Ended/Canceled and its last episode aired before this month, NEVER include it!
+        if (isEnded && (!lastEp?.air_date || lastEp.air_date < firstIso) && !nextEp) {
+          continue;
+        }
+        // Even for a "Returning Series", if it has NO next_episode_to_air AND its last episode aired before this month,
+        // its previous season already finished before this month — do NOT invent episodes!
+        if (!nextEp && lastEp?.air_date && lastEp.air_date < firstIso) {
+          continue;
+        }
+
+        // Pick the season that overlaps [firstIso..lastIso]
+        let targetSeasonNum = Number(
+          nextEp?.season_number ||
+            lastEp?.season_number ||
+            detail.number_of_seasons ||
+            1
+        );
+        if (Array.isArray(detail.seasons)) {
+          const validSeasons = detail.seasons.filter((s: any) => s.season_number > 0);
+          const matchingMonthSeason = validSeasons.find(
+            (s: any) => s.air_date && s.air_date >= firstIso && s.air_date <= lastIso
+          );
+          if (matchingMonthSeason) {
+            targetSeasonNum = matchingMonthSeason.season_number;
+          }
+        }
+
+        seasonPlans.push({ base, detail, targetSeasonNum });
+      }
+
+      const seasonResults = await Promise.allSettled(
+        seasonPlans.map(
+          (p) =>
+            tmdbFetch(`/tv/${p.base.id}/season/${p.targetSeasonNum}`, undefined, {
+              allowFuture: true,
+            }) as Promise<any>
+        )
       );
 
       const seenSlotKeys = new Set<string>();
 
-      for (let i = 0; i < topToEnrich.length; i++) {
-        const base = topToEnrich[i];
-        const detailRes = enrichedDetails[i];
-        const detail = detailRes?.status === "fulfilled" ? detailRes.value : null;
+      for (let i = 0; i < seasonPlans.length; i++) {
+        const { base, detail, targetSeasonNum } = seasonPlans[i];
+        const sRes = seasonResults[i];
+        const seasonData = sRes?.status === "fulfilled" ? sRes.value : null;
+        const episodes: any[] = Array.isArray(seasonData?.episodes)
+          ? seasonData.episodes
+          : [];
 
-        const statusStr = String(detail?.status || "").toLowerCase();
-        const isEnded = statusStr === "ended" || statusStr === "canceled" || statusStr === "cancelled";
+        let addedFromRealSeason = 0;
+        let lastKnownEpInSeason: { epNum: number; airDate: string } | null = null;
 
-        const nextEp = detail?.next_episode_to_air;
-        const lastEp = detail?.last_episode_to_air;
-        const anchorEp = nextEp || lastEp;
+        // 1. Add all real TMDB episodes from seasonData whose air_date is in [firstIso..lastIso]
+        for (const ep of episodes) {
+          if (!ep?.air_date) continue;
+          lastKnownEpInSeason = {
+            epNum: Number(ep.episode_number || 1),
+            airDate: ep.air_date,
+          };
+          if (ep.air_date < firstIso || ep.air_date > lastIso) continue;
 
-        // If show ended long before this month, skip it
-        if (isEnded && lastEp?.air_date && lastEp.air_date < firstIso) {
-          continue;
-        }
-
-        const anchorDateIso: string | null =
-          anchorEp?.air_date || base.first_air_date || null;
-        if (!anchorDateIso) continue;
-
-        const seasonNum = Number(anchorEp?.season_number || detail?.number_of_seasons || 1);
-        const anchorEpNum = Number(anchorEp?.episode_number || 1);
-
-        // Find max episodes in this season (default 10 for streaming / 16 for broadcast if unknown)
-        const matchedSeason = Array.isArray(detail?.seasons)
-          ? detail.seasons.find((s: any) => Number(s.season_number) === seasonNum)
-          : null;
-        const maxSeasonEps =
-          matchedSeason?.episode_count && matchedSeason.episode_count > 0
-            ? Number(matchedSeason.episode_count)
-            : 12;
-
-        const isTopShow =
-          i < 20 ||
-          trendingIds.has(Number(base.id)) ||
-          Number(base.popularity || 0) >= 55;
-
-        const anchorDateObj = parseIsoDateUtc(anchorDateIso);
-        if (!anchorDateObj) continue;
-        const weekdayName = WEEKDAY_NAMES[anchorDateObj.getUTCDay()];
-
-        // Project weekly recurring episodes across [-6 .. +6] weeks from the anchor episode
-        for (let weekDelta = -6; weekDelta <= 6; weekDelta++) {
-          const epNum = anchorEpNum + weekDelta;
-          if (epNum < 1 || epNum > maxSeasonEps) continue;
-          const targetIso = addDaysIso(anchorDateIso, weekDelta * 7);
-          if (!targetIso || targetIso < firstIso || targetIso > lastIso) continue;
-
-          const slotKey = `tv-${base.id}-${targetIso}`;
+          const slotKey = `tv-${base.id}-${ep.air_date}`;
           if (seenSlotKeys.has(slotKey)) continue;
           seenSlotKeys.add(slotKey);
+          addedFromRealSeason++;
 
-          collected.push({
-            id: `${slotKey}-s${seasonNum}e${epNum}`,
+          const dObj = parseIsoDateUtc(ep.air_date);
+          const weekdayName = dObj ? WEEKDAY_NAMES[dObj.getUTCDay()] : "Weekly";
+          const epNum = Number(ep.episode_number || 1);
+
+          tvCollected.push({
+            id: `${slotKey}-s${targetSeasonNum}e${epNum}`,
             mediaId: base.id,
             mediaType: "tv",
-            title: base.name || base.title || "TV Series",
+            title: base.name || base.title || detail.name || "TV Series",
             poster: base.poster_path
               ? `https://image.tmdb.org/t/p/w342${base.poster_path}`
               : null,
             backdrop: base.backdrop_path
               ? `https://image.tmdb.org/t/p/w780${base.backdrop_path}`
               : null,
-            dateIso: targetIso,
+            dateIso: ep.air_date,
             weekdayLabel: `Every ${weekdayName}`,
-            episodeLabel: `S${seasonNum} • E${epNum}`,
-            seasonNumber: seasonNum,
+            episodeLabel: `S${targetSeasonNum} • E${epNum}`,
+            seasonNumber: targetSeasonNum,
             episodeNumber: epNum,
             rating: base.vote_average || null,
             popularity: Number(base.popularity || 0),
-            isTop: isTopShow,
+            isTop: false, // computed after ranking all active shows of the month
             detailHref: `/tv/${base.id}`,
-            watchHref: `/watch/tv/${base.id}/${seasonNum}/${epNum}`,
+            watchHref: `/watch/tv/${base.id}/${targetSeasonNum}/${epNum}`,
           });
+        }
+
+        // 2. ONLY project future weekly episodes if the show has an explicit `next_episode_to_air`
+        // (i.e. it is actively airing new episodes) AND TMDB's season episode list didn't already cover them,
+        // and NEVER exceed `matchedSeason.episode_count`!
+        const nextEp = detail.next_episode_to_air;
+        const matchedSeasonMeta = Array.isArray(detail.seasons)
+          ? detail.seasons.find((s: any) => Number(s.season_number) === targetSeasonNum)
+          : null;
+        const declaredEpisodeCount = Number(matchedSeasonMeta?.episode_count || 0);
+
+        if (nextEp?.air_date && declaredEpisodeCount > 0) {
+          const anchorIso = lastKnownEpInSeason?.airDate || nextEp.air_date;
+          const anchorEpNum =
+            lastKnownEpInSeason?.epNum || Number(nextEp.episode_number || 1);
+          const dObj = parseIsoDateUtc(anchorIso);
+          const weekdayName = dObj ? WEEKDAY_NAMES[dObj.getUTCDay()] : "Weekly";
+
+          for (let weekDelta = 0; weekDelta <= 8; weekDelta++) {
+            const epNum = anchorEpNum + weekDelta;
+            if (epNum > declaredEpisodeCount) break;
+            const targetIso = addDaysIso(anchorIso, weekDelta * 7);
+            if (!targetIso || targetIso < firstIso || targetIso > lastIso) continue;
+            // Never project before next_episode_to_air
+            if (targetIso < nextEp.air_date) continue;
+
+            const slotKey = `tv-${base.id}-${targetIso}`;
+            if (seenSlotKeys.has(slotKey)) continue;
+            seenSlotKeys.add(slotKey);
+
+            tvCollected.push({
+              id: `${slotKey}-s${targetSeasonNum}e${epNum}`,
+              mediaId: base.id,
+              mediaType: "tv",
+              title: base.name || base.title || detail.name || "TV Series",
+              poster: base.poster_path
+                ? `https://image.tmdb.org/t/p/w342${base.poster_path}`
+                : null,
+              backdrop: base.backdrop_path
+                ? `https://image.tmdb.org/t/p/w780${base.backdrop_path}`
+                : null,
+              dateIso: targetIso,
+              weekdayLabel: `Every ${weekdayName}`,
+              episodeLabel: `S${targetSeasonNum} • E${epNum}`,
+              seasonNumber: targetSeasonNum,
+              episodeNumber: epNum,
+              rating: base.vote_average || null,
+              popularity: Number(base.popularity || 0),
+              isTop: false,
+              detailHref: `/tv/${base.id}`,
+              watchHref: `/watch/tv/${base.id}/${targetSeasonNum}/${epNum}`,
+            });
+          }
+        } else if (
+          addedFromRealSeason === 0 &&
+          base.first_air_date &&
+          base.first_air_date >= firstIso &&
+          base.first_air_date <= lastIso
+        ) {
+          // Brand-new upcoming series premiere in a future month
+          const slotKey = `tv-${base.id}-${base.first_air_date}`;
+          if (!seenSlotKeys.has(slotKey)) {
+            seenSlotKeys.add(slotKey);
+            tvCollected.push({
+              id: `${slotKey}-premiere`,
+              mediaId: base.id,
+              mediaType: "tv",
+              title: base.name || base.title || "TV Series",
+              poster: base.poster_path
+                ? `https://image.tmdb.org/t/p/w342${base.poster_path}`
+                : null,
+              backdrop: base.backdrop_path
+                ? `https://image.tmdb.org/t/p/w780${base.backdrop_path}`
+                : null,
+              dateIso: base.first_air_date,
+              episodeLabel: "Series Premiere",
+              seasonNumber: 1,
+              episodeNumber: 1,
+              rating: base.vote_average || null,
+              popularity: Number(base.popularity || 0),
+              isTop: false,
+              detailHref: `/tv/${base.id}`,
+              watchHref: `/watch/tv/${base.id}/1/1`,
+            });
+          }
         }
       }
 
-      // Also populate normal/remaining shows from discover so "Normal / All Shows" is comprehensive
-      for (const show of restCandidates) {
-        const baseIso: string | null = show.first_air_date || null;
-        let anchorIso = baseIso;
-        if (!anchorIso || anchorIso < firstIso || anchorIso > lastIso) {
-          // Align show's weekday into the current month
-          const d = baseIso ? parseIsoDateUtc(baseIso) : null;
-          const dow = d ? d.getUTCDay() : (Number(show.id) % 7);
-          const firstDow = firstDate.getUTCDay();
-          const offset = (dow - firstDow + 7) % 7;
-          anchorIso = addDaysIso(firstIso, offset);
-        }
-        if (!anchorIso) continue;
-
-        const dObj = parseIsoDateUtc(anchorIso);
-        const weekdayName = dObj ? WEEKDAY_NAMES[dObj.getUTCDay()] : "Weekly";
-
-        for (let weekDelta = 0; weekDelta < 4; weekDelta++) {
-          const targetIso = addDaysIso(anchorIso, weekDelta * 7);
-          if (!targetIso || targetIso < firstIso || targetIso > lastIso) continue;
-          const slotKey = `tv-${show.id}-${targetIso}`;
+      // Add remaining monthly premieres for "All Shows" mode
+      for (const show of remainingMonthly) {
+        if (
+          show.first_air_date &&
+          show.first_air_date >= firstIso &&
+          show.first_air_date <= lastIso
+        ) {
+          const slotKey = `tv-${show.id}-${show.first_air_date}`;
           if (seenSlotKeys.has(slotKey)) continue;
           seenSlotKeys.add(slotKey);
 
-          const epNum = weekDelta + 1;
-          collected.push({
-            id: `${slotKey}-e${epNum}`,
+          tvCollected.push({
+            id: `${slotKey}-s1e1`,
             mediaId: show.id,
             mediaType: "tv",
             title: show.name || show.title || "TV Series",
@@ -280,58 +494,98 @@ export async function GET(request: NextRequest) {
             backdrop: show.backdrop_path
               ? `https://image.tmdb.org/t/p/w780${show.backdrop_path}`
               : null,
-            dateIso: targetIso,
-            weekdayLabel: `Every ${weekdayName}`,
-            episodeLabel: `New Episode`,
+            dateIso: show.first_air_date,
+            episodeLabel: "Series Premiere",
             seasonNumber: 1,
-            episodeNumber: epNum,
+            episodeNumber: 1,
             rating: show.vote_average || null,
             popularity: Number(show.popularity || 0),
             isTop: false,
             detailHref: `/tv/${show.id}`,
-            watchHref: `/watch/tv/${show.id}/1/${epNum}`,
+            watchHref: `/watch/tv/${show.id}/1/1`,
           });
         }
+      }
+
+      // Rank unique TV shows that actually have episodes in this month by popularity,
+      // and mark the Top 26 unique series of the month as `isTop = true`!
+      const popByTvId = new Map<string, number>();
+      for (const item of tvCollected) {
+        const key = String(item.mediaId);
+        popByTvId.set(key, Math.max(popByTvId.get(key) || 0, item.popularity));
+      }
+      const topTvIds = new Set(
+        Array.from(popByTvId.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 26)
+          .map((e) => e[0])
+      );
+      for (const item of tvCollected) {
+        item.isTop = topTvIds.has(String(item.mediaId));
       }
     } catch {}
   })();
 
-  // ── 2. MOVIES: Blockbusters & Theatrical/Digital Releases in this Month ──
+  // ── 2. MOVIES: Current & Future Month Theatrical / Digital Releases ──
   const moviesTask = (async () => {
     try {
-      const [m1, m2, m3, upcoming] = await Promise.allSettled([
-        tmdbFetch("/discover/movie", {
-          "primary_release_date.gte": firstIso,
-          "primary_release_date.lte": lastIso,
-          sort_by: "popularity.desc",
-          without_keywords: "210024",
-          without_original_language: "ja",
-          include_adult: "false",
-          page: "1",
-        }) as Promise<any>,
-        tmdbFetch("/discover/movie", {
-          "primary_release_date.gte": firstIso,
-          "primary_release_date.lte": lastIso,
-          sort_by: "popularity.desc",
-          without_keywords: "210024",
-          without_original_language: "ja",
-          include_adult: "false",
-          page: "2",
-        }) as Promise<any>,
-        tmdbFetch("/discover/movie", {
-          "primary_release_date.gte": firstIso,
-          "primary_release_date.lte": lastIso,
-          sort_by: "popularity.desc",
-          without_keywords: "210024",
-          without_original_language: "ja",
-          include_adult: "false",
-          page: "3",
-        }) as Promise<any>,
-        tmdbFetch("/movie/upcoming", { page: "1" }) as Promise<any>,
+      const [m1, m2, m3, m4] = await Promise.allSettled([
+        tmdbFetch(
+          "/discover/movie",
+          {
+            "primary_release_date.gte": firstIso,
+            "primary_release_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            include_adult: "false",
+            page: "1",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/movie",
+          {
+            "primary_release_date.gte": firstIso,
+            "primary_release_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            include_adult: "false",
+            page: "2",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/movie",
+          {
+            "primary_release_date.gte": firstIso,
+            "primary_release_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            include_adult: "false",
+            page: "3",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
+        tmdbFetch(
+          "/discover/movie",
+          {
+            "release_date.gte": firstIso,
+            "release_date.lte": lastIso,
+            sort_by: "popularity.desc",
+            without_keywords: "210024",
+            without_original_language: "ja",
+            include_adult: "false",
+            page: "1",
+          },
+          { allowFuture: true }
+        ) as Promise<any>,
       ]);
 
       const rawMovies: any[] = [];
-      for (const r of [m1, m2, m3, upcoming]) {
+      for (const r of [m1, m2, m3, m4]) {
         if (r.status === "fulfilled" && Array.isArray(r.value?.results)) {
           rawMovies.push(...r.value.results);
         }
@@ -353,8 +607,8 @@ export async function GET(request: NextRequest) {
 
       validMovies.forEach((mov, idx) => {
         const dateIso = mov.release_date;
-        const isTopMovie = idx < 22 || Number(mov.popularity || 0) >= 30;
-        collected.push({
+        const isTopMovie = idx < 25;
+        movieCollected.push({
           id: `movie-${mov.id}-${dateIso}`,
           mediaId: mov.id,
           mediaType: "movie",
@@ -366,7 +620,7 @@ export async function GET(request: NextRequest) {
             ? `https://image.tmdb.org/t/p/w780${mov.backdrop_path}`
             : null,
           dateIso,
-          episodeLabel: dateIso > todayIso ? "Movie Premiere" : "Now Playing",
+          episodeLabel: dateIso > todayIso ? "Upcoming Movie" : "Movie Release",
           rating: mov.vote_average || null,
           popularity: Number(mov.popularity || 0),
           isTop: isTopMovie,
@@ -377,7 +631,7 @@ export async function GET(request: NextRequest) {
     } catch {}
   })();
 
-  // ── 3. ANIME: Exact Monthly AiringSchedule + Recurring Top Seasonal Anime ──
+  // ── 3. ANIME: Exact Monthly AiringSchedule + Future Month Anime Premieres ──
   const animeTask = (async () => {
     try {
       const scheduleQuery = `
@@ -391,6 +645,8 @@ export async function GET(request: NextRequest) {
                 id
                 isAdult
                 popularity
+                episodes
+                status
                 title { english romaji }
                 coverImage { large extraLarge }
                 bannerImage
@@ -400,127 +656,107 @@ export async function GET(request: NextRequest) {
           }
         }
       `;
-      const topReleasingQuery = `
-        query {
-          Page(page: 1, perPage: 30) {
-            media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC, isAdult: false) {
+      const startDateInt = year * 10000 + month * 100;
+      const endDateInt = year * 10000 + month * 100 + 32;
+      const monthPremiereQuery = `
+        query ($startDate: FuzzyDateInt, $endDate: FuzzyDateInt) {
+          Page(page: 1, perPage: 40) {
+            media(type: ANIME, startDate_greater: $startDate, startDate_lesser: $endDate, sort: POPULARITY_DESC, isAdult: false) {
               id
               isAdult
               popularity
               episodes
+              status
+              startDate { year month day }
               title { english romaji }
               coverImage { large extraLarge }
               bannerImage
               averageScore
-              nextAiringEpisode {
-                airingAt
-                episode
-              }
+              nextAiringEpisode { airingAt episode }
             }
           }
         }
       `;
 
-      const [sched1, sched2, sched3, topReleasingRes] = await Promise.allSettled([
-        fetch("https://graphql.anilist.co", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: scheduleQuery, variables: { start: startUnix, end: endUnix, page: 1 } }),
-          signal: AbortSignal.timeout(5500),
-        }).then((r) => (r.ok ? r.json() : null)),
-        fetch("https://graphql.anilist.co", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: scheduleQuery, variables: { start: startUnix, end: endUnix, page: 2 } }),
-          signal: AbortSignal.timeout(5500),
-        }).then((r) => (r.ok ? r.json() : null)),
-        fetch("https://graphql.anilist.co", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: scheduleQuery, variables: { start: startUnix, end: endUnix, page: 3 } }),
-          signal: AbortSignal.timeout(5500),
-        }).then((r) => (r.ok ? r.json() : null)),
-        fetch("https://graphql.anilist.co", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: topReleasingQuery }),
-          signal: AbortSignal.timeout(5500),
-        }).then((r) => (r.ok ? r.json() : null)),
-      ]);
+      const [sched1, sched2, sched3, sched4, monthPremieresRes] =
+        await Promise.allSettled([
+          fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: scheduleQuery,
+              variables: { start: startUnix, end: endUnix, page: 1 },
+            }),
+            signal: AbortSignal.timeout(5500),
+          }).then((r) => (r.ok ? r.json() : null)),
+          fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: scheduleQuery,
+              variables: { start: startUnix, end: endUnix, page: 2 },
+            }),
+            signal: AbortSignal.timeout(5500),
+          }).then((r) => (r.ok ? r.json() : null)),
+          fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: scheduleQuery,
+              variables: { start: startUnix, end: endUnix, page: 3 },
+            }),
+            signal: AbortSignal.timeout(5500),
+          }).then((r) => (r.ok ? r.json() : null)),
+          fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: scheduleQuery,
+              variables: { start: startUnix, end: endUnix, page: 4 },
+            }),
+            signal: AbortSignal.timeout(5500),
+          }).then((r) => (r.ok ? r.json() : null)),
+          fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: monthPremiereQuery,
+              variables: { startDate: startDateInt, endDate: endDateInt },
+            }),
+            signal: AbortSignal.timeout(5500),
+          }).then((r) => (r.ok ? r.json() : null)),
+        ]);
 
       const seenAnimeSlots = new Set<string>();
 
-      // Project weekly episodes for the top 30 currently releasing anime across the entire month
-      if (topReleasingRes.status === "fulfilled" && Array.isArray(topReleasingRes.value?.data?.Page?.media)) {
-        const list = topReleasingRes.value.data.Page.media;
-        list.forEach((media: any, idx: number) => {
-          if (!media?.id || media.isAdult || !media.nextAiringEpisode?.airingAt) return;
-          const anchorUnix = Number(media.nextAiringEpisode.airingAt);
-          const anchorEp = Number(media.nextAiringEpisode.episode || 1);
-          const maxEps = media.episodes && media.episodes > 0 ? Number(media.episodes) : 2000;
-          const pop = Number(media.popularity || 0);
-          const isTopAnime = idx < 22 || pop >= 18000;
-
-          const anchorDate = new Date(anchorUnix * 1000);
-          const weekdayName = WEEKDAY_NAMES[anchorDate.getUTCDay()];
-          const timeLabel = anchorDate.toLocaleTimeString("en-US", {
-            hour: "numeric",
-            minute: "2-digit",
-          });
-
-          for (let weekDelta = -6; weekDelta <= 6; weekDelta++) {
-            const epNum = anchorEp + weekDelta;
-            if (epNum < 1 || epNum > maxEps) continue;
-            const slotUnix = anchorUnix + weekDelta * 7 * 86400;
-            if (slotUnix < startUnix || slotUnix > endUnix) continue;
-            const dateIso = toIsoDateUtc(new Date(slotUnix * 1000));
-            const slotKey = `anime-${media.id}-${dateIso}`;
-            if (seenAnimeSlots.has(slotKey)) continue;
-            seenAnimeSlots.add(slotKey);
-
-            collected.push({
-              id: `${slotKey}-ep${epNum}`,
-              mediaId: media.id,
-              mediaType: "anime",
-              title: media.title?.english || media.title?.romaji || "Anime",
-              poster: media.coverImage?.extraLarge || media.coverImage?.large || null,
-              backdrop: media.bannerImage || media.coverImage?.extraLarge || null,
-              dateIso,
-              weekdayLabel: `Every ${weekdayName}`,
-              timeLabel,
-              episodeLabel: `Episode ${epNum}`,
-              episodeNumber: epNum,
-              rating: media.averageScore ? media.averageScore / 10 : null,
-              popularity: pop,
-              isTop: isTopAnime,
-              detailHref: `/anime/${media.id}`,
-              watchHref: `/watch/anime/${media.id}/${epNum}`,
-            });
-          }
-        });
-      }
-
-      // Add exact schedule entries from pages 1-3
-      for (const res of [sched1, sched2, sched3]) {
-        if (res.status !== "fulfilled" || !Array.isArray(res.value?.data?.Page?.airingSchedules)) continue;
+      for (const res of [sched1, sched2, sched3, sched4]) {
+        if (
+          res.status !== "fulfilled" ||
+          !Array.isArray(res.value?.data?.Page?.airingSchedules)
+        ) {
+          continue;
+        }
         for (const sched of res.value.data.Page.airingSchedules) {
           const media = sched?.media;
           if (!media?.id || media.isAdult) continue;
           const airDate = new Date(sched.airingAt * 1000);
           const dateIso = toIsoDateUtc(airDate);
+          if (dateIso < firstIso || dateIso > lastIso) continue;
           const slotKey = `anime-${media.id}-${dateIso}`;
           if (seenAnimeSlots.has(slotKey)) continue;
           seenAnimeSlots.add(slotKey);
 
           const pop = Number(media.popularity || 0);
           const weekdayName = WEEKDAY_NAMES[airDate.getUTCDay()];
-          collected.push({
+          animeCollected.push({
             id: `${slotKey}-ep${sched.episode}`,
             mediaId: media.id,
             mediaType: "anime",
             title: media.title?.english || media.title?.romaji || "Anime",
-            poster: media.coverImage?.extraLarge || media.coverImage?.large || null,
-            backdrop: media.bannerImage || media.coverImage?.extraLarge || null,
+            poster:
+              media.coverImage?.extraLarge || media.coverImage?.large || null,
+            backdrop:
+              media.bannerImage || media.coverImage?.extraLarge || null,
             dateIso,
             weekdayLabel: `Every ${weekdayName}`,
             timeLabel: airDate.toLocaleTimeString("en-US", {
@@ -531,17 +767,83 @@ export async function GET(request: NextRequest) {
             episodeNumber: sched.episode,
             rating: media.averageScore ? media.averageScore / 10 : null,
             popularity: pop,
-            isTop: pop >= 18000,
+            isTop: false,
             detailHref: `/anime/${media.id}`,
             watchHref: `/watch/anime/${media.id}/${sched.episode || 1}`,
           });
         }
+      }
+
+      // Also add future-month anime premieres that have a startDate in [firstIso..lastIso]
+      if (
+        monthPremieresRes.status === "fulfilled" &&
+        Array.isArray(monthPremieresRes.value?.data?.Page?.media)
+      ) {
+        for (const media of monthPremieresRes.value.data.Page.media) {
+          if (!media?.id || media.isAdult) continue;
+          const sd = media.startDate;
+          if (!sd?.year || !sd?.month || !sd?.day) continue;
+          const premiereIso = `${sd.year}-${String(sd.month).padStart(2, "0")}-${String(
+            sd.day
+          ).padStart(2, "0")}`;
+          if (premiereIso < firstIso || premiereIso > lastIso) continue;
+
+          const maxEps = Number(media.episodes || 12);
+          const dObj = parseIsoDateUtc(premiereIso);
+          const weekdayName = dObj ? WEEKDAY_NAMES[dObj.getUTCDay()] : "Weekly";
+
+          for (let weekDelta = 0; weekDelta < Math.min(maxEps, 5); weekDelta++) {
+            const targetIso = addDaysIso(premiereIso, weekDelta * 7);
+            if (!targetIso || targetIso < firstIso || targetIso > lastIso) continue;
+            const slotKey = `anime-${media.id}-${targetIso}`;
+            if (seenAnimeSlots.has(slotKey)) continue;
+            seenAnimeSlots.add(slotKey);
+
+            const epNum = weekDelta + 1;
+            animeCollected.push({
+              id: `${slotKey}-ep${epNum}`,
+              mediaId: media.id,
+              mediaType: "anime",
+              title: media.title?.english || media.title?.romaji || "Anime",
+              poster:
+                media.coverImage?.extraLarge || media.coverImage?.large || null,
+              backdrop:
+                media.bannerImage || media.coverImage?.extraLarge || null,
+              dateIso: targetIso,
+              weekdayLabel: maxEps > 1 ? `Every ${weekdayName}` : undefined,
+              episodeLabel: maxEps === 1 ? "Movie / Special" : `Episode ${epNum}`,
+              episodeNumber: epNum,
+              rating: media.averageScore ? media.averageScore / 10 : null,
+              popularity: Number(media.popularity || 0),
+              isTop: false,
+              detailHref: `/anime/${media.id}`,
+              watchHref: `/watch/anime/${media.id}/${epNum}`,
+            });
+          }
+        }
+      }
+
+      // Mark the top 25 unique Anime of the month by popularity as `isTop = true`
+      const popByAnimeId = new Map<string, number>();
+      for (const item of animeCollected) {
+        const key = String(item.mediaId);
+        popByAnimeId.set(key, Math.max(popByAnimeId.get(key) || 0, item.popularity));
+      }
+      const topAnimeIds = new Set(
+        Array.from(popByAnimeId.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 25)
+          .map((e) => e[0])
+      );
+      for (const item of animeCollected) {
+        item.isTop = topAnimeIds.has(String(item.mediaId));
       }
     } catch {}
   })();
 
   await Promise.allSettled([tvTask, moviesTask, animeTask]);
 
+  const collected = [...tvCollected, ...movieCollected, ...animeCollected];
   collected.sort((a, b) => {
     if (a.dateIso !== b.dateIso) return a.dateIso.localeCompare(b.dateIso);
     return b.popularity - a.popularity;

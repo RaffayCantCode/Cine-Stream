@@ -89,10 +89,21 @@ function likelyReturnsResults(path: string): boolean {
 export async function tmdbFetch(
   path: string,
   params?: Record<string, string>,
-  options?: { noCache?: boolean }
+  options?: { noCache?: boolean; allowFuture?: boolean }
 ): Promise<unknown> {
   try {
     const isSearch = path.includes("/search/");
+    const isVideos = path.endsWith("/videos");
+    const allowFuture = Boolean(
+      options?.allowFuture ||
+        path.includes("/upcoming") ||
+        path.includes("/on_the_air") ||
+        path.includes("/airing_today") ||
+        params?.["primary_release_date.gte"] ||
+        params?.["release_date.gte"] ||
+        params?.["air_date.gte"] ||
+        params?.["first_air_date.gte"]
+    );
     const token = getTmdbToken();
     if (!token) {
       console.warn(`[TMDB] TMDB_API_KEY is not set`);
@@ -210,7 +221,7 @@ export async function tmdbFetch(
         }
       }
 
-      const filtered: any = filterTmdbResponse(data, isSearch);
+      const filtered: any = isVideos ? data : filterTmdbResponse(data, isSearch, allowFuture);
 
       // Filter out any Movie or TV show marked as "hidden" in admin overrides
       if (
@@ -561,7 +572,11 @@ export async function fetchTmdbSeason(
   }
 }
 
-export function filterTmdbResponse(data: unknown, isSearch: boolean = false): unknown {
+export function filterTmdbResponse(
+  data: unknown,
+  isSearch: boolean = false,
+  allowFuture: boolean = false
+): unknown {
   if (!data || typeof data !== "object" || !("results" in data)) {
     return data;
   }
@@ -608,10 +623,12 @@ export function filterTmdbResponse(data: unknown, isSearch: boolean = false): un
         if (ADULT_KEYWORDS.some((keyword) => searchable.includes(keyword))) return false;
       }
 
-      const releaseStr = media.release_date || media.first_air_date;
-      if (releaseStr) {
-        const releaseDate = new Date(releaseStr);
-        if (!isNaN(releaseDate.getTime()) && releaseDate > today) return false;
+      if (!allowFuture) {
+        const releaseStr = media.release_date || media.first_air_date;
+        if (releaseStr) {
+          const releaseDate = new Date(releaseStr);
+          if (!isNaN(releaseDate.getTime()) && releaseDate > today) return false;
+        }
       }
 
       return true;

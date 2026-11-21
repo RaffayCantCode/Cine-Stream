@@ -59,6 +59,10 @@ export default function ReleaseCalendarPage() {
   const [scopeMode, setScopeMode] = useState<"top" | "all">("top");
   const [items, setItems] = useState<CalendarApiItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const monthCacheRef = useMemo(
+    () => new Map<string, CalendarApiItem[]>(),
+    []
+  );
 
   const monthRange = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -98,26 +102,55 @@ export default function ReleaseCalendarPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const key = `${monthRange.year}-${monthRange.month}`;
 
-    fetchJson<{ items: CalendarApiItem[] }>(
-      `/api/calendar?year=${monthRange.year}&month=${monthRange.month}`
-    )
-      .then((data) => {
-        if (cancelled) return;
-        setItems(Array.isArray(data?.items) ? data.items : []);
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    if (monthCacheRef.has(key)) {
+      setItems(monthCacheRef.get(key)!);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      fetchJson<{ items: CalendarApiItem[] }>(
+        `/api/calendar?year=${monthRange.year}&month=${monthRange.month}`
+      )
+        .then((data) => {
+          if (cancelled) return;
+          const list = Array.isArray(data?.items) ? data.items : [];
+          monthCacheRef.set(key, list);
+          setItems(list);
+        })
+        .catch(() => {
+          if (!cancelled) setItems([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
+
+    // Modular background prefetch for next month so clicking "Next Month" is instant
+    const nextDate = new Date(monthRange.year, monthRange.month, 1);
+    const nextKey = `${nextDate.getFullYear()}-${nextDate.getMonth() + 1}`;
+    if (!monthCacheRef.has(nextKey)) {
+      const timer = setTimeout(() => {
+        fetchJson<{ items: CalendarApiItem[] }>(
+          `/api/calendar?year=${nextDate.getFullYear()}&month=${nextDate.getMonth() + 1}`
+        )
+          .then((data) => {
+            if (Array.isArray(data?.items) && data.items.length > 0) {
+              monthCacheRef.set(nextKey, data.items);
+            }
+          })
+          .catch(() => {});
+      }, 600);
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [monthRange.year, monthRange.month]);
+  }, [monthRange.year, monthRange.month, monthCacheRef]);
 
   const categoryItems = useMemo(() => {
     return items.filter((it) => {

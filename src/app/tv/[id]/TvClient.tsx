@@ -29,8 +29,6 @@ function TvHeroTrailerButton() {
 }
 import { GridMediaCard } from "@/components/GridMediaCard";
 import { EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodeChunkBar, EpisodePagination, EpisodeControlsToolbar, type EpisodeItem } from "@/components/episodes/EpisodeViews";
-import { EpisodeRatingsHeatmap } from "@/components/episodes/EpisodeRatingsHeatmap";
-import { EndsAtBadge } from "@/components/EndsAtBadge";
 import { MediaSpecsCard } from "@/components/MediaSpecsCard";
 import { cn, fetchJson, peekCachedJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
@@ -1151,22 +1149,6 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
               </div>
             )}
         </section>
-
-        <EpisodeRatingsHeatmap
-          tvId={show.id}
-          seasonsMeta={seasons}
-          activeSeasonNumber={selectedSeason}
-          activeSeasonEpisodes={(seasonData?.episodes || []).map((ep) => ({
-            episodeNumber: ep.episode_number,
-            title: ep.name,
-            rating: ep.vote_average,
-            voteCount: ep.vote_count,
-            airDate: ep.air_date,
-          }))}
-          onSelectEpisode={(sNum, epNum, epTitle) => {
-            handleWatchEpisode(sNum, epNum, epTitle);
-          }}
-        />
 
         {(((show.credits as any)?.cast && (show.credits as any).cast.length > 0) || ((show.credits as any)?.crew && (show.credits as any).crew.length > 0)) && (
           <CastRow cast={(show.credits as any).cast || []} crew={(show.credits as any).crew || []} />

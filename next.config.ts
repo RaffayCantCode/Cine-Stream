@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   devIndicators: false,
+  deploymentId: process.env.NODE_ENV !== "production" ? "dev-v4" : undefined,
   images: {
     unoptimized: true,
     minimumCacheTTL: 86400 * 30,
@@ -87,7 +88,24 @@ const nextConfig: NextConfig = {
   },
   // Security & Cache control headers
   async headers() {
+    const isProd = process.env.NODE_ENV === "production";
     return [
+      ...(!isProd
+        ? [
+            {
+              source: "/",
+              headers: [{ key: "Clear-Site-Data", value: '"cache"' }],
+            },
+            {
+              source: "/calendar",
+              headers: [{ key: "Clear-Site-Data", value: '"cache"' }],
+            },
+            {
+              source: "/shorts",
+              headers: [{ key: "Clear-Site-Data", value: '"cache"' }],
+            },
+          ]
+        : []),
       {
         source: "/:path*",
         headers: [
@@ -131,20 +149,27 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/_next/static/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-          {
-            key: "CDN-Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-          {
-            key: "Cloudflare-CDN-Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
+        headers: isProd
+          ? [
+              {
+                key: "Cache-Control",
+                value: "public, max-age=31536000, immutable",
+              },
+              {
+                key: "CDN-Cache-Control",
+                value: "public, max-age=31536000, immutable",
+              },
+              {
+                key: "Cloudflare-CDN-Cache-Control",
+                value: "public, max-age=31536000, immutable",
+              },
+            ]
+          : [
+              {
+                key: "Cache-Control",
+                value: "no-store, no-cache, must-revalidate",
+              },
+            ],
       },
       {
         source: "/sw.js",

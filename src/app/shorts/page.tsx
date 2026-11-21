@@ -7,10 +7,10 @@ import {
   ArrowLeft,
   Play,
   Volume2,
+  Volume1,
   VolumeX,
   ChevronUp,
   ChevronDown,
-  Star,
   Plus,
   Check,
   Film,
@@ -56,100 +56,202 @@ export default function ShortsFeedPage() {
   usePageContentReady(true);
   const watchlist = useWatchlist();
   const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
 
   const [items, setItems] = useState<ShortFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<"all" | "movie" | "tv" | "anime">("all");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  // Tracks which slides the user explicitly clicked Play on (or active slide auto-plays)
+  const [volume, setVolume] = useState<number>(85);
+  const [prevVolume, setPrevVolume] = useState<number>(85);
+  const isMuted = volume === 0;
   const [playingSlides, setPlayingSlides] = useState<Record<string, boolean>>({});
+
+  // Send live volume updates to active YouTube iframe without reloading it
+  const syncYoutubeVolume = useCallback(
+    (targetVol: number, slideId?: string) => {
+      const clamped = Math.max(0, Math.min(100, Math.round(targetVol)));
+      const targets = slideId
+        ? [iframeRefs.current[slideId]]
+        : Object.values(iframeRefs.current);
+
+      for (const iframe of targets) {
+        if (!iframe?.contentWindow) continue;
+        try {
+          if (clamped === 0) {
+            iframe.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "mute", args: [] }),
+              "*"
+            );
+          } else {
+            iframe.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "unMute", args: [] }),
+              "*"
+            );
+            iframe.contentWindow.postMessage(
+              JSON.stringify({
+                event: "command",
+                func: "setVolume",
+                args: [clamped],
+              }),
+              "*"
+            );
+          }
+        } catch {}
+      }
+    },
+    []
+  );
+
+  const handleVolumeChange = useCallback(
+    (nextVol: number) => {
+      const clamped = Math.max(0, Math.min(100, Math.round(nextVol)));
+      setVolume(clamped);
+      if (clamped > 0) setPrevVolume(clamped);
+      syncYoutubeVolume(clamped);
+    },
+    [syncYoutubeVolume]
+  );
+
+  const toggleMute = useCallback(() => {
+    if (volume === 0) {
+      const restored = prevVolume > 0 ? prevVolume : 80;
+      handleVolumeChange(restored);
+    } else {
+      setPrevVolume(volume);
+      handleVolumeChange(0);
+    }
+  }, [volume, prevVolume, handleVolumeChange]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadPool = async () => {
       setLoading(true);
-      const moviesAndTvWithTrailers: ShortFeedItem[] = [];
+      const moviesWithTrailers: ShortFeedItem[] = [];
+      const tvWithTrailers: ShortFeedItem[] = [];
       const animeWithTrailers: ShortFeedItem[] = [];
 
-      // 1. Fetch trending + popular movies & TV and resolve their official YouTube trailer keys in parallel
+      // 1. Fetch trending + popular Movies & TV Series and resolve their YouTube trailers
       const tmdbTask = (async () => {
         try {
-          const [trendingRes, popMoviesRes, popTvRes] = await Promise.allSettled([
-            fetchJson<{ results: any[] }>("/api/tmdb/trending"),
-            fetchJson<{ results: any[] }>("/api/tmdb/movies/popular"),
-            fetchJson<{ results: any[] }>("/api/tmdb/tv/popular"),
+          const [trendMovies, popMovies, trendTv, popTv] =
+            await Promise.allSettled([
+              fetchJson<{ results: any[] }>("/api/tmdb/trending?type=movie", {
+                skipCache: true,
+              }),
+              fetchJson<{ results: any[] }>("/api/tmdb/movies/popular", {
+                skipCache: true,
+              }),
+              fetchJson<{ results: any[] }>("/api/tmdb/trending?type=tv", {
+                skipCache: true,
+              }),
+              fetchJson<{ results: any[] }>("/api/tmdb/tv/popular", {
+                skipCache: true,
+              }),
+            ]);
+
+          const rawMovies: any[] = [];
+          if (trendMovies.status === "fulfilled" && Array.isArray(trendMovies.value?.results)) {
+            rawMovies.push(...trendMovies.value.results);
+          }
+          if (popMovies.status === "fulfilled" && Array.isArray(popMovies.value?.results)) {
+            rawMovies.push(...popMovies.value.results);
+          }
+
+          const rawTv: any[] = [];
+          if (trendTv.status === "fulfilled" && Array.isArray(trendTv.value?.results)) {
+            rawTv.push(...trendTv.value.results);
+          }
+          if (popTv.status === "fulfilled" && Array.isArray(popTv.value?.results)) {
+            rawTv.push(...popTv.value.results);
+          }
+
+          const cleanMovies = filterExcludeAnime(rawMovies);
+          const cleanTv = filterExcludeAnime(rawTv);
+
+          const seenMovies = new Set<number>();
+          const movieCandidates: any[] = [];
+          for (const m of cleanMovies) {
+            if (!m?.id || (!m.backdrop_path && !m.poster_path) || seenMovies.has(Number(m.id))) continue;
+            seenMovies.add(Number(m.id));
+            movieCandidates.push(m);
+            if (movieCandidates.length >= 16) break;
+          }
+
+          const seenTv = new Set<number>();
+          const tvCandidates: any[] = [];
+          for (const t of cleanTv) {
+            if (!t?.id || (!t.backdrop_path && !t.poster_path) || seenTv.has(Number(t.id))) continue;
+            seenTv.add(Number(t.id));
+            tvCandidates.push(t);
+            if (tvCandidates.length >= 16) break;
+          }
+
+          const [resolvedMovies, resolvedTv] = await Promise.all([
+            Promise.allSettled(
+              movieCandidates.map(async (it) => {
+                const vData = await fetchJson<{ results: any[] }>(
+                  `/api/tmdb/movie/${it.id}/videos`,
+                  { skipCache: true }
+                );
+                const ytKey = pickBestYoutubeKey(vData?.results || []);
+                if (!ytKey) return null;
+                return {
+                  id: `movie-${it.id}`,
+                  mediaId: Number(it.id),
+                  mediaType: "movie" as const,
+                  title: it.title || it.name || "Movie",
+                  overview: it.overview || "",
+                  poster: it.poster_path
+                    ? `https://image.tmdb.org/t/p/w500${it.poster_path}`
+                    : null,
+                  backdrop: it.backdrop_path
+                    ? `https://image.tmdb.org/t/p/w1280${it.backdrop_path}`
+                    : null,
+                  year: String(it.release_date || "").slice(0, 4),
+                  rating: Number(it.vote_average || 0),
+                  trailerKey: ytKey,
+                  detailHref: `/movie/${it.id}`,
+                  watchHref: `/watch/movie/${it.id}`,
+                } satisfies ShortFeedItem;
+              })
+            ),
+            Promise.allSettled(
+              tvCandidates.map(async (it) => {
+                const vData = await fetchJson<{ results: any[] }>(
+                  `/api/tmdb/tv/${it.id}/videos`,
+                  { skipCache: true }
+                );
+                const ytKey = pickBestYoutubeKey(vData?.results || []);
+                if (!ytKey) return null;
+                return {
+                  id: `tv-${it.id}`,
+                  mediaId: Number(it.id),
+                  mediaType: "tv" as const,
+                  title: it.name || it.title || "TV Series",
+                  overview: it.overview || "",
+                  poster: it.poster_path
+                    ? `https://image.tmdb.org/t/p/w500${it.poster_path}`
+                    : null,
+                  backdrop: it.backdrop_path
+                    ? `https://image.tmdb.org/t/p/w1280${it.backdrop_path}`
+                    : null,
+                  year: String(it.first_air_date || "").slice(0, 4),
+                  rating: Number(it.vote_average || 0),
+                  trailerKey: ytKey,
+                  detailHref: `/tv/${it.id}`,
+                  watchHref: `/watch/tv/${it.id}/1/1`,
+                } satisfies ShortFeedItem;
+              })
+            ),
           ]);
 
-          const rawCandidates: any[] = [];
-          if (trendingRes.status === "fulfilled" && Array.isArray(trendingRes.value?.results)) {
-            rawCandidates.push(...trendingRes.value.results);
+          for (const r of resolvedMovies) {
+            if (r.status === "fulfilled" && r.value) moviesWithTrailers.push(r.value);
           }
-          if (popMoviesRes.status === "fulfilled" && Array.isArray(popMoviesRes.value?.results)) {
-            rawCandidates.push(
-              ...popMoviesRes.value.results.map((m) => ({ ...m, media_type: "movie" }))
-            );
-          }
-          if (popTvRes.status === "fulfilled" && Array.isArray(popTvRes.value?.results)) {
-            rawCandidates.push(
-              ...popTvRes.value.results.map((t) => ({ ...t, media_type: "tv" }))
-            );
-          }
-
-          const cleaned = filterExcludeAnime(rawCandidates);
-          const seen = new Set<string>();
-          const uniqueCandidates: any[] = [];
-          for (const it of cleaned) {
-            if (!it?.id || (!it.backdrop_path && !it.poster_path)) continue;
-            const mType: "movie" | "tv" =
-              it.media_type === "tv" || (it.first_air_date && !it.release_date)
-                ? "tv"
-                : "movie";
-            const key = `${mType}-${it.id}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            uniqueCandidates.push({ ...it, _mType: mType, _key: key });
-            if (uniqueCandidates.length >= 24) break;
-          }
-
-          // Resolve trailer keys in parallel so every slide has a guaranteed playable trailer
-          const resolved = await Promise.allSettled(
-            uniqueCandidates.map(async (it) => {
-              const mType: "movie" | "tv" = it._mType;
-              const vData = await fetchJson<{ results: any[] }>(
-                `/api/tmdb/${mType}/${it.id}/videos`
-              );
-              const ytKey = pickBestYoutubeKey(vData?.results || []);
-              if (!ytKey) return null;
-              return {
-                id: it._key,
-                mediaId: Number(it.id),
-                mediaType: mType,
-                title: it.title || it.name || "Featured Title",
-                overview: it.overview || "",
-                poster: it.poster_path
-                  ? `https://image.tmdb.org/t/p/w500${it.poster_path}`
-                  : null,
-                backdrop: it.backdrop_path
-                  ? `https://image.tmdb.org/t/p/w1280${it.backdrop_path}`
-                  : null,
-                year: String(it.release_date || it.first_air_date || "").slice(0, 4),
-                rating: Number(it.vote_average || 0),
-                trailerKey: ytKey,
-                detailHref: `/${mType}/${it.id}`,
-                watchHref:
-                  mType === "movie"
-                    ? `/watch/movie/${it.id}`
-                    : `/watch/tv/${it.id}/1/1`,
-              } satisfies ShortFeedItem;
-            })
-          );
-
-          for (const r of resolved) {
-            if (r.status === "fulfilled" && r.value) {
-              moviesAndTvWithTrailers.push(r.value);
-            }
+          for (const r of resolvedTv) {
+            if (r.status === "fulfilled" && r.value) tvWithTrailers.push(r.value);
           }
         } catch {}
       })();
@@ -159,7 +261,7 @@ export default function ShortsFeedPage() {
         try {
           const query = `
             query {
-              Page(page: 1, perPage: 20) {
+              Page(page: 1, perPage: 22) {
                 media(type: ANIME, sort: TRENDING_DESC, isAdult: false) {
                   id
                   title { english romaji }
@@ -206,11 +308,16 @@ export default function ShortsFeedPage() {
       await Promise.allSettled([tmdbTask, animeTask]);
       if (cancelled) return;
 
-      // Interleave Movies/TV and Anime so "All" feed feels rich and varied
+      // Interleave 1:1:1 (Movie -> TV Series -> Anime) so "All" is a rich mix starting with a Movie!
       const combined: ShortFeedItem[] = [];
-      const max = Math.max(moviesAndTvWithTrailers.length, animeWithTrailers.length);
-      for (let i = 0; i < max; i++) {
-        if (moviesAndTvWithTrailers[i]) combined.push(moviesAndTvWithTrailers[i]);
+      const maxLen = Math.max(
+        moviesWithTrailers.length,
+        tvWithTrailers.length,
+        animeWithTrailers.length
+      );
+      for (let i = 0; i < maxLen; i++) {
+        if (moviesWithTrailers[i]) combined.push(moviesWithTrailers[i]);
+        if (tvWithTrailers[i]) combined.push(tvWithTrailers[i]);
         if (animeWithTrailers[i]) combined.push(animeWithTrailers[i]);
       }
 
@@ -232,7 +339,6 @@ export default function ShortsFeedPage() {
     return items.filter((it) => it.mediaType === category);
   }, [items, category]);
 
-  // Automatically enable trailer playback when a slide becomes active
   useEffect(() => {
     const activeItem = filteredItems[activeIndex];
     if (activeItem) {
@@ -265,12 +371,14 @@ export default function ShortsFeedPage() {
         e.preventDefault();
         scrollToSlide(activeIndex - 1);
       } else if (e.key === "m") {
-        setIsMuted((prev) => !prev);
+        toggleMute();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeIndex, scrollToSlide]);
+  }, [activeIndex, scrollToSlide, toggleMute]);
+
+  const VolumeIcon = isMuted ? VolumeX : volume < 50 ? Volume1 : Volume2;
 
   return (
     <div className="fixed inset-0 w-full h-[100dvh] bg-black text-white overflow-hidden select-none">
@@ -278,6 +386,7 @@ export default function ShortsFeedPage() {
       <div className="fixed top-4 inset-x-4 sm:inset-x-8 z-50 flex items-center justify-between gap-3 pointer-events-none">
         <Link
           href="/"
+          prefetch={true}
           className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-black/65 hover:bg-black/90 border border-white/15 backdrop-blur-2xl text-xs font-extrabold text-white transition-all shadow-xl"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -328,6 +437,19 @@ export default function ShortsFeedPage() {
             Loading Official Trailers...
           </span>
         </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <p className="text-base font-bold text-white/80">
+            No trailers available in this category right now.
+          </p>
+          <button
+            type="button"
+            onClick={() => setCategory("all")}
+            className="px-4 py-2 rounded-full bg-white text-black text-xs font-black cursor-pointer"
+          >
+            Show All Trailers
+          </button>
+        </div>
       ) : (
         <div
           ref={containerRef}
@@ -342,7 +464,9 @@ export default function ShortsFeedPage() {
         >
           {filteredItems.map((item, idx) => {
             const isActive = idx === activeIndex;
-            const isTrailerPlaying = Boolean(isActive && playingSlides[item.id] && item.trailerKey);
+            const isTrailerPlaying = Boolean(
+              isActive && playingSlides[item.id] && item.trailerKey
+            );
             const inWatchlist = Boolean(
               watchlist?.isSaved?.(item.mediaId, item.mediaType)
             );
@@ -361,15 +485,20 @@ export default function ShortsFeedPage() {
                   />
                 )}
 
-                {/* Main Video / Trailer Frame — clicking Play ALWAYS plays the trailer inline inside /shorts */}
+                {/* Main Video / Trailer Frame */}
                 <div className="relative w-full h-full max-w-5xl mx-auto flex items-center justify-center px-0 sm:px-6">
                   {isTrailerPlaying ? (
                     <div className="relative w-full aspect-video max-h-[80dvh] sm:rounded-3xl overflow-hidden bg-black border border-white/15 shadow-[0_25px_70px_rgba(0,0,0,0.95)]">
                       <iframe
-                        key={`${item.id}-${isMuted ? "muted" : "unmuted"}`}
-                        src={`https://www.youtube-nocookie.com/embed/${item.trailerKey}?autoplay=1&mute=${
-                          isMuted ? 1 : 0
-                        }&controls=1&loop=1&playlist=${item.trailerKey}&rel=0&modestbranding=1&playsinline=1`}
+                        ref={(el) => {
+                          iframeRefs.current[item.id] = el;
+                        }}
+                        key={item.id}
+                        src={`https://www.youtube-nocookie.com/embed/${item.trailerKey}?autoplay=1&enablejsapi=1&controls=1&loop=1&playlist=${item.trailerKey}&rel=0&modestbranding=1&playsinline=1`}
+                        onLoad={() => {
+                          setTimeout(() => syncYoutubeVolume(volume, item.id), 250);
+                          setTimeout(() => syncYoutubeVolume(volume, item.id), 900);
+                        }}
                         className="w-full h-full border-0 pointer-events-auto"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
@@ -449,7 +578,9 @@ export default function ShortsFeedPage() {
                       className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white hover:bg-[#D3D1CE] text-black text-xs sm:text-sm font-black shadow-xl transition-transform active:scale-95"
                     >
                       <Play className="w-4 h-4 fill-black" />
-                      <span>Watch Full {item.mediaType === "movie" ? "Movie" : "Series"}</span>
+                      <span>
+                        Watch Full {item.mediaType === "movie" ? "Movie" : "Series"}
+                      </span>
                     </Link>
                     <Link
                       href={item.detailHref}
@@ -503,18 +634,38 @@ export default function ShortsFeedPage() {
                     )}
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsMuted((prev) => !prev)}
-                    className="w-12 h-12 rounded-full bg-black/60 hover:bg-white/20 border border-white/20 backdrop-blur-2xl flex items-center justify-center text-white transition-all cursor-pointer shadow-xl"
-                    title={isMuted ? "Unmute Trailer" : "Mute Trailer"}
-                  >
-                    {isMuted ? (
-                      <VolumeX className="w-5 h-5 text-white/70" />
-                    ) : (
-                      <Volume2 className="w-5 h-5" />
-                    )}
-                  </button>
+                  {/* Hover-Expanding Volume Slider Pill */}
+                  <div className="group/vol relative flex items-center justify-end">
+                    <div className="flex items-center rounded-full bg-black/75 hover:bg-black/90 border border-white/20 backdrop-blur-2xl shadow-2xl transition-all duration-200 overflow-hidden">
+                      {/* Expanding Slider Drawer (reveals smoothly on hover) */}
+                      <div className="w-0 opacity-0 group-hover/vol:w-32 group-hover/vol:opacity-100 group-hover/vol:pl-4 group-hover/vol:pr-1 flex items-center gap-2 transition-all duration-200 overflow-hidden">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={volume}
+                          onChange={(e) =>
+                            handleVolumeChange(Number(e.target.value))
+                          }
+                          aria-label="Trailer volume"
+                          className="w-20 h-1.5 accent-white bg-white/25 rounded-lg cursor-pointer"
+                        />
+                        <span className="text-[10px] font-black text-white/80 w-7 text-right tabular-nums">
+                          {volume}%
+                        </span>
+                      </div>
+
+                      {/* Volume Icon Button */}
+                      <button
+                        type="button"
+                        onClick={toggleMute}
+                        className="w-12 h-12 rounded-full flex items-center justify-center text-white hover:text-white/90 transition-colors cursor-pointer shrink-0"
+                        title={isMuted ? "Unmute Trailer" : `Volume ${volume}% (Click to mute)`}
+                      >
+                        <VolumeIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="flex flex-col gap-1.5 pt-2">
                     <button
