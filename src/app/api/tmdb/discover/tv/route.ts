@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
   const airDateLte = searchParams.get("airDateLte");
   const maxRuntime = searchParams.get("maxRuntime");
   const minRuntime = searchParams.get("minRuntime");
+  const withCompanies = searchParams.get("withCompanies");
+  const withNetworks = searchParams.get("withNetworks");
   // Per-provider monetization override (defaults to "flatrate")
   const monetizationTypes = searchParams.get("monetizationTypes") || "flatrate";
 
@@ -26,6 +28,8 @@ export async function GET(request: NextRequest) {
 
   const params: Record<string, string> = { sort_by: sortBy, page };
   if (genreId) params.with_genres = genreId;
+  if (withCompanies) params.with_companies = withCompanies;
+  if (withNetworks) params.with_networks = withNetworks;
   if (minVote) params["vote_average.gte"] = minVote;
   if (year) params.first_air_date_year = year;
   if (country) params.with_origin_country = country;

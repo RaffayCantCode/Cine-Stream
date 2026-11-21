@@ -5,6 +5,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { PageTransitionOverlay } from "@/components/PageTransitionOverlay";
 import { NavigationLoader } from "@/components/NavigationLoader";
+import { BackToTopButton } from "@/components/BackToTopButton";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 
@@ -187,6 +188,7 @@ export default function RootLayout({
         </div>
         <Providers>
           {children}
+          <BackToTopButton />
           <PageTransitionOverlay />
           <NavigationLoader />
         </Providers>

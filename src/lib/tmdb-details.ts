@@ -6,7 +6,8 @@ import {
 import type { MediaOverride } from "@/lib/db/schema";
 
 const IMAGE_LANGUAGES = "en,null,ja,es,fr,de,it,pt,ru,ko,zh";
-const BASE_APPEND = "credits,videos,similar,recommendations,images";
+const MOVIE_APPEND = "credits,videos,similar,recommendations,images,release_dates";
+const TV_APPEND = "credits,videos,similar,recommendations,images,content_ratings";
 
 export interface TmdbDetailsResult {
   data: Record<string, any> | null;
@@ -103,7 +104,39 @@ export function compactSeasonData(season: any): any {
  * slice. Sending the full TMDB `images`, `videos`, and `credits` payloads made
  * the RSC payload several hundred KB larger than necessary.
  */
+function extractContentRating(result: Record<string, any>): string | null {
+  // 1. Movie release_dates
+  const releaseDates = result.release_dates?.results;
+  if (Array.isArray(releaseDates)) {
+    const usEntry = releaseDates.find((r: any) => r?.iso_3166_1 === "US");
+    const preferred = [usEntry, ...releaseDates].filter(Boolean);
+    for (const entry of preferred) {
+      const dates = Array.isArray(entry.release_dates) ? entry.release_dates : [];
+      for (const d of dates) {
+        const cert = String(d?.certification || "").trim();
+        if (cert) return cert;
+      }
+    }
+  }
+  // 2. TV content_ratings
+  const contentRatings = result.content_ratings?.results;
+  if (Array.isArray(contentRatings)) {
+    const usEntry = contentRatings.find((r: any) => r?.iso_3166_1 === "US");
+    if (usEntry?.rating) return String(usEntry.rating).trim();
+    const first = contentRatings.find((r: any) => r?.rating);
+    if (first?.rating) return String(first.rating).trim();
+  }
+  return null;
+}
+
 function compactDetailPayload(result: Record<string, any>): void {
+  const cert = extractContentRating(result);
+  if (cert) {
+    result.contentRating = cert;
+  }
+  delete result.release_dates;
+  delete result.content_ratings;
+
   const images = result.images as Record<string, any> | undefined;
   if (images) {
     result.images = { logos: Array.isArray(images.logos) ? images.logos : [] };
@@ -120,14 +153,13 @@ function compactDetailPayload(result: Record<string, any>): void {
     const crew = Array.isArray(credits.crew) ? credits.crew : [];
     result.credits = {
       ...credits,
-      cast: cast.filter((person: any) => person?.profile_path).slice(0, 30),
+      cast: cast.slice(0, 30),
       crew: crew
         .filter(
           (person: any) =>
-            person?.profile_path &&
-            (person?.job === "Director" || person?.job === "Creator")
+            person?.job === "Director" || person?.job === "Creator" || person?.job === "Executive Producer"
         )
-        .slice(0, 10),
+        .slice(0, 12),
     };
   }
 }
@@ -157,7 +189,7 @@ export async function fetchMovieDetails(id: string): Promise<TmdbDetailsResult> 
     const [override, data] = await Promise.all([
       overridePromise,
       tmdbFetch(`/movie/${id}`, {
-        append_to_response: BASE_APPEND,
+        append_to_response: MOVIE_APPEND,
         include_image_language: IMAGE_LANGUAGES,
       }),
     ]);
@@ -213,7 +245,7 @@ export async function fetchTvDetails(id: string): Promise<TmdbDetailsResult> {
     const [override, data] = await Promise.all([
       overridePromise,
       tmdbFetch(`/tv/${id}`, {
-        append_to_response: BASE_APPEND,
+        append_to_response: TV_APPEND,
         include_image_language: IMAGE_LANGUAGES,
       }),
     ]);

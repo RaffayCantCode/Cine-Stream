@@ -17,6 +17,8 @@ import {
   ShieldCheck, 
   Bookmark, 
   Settings,
+  CalendarDays,
+  Flame,
 } from "lucide-react";
 import { memo, useEffect, useState, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -547,12 +549,12 @@ export const Sidebar = memo(function Sidebar() {
         )}
       </AnimatePresence>
 
-      {/* ── Mobile Floating Bottom Dock ── */}
-      <nav className="md:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] inset-x-4 sm:inset-x-8 h-14 rounded-2xl bg-[#090b10]/90 backdrop-blur-2xl border border-white/15 z-40 flex items-center justify-around px-2 shadow-[0_12px_36px_rgba(0,0,0,0.85)]">
+      {/* ── Mobile Floating Bottom Dock (Cinejoy Subscription-Grade Pill) ── */}
+      <nav className="md:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:inset-x-6 h-15 rounded-3xl bg-[#090b12]/90 backdrop-blur-2xl border border-white/15 z-40 flex items-center justify-around p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.92)]">
         {[
           { href: "/", icon: Home, label: "Home" },
           { href: "/browse/movies", icon: Film, label: "Movies" },
-          { href: "/browse/tv", icon: Tv, label: "TV" },
+          { href: "/browse/tv", icon: Tv, label: "Shows" },
           { href: "/anime", icon: Sparkles, label: "Anime" },
           { href: "/manga", icon: BookOpen, label: "Manga" },
         ].map(({ href, icon: Icon, label }) => {
@@ -566,15 +568,14 @@ export const Sidebar = memo(function Sidebar() {
               onFocus={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
               onPointerDown={() => { prefetchBrowseRoute(href); router.prefetch(href); }}
               className={cn(
-                "relative flex-1 h-full flex flex-col items-center justify-center transition-all duration-200 select-none touch-manipulation cursor-pointer",
-                isActive ? "text-white" : "text-white/45 hover:text-white/80"
+                "relative flex-1 h-full rounded-2xl flex flex-col items-center justify-center transition-all duration-200 select-none touch-manipulation cursor-pointer",
+                isActive
+                  ? "bg-white/15 text-white ring-1 ring-white/25 shadow-md"
+                  : "text-white/50 hover:text-white/85"
               )}
             >
-              {isActive && (
-                <span className="absolute top-1 w-6 h-0.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
-              )}
-              <Icon className="w-4 h-4 mb-0.5" />
-              <span className="text-[10px] font-bold tracking-tight">{label}</span>
+              <Icon className={cn("w-4 h-4 mb-0.5 transition-transform", isActive && "scale-110")} />
+              <span className="text-[10px] font-extrabold tracking-tight">{label}</span>
             </Link>
           );
         })}

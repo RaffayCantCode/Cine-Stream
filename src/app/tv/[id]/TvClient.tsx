@@ -28,7 +28,10 @@ function TvHeroTrailerButton() {
   );
 }
 import { GridMediaCard } from "@/components/GridMediaCard";
-import { EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodeChunkBar, EpisodePagination, type EpisodeItem } from "@/components/episodes/EpisodeViews";
+import { EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodeChunkBar, EpisodePagination, EpisodeControlsToolbar, type EpisodeItem } from "@/components/episodes/EpisodeViews";
+import { EpisodeRatingsHeatmap } from "@/components/episodes/EpisodeRatingsHeatmap";
+import { EndsAtBadge } from "@/components/EndsAtBadge";
+import { MediaSpecsCard } from "@/components/MediaSpecsCard";
 import { cn, fetchJson, peekCachedJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { isEpisodeUpcoming, isWithinUpcomingDays } from "@/lib/episode-availability";
 import { format } from "date-fns";
@@ -159,13 +162,17 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
   const [hasActiveProgress, setHasActiveProgress] = useState(false);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [episodeNotice, setEpisodeNotice] = useState<string | null>(null);
-  const { settings: siteSettings } = useSiteSettings();
+  const [episodeSearchQuery, setEpisodeSearchQuery] = useState("");
+  const [episodeSortOrder, setEpisodeSortOrder] = useState<"asc" | "desc">("asc");
+  const { settings: siteSettings, updateSettings: updateSiteSettings } = useSiteSettings();
   const tvViewMode = siteSettings.tvEpisodeViewMode;
   const {
     watchedSet,
     hasWatchedAny,
     wasReset,
     markWatchedUpTo,
+    toggleEpisodeWatched,
+    markSeasonWatched,
     resetWatched,
   } = useWatchedEpisodes("tv", id, selectedSeason);
   const activeLogo = useMemo(() => {
@@ -713,6 +720,8 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
       isPlaying: false,
       isWatched: isEpWatched,
       portrait: false,
+      spoilerFree: siteSettings.spoilerFreeMode,
+      onToggleWatched: () => toggleEpisodeWatched(episode.episode_number, selectedSeason),
       onClick: () => handleWatchEpisode(selectedSeason, episode.episode_number, episode.name),
     };
   };
@@ -793,6 +802,20 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
                   <span>{show.number_of_seasons} {show.number_of_seasons > 1 ? "Seasons" : "Season"}</span>
                 </div>
               )}
+              <div className="px-2.5 py-1 rounded-xl bg-amber-400/15 border border-amber-400/35 text-amber-300 font-black text-xs sm:text-sm shadow-sm">
+                {(show as any).contentRating || "TV-14"}
+              </div>
+              <div className="px-2.5 py-1 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-300 font-black text-xs sm:text-sm shadow-sm">
+                4K
+              </div>
+              <EndsAtBadge
+                runtimeMinutes={
+                  seasonData?.episodes?.find((e) => e.episode_number === playingEpisode)?.runtime ||
+                  seasonData?.episodes?.[0]?.runtime ||
+                  (Array.isArray((show as any).episode_run_time) && (show as any).episode_run_time[0]) ||
+                  45
+                }
+              />
               <div className="flex flex-wrap gap-2 ml-0.5">
                 {show.genres?.map((g) => (
                   <span
@@ -855,7 +878,60 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
 
               <TvHeroTrailerButton />
             </div>
+
+            {/* Clickable Creator Links */}
+            {(() => {
+              const creators =
+                Array.isArray((show as any).created_by) && (show as any).created_by.length > 0
+                  ? (show as any).created_by.slice(0, 3)
+                  : [];
+              if (creators.length === 0) return null;
+              return (
+                <div className="flex items-center gap-2 flex-wrap pt-1 text-xs sm:text-sm">
+                  <span className="text-white/45 font-medium">Created by</span>
+                  {creators.map((c: any) => (
+                    <Link
+                      key={c.id}
+                      href={`/person/${c.id}`}
+                      className="font-bold text-white/90 hover:text-white underline decoration-white/25 hover:decoration-white underline-offset-4 transition-colors"
+                    >
+                      {c.name}
+                    </Link>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
+
+          {/* Right-Side Cinejoy-Style Specs Table + Monochrome Network/Studio Logos */}
+          <MediaSpecsCard
+            mediaType="tv"
+            status={show.status || "Returning Series"}
+            releaseDate={
+              show.first_air_date
+                ? format(new Date(show.first_air_date), "MMM d, yyyy")
+                : null
+            }
+            lastAirDate={
+              (show as any).last_air_date
+                ? format(new Date((show as any).last_air_date), "MMM d, yyyy")
+                : null
+            }
+            runtimeMinutes={
+              seasonData?.episodes?.[0]?.runtime ||
+              (Array.isArray((show as any).episode_run_time) && (show as any).episode_run_time[0]) ||
+              null
+            }
+            seasonsCount={show.number_of_seasons}
+            episodesCount={(show as any).number_of_episodes || seasonData?.episodes?.length}
+            language={(show as any).original_language}
+            networks={Array.isArray((show as any).networks) ? (show as any).networks : []}
+            studios={
+              Array.isArray((show as any).production_companies)
+                ? (show as any).production_companies
+                : []
+            }
+          />
         </div>
       </CinematicHero>
 
@@ -880,25 +956,13 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
         </div>
       )}
         <section id="tv-episodes-section">
-          <div className="flex items-center justify-between gap-4 mb-8 flex-wrap">
+          <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-5 bg-primary rounded-full shrink-0" />
               <h2 className="text-lg md:text-xl font-bold text-white tracking-wide">Episodes</h2>
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              {(hasWatchedAny || (hasActiveProgress && Number(playingSeason) === Number(selectedSeason))) && (
-                <button
-                  type="button"
-                  onClick={handleResetWatched}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-rose-500/15 text-white/75 hover:text-rose-300 border border-white/10 hover:border-rose-500/30 text-xs font-extrabold transition-all cursor-pointer active:scale-95"
-                  title="Reset watched episodes for this season"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset Watched</span>
-                </button>
-              )}
-
               {seasons.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   {seasons.map((s) => (
@@ -923,8 +987,52 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
             </div>
           </div>
 
+          {!seasonLoading && seasonData?.episodes && seasonData.episodes.length > 0 && (
+            <EpisodeControlsToolbar
+              searchQuery={episodeSearchQuery}
+              onSearchChange={(q) => {
+                setEpisodeSearchQuery(q);
+                setGridEpisodePage(1);
+                setEpisodeChunk(0);
+              }}
+              sortOrder={episodeSortOrder}
+              onToggleSortOrder={() =>
+                setEpisodeSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+              }
+              spoilerFree={siteSettings.spoilerFreeMode}
+              onToggleSpoilerFree={() =>
+                updateSiteSettings({ spoilerFreeMode: !siteSettings.spoilerFreeMode })
+              }
+              onMarkSeasonWatched={() => {
+                const releasedNums = (seasonData.episodes || [])
+                  .filter((ep) => !isUpcomingEpisode(ep))
+                  .map((ep) => ep.episode_number);
+                markSeasonWatched(releasedNums, selectedSeason);
+              }}
+              onResetWatched={handleResetWatched}
+              hasWatchedAny={Boolean(
+                hasWatchedAny ||
+                  (hasActiveProgress && Number(playingSeason) === Number(selectedSeason))
+              )}
+              totalEpisodes={seasonData.episodes.length}
+            />
+          )}
+
             {!seasonLoading && seasonData && (() => {
-              const allEpisodes = seasonData.episodes || [];
+              const rawEpisodes = seasonData.episodes || [];
+              const qTrim = episodeSearchQuery.trim().toLowerCase();
+              const filteredEpisodes = qTrim
+                ? rawEpisodes.filter(
+                    (ep) =>
+                      String(ep.episode_number) === qTrim.replace(/^e/i, "") ||
+                      (ep.name || "").toLowerCase().includes(qTrim) ||
+                      (ep.overview || "").toLowerCase().includes(qTrim)
+                  )
+                : rawEpisodes;
+              const allEpisodes =
+                episodeSortOrder === "desc"
+                  ? [...filteredEpisodes].sort((a, b) => b.episode_number - a.episode_number)
+                  : filteredEpisodes;
               const totalEpisodes = allEpisodes.length;
 
               if (tvViewMode === "numbers") {
@@ -1054,6 +1162,22 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
               </div>
             )}
         </section>
+
+        <EpisodeRatingsHeatmap
+          tvId={show.id}
+          seasonsMeta={seasons}
+          activeSeasonNumber={selectedSeason}
+          activeSeasonEpisodes={(seasonData?.episodes || []).map((ep) => ({
+            episodeNumber: ep.episode_number,
+            title: ep.name,
+            rating: ep.vote_average,
+            voteCount: ep.vote_count,
+            airDate: ep.air_date,
+          }))}
+          onSelectEpisode={(sNum, epNum, epTitle) => {
+            handleWatchEpisode(sNum, epNum, epTitle);
+          }}
+        />
 
         {(((show.credits as any)?.cast && (show.credits as any).cast.length > 0) || ((show.credits as any)?.crew && (show.credits as any).crew.length > 0)) && (
           <CastRow cast={(show.credits as any).cast || []} crew={(show.credits as any).crew || []} />

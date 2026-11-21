@@ -2,7 +2,23 @@
 
 import { useState, useEffect, useRef, useMemo, memo, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { List, LayoutGrid, Hash, Play, Lock, Star, Clock, Check } from "lucide-react";
+import {
+  List,
+  LayoutGrid,
+  Hash,
+  Play,
+  Lock,
+  Star,
+  Clock,
+  Check,
+  Search,
+  X,
+  ArrowUpDown,
+  EyeOff,
+  Eye,
+  CheckCircle2,
+  RotateCcw,
+} from "lucide-react";
 
 export type EpisodeViewMode = "list" | "grid" | "numbers";
 
@@ -22,6 +38,8 @@ export interface EpisodeItem {
   isPlaying?: boolean;
   isWatched?: boolean;
   portrait?: boolean;
+  spoilerFree?: boolean;
+  onToggleWatched?: () => void;
   onClick: () => void;
 }
 
@@ -86,15 +104,130 @@ function handleKeyClick(e: KeyboardEvent, onClick: () => void) {
   }
 }
 
+// ── Episode Controls Toolbar (Search + Sort + Spoiler-Free + Mark Season Watched) ──
+export interface EpisodeControlsToolbarProps {
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  sortOrder: "asc" | "desc";
+  onToggleSortOrder: () => void;
+  spoilerFree: boolean;
+  onToggleSpoilerFree: () => void;
+  onMarkSeasonWatched?: () => void;
+  onResetWatched?: () => void;
+  hasWatchedAny?: boolean;
+  totalEpisodes?: number;
+}
+
+export const EpisodeControlsToolbar = memo(function EpisodeControlsToolbar({
+  searchQuery,
+  onSearchChange,
+  sortOrder,
+  onToggleSortOrder,
+  spoilerFree,
+  onToggleSpoilerFree,
+  onMarkSeasonWatched,
+  onResetWatched,
+  hasWatchedAny = false,
+  totalEpisodes = 0,
+}: EpisodeControlsToolbarProps) {
+  return (
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] backdrop-blur-xl p-2.5 sm:p-3 mb-5">
+      {/* Search Input */}
+      <div className="relative flex-1 min-w-[200px] max-w-md">
+        <Search className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={`Search ${totalEpisodes > 0 ? `${totalEpisodes} ` : ""}episodes by title or #...`}
+          className="w-full h-9 pl-9 pr-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] focus:bg-white/[0.09] border border-white/[0.1] focus:border-white/30 text-xs sm:text-sm font-semibold text-white placeholder:text-white/35 focus:outline-none transition-all"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => onSearchChange("")}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/45 hover:text-white p-0.5 rounded-full cursor-pointer"
+            aria-label="Clear episode search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Oldest / Newest Sort Toggle */}
+        <button
+          type="button"
+          onClick={onToggleSortOrder}
+          title={sortOrder === "asc" ? "Sorted Oldest First (Click for Newest)" : "Sorted Newest First (Click for Oldest)"}
+          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-extrabold text-white/80 hover:text-white transition-all cursor-pointer active:scale-95"
+        >
+          <ArrowUpDown className="w-3.5 h-3.5 text-sky-400" />
+          <span>{sortOrder === "asc" ? "Oldest" : "Newest"}</span>
+        </button>
+
+        {/* Spoiler-Free Toggle */}
+        <button
+          type="button"
+          onClick={onToggleSpoilerFree}
+          title="Blur thumbnails and synopses of unwatched episodes to prevent spoilers"
+          className={cn(
+            "inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-xs font-extrabold transition-all cursor-pointer active:scale-95",
+            spoilerFree
+              ? "bg-amber-400/20 border-amber-400/40 text-amber-300 shadow-sm"
+              : "bg-white/[0.05] hover:bg-white/[0.1] border-white/10 text-white/75 hover:text-white"
+          )}
+        >
+          {spoilerFree ? (
+            <EyeOff className="w-3.5 h-3.5 text-amber-300" />
+          ) : (
+            <Eye className="w-3.5 h-3.5 text-white/50" />
+          )}
+          <span>Spoiler-Free</span>
+        </button>
+
+        {/* Mark Season Watched */}
+        {onMarkSeasonWatched && (
+          <button
+            type="button"
+            onClick={onMarkSeasonWatched}
+            title="Mark all released episodes in this season as watched"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/30 text-xs font-extrabold text-emerald-300 transition-all cursor-pointer active:scale-95"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Mark Season Watched</span>
+          </button>
+        )}
+
+        {/* Reset Watched */}
+        {hasWatchedAny && onResetWatched && (
+          <button
+            type="button"
+            onClick={onResetWatched}
+            title="Reset watched episodes for this season"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl bg-white/[0.05] hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/30 text-xs font-extrabold text-white/70 hover:text-rose-300 transition-all cursor-pointer active:scale-95"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
 // ── Robust Episode Thumbnail Component with Shimmer & Fallback ───────────────
 const EpisodeThumbnailImage = memo(function EpisodeThumbnailImage({
   thumbnail,
   title,
   number,
+  blurSpoiler = false,
 }: {
   thumbnail?: string | null;
   title: string;
   number: number;
+  blurSpoiler?: boolean;
 }) {
   const [imgSrc, setImgSrc] = useState<string | null>(thumbnail || null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -155,8 +288,9 @@ const EpisodeThumbnailImage = memo(function EpisodeThumbnailImage({
           onLoad={() => setIsLoaded(true)}
           onError={handleImageError}
           className={cn(
-            "w-full h-full object-cover transition-opacity duration-500 ease-out group-hover:scale-105",
-            isLoaded ? "opacity-100" : "opacity-0"
+            "w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105",
+            isLoaded ? "opacity-100" : "opacity-0",
+            blurSpoiler && "blur-xl scale-110 brightness-75 group-hover:blur-none group-hover:brightness-100"
           )}
         />
       ) : (
@@ -216,7 +350,15 @@ export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: E
           thumbnail={item.thumbnail}
           title={item.title}
           number={item.number}
+          blurSpoiler={Boolean(item.spoilerFree && !item.isWatched && !item.isSelected)}
         />
+
+        {item.spoilerFree && !item.isWatched && !item.isSelected && !isUpcoming && (
+          <div className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-amber-400/30 text-[9px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1 group-hover:opacity-0 transition-opacity pointer-events-none">
+            <EyeOff className="w-2.5 h-2.5" />
+            <span>Spoiler-Free</span>
+          </div>
+        )}
 
         {/* Hover vignette */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -296,7 +438,12 @@ export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: E
 
         {/* Full Plot Description across the row */}
         {item.description && (
-          <p className="text-white/65 text-xs sm:text-sm leading-relaxed line-clamp-2 md:line-clamp-3 font-normal max-w-5xl">
+          <p
+            className={cn(
+              "text-white/65 text-xs sm:text-sm leading-relaxed line-clamp-2 md:line-clamp-3 font-normal max-w-5xl transition-all duration-300",
+              item.spoilerFree && !item.isWatched && !item.isSelected && "blur-[5px] select-none group-hover:blur-none"
+            )}
+          >
             {item.description}
           </p>
         )}
@@ -317,8 +464,26 @@ export const EpisodeListCard = memo(function EpisodeListCard({ item }: { item: E
         </div>
       </div>
 
-      {/* Far Right Action Icon */}
-      <div className="hidden lg:flex shrink-0 items-center justify-center pl-4 pr-2">
+      {/* Far Right Action Icons */}
+      <div className="hidden lg:flex shrink-0 items-center justify-center gap-2.5 pl-4 pr-2">
+        {!isUpcoming && item.onToggleWatched && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              item.onToggleWatched?.();
+            }}
+            title={item.isWatched ? "Mark as unwatched" : "Mark as watched"}
+            className={cn(
+              "w-9 h-9 rounded-full border flex items-center justify-center transition-all duration-200 cursor-pointer",
+              item.isWatched
+                ? "bg-sky-500/20 border-sky-400/50 text-sky-300 hover:bg-sky-500/35"
+                : "bg-white/[0.04] border-white/10 text-white/35 hover:text-white hover:border-white/30"
+            )}
+          >
+            <Check className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        )}
         <div className="w-11 h-11 rounded-full bg-white/[0.04] border border-white/10 group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary/50 text-white/40 flex items-center justify-center transition-all duration-300 shadow-sm">
           <Play className="w-4 h-4 fill-current ml-0.5" />
         </div>
@@ -364,7 +529,15 @@ export const EpisodeGridCard = memo(function EpisodeGridCard({ item }: { item: E
           thumbnail={item.thumbnail}
           title={item.title}
           number={item.number}
+          blurSpoiler={Boolean(item.spoilerFree && !item.isWatched && !item.isSelected)}
         />
+
+        {item.spoilerFree && !item.isWatched && !item.isSelected && !isUpcoming && (
+          <div className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-amber-400/30 text-[9px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1 group-hover:opacity-0 transition-opacity pointer-events-none">
+            <EyeOff className="w-2.5 h-2.5" />
+            <span>Spoiler-Free</span>
+          </div>
+        )}
 
         {/* Gradient shade */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-60 group-hover:opacity-100 transition-opacity duration-200" />
@@ -421,7 +594,7 @@ export const EpisodeGridCard = memo(function EpisodeGridCard({ item }: { item: E
         )}
       </div>
 
-      {/* Episode title ONLY (clean, visual, distinct from list view) */}
+      {/* Episode title + quick watched toggle */}
       <div className="mt-2 flex items-center justify-between gap-2">
         <h3
           className={cn(
@@ -431,6 +604,24 @@ export const EpisodeGridCard = memo(function EpisodeGridCard({ item }: { item: E
         >
           {item.title}
         </h3>
+        {!isUpcoming && item.onToggleWatched && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              item.onToggleWatched?.();
+            }}
+            title={item.isWatched ? "Mark as unwatched" : "Mark as watched"}
+            className={cn(
+              "w-6 h-6 rounded-full border shrink-0 flex items-center justify-center transition-all cursor-pointer",
+              item.isWatched
+                ? "bg-sky-500/20 border-sky-400/50 text-sky-300"
+                : "bg-white/[0.04] border-white/10 text-white/30 hover:text-white hover:border-white/30 opacity-0 group-hover:opacity-100"
+            )}
+          >
+            <Check className="w-3 h-3 stroke-[2.5]" />
+          </button>
+        )}
       </div>
     </div>
   );

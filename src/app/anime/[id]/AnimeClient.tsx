@@ -7,7 +7,8 @@ import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { AnimeCard } from "@/components/AnimeCard";
 import { WatchlistButton } from "@/components/WatchlistButton";
-import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, EpisodeChunkBar, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
+import { EpisodeViewSelector, EpisodeListView, EpisodeGridView, EpisodeNumbersView, EpisodePagination, EpisodeChunkBar, EpisodeControlsToolbar, type EpisodeItem, type EpisodeViewMode } from "@/components/episodes/EpisodeViews";
+import { EndsAtBadge } from "@/components/EndsAtBadge";
 import { usePageContentReady } from "@/lib/pageLoad";
 import { useMediaLogo } from "@/components/MediaLogo";
 import { fetchJson, cn, getRecommendationReason } from "@/lib/utils";
@@ -872,13 +873,17 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
   );
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
-  const { settings: siteSettings } = useSiteSettings();
+  const [episodeSearchQuery, setEpisodeSearchQuery] = useState("");
+  const [episodeSortOrder, setEpisodeSortOrder] = useState<"asc" | "desc">("asc");
+  const { settings: siteSettings, updateSettings: updateSiteSettings } = useSiteSettings();
   const episodeView: EpisodeViewMode = siteSettings.animeEpisodeViewMode;
   const activeSeasonWatchedId = String(currentSeasonId || anime?.id || id);
   const {
     isWatched: isEpisodeMarkedWatched,
     hasWatchedAny,
     markWatchedUpTo,
+    toggleEpisodeWatched,
+    markSeasonWatched,
     resetWatched,
   } = useWatchedEpisodes("anime", activeSeasonWatchedId, 1);
   const [episodePage, setEpisodePage] = useState(1);
@@ -2169,9 +2174,11 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
       isPlaying: isPlaying && isSelected,
       isWatched,
       portrait: isSingleItem,
+      spoilerFree: siteSettings.spoilerFreeMode,
+      onToggleWatched: () => toggleEpisodeWatched(ep.episodeNum),
       onClick: () => handleWatchEpisode(ep),
     };
-  }, [anime, currentSeasonId, currentSeasonNumber, displayPoster, displayTitle, handleWatchEpisode, hasActiveProgress, initialData?.bannerImage, isEpisodeMarkedWatched, isPlaying, isSingleItem, playingEpisode, playingSeason, selectedEp]);
+  }, [anime, currentSeasonId, currentSeasonNumber, displayPoster, displayTitle, handleWatchEpisode, hasActiveProgress, initialData?.bannerImage, isEpisodeMarkedWatched, isPlaying, isSingleItem, playingEpisode, playingSeason, selectedEp, siteSettings.spoilerFreeMode, toggleEpisodeWatched]);
 
   const episodeItems = useMemo(() => dedupedCurrentEps.map(episodeToItem), [dedupedCurrentEps, episodeToItem]);
 
@@ -2440,6 +2447,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               </div>
                               <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                               <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                              <EndsAtBadge runtimeMinutes={anime.duration || 24} />
                             </>
                           ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" || (currentSeasonInfo as any)?.isUnavailable ? (
                             <>
@@ -2449,6 +2457,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               </div>
                               <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                               <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                              <EndsAtBadge runtimeMinutes={anime.duration || 24} />
                             </>
                           ) : dedupedCurrentEps.length > 0 ? (
                             <>
@@ -2473,6 +2482,7 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               </button>
                               <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                               <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
+                              <EndsAtBadge runtimeMinutes={anime.duration || 24} />
                             </>
                           ) : episodesLoading ? (
                             <>
@@ -2643,6 +2653,54 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   </div>
                 </div>
 
+                {/* Episodes Toolbar (Search, Sort, Spoiler-Free, Mark Season Watched, Reset) */}
+                {!episodesLoading && dedupedCurrentEps.length > 0 && (
+                  <EpisodeControlsToolbar
+                    searchQuery={episodeSearchQuery}
+                    onSearchChange={(q) => {
+                      setEpisodeSearchQuery(q);
+                      setEpisodePage(1);
+                      setListChunkIndex(0);
+                    }}
+                    sortOrder={episodeSortOrder}
+                    onToggleSortOrder={() =>
+                      setEpisodeSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+                    }
+                    spoilerFree={siteSettings.spoilerFreeMode}
+                    onToggleSpoilerFree={() =>
+                      updateSiteSettings({ spoilerFreeMode: !siteSettings.spoilerFreeMode })
+                    }
+                    onMarkSeasonWatched={() => {
+                      const releasedNums = dedupedCurrentEps
+                        .filter((ep) => ep.isReleased !== false)
+                        .map((ep) => ep.episodeNum);
+                      markSeasonWatched(releasedNums);
+                    }}
+                    onResetWatched={() => {
+                      resetWatched();
+                      setHasActiveProgress(false);
+                      setPlayingEpisode(1);
+                      setSelectedEp(null);
+                      try {
+                        const raw = localStorage.getItem("cinestream_active_anime_show");
+                        if (raw) {
+                          const parsed = JSON.parse(raw);
+                          if (String(parsed?.id) === String(anime?.id || id)) {
+                            localStorage.removeItem("cinestream_active_anime_show");
+                          }
+                        }
+                      } catch {}
+                    }}
+                    hasWatchedAny={Boolean(
+                      hasWatchedAny ||
+                        (hasActiveProgress &&
+                          (Number(playingSeason) === Number(currentSeasonNumber) || !playingSeason) &&
+                          Number(playingEpisode) > 0)
+                    )}
+                    totalEpisodes={Math.max(seasonTotalEpisodes || 0, dedupedCurrentEps.length)}
+                  />
+                )}
+
                 {/* Episode Display */}
                 {(() => {
                   if (episodesLoading && dedupedCurrentEps.length === 0) {
@@ -2696,18 +2754,35 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     );
                   }
 
-                  const effectiveTotalEps = Math.max(
-                    seasonTotalEpisodes || 0,
-                    (currentSeasonInfo as any)?.totalEpisodes && (currentSeasonInfo as any).totalEpisodes < 1499
-                      ? (currentSeasonInfo as any).totalEpisodes
-                      : 0,
-                    episodeItems.length
-                  );
+                  const qTrim = episodeSearchQuery.trim().toLowerCase();
+                  const isFilteringOrSorting = Boolean(qTrim) || episodeSortOrder === "desc";
+                  const filteredByQuery = qTrim
+                    ? episodeItems.filter(
+                        (it) =>
+                          String(it.number) === qTrim.replace(/^e/i, "") ||
+                          (it.title || "").toLowerCase().includes(qTrim) ||
+                          (it.description || "").toLowerCase().includes(qTrim)
+                      )
+                    : episodeItems;
+                  const activeEpisodeItems =
+                    episodeSortOrder === "desc"
+                      ? [...filteredByQuery].sort((a, b) => b.number - a.number)
+                      : filteredByQuery;
+
+                  const effectiveTotalEps = isFilteringOrSorting
+                    ? activeEpisodeItems.length
+                    : Math.max(
+                        seasonTotalEpisodes || 0,
+                        (currentSeasonInfo as any)?.totalEpisodes && (currentSeasonInfo as any).totalEpisodes < 1499
+                          ? (currentSeasonInfo as any).totalEpisodes
+                          : 0,
+                        episodeItems.length
+                      );
 
                   if (episodeView === "numbers") {
-                    let numberItems = episodeItems;
-                    if (effectiveTotalEps > episodeItems.length) {
-                      const byNum = new Map(episodeItems.map((it) => [it.number, it]));
+                    let numberItems = activeEpisodeItems;
+                    if (!isFilteringOrSorting && effectiveTotalEps > activeEpisodeItems.length) {
+                      const byNum = new Map(activeEpisodeItems.map((it) => [it.number, it]));
                       numberItems = Array.from({ length: effectiveTotalEps }, (_, idx) => {
                         const n = idx + 1;
                         const existing = byNum.get(n);
@@ -2738,9 +2813,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                     const activePage = Math.min(Math.max(1, episodePage), Math.max(1, totalPages));
                     const startEp = (activePage - 1) * gridSize + 1;
                     const endEp = Math.min(activePage * gridSize, effectiveTotalEps);
-                    const sliced = effectiveTotalEps > episodeItems.length
-                      ? episodeItems.filter((it) => it.number >= startEp && it.number <= endEp)
-                      : episodeItems.slice((activePage - 1) * gridSize, activePage * gridSize);
+                    const sliced = !isFilteringOrSorting && effectiveTotalEps > activeEpisodeItems.length
+                      ? activeEpisodeItems.filter((it) => it.number >= startEp && it.number <= endEp)
+                      : activeEpisodeItems.slice((activePage - 1) * gridSize, activePage * gridSize);
                     const onPageChange = (p: number) => { setEpisodePage(p); document.getElementById("anime-episodes-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
                     return (
                       <div key={`grid-${currentSeasonId}-${activePage}`}>
@@ -2767,9 +2842,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                   const activeChunk = Math.min(Math.max(0, listChunkIndex), Math.max(0, totalChunks - 1));
                   const chunkStartEp = activeChunk * CHUNK + 1;
                   const chunkEndEp = Math.min((activeChunk + 1) * CHUNK, effectiveTotalEps);
-                  const slicedChunk = effectiveTotalEps > episodeItems.length
-                    ? episodeItems.filter((it) => it.number >= chunkStartEp && it.number <= chunkEndEp)
-                    : episodeItems.slice(activeChunk * CHUNK, activeChunk * CHUNK + CHUNK);
+                  const slicedChunk = !isFilteringOrSorting && effectiveTotalEps > activeEpisodeItems.length
+                    ? activeEpisodeItems.filter((it) => it.number >= chunkStartEp && it.number <= chunkEndEp)
+                    : activeEpisodeItems.slice(activeChunk * CHUNK, activeChunk * CHUNK + CHUNK);
                   const onChunkChange = (c: number) => { setListChunkIndex(c); document.getElementById("anime-episodes-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
 
                   return (

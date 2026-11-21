@@ -9,6 +9,7 @@ export interface SiteSettings {
   animeEpisodeViewMode: EpisodeViewMode;
   autoNextEpisode: boolean;
   autoMarkPreviousWatched: boolean;
+  spoilerFreeMode: boolean;
 }
 
 export const SITE_SETTINGS_KEY = "cinestream_site_settings_v1";
@@ -20,6 +21,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   animeEpisodeViewMode: "grid",
   autoNextEpisode: true,
   autoMarkPreviousWatched: true,
+  spoilerFreeMode: false,
 };
 
 let memorySettings: SiteSettings | null = null;
@@ -54,6 +56,10 @@ function normalizeSettingsObject(parsed: any): SiteSettings {
       typeof parsed?.autoMarkPreviousWatched === "boolean"
         ? parsed.autoMarkPreviousWatched
         : DEFAULT_SITE_SETTINGS.autoMarkPreviousWatched,
+    spoilerFreeMode:
+      typeof parsed?.spoilerFreeMode === "boolean"
+        ? parsed.spoilerFreeMode
+        : DEFAULT_SITE_SETTINGS.spoilerFreeMode,
   };
 }
 
@@ -314,6 +320,56 @@ export function markEpisodesWatchedUpTo(
   return nextList;
 }
 
+export function toggleSingleEpisodeWatched(
+  mediaType: "tv" | "anime",
+  mediaId: string | number,
+  episodeNumber: number,
+  season: number = 1
+): number[] {
+  const epNum = Math.floor(Number(episodeNumber) || 0);
+  if (epNum <= 0 || !mediaId) return [];
+  const store = readWatchedStore();
+  const key = buildWatchedScopeKey(mediaType, mediaId, season);
+  const existing = new Set<number>(store[key]?.episodes || []);
+  if (existing.has(epNum)) {
+    existing.delete(epNum);
+  } else {
+    existing.add(epNum);
+  }
+  const nextList = Array.from(existing).sort((a, b) => a - b);
+  store[key] = {
+    episodes: nextList,
+    wasReset: nextList.length === 0,
+    updatedAt: Date.now(),
+  };
+  writeWatchedStore(store);
+  return nextList;
+}
+
+export function markAllSeasonEpisodesWatched(
+  mediaType: "tv" | "anime",
+  mediaId: string | number,
+  episodeNumbers: number[],
+  season: number = 1
+): number[] {
+  if (!mediaId || !Array.isArray(episodeNumbers) || episodeNumbers.length === 0) return [];
+  const store = readWatchedStore();
+  const key = buildWatchedScopeKey(mediaType, mediaId, season);
+  const existing = new Set<number>(store[key]?.episodes || []);
+  for (const n of episodeNumbers) {
+    const clean = Math.floor(Number(n) || 0);
+    if (clean > 0 && clean <= 3000) existing.add(clean);
+  }
+  const nextList = Array.from(existing).sort((a, b) => a - b);
+  store[key] = {
+    episodes: nextList,
+    wasReset: false,
+    updatedAt: Date.now(),
+  };
+  writeWatchedStore(store);
+  return nextList;
+}
+
 export function resetWatchedEpisodes(
   mediaType: "tv" | "anime",
   mediaId: string | number,
@@ -402,6 +458,22 @@ export function useWatchedEpisodes(
     [watchedSet]
   );
 
+  const toggleEpisode = useCallback(
+    (episodeNumber: number, targetSeason?: number) => {
+      if (!mediaId) return;
+      toggleSingleEpisodeWatched(mediaType, mediaId, episodeNumber, targetSeason ?? season);
+    },
+    [mediaType, mediaId, season]
+  );
+
+  const markSeasonWatched = useCallback(
+    (episodeNumbers: number[], targetSeason?: number) => {
+      if (!mediaId) return;
+      markAllSeasonEpisodesWatched(mediaType, mediaId, episodeNumbers, targetSeason ?? season);
+    },
+    [mediaType, mediaId, season]
+  );
+
   return {
     watchedSet,
     watchedCount: state.episodes.length,
@@ -409,6 +481,8 @@ export function useWatchedEpisodes(
     wasReset: state.wasReset,
     isWatched,
     markWatchedUpTo: markUpTo,
+    toggleEpisodeWatched: toggleEpisode,
+    markSeasonWatched,
     resetWatched: reset,
   };
 }

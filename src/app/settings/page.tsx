@@ -536,6 +536,20 @@ export default function SettingsPage() {
             </SettingRow>
 
             <SettingRow
+              title="Spoiler-Free Mode"
+              description="Blur thumbnails and plot synopses of unwatched episodes on TV and Anime pages until hovered or watched."
+            >
+              <SegmentedPillToggle
+                ariaLabel="Spoiler-Free Mode"
+                value={settings.spoilerFreeMode ? "on" : "off"}
+                options={booleanOptions}
+                onChange={(val) =>
+                  updateSettings({ spoilerFreeMode: val === "on" })
+                }
+              />
+            </SettingRow>
+
+            <SettingRow
               title="Watched Episode Badges"
               description="Clear all watched episode indicators saved in your browser."
             >

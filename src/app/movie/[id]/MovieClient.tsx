@@ -20,6 +20,8 @@ import { usePageContentReady } from "@/lib/pageLoad";
 import { fetchJson, peekCachedJson, shuffleArray, getRecommendationReason } from "@/lib/utils";
 import { AmbientBackdropGlow } from "@/components/AmbientBackdropGlow";
 import { useTheme } from "@/context/ThemeContext";
+import { EndsAtBadge } from "@/components/EndsAtBadge";
+import { MediaSpecsCard } from "@/components/MediaSpecsCard";
 
 function MovieHeroTrailerButton() {
   const { playTrailer, hasTrailer } = useCinematicHero();
@@ -369,6 +371,12 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
                   <span>{Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m</span>
                 </div>
               ) : null}
+              <div className="px-2.5 py-1 rounded-xl bg-amber-400/15 border border-amber-400/35 text-amber-300 font-black text-xs sm:text-sm shadow-sm">
+                {(movie as any).contentRating || (movie.adult ? "R" : "PG-13")}
+              </div>
+              <div className="px-2.5 py-1 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-300 font-black text-xs sm:text-sm shadow-sm">
+                4K HDR
+              </div>
               <div className="flex flex-wrap gap-2 ml-0.5">
                 {movie.genres?.map((g) => (
                   <span
@@ -426,7 +434,49 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
 
               <MovieHeroTrailerButton />
             </div>
+
+            {/* Clickable Director & Studio Pills */}
+            {(() => {
+              const directors = Array.isArray((movie.credits as any)?.crew)
+                ? (movie.credits as any).crew.filter((c: any) => c?.job === "Director").slice(0, 3)
+                : [];
+              if (directors.length === 0) return null;
+              return (
+                <div className="flex items-center gap-2 flex-wrap pt-1 text-xs sm:text-sm">
+                  <span className="text-white/45 font-medium">Directed by</span>
+                  {directors.map((d: any) => (
+                    <Link
+                      key={d.id}
+                      href={`/person/${d.id}`}
+                      className="font-bold text-white/90 hover:text-white underline decoration-white/25 hover:decoration-white underline-offset-4 transition-colors"
+                    >
+                      {d.name}
+                    </Link>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
+
+          {/* Right-Side Cinejoy-Style Specs Table + Monochrome Studio Logos */}
+          <MediaSpecsCard
+            mediaType="movie"
+            status={(movie as any).status || "Released"}
+            releaseDate={
+              movie.release_date
+                ? format(new Date(movie.release_date), "MMM d, yyyy")
+                : null
+            }
+            runtimeMinutes={movie.runtime}
+            language={(movie as any).original_language}
+            budget={(movie as any).budget}
+            revenue={(movie as any).revenue}
+            studios={
+              Array.isArray((movie as any).production_companies)
+                ? (movie as any).production_companies
+                : []
+            }
+          />
           </div>
         </CinematicHero>
 

@@ -8,7 +8,7 @@ import { MediaCard } from "@/components/MediaCard";
 import { PersonCard } from "@/components/PersonCard";
 import { AnimeCard, AnimeItem } from "@/components/AnimeCard";
 import { useDebounce } from "@/hooks/useDebounce";
-import { Search as SearchIcon, Sparkles, HelpCircle, Loader2, X } from "lucide-react";
+import { Search as SearchIcon, Sparkles, HelpCircle, Loader2, X, Flame, Film, Tv } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { fetchJson, filterReleasedSafeContent, filterExcludeAnime } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -153,7 +153,27 @@ function SearchContent() {
   const [isSearchingMedia, setIsSearchingMedia] = useState(false);
   const [isSearchingAnime, setIsSearchingAnime] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trendingItems, setTrendingItems] = useState<MediaItem[]>([]);
+  const [trendingFilter, setTrendingFilter] = useState<"all" | "movie" | "tv">("all");
   const { mode, setMode } = useContentMode();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchJson<{ results: MediaItem[] }>("/api/tmdb/trending")
+      .then((data) => {
+        if (cancelled || !Array.isArray(data?.results)) return;
+        const cleaned = filterExcludeAnime(
+          filterReleasedSafeContent(
+            data.results.filter((r) => (r.media_type === "movie" || r.media_type === "tv") && r.poster_path)
+          ) as MediaItem[]
+        ) as MediaItem[];
+        setTrendingItems(cleaned.slice(0, 15));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isSearching = isSearchingMedia || isSearchingAnime;
 
@@ -542,22 +562,77 @@ function SearchContent() {
             </div>
           )}
 
-          {/* Initial Clean State */}
+          {/* Initial Pre-Search State: Trending Today Showcase Grid (Cinejoy-style) */}
           {debouncedQuery.length < 2 ? (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="max-w-md mx-auto py-16 text-center space-y-4"
+              className="space-y-7 pt-2"
             >
-              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mx-auto text-[#9EB2D1]">
-                <SearchIcon className="w-8 h-8 opacity-60" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-400/30 flex items-center justify-center text-rose-400 shadow-sm">
+                    <Flame className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                      Trending Today
+                    </h2>
+                    <p className="text-xs text-white/45">
+                      Most popular movies &amp; series everyone is watching right now
+                    </p>
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 p-1 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+                  {(
+                    [
+                      { id: "all", label: "All Trending" },
+                      { id: "movie", label: "Movies", icon: Film },
+                      { id: "tv", label: "TV Series", icon: Tv },
+                    ] as const
+                  ).map((t) => {
+                    const Icon = (t as any).icon;
+                    const active = trendingFilter === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setTrendingFilter(t.id)}
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                          active
+                            ? "bg-white text-black shadow-sm"
+                            : "text-white/60 hover:text-white"
+                        }`}
+                      >
+                        {Icon && <Icon className="w-3.5 h-3.5" />}
+                        <span>{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white tracking-tight">Explore CineStream</h3>
-                <p className="text-xs text-white/40 leading-relaxed">
-                  Type a title, actor, or director above to search across Movies, TV Shows, and Anime.
-                </p>
-              </div>
+
+              {trendingItems.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 3xl:grid-cols-7 gap-4 sm:gap-5 md:gap-6">
+                  {trendingItems
+                    .filter((item) =>
+                      trendingFilter === "all" ? true : item.media_type === trendingFilter
+                    )
+                    .slice(0, 15)
+                    .map((item, i) => (
+                      <div key={`trending-${item.media_type}-${item.id}`} className="w-full h-full flex justify-center">
+                        <MediaCard item={item} index={i} priority={i < 5} showMediaBadge={true} />
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5 md:gap-6">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="aspect-[2/3] w-full rounded-2xl bg-muted/40 skeleton-pulse" />
+                  ))}
+                </div>
+              )}
             </motion.div>
           ) : error ? (
             <div className="premium-glass max-w-lg mx-auto p-8 rounded-2xl text-center">

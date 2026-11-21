@@ -13,6 +13,8 @@ import { HeroSkeleton } from "@/components/HeroSkeleton";
 import { HeroAnnouncement } from "@/components/HeroAnnouncement";
 import { MediaRow } from "@/components/MediaRow";
 import { AnimeRow } from "@/components/AnimeRow";
+import { CurrentUpcomingTvRow } from "@/components/CurrentUpcomingTvRow";
+import { HomeCalendarShortsHub } from "@/components/HomeCalendarShortsHub";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { ContinueWatching } from "@/components/ContinueWatching";
 import { BecauseYouWatchedRow } from "@/components/BecauseYouWatchedRow";
@@ -1632,6 +1634,18 @@ export default function Home() {
               isLoading={isLoading}
               isTop10={true}
               accentIcon={TRENDING_ACCENT_ICON}
+            />
+          </LazySection>
+
+          {/* ─── CURRENT & UPCOMING TV SHOWS (16:9 Landscape Row) ─── */}
+          <LazySection show={revealedSections >= 1} placeholderHeight={260}>
+            <CurrentUpcomingTvRow fallbackItems={trendingTvToday} />
+          </LazySection>
+
+          {/* ─── RELEASE CALENDAR & SHORTS DISCOVERY HUB ─── */}
+          <LazySection show={revealedSections >= 1} placeholderHeight={220}>
+            <HomeCalendarShortsHub
+              previewItems={[...trendingMoviesToday.slice(0, 3), ...trendingTvToday.slice(0, 3)]}
             />
           </LazySection>
 

@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
   const releaseDateLte = searchParams.get("releaseDateLte");
   const maxRuntime = searchParams.get("maxRuntime");
   const minRuntime = searchParams.get("minRuntime");
+  const withCompanies = searchParams.get("withCompanies");
   // Per-provider monetization override (defaults to "flatrate")
   const monetizationTypes = searchParams.get("monetizationTypes") || "flatrate";
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
 
   const params: Record<string, string> = { sort_by: sortBy, page };
   if (genreId) params.with_genres = genreId;
+  if (withCompanies) params.with_companies = withCompanies;
   if (minVote) params["vote_average.gte"] = minVote;
   if (year) params.primary_release_year = year;
   if (country) params.with_origin_country = country;
