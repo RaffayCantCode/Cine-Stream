@@ -1,7 +1,7 @@
 // CineStream Service Worker
 // Strategy: Fast Network-first with timeout for HTML, Cache-first for static + images
 // CACHE_VERSION is updated to bust previous worker cache.
-const CACHE_VERSION = 'v35-same-origin-safe';
+const CACHE_VERSION = 'v36-watch-passthrough';
 const CACHE_NAME = `cinestream-${CACHE_VERSION}`;
 const IMAGE_CACHE = `cinestream-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `cinestream-static-${CACHE_VERSION}`;
@@ -49,11 +49,12 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Never intercept auth, API writes, or external embeds
+  // Never intercept auth, API writes, watch pages, or external embeds
   if (
     request.method !== 'GET' ||
     url.pathname.startsWith('/api/auth') ||
-    url.pathname.startsWith('/api/watch-history')
+    url.pathname.startsWith('/api/watch-history') ||
+    url.pathname.startsWith('/watch')
   ) {
     return;
   }

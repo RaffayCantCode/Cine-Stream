@@ -4,6 +4,85 @@ import { useEffect, useRef, useState, useCallback, memo } from "react";
 import Hls from "hls.js";
 import { Loader2, AlertCircle, Play } from "lucide-react";
 
+const warmedEmbedOrigins = new Set<string>();
+const inflightOriginWarmups = new Map<string, Promise<void>>();
+
+function getUrlOrigin(url?: string | null): string {
+  if (!url) return "";
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
+
+function isUrlOriginWarmed(url?: string | null): boolean {
+  const origin = getUrlOrigin(url);
+  if (!origin) return true;
+  if (warmedEmbedOrigins.has(origin)) return true;
+  if (typeof window !== "undefined") {
+    try {
+      if (sessionStorage.getItem(`cs_warm_origin_${origin}`) === "1") {
+        warmedEmbedOrigins.add(origin);
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
+function markOriginWarmed(origin: string): void {
+  if (!origin) return;
+  warmedEmbedOrigins.add(origin);
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.setItem(`cs_warm_origin_${origin}`, "1");
+    } catch {}
+  }
+}
+
+function warmEmbedOrigin(url: string): Promise<void> {
+  const origin = getUrlOrigin(url);
+  if (!origin || isUrlOriginWarmed(url)) return Promise.resolve();
+
+  const existing = inflightOriginWarmups.get(origin);
+  if (existing) return existing;
+
+  const probeOnce = async (timeoutMs: number): Promise<boolean> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      await fetch(`${origin}/`, {
+        mode: "no-cors",
+        credentials: "omit",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const task = (async () => {
+    // First probe warms DNS + TLS + HTTP/3 on a fresh browser session.
+    // If a cold QUIC/TLS/ISP handshake resets, a second probe triggers
+    // Chromium's TCP/H2 fallback BEFORE the <iframe> ever mounts.
+    const ok = await probeOnce(1100);
+    if (!ok) {
+      await probeOnce(1100);
+    }
+    markOriginWarmed(origin);
+  })().finally(() => {
+    inflightOriginWarmups.delete(origin);
+  });
+
+  inflightOriginWarmups.set(origin, task);
+  return task;
+}
+
 export interface SubtitleTrack {
   id: number;
   label: string;
@@ -115,6 +194,28 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
 
   const [isClickUnlocked, setIsClickUnlocked] = useState(!isAnimePlaySource);
   const [liveIframeUrl, setLiveIframeUrl] = useState(isAnimePlaySource ? "" : (fallbackIframeUrl || ""));
+  const [isOriginReady, setIsOriginReady] = useState(() => isUrlOriginWarmed(fallbackIframeUrl));
+
+  // Pre-warm embed origin on cold browser sessions so the first iframe navigation
+  // never hits a cold DNS/TLS/QUIC reset ("might be temporarily down") error.
+  useEffect(() => {
+    if (!fallbackIframeUrl) {
+      setIsOriginReady(true);
+      return;
+    }
+    if (isUrlOriginWarmed(fallbackIframeUrl)) {
+      setIsOriginReady(true);
+      return;
+    }
+    let cancelled = false;
+    setIsOriginReady(false);
+    warmEmbedOrigin(fallbackIframeUrl).then(() => {
+      if (!cancelled) setIsOriginReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fallbackIframeUrl]);
 
   const lastSourceKeyRef = useRef(`${server}-${mediaId}-${episode}`);
   useEffect(() => {
@@ -464,7 +565,7 @@ export const NativeHlsPlayer = memo(function NativeHlsPlayer({
         className="absolute inset-0 w-full h-full bg-black flex items-center justify-center overflow-hidden"
         style={{ width: "100%", height: "100%" }}
       >
-        {effectiveIframeUrl ? (
+        {effectiveIframeUrl && isOriginReady ? (
           <iframe
             key={effectiveIframeUrl}
             src={effectiveIframeUrl}

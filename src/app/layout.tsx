@@ -80,6 +80,15 @@ export default function RootLayout({
         {/* Anime image sources */}
         <link rel="preconnect" href="https://api.anipub.xyz" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://api.anipub.xyz" />
+
+        {/* Pre-warm DNS/TLS for primary streaming embed hosts so cold browser sessions never fail on first open */}
+        <link rel="dns-prefetch" href="https://embedmaster.link" />
+        <link rel="preconnect" href="https://embedmaster.link" />
+        <link rel="dns-prefetch" href="https://megaplay.buzz" />
+        <link rel="preconnect" href="https://megaplay.buzz" />
+        <link rel="dns-prefetch" href="https://vidnest.fun" />
+        <link rel="dns-prefetch" href="https://vidbolt.net" />
+        <link rel="dns-prefetch" href="https://vidsrc.me" />
         {/* Local development must not be controlled by the production SW.
             Dev chunks keep stable URLs, so a cache-first worker would serve
             stale code after every rebuild. */}

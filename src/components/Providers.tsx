@@ -84,6 +84,7 @@ export function Providers({ children }: ProvidersProps) {
     const onControllerChange = () => {
       if (refreshing) return;
       try {
+        if (window.location.pathname.startsWith("/watch")) return;
         const hasReloaded = sessionStorage.getItem("cs_sw_reloaded");
         if (hasReloaded) return;
         if (document.visibilityState === "visible") {
