@@ -1645,6 +1645,17 @@ export default function Home() {
             />
           </LazySection>
 
+          {/* ─── TOP 10 ANIME TODAY ─── */}
+          <LazySection show={revealedSections >= 1} placeholderHeight={380}>
+            <AnimeRow
+              title="Top 10 Anime Today"
+              items={animeList}
+              isLoading={animeLoading}
+              isTop10={true}
+              seeAllHref="/anime"
+            />
+          </LazySection>
+
           {/* ─── CURRENT & UPCOMING TV SHOWS (16:9 Landscape Row) ─── */}
           <LazySection show={revealedSections >= 1} placeholderHeight={260}>
             <CurrentUpcomingTvRow fallbackItems={trendingTvToday} />
@@ -1654,17 +1665,6 @@ export default function Home() {
           <LazySection show={revealedSections >= 1} placeholderHeight={220}>
             <HomeCalendarShortsHub
               previewItems={[...trendingMoviesToday.slice(0, 3), ...trendingTvToday.slice(0, 3)]}
-            />
-          </LazySection>
-
-          {/* ─── TOP 10 ANIME TODAY ─── */}
-          <LazySection show={revealedSections >= 1} placeholderHeight={380}>
-            <AnimeRow
-              title="Top 10 Anime Today"
-              items={animeList}
-              isLoading={animeLoading}
-              isTop10={true}
-              seeAllHref="/anime"
             />
           </LazySection>
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Play,
+  Pause,
   Volume2,
   Volume1,
   VolumeX,
@@ -39,6 +40,103 @@ interface ShortFeedItem {
   watchHref: string;
 }
 
+const SEEN_SHORTS_KEY = "sv_seen_shorts_v1";
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function loadSeenShorts(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SEEN_SHORTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.ids)) return parsed.ids.map(String);
+    }
+  } catch {}
+  return [];
+}
+
+function saveSeenShorts(ids: string[], maxCap = 120): void {
+  if (typeof window === "undefined") return;
+  try {
+    const unique = Array.from(new Set(ids));
+    localStorage.setItem(
+      SEEN_SHORTS_KEY,
+      JSON.stringify({ ids: unique.slice(-maxCap), ts: Date.now() })
+    );
+  } catch {}
+}
+
+function pickRandomizedCandidates<T>(
+  trendingList: T[],
+  allTimeBestList: T[],
+  getKey: (item: T) => string | null,
+  isValid: (item: T) => boolean,
+  targetCount: number,
+  seenHistory: string[]
+): T[] {
+  const seenInHistory = new Set(seenHistory);
+  const historyOrder = new Map<string, number>();
+  seenHistory.forEach((id, idx) => historyOrder.set(id, idx));
+
+  const dedupeAndSplit = (list: T[], globalSeen: Set<string>) => {
+    const unseen: T[] = [];
+    const seen: T[] = [];
+    for (const item of shuffleArray(list)) {
+      if (!isValid(item)) continue;
+      const key = getKey(item);
+      if (!key || globalSeen.has(key)) continue;
+      globalSeen.add(key);
+      if (seenInHistory.has(key)) {
+        seen.push(item);
+      } else {
+        unseen.push(item);
+      }
+    }
+    // Least-recently-seen first when recycling
+    seen.sort(
+      (a, b) =>
+        (historyOrder.get(getKey(a) || "") ?? 0) -
+        (historyOrder.get(getKey(b) || "") ?? 0)
+    );
+    return [...unseen, ...seen];
+  };
+
+  const globalSeen = new Set<string>();
+  const trendQueue = dedupeAndSplit(trendingList, globalSeen);
+  const allTimeQueue = dedupeAndSplit(allTimeBestList, globalSeen);
+
+  const picked: T[] = [];
+  let tIdx = 0;
+  let aIdx = 0;
+  let pickTrendingNext = Math.random() < 0.5;
+
+  while (
+    picked.length < targetCount &&
+    (tIdx < trendQueue.length || aIdx < allTimeQueue.length)
+  ) {
+    if (pickTrendingNext && tIdx < trendQueue.length) {
+      picked.push(trendQueue[tIdx++]);
+    } else if (!pickTrendingNext && aIdx < allTimeQueue.length) {
+      picked.push(allTimeQueue[aIdx++]);
+    } else if (tIdx < trendQueue.length) {
+      picked.push(trendQueue[tIdx++]);
+    } else if (aIdx < allTimeQueue.length) {
+      picked.push(allTimeQueue[aIdx++]);
+    }
+    pickTrendingNext = !pickTrendingNext;
+  }
+
+  return shuffleArray(picked);
+}
+
 function pickBestYoutubeKey(videos: any[]): string | null {
   if (!Array.isArray(videos) || videos.length === 0) return null;
   const yt = videos.filter((v) => v?.site === "YouTube" && v?.key);
@@ -66,6 +164,120 @@ export default function ShortsFeedPage() {
   const [prevVolume, setPrevVolume] = useState<number>(85);
   const isMuted = volume === 0;
   const [playingSlides, setPlayingSlides] = useState<Record<string, boolean>>({});
+  const [pausedSlides, setPausedSlides] = useState<Record<string, boolean>>({});
+
+  // Register YouTube IFrame API event listener on an embed so native clicks/taps sync play/pause state
+  const registerYoutubeListener = useCallback((slideId: string) => {
+    const iframe = iframeRefs.current[slideId];
+    if (!iframe?.contentWindow) return;
+    try {
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: "listening", id: slideId, channel: "widget" }),
+        "*"
+      );
+      iframe.contentWindow.postMessage(
+        JSON.stringify({
+          event: "command",
+          func: "addEventListener",
+          args: ["onStateChange"],
+          id: slideId,
+          channel: "widget",
+        }),
+        "*"
+      );
+    } catch {}
+  }, []);
+
+  // Listen to YouTube player state changes (1 = playing, 2 = paused, 0 = ended)
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (!e.origin.includes("youtube")) return;
+      let data: any = e.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (!data || typeof data !== "object") return;
+
+      let matchedSlideId: string | undefined =
+        typeof data.id === "string" ? data.id : undefined;
+
+      if (!matchedSlideId) {
+        for (const [id, frame] of Object.entries(iframeRefs.current)) {
+          if (frame?.contentWindow && frame.contentWindow === e.source) {
+            matchedSlideId = id;
+            break;
+          }
+        }
+      }
+
+      if (!matchedSlideId) return;
+
+      let playerState: number | undefined;
+      if (data.event === "onStateChange" && typeof data.info === "number") {
+        playerState = data.info;
+      } else if (
+        data.event === "infoDelivery" &&
+        data.info &&
+        typeof data.info.playerState === "number"
+      ) {
+        playerState = data.info.playerState;
+      }
+
+      if (playerState === 1) {
+        // Playing -> hide bottom-left info
+        setPausedSlides((prev) =>
+          prev[matchedSlideId!] === false ? prev : { ...prev, [matchedSlideId!]: false }
+        );
+      } else if (playerState === 2 || playerState === 0) {
+        // Paused or Ended -> show bottom-left info
+        setPausedSlides((prev) =>
+          prev[matchedSlideId!] === true ? prev : { ...prev, [matchedSlideId!]: true }
+        );
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  // Toggle play/pause for a slide via button or tap/click
+  const togglePlayPause = useCallback((slideId: string, idx?: number) => {
+    if (typeof idx === "number") {
+      setActiveIndex(idx);
+    }
+
+    setPlayingSlides((prevPlaying) => {
+      const isAlreadyMounted = Boolean(prevPlaying[slideId]);
+      if (!isAlreadyMounted) {
+        setPausedSlides((prev) => ({ ...prev, [slideId]: false }));
+        return { ...prevPlaying, [slideId]: true };
+      }
+
+      setPausedSlides((prevPaused) => {
+        const nextPaused = !prevPaused[slideId];
+        const iframe = iframeRefs.current[slideId];
+        if (iframe?.contentWindow) {
+          try {
+            iframe.contentWindow.postMessage(
+              JSON.stringify({
+                event: "command",
+                func: nextPaused ? "pauseVideo" : "playVideo",
+                args: [],
+              }),
+              "*"
+            );
+          } catch {}
+        }
+        return { ...prevPaused, [slideId]: nextPaused };
+      });
+
+      return prevPlaying;
+    });
+  }, []);
 
   // Send live volume updates to active YouTube iframe without reloading it
   const syncYoutubeVolume = useCallback(
@@ -128,65 +340,94 @@ export default function ShortsFeedPage() {
 
     const loadPool = async () => {
       setLoading(true);
+      const seenHistory = loadSeenShorts();
       const moviesWithTrailers: ShortFeedItem[] = [];
       const tvWithTrailers: ShortFeedItem[] = [];
       const animeWithTrailers: ShortFeedItem[] = [];
 
-      // 1. Fetch trending + popular Movies & TV Series and resolve their YouTube trailers
+      const randPage = (min: number, max: number) =>
+        Math.floor(Math.random() * (max - min + 1)) + min;
+
+      // 1. Fetch Trending + All-Time Best (Top-Rated & All-Time Popular) Movies & TV Series across randomized pages
       const tmdbTask = (async () => {
         try {
-          const [trendMovies, popMovies, trendTv, popTv] =
-            await Promise.allSettled([
-              fetchJson<{ results: any[] }>("/api/tmdb/trending?type=movie", {
-                skipCache: true,
-              }),
-              fetchJson<{ results: any[] }>("/api/tmdb/movies/popular", {
-                skipCache: true,
-              }),
-              fetchJson<{ results: any[] }>("/api/tmdb/trending?type=tv", {
-                skipCache: true,
-              }),
-              fetchJson<{ results: any[] }>("/api/tmdb/tv/popular", {
-                skipCache: true,
-              }),
-            ]);
+          const [
+            trendMovies,
+            topMovies,
+            popMovies,
+            trendTv,
+            topTv,
+            popTv,
+          ] = await Promise.allSettled([
+            fetchJson<{ results: any[] }>(
+              `/api/tmdb/trending?type=movie&page=${randPage(1, 3)}`,
+              { skipCache: true }
+            ),
+            fetchJson<{ results: any[] }>(
+              `/api/tmdb/movies/top-rated?page=${randPage(1, 5)}`,
+              { skipCache: true }
+            ),
+            fetchJson<{ results: any[] }>(
+              `/api/tmdb/movies/popular?page=${randPage(1, 4)}`,
+              { skipCache: true }
+            ),
+            fetchJson<{ results: any[] }>(
+              `/api/tmdb/trending?type=tv&page=${randPage(1, 3)}`,
+              { skipCache: true }
+            ),
+            fetchJson<{ results: any[] }>(
+              `/api/tmdb/tv/top-rated?page=${randPage(1, 5)}`,
+              { skipCache: true }
+            ),
+            fetchJson<{ results: any[] }>(
+              `/api/tmdb/tv/popular?page=${randPage(1, 4)}`,
+              { skipCache: true }
+            ),
+          ]);
 
-          const rawMovies: any[] = [];
-          if (trendMovies.status === "fulfilled" && Array.isArray(trendMovies.value?.results)) {
-            rawMovies.push(...trendMovies.value.results);
-          }
-          if (popMovies.status === "fulfilled" && Array.isArray(popMovies.value?.results)) {
-            rawMovies.push(...popMovies.value.results);
-          }
+          const trendingMoviesRaw =
+            trendMovies.status === "fulfilled" && Array.isArray(trendMovies.value?.results)
+              ? filterExcludeAnime(trendMovies.value.results)
+              : [];
+          const allTimeMoviesRaw = filterExcludeAnime([
+            ...(topMovies.status === "fulfilled" && Array.isArray(topMovies.value?.results)
+              ? topMovies.value.results
+              : []),
+            ...(popMovies.status === "fulfilled" && Array.isArray(popMovies.value?.results)
+              ? popMovies.value.results
+              : []),
+          ]);
 
-          const rawTv: any[] = [];
-          if (trendTv.status === "fulfilled" && Array.isArray(trendTv.value?.results)) {
-            rawTv.push(...trendTv.value.results);
-          }
-          if (popTv.status === "fulfilled" && Array.isArray(popTv.value?.results)) {
-            rawTv.push(...popTv.value.results);
-          }
+          const trendingTvRaw =
+            trendTv.status === "fulfilled" && Array.isArray(trendTv.value?.results)
+              ? filterExcludeAnime(trendTv.value.results)
+              : [];
+          const allTimeTvRaw = filterExcludeAnime([
+            ...(topTv.status === "fulfilled" && Array.isArray(topTv.value?.results)
+              ? topTv.value.results
+              : []),
+            ...(popTv.status === "fulfilled" && Array.isArray(popTv.value?.results)
+              ? popTv.value.results
+              : []),
+          ]);
 
-          const cleanMovies = filterExcludeAnime(rawMovies);
-          const cleanTv = filterExcludeAnime(rawTv);
+          const movieCandidates = pickRandomizedCandidates(
+            trendingMoviesRaw,
+            allTimeMoviesRaw,
+            (m) => (m?.id ? `movie-${m.id}` : null),
+            (m) => Boolean(m?.id && (m.backdrop_path || m.poster_path)),
+            18,
+            seenHistory
+          );
 
-          const seenMovies = new Set<number>();
-          const movieCandidates: any[] = [];
-          for (const m of cleanMovies) {
-            if (!m?.id || (!m.backdrop_path && !m.poster_path) || seenMovies.has(Number(m.id))) continue;
-            seenMovies.add(Number(m.id));
-            movieCandidates.push(m);
-            if (movieCandidates.length >= 16) break;
-          }
-
-          const seenTv = new Set<number>();
-          const tvCandidates: any[] = [];
-          for (const t of cleanTv) {
-            if (!t?.id || (!t.backdrop_path && !t.poster_path) || seenTv.has(Number(t.id))) continue;
-            seenTv.add(Number(t.id));
-            tvCandidates.push(t);
-            if (tvCandidates.length >= 16) break;
-          }
+          const tvCandidates = pickRandomizedCandidates(
+            trendingTvRaw,
+            allTimeTvRaw,
+            (t) => (t?.id ? `tv-${t.id}` : null),
+            (t) => Boolean(t?.id && (t.backdrop_path || t.poster_path)),
+            18,
+            seenHistory
+          );
 
           const [resolvedMovies, resolvedTv] = await Promise.all([
             Promise.allSettled(
@@ -247,30 +488,51 @@ export default function ShortsFeedPage() {
             ),
           ]);
 
+          const validMovies: ShortFeedItem[] = [];
           for (const r of resolvedMovies) {
-            if (r.status === "fulfilled" && r.value) moviesWithTrailers.push(r.value);
+            if (r.status === "fulfilled" && r.value) validMovies.push(r.value);
           }
+          const validTv: ShortFeedItem[] = [];
           for (const r of resolvedTv) {
-            if (r.status === "fulfilled" && r.value) tvWithTrailers.push(r.value);
+            if (r.status === "fulfilled" && r.value) validTv.push(r.value);
           }
+
+          moviesWithTrailers.push(...shuffleArray(validMovies));
+          tvWithTrailers.push(...shuffleArray(validTv));
         } catch {}
       })();
 
-      // 2. Fetch trending Anime with YouTube trailers from AniList
+      // 2. Fetch Trending + All-Time Best (Top Score & All-Time Popular) Anime with YouTube trailers from AniList
       const animeTask = (async () => {
         try {
+          const trendAnimePage = randPage(1, 3);
+          const topAnimePage = randPage(1, 5);
+          const popAnimePage = randPage(1, 4);
+          const mediaFields = `
+            id
+            title { english romaji }
+            description
+            coverImage { extraLarge large }
+            bannerImage
+            seasonYear
+            averageScore
+            trailer { id site }
+          `;
           const query = `
             query {
-              Page(page: 1, perPage: 22) {
+              trending: Page(page: ${trendAnimePage}, perPage: 25) {
                 media(type: ANIME, sort: TRENDING_DESC, isAdult: false) {
-                  id
-                  title { english romaji }
-                  description
-                  coverImage { extraLarge large }
-                  bannerImage
-                  seasonYear
-                  averageScore
-                  trailer { id site }
+                  ${mediaFields}
+                }
+              }
+              topRated: Page(page: ${topAnimePage}, perPage: 25) {
+                media(type: ANIME, sort: SCORE_DESC, isAdult: false) {
+                  ${mediaFields}
+                }
+              }
+              popular: Page(page: ${popAnimePage}, perPage: 25) {
+                media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
+                  ${mediaFields}
                 }
               }
             }
@@ -279,13 +541,31 @@ export default function ShortsFeedPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query }),
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(6000),
           });
           if (res.ok) {
             const json = await res.json();
-            const list = json?.data?.Page?.media || [];
-            for (const m of list) {
-              if (!m?.id || m.trailer?.site !== "youtube" || !m.trailer?.id) continue;
+            const trendingAnime = json?.data?.trending?.media || [];
+            const allTimeAnime = [
+              ...(json?.data?.topRated?.media || []),
+              ...(json?.data?.popular?.media || []),
+            ];
+
+            const pickedAnime = pickRandomizedCandidates(
+              trendingAnime,
+              allTimeAnime,
+              (m: any) => (m?.id ? `anime-${m.id}` : null),
+              (m: any) =>
+                Boolean(
+                  m?.id &&
+                    m.trailer?.site === "youtube" &&
+                    m.trailer?.id
+                ),
+              18,
+              seenHistory
+            );
+
+            for (const m of pickedAnime) {
               animeWithTrailers.push({
                 id: `anime-${m.id}`,
                 mediaId: Number(m.id),
@@ -308,7 +588,7 @@ export default function ShortsFeedPage() {
       await Promise.allSettled([tmdbTask, animeTask]);
       if (cancelled) return;
 
-      // Interleave 1:1:1 (Movie -> TV Series -> Anime) so "All" is a rich mix starting with a Movie!
+      // Interleave randomized triplets (Movie, TV Series, Anime) so every session feels fresh & balanced
       const combined: ShortFeedItem[] = [];
       const maxLen = Math.max(
         moviesWithTrailers.length,
@@ -316,14 +596,21 @@ export default function ShortsFeedPage() {
         animeWithTrailers.length
       );
       for (let i = 0; i < maxLen; i++) {
-        if (moviesWithTrailers[i]) combined.push(moviesWithTrailers[i]);
-        if (tvWithTrailers[i]) combined.push(tvWithTrailers[i]);
-        if (animeWithTrailers[i]) combined.push(animeWithTrailers[i]);
+        const roundItems = shuffleArray(
+          [
+            moviesWithTrailers[i],
+            tvWithTrailers[i],
+            animeWithTrailers[i],
+          ].filter(Boolean) as ShortFeedItem[]
+        );
+        combined.push(...roundItems);
       }
 
       setItems(combined);
       if (combined[0]) {
         setPlayingSlides({ [combined[0].id]: true });
+        setPausedSlides({ [combined[0].id]: false });
+        saveSeenShorts([...seenHistory, combined[0].id]);
       }
       setLoading(false);
     };
@@ -345,6 +632,25 @@ export default function ShortsFeedPage() {
       setPlayingSlides((prev) =>
         prev[activeItem.id] ? prev : { ...prev, [activeItem.id]: true }
       );
+      setPausedSlides((prev) => ({ ...prev, [activeItem.id]: false }));
+      // Ensure active iframe is playing and non-active iframes are paused
+      for (const [id, iframe] of Object.entries(iframeRefs.current)) {
+        if (!iframe?.contentWindow) continue;
+        try {
+          iframe.contentWindow.postMessage(
+            JSON.stringify({
+              event: "command",
+              func: id === activeItem.id ? "playVideo" : "pauseVideo",
+              args: [],
+            }),
+            "*"
+          );
+        } catch {}
+      }
+      const seen = loadSeenShorts();
+      if (!seen.includes(activeItem.id)) {
+        saveSeenShorts([...seen, activeItem.id]);
+      }
     }
   }, [activeIndex, filteredItems]);
 
@@ -361,7 +667,7 @@ export default function ShortsFeedPage() {
     [filteredItems.length]
   );
 
-  // Keyboard Up / Down navigation
+  // Keyboard Up / Down / Space / Mute navigation
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown" || e.key === "j") {
@@ -372,11 +678,17 @@ export default function ShortsFeedPage() {
         scrollToSlide(activeIndex - 1);
       } else if (e.key === "m") {
         toggleMute();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        const activeItem = filteredItems[activeIndex];
+        if (activeItem) {
+          togglePlayPause(activeItem.id, activeIndex);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeIndex, scrollToSlide, toggleMute]);
+  }, [activeIndex, filteredItems, scrollToSlide, toggleMute, togglePlayPause]);
 
   const VolumeIcon = isMuted ? VolumeX : volume < 50 ? Volume1 : Volume2;
 
@@ -467,6 +779,8 @@ export default function ShortsFeedPage() {
             const isTrailerPlaying = Boolean(
               isActive && playingSlides[item.id] && item.trailerKey
             );
+            const isPaused = Boolean(pausedSlides[item.id]);
+            const isActivelyPlaying = isTrailerPlaying && !isPaused;
             const inWatchlist = Boolean(
               watchlist?.isSaved?.(item.mediaId, item.mediaType)
             );
@@ -474,7 +788,12 @@ export default function ShortsFeedPage() {
             return (
               <div
                 key={item.id}
-                className="relative w-full h-[100dvh] snap-start snap-always flex items-center justify-center overflow-hidden bg-black"
+                onClick={(e) => {
+                  const target = e.target as HTMLElement | null;
+                  if (target?.closest("[data-shorts-ui]")) return;
+                  togglePlayPause(item.id, idx);
+                }}
+                className="relative w-full h-[100dvh] snap-start snap-always flex items-center justify-center overflow-hidden bg-black cursor-pointer"
               >
                 {/* Ambient blurred backdrop */}
                 {(item.backdrop || item.poster) && (
@@ -496,8 +815,17 @@ export default function ShortsFeedPage() {
                         key={item.id}
                         src={`https://www.youtube-nocookie.com/embed/${item.trailerKey}?autoplay=1&enablejsapi=1&controls=1&loop=1&playlist=${item.trailerKey}&rel=0&modestbranding=1&playsinline=1`}
                         onLoad={() => {
-                          setTimeout(() => syncYoutubeVolume(volume, item.id), 250);
-                          setTimeout(() => syncYoutubeVolume(volume, item.id), 900);
+                          setTimeout(() => {
+                            syncYoutubeVolume(volume, item.id);
+                            registerYoutubeListener(item.id);
+                          }, 200);
+                          setTimeout(() => {
+                            syncYoutubeVolume(volume, item.id);
+                            registerYoutubeListener(item.id);
+                          }, 700);
+                          setTimeout(() => {
+                            registerYoutubeListener(item.id);
+                          }, 1400);
                         }}
                         className="w-full h-full border-0 pointer-events-auto"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -517,11 +845,16 @@ export default function ShortsFeedPage() {
                       <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
                         <button
                           type="button"
+                          data-shorts-ui="true"
                           onClick={() => {
                             setActiveIndex(idx);
                             setPlayingSlides((prev) => ({
                               ...prev,
                               [item.id]: true,
+                            }));
+                            setPausedSlides((prev) => ({
+                              ...prev,
+                              [item.id]: false,
                             }));
                           }}
                           aria-label={`Play ${item.title} trailer`}
@@ -540,10 +873,23 @@ export default function ShortsFeedPage() {
                   )}
                 </div>
 
-                {/* Bottom Gradient & Title Info Overlay */}
-                <div className="absolute inset-x-0 bottom-0 h-60 bg-gradient-to-t from-black via-black/65 to-transparent pointer-events-none" />
+                {/* Bottom Gradient & Title Info Overlay — Hidden while trailer is actively playing, reappears when paused */}
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-60 bg-gradient-to-t from-black via-black/65 to-transparent pointer-events-none transition-opacity duration-300",
+                    isActivelyPlaying ? "opacity-0" : "opacity-100"
+                  )}
+                />
 
-                <div className="absolute bottom-7 left-4 sm:left-10 right-20 sm:right-28 z-30 max-w-2xl space-y-2.5 pointer-events-auto">
+                <div
+                  data-shorts-ui="true"
+                  className={cn(
+                    "absolute bottom-7 left-4 sm:left-10 right-20 sm:right-28 z-30 max-w-2xl space-y-2.5 transition-all duration-300",
+                    isActivelyPlaying
+                      ? "opacity-0 translate-y-4 pointer-events-none"
+                      : "opacity-100 translate-y-0 pointer-events-auto"
+                  )}
+                >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/15 border border-white/15 backdrop-blur-md text-[10px] font-black uppercase tracking-wider text-white">
                       <SiYoutube className="w-3 h-3 text-[#FF0000]" />
@@ -593,7 +939,10 @@ export default function ShortsFeedPage() {
                 </div>
 
                 {/* Right-Side Vertical Action Rail */}
-                <div className="absolute right-3 sm:right-8 bottom-10 z-30 flex flex-col items-center gap-3.5">
+                <div
+                  data-shorts-ui="true"
+                  className="absolute right-3 sm:right-8 bottom-10 z-30 flex flex-col items-center gap-3.5"
+                >
                   {item.poster && (
                     <Link
                       href={item.detailHref}
@@ -631,6 +980,26 @@ export default function ShortsFeedPage() {
                       <Check className="w-5 h-5 stroke-[2.5]" />
                     ) : (
                       <Plus className="w-5 h-5" />
+                    )}
+                  </button>
+
+                  {/* Pause / Play Toggle Button (above volume slider) */}
+                  <button
+                    type="button"
+                    onClick={() => togglePlayPause(item.id, idx)}
+                    className={cn(
+                      "w-12 h-12 rounded-full border backdrop-blur-2xl flex items-center justify-center transition-all cursor-pointer shadow-xl",
+                      !isActivelyPlaying
+                        ? "bg-white text-black border-white"
+                        : "bg-black/60 hover:bg-white/20 text-white border-white/20"
+                    )}
+                    title={isActivelyPlaying ? "Pause Trailer & Show Info" : "Play Trailer & Hide Info"}
+                    aria-label={isActivelyPlaying ? "Pause Trailer" : "Play Trailer"}
+                  >
+                    {isActivelyPlaying ? (
+                      <Pause className="w-5 h-5 fill-current" />
+                    ) : (
+                      <Play className="w-5 h-5 fill-current ml-0.5" />
                     )}
                   </button>
 
