@@ -734,6 +734,8 @@ export default function Home() {
   const [genres, setGenres] = useState<Genre[]>(() => globalHomeCache?.genres || loadHomeFeedFromStorage()?.genres || []);
   const [isLoading, setIsLoading] = useState(() => {
     if (globalHomeCache?.heroPool && globalHomeCache.heroPool.length > 0) return false;
+    const stored = loadHomeFeedFromStorage();
+    if (stored?.trending && stored.trending.length > 0) return false;
     return true;
   });
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -750,7 +752,12 @@ export default function Home() {
     return true;
   });
   const [heroArtworkReady, setHeroArtworkReady] = useState(true);
-  const [revealedSections, setRevealedSections] = useState(2);
+  const [revealedSections, setRevealedSections] = useState(() => {
+    if (globalHomeCache?.trending?.length || loadHomeFeedFromStorage()?.trending?.length) {
+      return 8;
+    }
+    return 2;
+  });
   const [moodSeed, setMoodSeed] = useState("");
   const [customSections, setCustomSections] = useState<any[]>(() => {
     if (globalCustomSectionsCache !== null) {
@@ -777,7 +784,8 @@ export default function Home() {
   });
   const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [timerReset, setTimerReset] = useState(0);
-  usePageContentReady(!isLoading);
+  // Immediately mark page ready so returning via top-left CineStream logo never stalls on NavigationLoader
+  usePageContentReady(true);
 
   const heroPoolLengthRef = useRef(0);
 

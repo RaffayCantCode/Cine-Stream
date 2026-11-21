@@ -151,6 +151,9 @@ export const Sidebar = memo(function Sidebar() {
   // only exist while the menu is open, so Next cannot auto-prefetch the routes
   // — warm both the data and the route payloads explicitly.
   useEffect(() => {
+    if (pathname !== "/") {
+      router.prefetch("/");
+    }
     prefetchPrimaryBrowse(pathname);
     prefetchPrimaryBrowseRoutes((href) => router.prefetch(href));
   }, [pathname, router]);
@@ -185,6 +188,9 @@ export const Sidebar = memo(function Sidebar() {
       {/* ── Desktop Top-Left Brand Logo Button (navigates to Home) ── */}
       <Link
         href="/"
+        prefetch={true}
+        onMouseEnter={() => router.prefetch("/")}
+        onPointerDown={() => router.prefetch("/")}
         className="hidden md:flex fixed top-4 left-6 z-[60] items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-black/40 hover:bg-black/70 border border-white/10 backdrop-blur-xl transition-all duration-200 hover:scale-[1.03] active:scale-95 group shadow-lg"
         aria-label="CineStream Home"
         title="Go to Home"

@@ -56,6 +56,107 @@ function formatLanguage(code?: string | null): string | null {
   return map[code.toLowerCase()] || code.toUpperCase();
 }
 
+/**
+ * Checks whether a TMDB studio/network logo has a transparent background.
+ * Some TMDB logos are solid-background PNGs or JPEGs — applying `brightness-0 invert`
+ * to a solid-background image turns the entire rectangle into a solid white block!
+ * We sample corner/edge alpha and total opaque ratio on an offscreen canvas;
+ * if it's a solid box, we render a clean typographic wordmark instead.
+ */
+const StudioLogoMark = memo(function StudioLogoMark({
+  name,
+  logoPath,
+  href,
+}: {
+  name: string;
+  logoPath?: string | null;
+  href: string;
+}) {
+  const isNonTransparentExt =
+    !logoPath || /\.(jpe?g|bmp)$/i.test(logoPath);
+  const [useTextFallback, setUseTextFallback] = useState(isNonTransparentExt);
+  const [verified, setVerified] = useState(false);
+
+  const src =
+    logoPath && !isNonTransparentExt
+      ? `https://image.tmdb.org/t/p/w300${logoPath}`
+      : null;
+
+  const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    try {
+      const w = 24;
+      const h = 24;
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        setVerified(true);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+
+      // Check 4 corners
+      const cornerIndices = [
+        0,
+        (w - 1) * 4,
+        (h - 1) * w * 4,
+        ((h - 1) * w + (w - 1)) * 4,
+      ];
+      let opaqueCorners = 0;
+      for (const idx of cornerIndices) {
+        if (data[idx + 3] > 160) opaqueCorners++;
+      }
+
+      // Count total opaque pixels across the 24x24 grid
+      let opaqueCount = 0;
+      const totalPixels = w * h;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 180) opaqueCount++;
+      }
+      const opaqueRatio = opaqueCount / totalPixels;
+
+      // If 3+ corners are opaque OR >72% of the bounding box is solid,
+      // brightness-0 invert will look like a solid white rectangle/line.
+      if (opaqueCorners >= 3 || opaqueRatio > 0.72 || opaqueCount < 8) {
+        setUseTextFallback(true);
+      } else {
+        setVerified(true);
+      }
+    } catch {
+      // If CORS prevents reading canvas data, show the image normally
+      setVerified(true);
+    }
+  };
+
+  return (
+    <Link
+      href={href}
+      title={`Browse all titles from ${name}`}
+      className="group inline-flex items-center justify-center opacity-75 hover:opacity-100 transition-all duration-200 hover:scale-105"
+    >
+      {src && !useTextFallback ? (
+        <img
+          src={src}
+          alt={name}
+          crossOrigin="anonymous"
+          onLoad={handleLoad}
+          onError={() => setUseTextFallback(true)}
+          className={`max-h-7 sm:max-h-9 max-w-[110px] sm:max-w-[125px] w-auto object-contain brightness-0 invert transition-opacity duration-200 ${
+            verified ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      ) : (
+        <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] sm:text-xs font-black uppercase tracking-[0.16em] text-white/80 group-hover:text-white group-hover:border-white/25 transition-all">
+          {name}
+        </span>
+      )}
+    </Link>
+  );
+});
+
 export const MediaSpecsCard = memo(function MediaSpecsCard({
   mediaType,
   status,
@@ -73,6 +174,10 @@ export const MediaSpecsCard = memo(function MediaSpecsCard({
   const [endsAtText, setEndsAtText] = useState<string | null>(null);
 
   useEffect(() => {
+    if (mediaType !== "movie") {
+      setEndsAtText(null);
+      return;
+    }
     const mins = Number(runtimeMinutes || 0);
     if (!Number.isFinite(mins) || mins <= 0 || mins > 1440) {
       setEndsAtText(null);
@@ -92,7 +197,7 @@ export const MediaSpecsCard = memo(function MediaSpecsCard({
     compute();
     const timer = setInterval(compute, 30_000);
     return () => clearInterval(timer);
-  }, [runtimeMinutes]);
+  }, [runtimeMinutes, mediaType]);
 
   const formattedLang = formatLanguage(language);
   const formattedBudget = formatFullCurrency(budget);
@@ -159,25 +264,8 @@ export const MediaSpecsCard = memo(function MediaSpecsCard({
     if (episodesCount && episodesCount > 0) {
       rows.push({ label: "Episodes", value: String(episodesCount) });
     }
-    if (runtimeLabel && rows.length < 5) {
-      rows.push({
-        label: "Runtime",
-        value: (
-          <span>
-            <span className="text-white font-semibold">{runtimeLabel}</span>
-            {endsAtText && (
-              <span className="text-white/45 font-medium">
-                {" "}
-                • Ends {endsAtText}
-              </span>
-            )}
-          </span>
-        ),
-      });
-    }
   }
 
-  // Prefer networks with logos on TV, studios with logos on Movie
   const primaryCompanies =
     mediaType === "tv" && networks.length > 0
       ? networks.map((n) => ({ ...n, kind: "network" as const }))
@@ -210,7 +298,7 @@ export const MediaSpecsCard = memo(function MediaSpecsCard({
       )}
 
       {displayCompanies.length > 0 && (
-        <div className="flex items-center justify-center gap-7 sm:gap-9 flex-wrap px-2">
+        <div className="flex items-center justify-center gap-6 sm:gap-8 flex-wrap px-2">
           {displayCompanies.map((comp, idx) => {
             const href =
               comp.kind === "network" && comp.id
@@ -220,24 +308,12 @@ export const MediaSpecsCard = memo(function MediaSpecsCard({
                 : `/search?q=${encodeURIComponent(comp.name)}`;
 
             return (
-              <Link
+              <StudioLogoMark
                 key={`${comp.id || idx}-${comp.name}`}
+                name={comp.name}
+                logoPath={comp.logo_path}
                 href={href}
-                title={`Browse all titles from ${comp.name}`}
-                className="group inline-flex items-center justify-center opacity-70 hover:opacity-100 transition-all duration-200 hover:scale-105"
-              >
-                {comp.logo_path ? (
-                  <img
-                    src={`https://image.tmdb.org/t/p/w300${comp.logo_path}`}
-                    alt={comp.name}
-                    className="max-h-8 sm:max-h-10 max-w-[115px] sm:max-w-[130px] w-auto object-contain brightness-0 invert"
-                  />
-                ) : (
-                  <span className="text-xs sm:text-sm font-black uppercase tracking-[0.18em] text-white/75 group-hover:text-white">
-                    {comp.name}
-                  </span>
-                )}
-              </Link>
+              />
             );
           })}
         </div>

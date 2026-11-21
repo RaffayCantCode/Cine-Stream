@@ -7,34 +7,23 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  LayoutGrid,
-  List,
   Play,
   Star,
+  Film,
   Tv,
   Sparkles,
   Bookmark,
-  Clock,
+  Flame,
+  Layers,
+  Repeat,
 } from "lucide-react";
+import { SiNetflix, SiAppletv, SiCrunchyroll, SiImdb } from "react-icons/si";
 import { Sidebar } from "@/components/Sidebar";
+import { ProviderIcon } from "@/components/ProviderIcon";
 import { useWatchlist } from "@/context/WatchlistContext";
 import { usePageContentReady } from "@/lib/pageLoad";
-import { fetchJson, filterExcludeAnime, cn } from "@/lib/utils";
-
-interface CalendarReleaseItem {
-  id: string;
-  mediaId: number | string;
-  mediaType: "tv" | "anime";
-  title: string;
-  poster: string | null;
-  backdrop: string | null;
-  dateIso: string; // YYYY-MM-DD
-  timeLabel?: string | null;
-  episodeLabel?: string | null;
-  rating?: number | null;
-  detailHref: string;
-  watchHref: string;
-}
+import { fetchJson, cn } from "@/lib/utils";
+import type { CalendarApiItem } from "@/app/api/calendar/route";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -64,9 +53,11 @@ export default function ReleaseCalendarPage() {
     () => new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [selectedDateIso, setSelectedDateIso] = useState<string>(todayIso);
-  const [filterMode, setFilterMode] = useState<"all" | "watchlist" | "tv" | "anime">("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [items, setItems] = useState<CalendarReleaseItem[]>([]);
+  // Media category selector: TV Series (default), Movies, Anime, or My Watchlist
+  const [filterMode, setFilterMode] = useState<"tv" | "movie" | "anime" | "watchlist">("tv");
+  // Scope toggle: "top" = Top & Trending Hits (default, clean & fast!) vs "all" = All Normal Releases
+  const [scopeMode, setScopeMode] = useState<"top" | "all">("top");
+  const [items, setItems] = useState<CalendarApiItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const monthRange = useMemo(() => {
@@ -95,10 +86,8 @@ export default function ReleaseCalendarPage() {
     }
 
     return {
-      firstIso: toIsoDate(firstDay),
-      lastIso: toIsoDate(lastDay),
-      startUnix: Math.floor(firstDay.getTime() / 1000),
-      endUnix: Math.floor(new Date(year, month + 1, 0, 23, 59, 59).getTime() / 1000),
+      year,
+      month: month + 1,
       cells,
       monthLabel: firstDay.toLocaleDateString("en-US", {
         month: "long",
@@ -111,163 +100,28 @@ export default function ReleaseCalendarPage() {
     let cancelled = false;
     setLoading(true);
 
-    const loadSchedule = async () => {
-      const collected: CalendarReleaseItem[] = [];
+    fetchJson<{ items: CalendarApiItem[] }>(
+      `/api/calendar?year=${monthRange.year}&month=${monthRange.month}`
+    )
+      .then((data) => {
+        if (cancelled) return;
+        setItems(Array.isArray(data?.items) ? data.items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-      // 1. Fetch TMDB TV releases in this month + airing today
-      const tmdbTask = (async () => {
-        try {
-          const [p1, p2, airingToday] = await Promise.allSettled([
-            fetchJson<{ results: any[] }>(
-              `/api/tmdb/discover/tv?sortBy=popularity.desc&airDateGte=${monthRange.firstIso}&airDateLte=${monthRange.lastIso}&page=1`
-            ),
-            fetchJson<{ results: any[] }>(
-              `/api/tmdb/discover/tv?sortBy=popularity.desc&airDateGte=${monthRange.firstIso}&airDateLte=${monthRange.lastIso}&page=2`
-            ),
-            fetchJson<{ results: any[] }>("/api/tmdb/tv/airing-today"),
-          ]);
-
-          const rawTv: any[] = [];
-          if (p1.status === "fulfilled" && Array.isArray(p1.value?.results)) {
-            rawTv.push(...p1.value.results);
-          }
-          if (p2.status === "fulfilled" && Array.isArray(p2.value?.results)) {
-            rawTv.push(...p2.value.results);
-          }
-          if (
-            airingToday.status === "fulfilled" &&
-            Array.isArray(airingToday.value?.results)
-          ) {
-            for (const show of airingToday.value.results) {
-              rawTv.push({ ...show, _airingTodayIso: todayIso });
-            }
-          }
-
-          const cleanTv = filterExcludeAnime(rawTv);
-          const seenTv = new Set<string>();
-
-          for (const show of cleanTv) {
-            if (!show?.id || (!show.poster_path && !show.backdrop_path)) continue;
-            const dateIso = show._airingTodayIso || show.first_air_date;
-            if (!dateIso || dateIso < monthRange.firstIso || dateIso > monthRange.lastIso) {
-              continue;
-            }
-            const key = `tv-${show.id}-${dateIso}`;
-            if (seenTv.has(key)) continue;
-            seenTv.add(key);
-
-            collected.push({
-              id: key,
-              mediaId: show.id,
-              mediaType: "tv",
-              title: show.name || show.title || "TV Series",
-              poster: show.poster_path
-                ? `https://image.tmdb.org/t/p/w342${show.poster_path}`
-                : null,
-              backdrop: show.backdrop_path
-                ? `https://image.tmdb.org/t/p/w780${show.backdrop_path}`
-                : null,
-              dateIso,
-              episodeLabel: show._airingTodayIso ? "New Episode" : "Season Premiere",
-              rating: show.vote_average || null,
-              detailHref: `/tv/${show.id}`,
-              watchHref: `/watch/tv/${show.id}/1/1`,
-            });
-          }
-        } catch {}
-      })();
-
-      // 2. Fetch AniList AiringSchedule for this month (up to 2 pages)
-      const animeTask = (async () => {
-        try {
-          const query = `
-            query ($start: Int, $end: Int, $page: Int) {
-              Page(page: $page, perPage: 50) {
-                airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) {
-                  id
-                  episode
-                  airingAt
-                  media {
-                    id
-                    isAdult
-                    title { english romaji }
-                    coverImage { large extraLarge }
-                    bannerImage
-                    averageScore
-                    format
-                  }
-                }
-              }
-            }
-          `;
-          const pages = await Promise.allSettled(
-            [1, 2].map((page) =>
-              fetch("https://graphql.anilist.co", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  query,
-                  variables: {
-                    start: monthRange.startUnix,
-                    end: monthRange.endUnix,
-                    page,
-                  },
-                }),
-                signal: AbortSignal.timeout(5500),
-              }).then((r) => (r.ok ? r.json() : null))
-            )
-          );
-
-          const seenAnime = new Set<string>();
-          for (const res of pages) {
-            if (res.status !== "fulfilled" || !res.value?.data?.Page?.airingSchedules) continue;
-            for (const sched of res.value.data.Page.airingSchedules) {
-              const media = sched?.media;
-              if (!media || media.isAdult) continue;
-              const airDate = new Date(sched.airingAt * 1000);
-              const dateIso = toIsoDate(airDate);
-              const key = `anime-${media.id}-ep${sched.episode}-${dateIso}`;
-              if (seenAnime.has(key)) continue;
-              seenAnime.add(key);
-
-              collected.push({
-                id: key,
-                mediaId: media.id,
-                mediaType: "anime",
-                title: media.title?.english || media.title?.romaji || "Anime",
-                poster: media.coverImage?.extraLarge || media.coverImage?.large || null,
-                backdrop: media.bannerImage || media.coverImage?.extraLarge || null,
-                dateIso,
-                timeLabel: airDate.toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                }),
-                episodeLabel: `Episode ${sched.episode}`,
-                rating: media.averageScore ? media.averageScore / 10 : null,
-                detailHref: `/anime/${media.id}`,
-                watchHref: `/watch/anime/${media.id}/${sched.episode || 1}`,
-              });
-            }
-          }
-        } catch {}
-      })();
-
-      await Promise.allSettled([tmdbTask, animeTask]);
-      if (cancelled) return;
-
-      collected.sort((a, b) => a.dateIso.localeCompare(b.dateIso));
-      setItems(collected);
-      setLoading(false);
-    };
-
-    void loadSchedule();
     return () => {
       cancelled = true;
     };
-  }, [monthRange, todayIso]);
+  }, [monthRange.year, monthRange.month]);
 
-  const filteredItems = useMemo(() => {
+  const categoryItems = useMemo(() => {
     return items.filter((it) => {
+      if (filterMode === "movie") return it.mediaType === "movie";
       if (filterMode === "tv") return it.mediaType === "tv";
       if (filterMode === "anime") return it.mediaType === "anime";
       if (filterMode === "watchlist") {
@@ -280,8 +134,16 @@ export default function ReleaseCalendarPage() {
     });
   }, [items, filterMode, watchlistIds]);
 
+  const filteredItems = useMemo(() => {
+    if (scopeMode === "all" || filterMode === "watchlist") {
+      return categoryItems;
+    }
+    const topOnly = categoryItems.filter((it) => it.isTop);
+    return topOnly.length > 0 ? topOnly : categoryItems;
+  }, [categoryItems, scopeMode, filterMode]);
+
   const byDate = useMemo(() => {
-    const map = new Map<string, CalendarReleaseItem[]>();
+    const map = new Map<string, CalendarApiItem[]>();
     for (const it of filteredItems) {
       const list = map.get(it.dateIso) || [];
       list.push(it);
@@ -289,6 +151,20 @@ export default function ReleaseCalendarPage() {
     }
     return map;
   }, [filteredItems]);
+
+  // Automatically select today (if it has items) or the nearest date with items when switching tabs
+  useEffect(() => {
+    if (loading) return;
+    if ((byDate.get(selectedDateIso) || []).length > 0) return;
+    if ((byDate.get(todayIso) || []).length > 0) {
+      setSelectedDateIso(todayIso);
+      return;
+    }
+    const firstWithItems = Array.from(byDate.keys())[0];
+    if (firstWithItems) {
+      setSelectedDateIso(firstWithItems);
+    }
+  }, [filterMode, scopeMode, byDate, loading, selectedDateIso, todayIso]);
 
   const selectedDayItems = byDate.get(selectedDateIso) || [];
 
@@ -302,39 +178,55 @@ export default function ReleaseCalendarPage() {
     setSelectedDateIso(toIsoDate(next));
   };
 
+  const scopeNoun =
+    filterMode === "movie"
+      ? "Movies"
+      : filterMode === "anime"
+      ? "Anime"
+      : "Shows";
+
   return (
     <div className="min-h-screen bg-background text-foreground pb-28">
       <Sidebar />
 
-      <main className="w-full pt-16 md:pt-24 lg:pt-28 px-4 sm:px-6 md:px-10 lg:px-12 max-w-[1460px] mx-auto space-y-8">
-        {/* Header & Controls */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 border-b border-white/[0.08] pb-6">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shadow-lg">
+      <main className="w-full pt-16 md:pt-24 lg:pt-28 px-4 sm:px-6 md:px-10 lg:px-12 max-w-[1480px] mx-auto space-y-6">
+        {/* Clean, Intuitive Header & Controls */}
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 border-b border-white/[0.08] pb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/15 backdrop-blur-2xl flex items-center justify-center text-white shadow-xl shrink-0">
               <CalendarDays className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
-                Release Calendar
-              </h1>
-              <p className="text-xs sm:text-sm text-white/50 mt-0.5">
-                Track upcoming TV episodes, premieres &amp; anime broadcasts
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
+                  Release Calendar
+                </h1>
+                <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-white/[0.04] border border-white/[0.08]">
+                  <SiNetflix className="w-3.5 h-3.5 text-[#E50914]" />
+                  <SiAppletv className="w-4 h-4 text-white" />
+                  <ProviderIcon slug="hbo-max" className="w-5 h-3 opacity-90" />
+                  <SiCrunchyroll className="w-3.5 h-3.5 text-[#F47521]" />
+                  <SiImdb className="w-4 h-4 text-[#F5C518]" />
+                </div>
+              </div>
+              <p className="text-xs sm:text-sm text-white/55 mt-0.5">
+                Pick a day on the calendar to see what drops — ongoing shows repeat every week on their air day
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Filter Tabs */}
-            <div className="inline-flex items-center gap-1 p-1 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+            {/* 1. Category Selector: TV Series | Movies | Anime | My Watchlist */}
+            <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-white/[0.04] border border-white/[0.1] backdrop-blur-2xl">
               {(
                 [
-                  { id: "all", label: "All Shows" },
-                  { id: "watchlist", label: "My Shows", icon: Bookmark },
                   { id: "tv", label: "TV Series", icon: Tv },
+                  { id: "movie", label: "Movies", icon: Film },
                   { id: "anime", label: "Anime", icon: Sparkles },
+                  { id: "watchlist", label: "My Watchlist", icon: Bookmark },
                 ] as const
               ).map((tab) => {
-                const Icon = (tab as any).icon;
+                const Icon = tab.icon;
                 const active = filterMode === tab.id;
                 return (
                   <button
@@ -342,60 +234,65 @@ export default function ReleaseCalendarPage() {
                     type="button"
                     onClick={() => setFilterMode(tab.id)}
                     className={cn(
-                      "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer",
+                      "inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer",
                       active
-                        ? "bg-white text-black shadow-sm"
-                        : "text-white/60 hover:text-white"
+                        ? "bg-white text-black shadow-md"
+                        : "text-white/60 hover:text-white hover:bg-white/[0.05]"
                     )}
                   >
-                    {Icon && <Icon className="w-3.5 h-3.5" />}
+                    <Icon className="w-3.5 h-3.5" />
                     <span>{tab.label}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Grid vs List View Toggle */}
-            <div className="inline-flex items-center gap-1 p-1 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer",
-                  viewMode === "grid"
-                    ? "bg-emerald-500 text-black"
-                    : "text-white/60 hover:text-white"
-                )}
+            {/* 2. Simple Scope Setting: Top & Trending vs All Normal Releases */}
+            {filterMode !== "watchlist" && (
+              <div
+                className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-white/[0.04] border border-white/[0.1] backdrop-blur-2xl"
+                title="Switch between only the biggest trending hits or all normal releases"
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Calendar</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer",
-                  viewMode === "list"
-                    ? "bg-emerald-500 text-black"
-                    : "text-white/60 hover:text-white"
-                )}
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>List View</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setScopeMode("top")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer",
+                    scopeMode === "top"
+                      ? "bg-white text-black shadow-md"
+                      : "text-white/60 hover:text-white"
+                  )}
+                >
+                  <Flame className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Top {scopeNoun}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScopeMode("all")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer",
+                    scopeMode === "all"
+                      ? "bg-white text-black shadow-md"
+                      : "text-white/60 hover:text-white"
+                  )}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>All {scopeNoun}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Month Navigation Bar */}
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] backdrop-blur-xl px-4 sm:px-6 py-3.5">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.09] bg-white/[0.025] backdrop-blur-2xl px-4 sm:px-6 py-3">
           <button
             type="button"
             onClick={() => changeMonth(-1)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 text-xs font-bold text-white transition-all cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Previous</span>
+            <span className="hidden sm:inline">Prev Month</span>
           </button>
 
           <div className="flex items-center gap-3">
@@ -408,9 +305,9 @@ export default function ReleaseCalendarPage() {
                 setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
                 setSelectedDateIso(todayIso);
               }}
-              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/30 text-[11px] font-black text-emerald-300 transition-colors cursor-pointer"
+              className="px-3 py-1 rounded-lg bg-white/[0.08] hover:bg-white text-white hover:text-black border border-white/15 text-[11px] font-black transition-colors cursor-pointer"
             >
-              Today
+              Jump to Today
             </button>
           </div>
 
@@ -419,74 +316,77 @@ export default function ReleaseCalendarPage() {
             onClick={() => changeMonth(1)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 text-xs font-bold text-white transition-all cursor-pointer"
           >
-            <span className="hidden sm:inline">Next</span>
+            <span className="hidden sm:inline">Next Month</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {viewMode === "grid" ? (
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            {/* Mon-Sun Monthly Calendar Grid */}
-            <div className="xl:col-span-8 rounded-3xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-xl p-3 sm:p-5 shadow-2xl">
-              <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">
-                {WEEKDAYS.map((day) => (
-                  <div
-                    key={day}
-                    className="text-center text-[11px] sm:text-xs font-black uppercase tracking-wider text-white/40 py-1.5"
+        {/* Main Calendar Grid + Selected Day Breakdown Panel */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          {/* Mon-Sun Monthly Calendar Grid */}
+          <div className="xl:col-span-8 rounded-3xl border border-white/[0.09] bg-white/[0.02] backdrop-blur-2xl p-3 sm:p-5 shadow-2xl">
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5 mb-2">
+              {WEEKDAYS.map((day) => (
+                <div
+                  key={day}
+                  className="text-center text-[11px] sm:text-xs font-black uppercase tracking-wider text-white/45 py-1.5"
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
+              {monthRange.cells.map((cell) => {
+                const dayReleases = byDate.get(cell.iso) || [];
+                const isToday = cell.iso === todayIso;
+                const isSelected = cell.iso === selectedDateIso;
+
+                return (
+                  <button
+                    key={cell.iso}
+                    type="button"
+                    onClick={() => setSelectedDateIso(cell.iso)}
+                    className={cn(
+                      "group relative min-h-[96px] sm:min-h-[124px] rounded-2xl border p-2 flex flex-col justify-between text-left transition-all cursor-pointer overflow-hidden",
+                      !cell.inMonth && "opacity-30",
+                      isSelected
+                        ? "border-white bg-white/[0.13] ring-1 ring-white/50 shadow-[0_0_25px_rgba(255,255,255,0.12)]"
+                        : isToday
+                        ? "border-white/45 bg-white/[0.07]"
+                        : "border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/20"
+                    )}
                   >
-                    {day}
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-                {monthRange.cells.map((cell) => {
-                  const dayReleases = byDate.get(cell.iso) || [];
-                  const isToday = cell.iso === todayIso;
-                  const isSelected = cell.iso === selectedDateIso;
-
-                  return (
-                    <button
-                      key={cell.iso}
-                      type="button"
-                      onClick={() => setSelectedDateIso(cell.iso)}
-                      className={cn(
-                        "relative min-h-[82px] sm:min-h-[108px] rounded-2xl border p-1.5 sm:p-2 flex flex-col justify-between text-left transition-all cursor-pointer overflow-hidden",
-                        !cell.inMonth && "opacity-35",
-                        isSelected
-                          ? "border-emerald-400 bg-emerald-500/15 ring-1 ring-emerald-400/50 shadow-lg"
-                          : isToday
-                          ? "border-sky-400/60 bg-sky-500/10"
-                          : "border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/20"
-                      )}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span
-                          className={cn(
-                            "text-xs sm:text-sm font-black leading-none",
-                            isToday
-                              ? "text-sky-300"
-                              : isSelected
-                              ? "text-emerald-300"
-                              : "text-white/80"
-                          )}
-                        >
-                          {cell.date.getDate()}
-                        </span>
-                        {dayReleases.length > 0 && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-black/70 border border-white/15 text-[9px] font-black text-white/80">
-                            {dayReleases.length}
+                    {/* Day Number & Release Count */}
+                    <div className="flex items-center justify-between w-full">
+                      <span
+                        className={cn(
+                          "text-xs sm:text-sm font-black leading-none flex items-center gap-1",
+                          isToday || isSelected ? "text-white" : "text-white/75"
+                        )}
+                      >
+                        <span>{cell.date.getDate()}</span>
+                        {isToday && (
+                          <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-white text-black text-[8px] font-black uppercase">
+                            Today
                           </span>
                         )}
-                      </div>
-
-                      {/* Stacked Mini-Posters (Cinejoy style) */}
+                      </span>
                       {dayReleases.length > 0 && (
-                        <div className="flex items-center -space-x-2.5 overflow-hidden pt-1 w-full">
+                        <span className="px-1.5 py-0.5 rounded-md bg-black/75 border border-white/15 text-[9px] font-black text-white/85">
+                          {dayReleases.length}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Visual Poster Thumbnails + Top Title Preview */}
+                    {dayReleases.length > 0 ? (
+                      <div className="space-y-1.5 w-full pt-1.5">
+                        <div className="flex items-center -space-x-2 overflow-hidden w-full">
                           {dayReleases.slice(0, 3).map((rel) => (
                             <div
                               key={rel.id}
-                              className="w-6 h-8 sm:w-8 sm:h-11 rounded-md overflow-hidden ring-1 ring-black/90 bg-zinc-900 shrink-0 shadow-md"
+                              className="w-7 h-10 sm:w-8 sm:h-11 rounded-md overflow-hidden ring-1 ring-black/90 bg-zinc-900 shrink-0 shadow-md"
                             >
                               {rel.poster ? (
                                 <img
@@ -501,194 +401,131 @@ export default function ReleaseCalendarPage() {
                             </div>
                           ))}
                           {dayReleases.length > 3 && (
-                            <div className="w-6 h-8 sm:w-7 sm:h-11 rounded-md bg-black/90 border border-white/20 flex items-center justify-center text-[9px] font-black text-white shrink-0 z-10">
+                            <div className="w-6 h-10 sm:w-7 sm:h-11 rounded-md bg-black/90 border border-white/20 flex items-center justify-center text-[9px] font-black text-white shrink-0 z-10">
                               +{dayReleases.length - 3}
                             </div>
                           )}
                         </div>
-                      )}
-                    </button>
-                  );
-                })}
+                        <p className="hidden sm:block text-[10px] font-bold text-white/75 truncate leading-tight">
+                          {dayReleases[0].title}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-white/20 font-medium pt-4">
+                        —
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Panel: Selected Day Easy-to-Read Schedule */}
+          <div className="xl:col-span-4 rounded-3xl border border-white/[0.09] bg-white/[0.025] backdrop-blur-2xl p-5 space-y-4 shadow-2xl sticky top-24">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#D3D1CE]">
+                  {scopeMode === "top" ? `Top ${scopeNoun} Schedule` : `All ${scopeNoun} Schedule`}
+                </span>
+                <h3 className="text-lg sm:text-xl font-black text-white">
+                  {new Date(`${selectedDateIso}T12:00:00`).toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </h3>
               </div>
+              <span className="px-2.5 py-1 rounded-xl bg-white/[0.06] border border-white/10 text-xs font-extrabold text-white/85">
+                {selectedDayItems.length}{" "}
+                {selectedDayItems.length === 1 ? "Title" : "Titles"}
+              </span>
             </div>
 
-            {/* Selected Day Episode Breakdown Panel */}
-            <div className="xl:col-span-4 rounded-3xl border border-white/[0.08] bg-white/[0.025] backdrop-blur-xl p-5 space-y-4 shadow-2xl sticky top-24">
-              <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                    Selected Day
-                  </span>
-                  <h3 className="text-lg font-black text-white">
-                    {new Date(`${selectedDateIso}T12:00:00`).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </h3>
-                </div>
-                <span className="px-2.5 py-1 rounded-xl bg-white/[0.06] border border-white/10 text-xs font-extrabold text-white/80">
-                  {selectedDayItems.length}{" "}
-                  {selectedDayItems.length === 1 ? "Release" : "Releases"}
-                </span>
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-22 rounded-2xl bg-white/[0.04] animate-pulse" />
+                ))}
               </div>
-
-              {loading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="h-20 rounded-2xl bg-white/[0.04] animate-pulse" />
-                  ))}
-                </div>
-              ) : selectedDayItems.length === 0 ? (
-                <div className="py-12 text-center space-y-2">
-                  <CalendarDays className="w-8 h-8 text-white/25 mx-auto" />
-                  <p className="text-sm font-bold text-white/70">No scheduled releases</p>
+            ) : selectedDayItems.length === 0 ? (
+              <div className="py-12 text-center space-y-3">
+                <CalendarDays className="w-8 h-8 text-white/25 mx-auto" />
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-white/75">
+                    No {scopeMode === "top" ? `top ${scopeNoun.toLowerCase()}` : scopeNoun.toLowerCase()} on this date
+                  </p>
                   <p className="text-xs text-white/40">
-                    Select another highlighted day on the calendar.
+                    Click any day with posters on the calendar{scopeMode === "top" ? ` or switch to "All ${scopeNoun}" above` : ""}.
                   </p>
                 </div>
-              ) : (
-                <div className="space-y-3 max-h-[62vh] overflow-y-auto pr-1">
-                  {selectedDayItems.map((rel) => (
-                    <div
-                      key={rel.id}
-                      className="group flex items-center gap-3.5 p-2.5 rounded-2xl border border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/20 transition-all"
-                    >
-                      <Link
-                        href={rel.detailHref}
-                        className="w-12 h-16 sm:w-[54px] sm:h-[76px] rounded-xl overflow-hidden bg-zinc-900 shrink-0 ring-1 ring-white/10 block"
-                      >
-                        {rel.poster ? (
-                          <img
-                            src={rel.poster}
-                            alt={rel.title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : null}
-                      </Link>
-
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span
-                            className={cn(
-                              "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider",
-                              rel.mediaType === "anime"
-                                ? "bg-purple-500/20 text-purple-300 border border-purple-400/30"
-                                : "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
-                            )}
-                          >
-                            {rel.mediaType === "anime" ? "Anime" : "TV"}
-                          </span>
-                          {rel.episodeLabel && (
-                            <span className="text-[11px] font-extrabold text-white/75">
-                              {rel.episodeLabel}
-                            </span>
-                          )}
-                        </div>
-
-                        <Link
-                          href={rel.detailHref}
-                          className="block text-sm font-black text-white truncate hover:text-primary transition-colors"
-                        >
-                          {rel.title}
-                        </Link>
-
-                        <div className="flex items-center gap-2.5 text-[11px] text-white/50 font-semibold">
-                          {rel.timeLabel && (
-                            <span className="inline-flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> {rel.timeLabel}
-                            </span>
-                          )}
-                          {rel.rating && rel.rating > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-amber-400 font-bold">
-                              <Star className="w-3 h-3 fill-current" />
-                              {rel.rating.toFixed(1)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <Link
-                        href={rel.watchHref}
-                        title="Watch now"
-                        className="w-9 h-9 rounded-full bg-white/10 hover:bg-white text-white hover:text-black flex items-center justify-center shrink-0 transition-all"
-                      >
-                        <Play className="w-4 h-4 fill-current ml-0.5" />
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Chronological Schedule List View */
-          <div className="space-y-6">
-            {Array.from(byDate.entries()).map(([dateIso, dayList]) => (
-              <div
-                key={dateIso}
-                className="rounded-3xl border border-white/[0.08] bg-white/[0.02] p-5 space-y-4"
-              >
-                <div className="flex items-center justify-between border-b border-white/[0.07] pb-3">
-                  <h3 className="text-base sm:text-lg font-black text-white">
-                    {new Date(`${dateIso}T12:00:00`).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </h3>
-                  <span className="text-xs font-bold text-white/45">
-                    {dayList.length} {dayList.length === 1 ? "Episode" : "Episodes"}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                  {dayList.map((rel) => (
-                    <div
-                      key={rel.id}
-                      className="flex items-center gap-3.5 p-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.06] transition-all"
-                    >
-                      <Link
-                        href={rel.detailHref}
-                        className="w-14 h-20 rounded-xl overflow-hidden bg-zinc-900 shrink-0"
-                      >
-                        {rel.poster && (
-                          <img
-                            src={rel.poster}
-                            alt={rel.title}
-                            loading="lazy"
-                            className="w-full h-full object-cover"
-                          />
-                        )}
-                      </Link>
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                          {rel.episodeLabel || "New Release"}
-                        </span>
-                        <Link
-                          href={rel.detailHref}
-                          className="block text-sm font-black text-white truncate hover:text-primary"
-                        >
-                          {rel.title}
-                        </Link>
-                        {rel.timeLabel && (
-                          <span className="text-xs text-white/45 block">{rel.timeLabel}</span>
-                        )}
-                      </div>
-                      <Link
-                        href={rel.watchHref}
-                        className="w-9 h-9 rounded-full bg-white/10 hover:bg-white text-white hover:text-black flex items-center justify-center shrink-0 transition-all"
-                      >
-                        <Play className="w-4 h-4 fill-current ml-0.5" />
-                      </Link>
-                    </div>
-                  ))}
-                </div>
               </div>
-            ))}
+            ) : (
+              <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+                {selectedDayItems.map((rel) => (
+                  <div
+                    key={rel.id}
+                    className="group flex items-center gap-3.5 p-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/20 transition-all"
+                  >
+                    <Link
+                      href={rel.detailHref}
+                      className="w-[50px] h-[72px] sm:w-[56px] sm:h-[80px] rounded-xl overflow-hidden bg-zinc-900 shrink-0 ring-1 ring-white/15 block shadow-md"
+                    >
+                      {rel.poster ? (
+                        <img
+                          src={rel.poster}
+                          alt={rel.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : null}
+                    </Link>
+
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {rel.episodeLabel && (
+                          <span className="px-2 py-0.5 rounded-md bg-white text-black text-[10px] font-black uppercase tracking-wider">
+                            {rel.episodeLabel}
+                          </span>
+                        )}
+                        {rel.weekdayLabel && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/10 text-[10px] font-bold text-white/70">
+                            <Repeat className="w-2.5 h-2.5" />
+                            <span>{rel.weekdayLabel}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <Link
+                        href={rel.detailHref}
+                        className="block text-sm sm:text-[15px] font-black text-white truncate hover:text-[#D3D1CE] transition-colors"
+                      >
+                        {rel.title}
+                      </Link>
+
+                      <div className="flex items-center gap-2.5 text-[11px] text-white/50 font-semibold">
+                        {rel.rating && rel.rating > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-amber-400 font-bold">
+                            <Star className="w-3 h-3 fill-current" />
+                            {rel.rating.toFixed(1)}
+                          </span>
+                        ) : null}
+                        {rel.timeLabel && <span>• {rel.timeLabel}</span>}
+                      </div>
+                    </div>
+
+                    <Link
+                      href={rel.watchHref}
+                      title="Watch now"
+                      className="w-10 h-10 rounded-full bg-white/10 hover:bg-white text-white hover:text-black flex items-center justify-center shrink-0 transition-all shadow-md"
+                    >
+                      <Play className="w-4 h-4 fill-current ml-0.5" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </main>
     </div>
   );

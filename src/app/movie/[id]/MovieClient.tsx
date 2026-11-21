@@ -374,9 +374,6 @@ export default function MovieClient({ initialData, initialHidden = false }: Movi
               <div className="px-2.5 py-1 rounded-xl bg-amber-400/15 border border-amber-400/35 text-amber-300 font-black text-xs sm:text-sm shadow-sm">
                 {(movie as any).contentRating || (movie.adult ? "R" : "PG-13")}
               </div>
-              <div className="px-2.5 py-1 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-300 font-black text-xs sm:text-sm shadow-sm">
-                4K HDR
-              </div>
               <div className="flex flex-wrap gap-2 ml-0.5">
                 {movie.genres?.map((g) => (
                   <span

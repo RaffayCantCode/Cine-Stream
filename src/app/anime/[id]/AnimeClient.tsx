@@ -2447,7 +2447,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               </div>
                               <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                               <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
-                              <EndsAtBadge runtimeMinutes={anime.duration || 24} />
                             </>
                           ) : (anime as any)?.isUnavailable || (anime as any)?.status === "unavailable" || (currentSeasonInfo as any)?.isUnavailable ? (
                             <>
@@ -2457,7 +2456,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               </div>
                               <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                               <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
-                              <EndsAtBadge runtimeMinutes={anime.duration || 24} />
                             </>
                           ) : dedupedCurrentEps.length > 0 ? (
                             <>
@@ -2482,7 +2480,6 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
                               </button>
                               <WatchlistButton mediaId={parseInt(String(anime.id).replace(/\D/g, ""), 10) || 0} mediaType="anime" title={displayTitle || getSafeAnimeTitle(anime.name)} posterPath={anime.poster || null} />
                               <TrailerButton trailerId={anime.trailerId} onClick={() => setTrailerOpen(true)} />
-                              <EndsAtBadge runtimeMinutes={anime.duration || 24} />
                             </>
                           ) : episodesLoading ? (
                             <>

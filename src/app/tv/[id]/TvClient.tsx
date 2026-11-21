@@ -805,17 +805,6 @@ export default function TvClient({ initialData, initialHidden = false }: TvClien
               <div className="px-2.5 py-1 rounded-xl bg-amber-400/15 border border-amber-400/35 text-amber-300 font-black text-xs sm:text-sm shadow-sm">
                 {(show as any).contentRating || "TV-14"}
               </div>
-              <div className="px-2.5 py-1 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-300 font-black text-xs sm:text-sm shadow-sm">
-                4K
-              </div>
-              <EndsAtBadge
-                runtimeMinutes={
-                  seasonData?.episodes?.find((e) => e.episode_number === playingEpisode)?.runtime ||
-                  seasonData?.episodes?.[0]?.runtime ||
-                  (Array.isArray((show as any).episode_run_time) && (show as any).episode_run_time[0]) ||
-                  45
-                }
-              />
               <div className="flex flex-wrap gap-2 ml-0.5">
                 {show.genres?.map((g) => (
                   <span

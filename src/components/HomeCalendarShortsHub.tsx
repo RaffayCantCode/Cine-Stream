@@ -2,16 +2,9 @@
 
 import { memo } from "react";
 import Link from "next/link";
-import {
-  CalendarDays,
-  Flame,
-  ChevronRight,
-  Play,
-  Clock,
-  Sparkles,
-  Tv,
-  Film,
-} from "lucide-react";
+import { ChevronRight, Play } from "lucide-react";
+import { SiNetflix, SiAppletv, SiYoutube, SiCrunchyroll, SiImdb } from "react-icons/si";
+import { ProviderIcon } from "@/components/ProviderIcon";
 
 interface HomeCalendarShortsHubProps {
   previewItems?: any[];
@@ -33,22 +26,23 @@ export const HomeCalendarShortsHub = memo(function HomeCalendarShortsHub({
   return (
     <section className="py-3 md:py-5 px-3 md:px-6 lg:px-8 xl:px-10 2xl:px-12 3xl:px-16">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
-        {/* 1. Release Calendar Hub Card */}
-        <div className="group relative overflow-hidden rounded-3xl border border-white/[0.09] bg-gradient-to-br from-[#0e1b18]/90 via-[#0b1118]/95 to-[#07090e] p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-[0_18px_45px_rgba(0,0,0,0.55)] hover:border-emerald-400/35 transition-all duration-300">
-          {/* Ambient glow */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none group-hover:bg-emerald-500/25 transition-colors" />
+        {/* 1. Release Calendar Hub Card — Pure Glassmorphic & Classic Silver/White */}
+        <div className="group relative overflow-hidden rounded-3xl border border-white/[0.1] hover:border-white/25 bg-white/[0.03] hover:bg-white/[0.045] backdrop-blur-2xl p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.65)] transition-all duration-300">
+          {/* Subtle top glass specular highlight */}
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+          <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-white/[0.04] blur-3xl pointer-events-none group-hover:bg-white/[0.07] transition-colors" />
 
           <div className="relative z-10 flex items-start justify-between gap-4">
-            <div className="space-y-2 max-w-md">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
-                <CalendarDays className="w-3.5 h-3.5" />
-                <span>Live Schedule • {todayLabel}</span>
+            <div className="space-y-2.5 max-w-md">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.06] border border-white/15 text-[#D3D1CE] text-[11px] font-black uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                <span>Release Schedule • {todayLabel}</span>
               </div>
               <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight">
-                TV &amp; Anime Release Calendar
+                Release Calendar
               </h3>
               <p className="text-xs sm:text-sm text-white/55 leading-relaxed">
-                Track daily episode drops, season premieres, and weekly anime broadcasts across your watchlist in an interactive monthly calendar.
+                See exact release dates for upcoming Movies, weekly TV Series episodes, and Anime broadcasts in an interactive monthly calendar.
               </p>
             </div>
 
@@ -58,7 +52,7 @@ export const HomeCalendarShortsHub = memo(function HomeCalendarShortsHub({
                 {posters.slice(0, 3).map((item, idx) => (
                   <div
                     key={`cal-prev-${item.id || idx}`}
-                    className="w-14 h-20 rounded-xl overflow-hidden ring-2 ring-[#0b1118] shadow-xl bg-zinc-900 transition-transform duration-300 group-hover:translate-y-[-2px]"
+                    className="w-14 h-20 rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl bg-zinc-900 transition-transform duration-300 group-hover:-translate-y-1"
                     style={{ transform: `rotate(${(idx - 1) * 6}deg)` }}
                   >
                     <img
@@ -73,47 +67,47 @@ export const HomeCalendarShortsHub = memo(function HomeCalendarShortsHub({
             )}
           </div>
 
-          <div className="relative z-10 flex items-center justify-between gap-4 pt-2 border-t border-white/[0.07] flex-wrap">
-            <div className="flex items-center gap-3 text-xs font-bold text-white/50">
-              <span className="inline-flex items-center gap-1.5">
-                <Tv className="w-3.5 h-3.5 text-emerald-400" /> TV Series
-              </span>
-              <span>•</span>
-              <span className="inline-flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Anime Simuldubs
-              </span>
-              <span className="hidden sm:inline">•</span>
-              <span className="hidden sm:inline-flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-sky-400" /> Local Air Times
+          <div className="relative z-10 flex items-center justify-between gap-4 pt-3 border-t border-white/[0.08] flex-wrap">
+            {/* Real Brand Icons Row */}
+            <div className="flex items-center gap-3.5 text-white/65">
+              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08]">
+                <SiNetflix className="w-3.5 h-3.5 text-[#E50914]" title="Netflix" />
+                <SiAppletv className="w-4 h-4 text-white" title="Apple TV+" />
+                <ProviderIcon slug="hbo-max" className="w-6 h-3.5 opacity-90" />
+                <SiCrunchyroll className="w-3.5 h-3.5 text-[#F47521]" title="Crunchyroll" />
+              </div>
+              <span className="text-xs font-bold text-[#D3D1CE]/70 tracking-wide">
+                Movies • Series • Anime
               </span>
             </div>
 
             <Link
               href="/calendar"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.03] active:scale-95"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white hover:bg-[#D3D1CE] text-black font-black text-xs sm:text-sm shadow-[0_8px_24px_rgba(255,255,255,0.15)] transition-all hover:scale-[1.03] active:scale-95"
             >
-              <span>View Calendar</span>
+              <span>Open Calendar</span>
               <ChevronRight className="w-4 h-4 stroke-[2.5]" />
             </Link>
           </div>
         </div>
 
-        {/* 2. Vertical Shorts & Trailers Feed Card */}
-        <div className="group relative overflow-hidden rounded-3xl border border-white/[0.09] bg-gradient-to-br from-[#1f0d16]/90 via-[#120b18]/95 to-[#07090e] p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-[0_18px_45px_rgba(0,0,0,0.55)] hover:border-rose-400/35 transition-all duration-300">
-          {/* Ambient glow */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-rose-500/15 blur-3xl pointer-events-none group-hover:bg-rose-500/25 transition-colors" />
+        {/* 2. Vertical Shorts & Trailers Feed Card — Pure Glassmorphic & Classic Silver/White */}
+        <div className="group relative overflow-hidden rounded-3xl border border-white/[0.1] hover:border-white/25 bg-white/[0.03] hover:bg-white/[0.045] backdrop-blur-2xl p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.65)] transition-all duration-300">
+          {/* Subtle top glass specular highlight */}
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+          <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-white/[0.04] blur-3xl pointer-events-none group-hover:bg-white/[0.07] transition-colors" />
 
           <div className="relative z-10 flex items-start justify-between gap-4">
-            <div className="space-y-2 max-w-md">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-300 text-[11px] font-black uppercase tracking-wider">
-                <Flame className="w-3.5 h-3.5" />
-                <span>Instant Discovery Feed</span>
+            <div className="space-y-2.5 max-w-md">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.06] border border-white/15 text-[#D3D1CE] text-[11px] font-black uppercase tracking-widest">
+                <SiYoutube className="w-3.5 h-3.5 text-[#FF0000]" />
+                <span>Vertical Cinema Feed</span>
               </div>
               <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight">
-                Shorts &amp; Trailers Feed
+                Shorts &amp; Trailers
               </h3>
               <p className="text-xs sm:text-sm text-white/55 leading-relaxed">
-                Swipe through a full-screen vertical feed of trending Movie, TV, and Anime trailers—add to your watchlist or jump straight into watching.
+                Swipe through an instant full-screen feed of official trailers—preview trending titles in HD, save to your watchlist, or start streaming.
               </p>
             </div>
 
@@ -123,7 +117,7 @@ export const HomeCalendarShortsHub = memo(function HomeCalendarShortsHub({
                 {posters.slice(3, 6).map((item, idx) => (
                   <div
                     key={`short-prev-${item.id || idx}`}
-                    className="w-14 h-20 rounded-xl overflow-hidden ring-2 ring-[#120b18] shadow-xl bg-zinc-900 transition-transform duration-300 group-hover:translate-y-[-2px]"
+                    className="w-14 h-20 rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl bg-zinc-900 transition-transform duration-300 group-hover:-translate-y-1"
                     style={{ transform: `rotate(${(idx - 1) * 6}deg)` }}
                   >
                     <img
@@ -138,27 +132,26 @@ export const HomeCalendarShortsHub = memo(function HomeCalendarShortsHub({
             )}
           </div>
 
-          <div className="relative z-10 flex items-center justify-between gap-4 pt-2 border-t border-white/[0.07] flex-wrap">
-            <div className="flex items-center gap-3 text-xs font-bold text-white/50">
-              <span className="inline-flex items-center gap-1.5">
-                <Film className="w-3.5 h-3.5 text-rose-400" /> Movies
-              </span>
-              <span>•</span>
-              <span className="inline-flex items-center gap-1.5">
-                <Tv className="w-3.5 h-3.5 text-amber-400" /> Series
-              </span>
-              <span>•</span>
-              <span className="inline-flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Anime Trailers
+          <div className="relative z-10 flex items-center justify-between gap-4 pt-3 border-t border-white/[0.08] flex-wrap">
+            {/* Real Brand Icons Row */}
+            <div className="flex items-center gap-3.5 text-white/65">
+              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08]">
+                <SiYoutube className="w-4 h-4 text-[#FF0000]" title="YouTube Trailers" />
+                <SiImdb className="w-4 h-4 text-[#F5C518]" title="IMDb Rated" />
+                <ProviderIcon slug="prime-video" className="w-5 h-3.5 opacity-90" />
+                <ProviderIcon slug="disney-plus" className="w-4 h-4 opacity-90" />
+              </div>
+              <span className="text-xs font-bold text-[#D3D1CE]/70 tracking-wide">
+                Official HD Trailers
               </span>
             </div>
 
             <Link
               href="/shorts"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-rose-600/25 transition-all hover:scale-[1.03] active:scale-95"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white hover:bg-[#D3D1CE] text-black font-black text-xs sm:text-sm shadow-[0_8px_24px_rgba(255,255,255,0.15)] transition-all hover:scale-[1.03] active:scale-95"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Open Shorts</span>
+              <Play className="w-3.5 h-3.5 fill-black" />
+              <span>Watch Shorts</span>
               <ChevronRight className="w-4 h-4 stroke-[2.5]" />
             </Link>
           </div>
