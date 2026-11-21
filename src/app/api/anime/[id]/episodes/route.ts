@@ -576,7 +576,8 @@ export async function GET(
         String(n.id) === String(season.id) ||
         String(n.anilistId) === String(season.id) ||
         String(n.id) === String(targetSeasonId) ||
-        String(n.anilistId) === String(targetSeasonId)
+        String(n.anilistId) === String(targetSeasonId) ||
+        (tmdbId != null && n.tmdbId != null && String(n.tmdbId) === String(tmdbId) && (n.tmdbSeasonNumber == null || n.tmdbSeasonNumber === 1))
       );
       if (curatedItem) {
         if (curatedItem.tmdbId) tmdbId = curatedItem.tmdbId;
@@ -619,13 +620,20 @@ export async function GET(
         } catch {}
       }
 
+      const firstSeasonTmdbId = meta?.seasons?.[0]?.tmdbId ?? null;
+      const sharesSameTmdbShow = Boolean(tmdbId && firstSeasonTmdbId && String(tmdbId) === String(firstSeasonTmdbId));
+      const isDistinctTmdbShow = Boolean(tmdbId && firstSeasonTmdbId && String(tmdbId) !== String(firstSeasonTmdbId));
+
       // 5. Season & offset parsing override (from anime title or seasonLabel)
-      if (tmdbSeasonNum == null || isNaN(tmdbSeasonNum) || tmdbSeasonNum === 1) {
+      // NEVER run when curatedItem already authoritatively set the mapping, and NEVER parse
+      // a franchise slot label ("Season 2") as a TMDB season number when this entry has its
+      // own separate TMDB show (e.g. Naruto Shippuden, Boruto, Dragon Ball Z, Dragon Ball Super)!
+      if (!curatedItem && (tmdbSeasonNum == null || isNaN(tmdbSeasonNum) || tmdbSeasonNum === 1)) {
         const parsedName = parseSeasonAndOffsetFromTitle(season.name || meta?.anime?.name || "");
         if (parsedName.tmdbSeason != null && parsedName.tmdbSeason > 1) {
           tmdbSeasonNum = parsedName.tmdbSeason;
           if (episodeOffset === 0) episodeOffset = parsedName.episodeOffset;
-        } else if (season.seasonLabel && !season.seasonLabel.toLowerCase().startsWith("episodes")) {
+        } else if (!isDistinctTmdbShow && season.seasonLabel && !season.seasonLabel.toLowerCase().startsWith("episodes")) {
           const parsedLabel = parseSeasonAndOffsetFromTitle(season.seasonLabel);
           if (parsedLabel.tmdbSeason != null && parsedLabel.tmdbSeason > 1) {
             tmdbSeasonNum = parsedLabel.tmdbSeason;
@@ -639,8 +647,6 @@ export async function GET(
 
       // 6. Only infer tmdbSeasonNum from seasonNumFromList if this season shares the SAME tmdbId
       // as the first season (never apply list index 2 to a separate TMDB show like Naruto Shippuden!).
-      const firstSeasonTmdbId = meta?.seasons?.[0]?.tmdbId ?? null;
-      const sharesSameTmdbShow = Boolean(tmdbId && firstSeasonTmdbId && String(tmdbId) === String(firstSeasonTmdbId));
       if ((tmdbSeasonNum == null || isNaN(tmdbSeasonNum)) && seasonNumFromList > 1 && sharesSameTmdbShow) {
         tmdbSeasonNum = seasonNumFromList;
       }
@@ -661,8 +667,12 @@ export async function GET(
 
       if (isTMDBReady && !isMovieOrSpecial) {
         let primarySeasonNum = tmdbSeasonNum || 1;
-        const tmdbShowPromise = tmdbFetch(`/tv/${tmdbId}`).catch(() => null);
-        const primaryEpisodesPromise = fetchTmdbEpisodeData(tmdbId, [primarySeasonNum]).catch(() => new Map<string, any>());
+        const skipPrimaryPrefetch = Boolean(isRangeRequest && epStartParam > 1 && (curatedItem || !startDateIso));
+        const tmdbShowPromise = tmdbFetch(`/tv/${tmdbId}`)
+          .catch(() => tmdbFetch(`/tv/${tmdbId}`).catch(() => null));
+        const primaryEpisodesPromise = skipPrimaryPrefetch
+          ? Promise.resolve(new Map<string, any>())
+          : fetchTmdbEpisodeData(tmdbId, [primarySeasonNum]).catch(() => new Map<string, any>());
         const overlayEpsPromise = Promise.race([
           getEnrichedEpisodesList(season.id, season.name, safeTotalEpisodes, effectiveMalId, startDateIso, true),
           new Promise<any[]>((r) => setTimeout(() => r([]), 4500)),
@@ -803,13 +813,16 @@ export async function GET(
           overlayByNum.size >= Math.min(Math.floor(dynamicTotalEpisodes * 0.55), 50) &&
           Boolean(overlayByNum.get(1)?.thumbnail || overlayByNum.get(2)?.thumbnail);
 
-        // Fetch ONLY the TMDB seasons required for [loopStart..loopEnd].
-        // For modular paginated range requests (e.g. epStart=251&epEnd=300), this fetches just 1–2 TMDB seasons!
+        // Fetch ALL TMDB seasons required for [loopStart..loopEnd].
+        // For modular paginated range requests (e.g. epStart=1&epEnd=50 or epStart=251&epEnd=300),
+        // this fetches every TMDB season overlapping the batch in parallel with a generous timeout
+        // so episodes never fall back to generic "Episode N" titles or banner placeholders!
         const neededSeasons = new Set<number>();
-        const maxSecondarySeasons = isRangeRequest ? 4 : (overlayHasRichCoverage ? 2 : 8);
+        const maxSecondarySeasons = isRangeRequest ? 8 : (overlayHasRichCoverage ? 4 : 10);
         for (let i = loopStart; i <= Math.min(loopEnd, 1500); i++) {
           const mapped = mapRelativeToTmdb(episodeOffset + i, primarySeasonNum, tmdbSeasonsList);
-          if (mapped.seasonNumber !== primarySeasonNum) {
+          const alreadyLoadedPrimary = !skipPrimaryPrefetch && mapped.seasonNumber === primarySeasonNum && primaryEpisodes.size > 0;
+          if (!alreadyLoadedPrimary) {
             neededSeasons.add(mapped.seasonNumber);
             if (neededSeasons.size >= maxSecondarySeasons) break;
           }
@@ -817,10 +830,17 @@ export async function GET(
         if (neededSeasons.size > 0) {
           try {
             const seasonsToFetch = Array.from(neededSeasons).slice(0, maxSecondarySeasons);
-            const extraEpisodes = await Promise.race([
+            let extraEpisodes = await Promise.race([
               fetchTmdbEpisodeData(tmdbId, seasonsToFetch),
-              new Promise<Map<string, any>>((r) => setTimeout(() => r(new Map()), 2200)),
+              new Promise<Map<string, any>>((r) => setTimeout(() => r(new Map()), 6500)),
             ]);
+            // One targeted retry if the batch fetch returned empty (e.g. transient edge hiccup)
+            if (extraEpisodes.size === 0) {
+              extraEpisodes = await Promise.race([
+                fetchTmdbEpisodeData(tmdbId, seasonsToFetch),
+                new Promise<Map<string, any>>((r) => setTimeout(() => r(new Map()), 4500)),
+              ]);
+            }
             for (const [k, v] of extraEpisodes.entries()) {
               tmdbEpisodes.set(k, v);
             }
@@ -1075,8 +1095,10 @@ export async function GET(
         },
       };
 
-      const hasRealMetadata = seasonEps.some(e => episodeHasRealMetadata(e));
-      if (hasRealMetadata) {
+      const realMetadataCount = seasonEps.filter(e => episodeHasRealMetadata(e)).length;
+      const hasRealMetadata = realMetadataCount > 0;
+      const isCompleteMetadata = hasRealMetadata && (seasonEps.length <= 5 || realMetadataCount / seasonEps.length >= 0.8);
+      if (isCompleteMetadata) {
         if (EPISODES_CACHE.size > 300) {
           const first = EPISODES_CACHE.keys().next().value;
           if (first !== undefined) EPISODES_CACHE.delete(first);
@@ -1084,7 +1106,11 @@ export async function GET(
         EPISODES_CACHE.set(cacheKey, { data: resPayload.data, timestamp: Date.now() });
       }
 
-      return Response.json(resPayload, { headers: animeCacheHeaders });
+      return Response.json(resPayload, {
+        headers: isCompleteMetadata
+          ? animeCacheHeaders
+          : { "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate" },
+      });
     }
 
     // ── Fallback: fetch by season index ──────────────────

@@ -1278,36 +1278,44 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     if (hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) && playingEpisode) {
       const ep = dedupedCurrentEps.find(e => Number(e.episodeNum) === Number(playingEpisode));
       if (ep) {
-        setSelectedEp(ep);
+        setSelectedEp(prev =>
+          prev && Number(prev.episodeNum) === Number(ep.episodeNum) && String(prev.seasonId) === String(ep.seasonId)
+            ? prev
+            : ep
+        );
       } else if (dedupedCurrentEps.length > 0) {
-        setSelectedEp({
-          episodeId: `${currentSeasonId}-${playingEpisode}`,
-          episodeNum: playingEpisode,
-          title: `Episode ${playingEpisode}`,
-          isReleased: true,
-          seasonId: String(currentSeasonId),
-          seasonNum: currentSeasonNumber,
-        });
+        setSelectedEp(prev =>
+          prev && Number(prev.episodeNum) === Number(playingEpisode) && String(prev.seasonId) === String(currentSeasonId)
+            ? prev
+            : {
+                episodeId: `${currentSeasonId}-${playingEpisode}`,
+                episodeNum: playingEpisode,
+                title: `Episode ${playingEpisode}`,
+                isReleased: true,
+                seasonId: String(currentSeasonId),
+                seasonNum: currentSeasonNumber,
+              }
+        );
       }
     }
   }, [hasActiveProgress, playingSeason, currentSeasonNumber, playingEpisode, dedupedCurrentEps, currentSeasonId]);
 
   // ── Synchronize chunk bar and grid pagination to active episode ──────────
   useEffect(() => {
+    const knownTotal = seasonTotalEpisodes || dedupedCurrentEps.length;
+    const gridSize = knownTotal > 500 ? 50 : 25;
     if (hasActiveProgress && Number(playingSeason) === Number(currentSeasonNumber) && playingEpisode) {
-      const gridSize = dedupedCurrentEps.length > 500 ? 50 : 25;
       const targetPage = Math.floor((playingEpisode - 1) / gridSize) + 1;
       setEpisodePage(targetPage);
       setListChunkIndex(Math.floor((playingEpisode - 1) / 10));
-    } else if (selectedEp) {
-      const gridSize = dedupedCurrentEps.length > 500 ? 50 : 25;
+    } else if (selectedEp?.episodeNum) {
       setEpisodePage(Math.floor((selectedEp.episodeNum - 1) / gridSize) + 1);
       setListChunkIndex(Math.floor((selectedEp.episodeNum - 1) / 10));
-    } else {
-      setEpisodePage(1);
-      setListChunkIndex(0);
     }
-  }, [hasActiveProgress, playingSeason, currentSeasonNumber, playingEpisode, selectedEp, dedupedCurrentEps.length]);
+    // Note: intentionally NOT depending on dedupedCurrentEps.length or selectedEp object identity
+    // so loading a new modular batch on Page 2+ never snaps the user back to Page 1!
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasActiveProgress, playingSeason, currentSeasonNumber, playingEpisode, selectedEp?.episodeNum]);
 
   // ── LOAD SEASON EPISODES (called from one place only) ────────────────────
   const loadSeasonEpisodes = useCallback(async (
@@ -2067,6 +2075,9 @@ export default function AnimeClient({ initialData }: { initialData?: any | null 
     const sId = String(season.id);
     if (sId === String(currentSeasonId)) return;
     setCurrentSeasonId(sId);
+    setEpisodePage(1);
+    setListChunkIndex(0);
+    setSeasonTotalEpisodes(Number((season as any).totalEpisodes || (season as any).episodes || 0));
     setIsPlaying(false);
     setSelectedEp(null);
     setEpisodeNotice(null);

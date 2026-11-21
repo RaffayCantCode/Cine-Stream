@@ -1004,6 +1004,7 @@ export async function getAnimeDetails(
   const baseSeasons = buildSeasonList(franchiseNodes, numId);
   const tmdbSeasonMap: Record<string, number> = {};
 
+  const firstBaseTmdbId = baseSeasons[0]?.tmdbId || null;
   const mappedSeasons: SeasonInfo[] = baseSeasons.map(s => {
     const sIsMovie = (s.seasonLabel || "").startsWith("Movie") || isMovie;
     const sIsSpecial =
@@ -1014,6 +1015,7 @@ export async function getAnimeDetails(
       SPECIAL_ANIME_REGEX.test(s.name);
     const isCurrentSeason = String(s.id) === String(numId);
     const tid = (sIsMovie || sIsSpecial) ? null : (s.tmdbId || tmdbId || null);
+    const isDistinctShow = Boolean(s.tmdbId && firstBaseTmdbId && String(s.tmdbId) !== String(firstBaseTmdbId));
     let sNum: number | null = (sIsMovie || sIsSpecial) ? null : (s.tmdbSeasonNumber ?? null);
     let offset = (sIsMovie || sIsSpecial) ? 0 : (s.episodeOffset || 0);
 
@@ -1038,6 +1040,8 @@ export async function getAnimeDetails(
       const parsed = parseSeasonNumberFromTitle(s.name);
       if (parsed) {
         sNum = parsed;
+      } else if (isDistinctShow) {
+        sNum = 1;
       } else if (s.seasonLabel && !s.seasonLabel.toLowerCase().includes("special") && !s.seasonLabel.toLowerCase().includes("movie")) {
         const parsedLabel = parseSeasonNumberFromTitle(s.seasonLabel);
         if (parsedLabel) sNum = parsedLabel;
